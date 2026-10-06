@@ -5,9 +5,10 @@ import { type ComplementPlan, VerifyComplement } from '@verification/VerifyCompl
 import { type GhRunner, gitHubPulls } from './GitHubPulls'
 
 /*
- * `verify-complement` is the local half of a landing: hosted `Verify` proves the portable gates on
- * Linux runners, and this runs, on the one macOS host with a window server, exactly the gates the
- * workflow does not admit. It derives that list (`VerifyComplement`), runs it as one `./dev gates`
+ * `verify-complement` is the local half of a landing: hosted `Verify` proves the portable gates and
+ * the host gates its Linux partitions run, and this runs, on the one macOS host with a window server,
+ * exactly the host-only gates hosted Verify does not run. It derives that list from the catalog and
+ * `ci-macos.yml` (`VerifyComplement`), runs it as one `./dev gates`
  * lane — a child process rather than a call, so the lock, the GUI lease, Watchman, and the lowered
  * priority are the gates command's own and not a second copy here — and reports the verdict as the
  * `Verify (host)` commit status on HEAD, where `pr-checks` and `open-pr` read it beside `Verify`.

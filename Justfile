@@ -776,7 +776,7 @@ diagnose-verification: _deps
 verify-full-sandbox no_cache='false' partition='' hosted_linux='false':
     ./dev gates {{ VERIFY_FULL_GATES }} --skip-unsandboxed {{ if hosted_linux == "true" { "--hosted-linux" } else { "" } }} --lane verify-full-sandbox {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }} {{ if partition == "" { "" } else { "--partition " + partition } }}
 
-# The local half of a landing: the host-only gates hosted Verify does not admit, derived from the workflow, run under the lock and GUI lease, reported as the Verify (host) status on HEAD
+# The local half of a landing: the host-only gates hosted Verify does not run, derived from the catalog and ci-macos.yml, run under the lock and GUI lease, reported as the Verify (host) status on HEAD
 [arg('status', long='no-status', value='false')]
 [arg('show_studio', long='show-studio', value='true')]
 [group('Dev')]
