@@ -225,7 +225,9 @@ async function machine() {
   await FS.writeText(identity, `-----BEGIN PRIVATE KEY-----\n${pkcs8}\n-----END PRIVATE KEY-----\n`, { mode: 0o600 })
   const publicKey = new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey))
   const wire = Buffer.concat([sshField(new TextEncoder().encode('ssh-ed25519')), sshField(publicKey)])
-  const real = SecretsCommand.testing.ageCipher(identity)
+  // The unlock notice goes to a stream of this machine's own: these tests run concurrently, and one written to
+  // process stderr lands in whichever sibling test is capturing it at that moment.
+  const real = SecretsCommand.testing.ageCipher(identity, { output: fakeTerminal().output })
   const counter = { uses: 0 }
   const cipher: Cipher = {
     ...real,
