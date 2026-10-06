@@ -5,6 +5,43 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 const DISPATCHER = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts')
 
 Describe('named host command dispatch', () => {
+  Test('process recovery requires an exact PID and kernel identity without signal or shell arguments', async () => {
+    const root = await mkTestDir('tao-process-stop-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const log = FS.resolvePath('dev.log', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["processes stop"] }')
+      await FS.writeText(FS.resolvePath('dev', root), '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.chmod(FS.resolvePath('dev', root), 0o755)
+      const run = (args: string[]) =>
+        CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, 'processes', 'stop', ...args],
+          cwd: root,
+          env: { TAO_HOST_LOG: log },
+        })
+      for (
+        const args of [
+          [],
+          ['123'],
+          ['1', '123:456'],
+          ['-123', '123:456'],
+          ['2147483648', '1'],
+          ['123', 'yesterday'],
+          ['123', '123:456', '-KILL'],
+          ['123;echo', '1'],
+          ['123', '1'.repeat(41)],
+        ]
+      ) {
+        Expect((await run(args)).exitCode).toBe(2)
+        Expect(await FS.exists(log)).toBe(false)
+      }
+      Expect((await run(['123', '123:456'])).exitCode).toBe(0)
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual(['process-stop', '123', '123:456'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('resource discovery admits only its read-only report forms', async () => {
     const root = await mkTestDir('tao-resource-host-')
     try {

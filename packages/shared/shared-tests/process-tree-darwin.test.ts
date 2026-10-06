@@ -126,6 +126,13 @@ function fixture(options: {
   }
 }
 
+Test('Darwin descendant enumeration retains a reparented zombie without accepting a live orphan', () => {
+  const host = fixture({ zombie: true, returnedParentPid: 1 })
+  Expect(host.inspect('descendants')).toEqual([{ pid: 701, group: 700, startedAt: '123:456', command: '' }])
+  Expect(() => fixture({ returnedParentPid: 1 }).inspect('descendants')).toThrow('changed parent')
+  Expect(host.closes()).toBe(1)
+})
+
 for (const kind of ['group', 'descendants'] as const) {
   Test(`Darwin ${kind} retains a zombie's exact kernel identity until reaping`, () => {
     const host = fixture({ zombie: true, probe: 'live' })

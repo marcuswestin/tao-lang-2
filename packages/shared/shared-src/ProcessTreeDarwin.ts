@@ -71,8 +71,11 @@ try {
       return unreadableIdentity(pid, { ...details, failureKind: 'identity-pid-mismatch' });
     }
     // proc_bsdinfo.pbi_status uses BSD SZOMB (5): execution ended, even if not yet reaped.
-    if (direct && view.getUint32(4, true) === 5) return undefined;
-    if (parentPid !== undefined && view.getUint32(16, true) !== parentPid) {
+    const zombie = view.getUint32(4, true) === 5;
+    if (direct && zombie) return undefined;
+    // A reparented zombie has finished execution. Retain its exact identity for enumeration,
+    // without treating the kernel's reaping transition as a live ownership change.
+    if (!zombie && parentPid !== undefined && view.getUint32(16, true) !== parentPid) {
       failInspection('macOS process ' + pid + ' changed parent during inspection.', {
         details: { ...details, failureKind: 'parent-changed', expectedParentPid: parentPid,
           actualParentPid: view.getUint32(16, true) },

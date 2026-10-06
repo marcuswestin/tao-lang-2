@@ -112,4 +112,14 @@
   The broad lane skipped 555 checks after this failure. No permissions or ownership policy changed.
 - **Acceptance:** Either a sandboxed lane's `processTable()` returns the real table, or the code and its
   tests state that the non-Darwin branch is out of scope on this host and nothing in a lane relies on it.
+- **Reviewed recovery (2026-10-06):** After explicit approval, a fresh start-time probe matched the
+  task's old wrapper, but sandboxed TERM still returned `operation not permitted`. The new named
+  `processes stop` host operation requires the exact kernel start identity and an isolated process
+  group with no children; it refuses changed identity, uncertain inspection and other group members.
+  TERM precedes KILL, with a fixed wait budget and final group-absence check. That operation stopped
+  the reviewed wrapper and its pending tool session returned. This adds a guarded recovery path,
+  rather than establishing general sandbox signal access. A reparented full-record zombie also no
+  longer triggers a live parent-change error; exact identities remain recorded and live mismatches
+  still fail. The focused native suite passes 42 cases; mutation tests reject removal of the zombie
+  exception and PID-reuse guard. The native transient-read failures still need host acceptance.
 - **Source:** 2026-09-17 process-teardown implementation.

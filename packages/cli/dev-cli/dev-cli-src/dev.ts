@@ -29,6 +29,7 @@ import { landingHostGateMessage, prepareLandingHost } from './doctor/LandingHost
 import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { stopProcess } from './doctor/StopProcess'
 import { MergeRecovery } from './git/MergeRecovery'
 import { SyncLocalMainCommand } from './git/SyncLocalMain'
 import { CancelVerifyCommand } from './pr/CancelVerify'
@@ -1343,6 +1344,15 @@ await runWithCommands(commands => {
     .action(async (options: { json?: boolean } = {}) => {
       const { StudioLifecycleCommand } = await import('@studio-tooling/StudioLifecycleCommand')
       Platform.runtimeProcess.exit(await StudioLifecycleCommand.ps({ json: options.json === true }))
+    })
+
+  commands
+    .command('process-stop <pid> <started-at>')
+    .description('Stop one reviewed isolated process, checking its exact kernel start identity.')
+    .action(async (pid: string, startedAt: string) => {
+      HCI.writeLine(`Stopping reviewed process ${pid} ...`)
+      await stopProcess(Number(pid), startedAt)
+      HCI.writeLine(`Process ${pid} has exited.`)
     })
 
   commands
