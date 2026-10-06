@@ -63,8 +63,8 @@ async function runTests(repoRoot: string): Promise<void> {
 /** compileApp runs parser generation when needed and compiles the selected Tao app, returning success. */
 async function compileApp(options: CompileAppOptions): Promise<boolean> {
   const { reason } = options
-  if (!CommandRunner.beginCommand()) {
-    DevLoopOutput.logDevLoop('dev', `Command running; ignored compile (${reason}).`)
+  if (!CommandRunner.beginCommand(`compile (${reason})`)) {
+    CommandRunner.reportBusy(`compile (${reason})`)
     return true
   }
 

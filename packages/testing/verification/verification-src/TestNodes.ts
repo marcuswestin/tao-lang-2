@@ -42,6 +42,8 @@ export type SelectedSuite = {
    * (Jest's `--maxWorkers`) is held to what was actually reserved.
    */
   buildProcess: (nodeName: string, units: readonly string[], slots: number) => TestProcess
+  /** Complete suite inventory against which a partial selection is estimated. */
+  estimationUnits?: readonly string[]
   files: readonly string[]
   name: string
   /**
@@ -91,8 +93,11 @@ type SuiteEvidence = {
   nodeCount: number
   /** The suite's recorded one-process duration, or undefined on a cold checkout. */
   suiteMs: number | undefined
-  /** Sum of `costs` over every unit the suite runs here, unmeasured units at the mean. */
+  /** Sum of `costs` over the complete suite inventory, unmeasured units at the mean. */
   totalCostMs: number
+  units: readonly string[]
+  /** True when the selection contains the complete suite inventory. */
+  completeSelection: boolean
 }
 
 export type BuildTestNodesOptions = {
@@ -161,9 +166,14 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
       ? TestShards.fileCostsFromLedger(options.ledger, suite.name)
       : new Map<string, number>()
     // A suite's own units win when the ledger cannot speak about them at all.
-    const usesUnitCosts = suite.shardUnits !== undefined && suite.unitCostMs !== undefined
+    const usesUnitCosts = suite.unitCostMs !== undefined
     const costs = usesUnitCosts ? suite.unitCostMs! : ledgerCosts
     const suiteMs = RunTimings.expectedMs(options.timings, suite.name)
+    const inventory = suite.estimationUnits ?? suite.shardUnits ?? suite.files
+    const selectedUnits = suite.shardUnits ?? suite.files
+    const completeSelection = inventory.every(unit =>
+      selectedUnits.some(root => unit === root || unit.startsWith(root + '/'))
+    )
     /** Every node this suite becomes here, before any is weighed: the count is part of the weight. */
     const planned: { files: readonly string[]; name: string; preflight?: boolean; shardCount: number }[] = []
     const preflightFiles = options.preflight === true && suite.shardUnits === undefined
@@ -192,7 +202,9 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
         fileCostMs: costs,
         files: remaining,
         fixedMs,
-        measuredMs: suiteMs,
+        measuredMs: suiteMs === undefined
+          ? undefined
+          : fixedMs + Math.max(0, suiteMs - fixedMs) * TestShards.weightShare(remaining, inventory, costs),
         shardable: tuning.shardable,
         suite: suite.name,
       })
@@ -213,12 +225,13 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
       })
     }
     const evidence = suiteEvidence({
+      completeSelection,
       costs,
       costsAreMs: !usesUnitCosts,
       fixedMs,
       nodeCount: planned.length,
       suiteMs,
-      units: planned.flatMap(node => node.files),
+      units: inventory,
     })
     for (const node of planned) {
       if (options.proved?.has(node.name) === true) {
@@ -242,6 +255,7 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
 
 /** suiteEvidence gathers what every node of one suite is weighed against. */
 function suiteEvidence(options: {
+  completeSelection: boolean
   costs: ReadonlyMap<string, number>
   costsAreMs: boolean
   fixedMs: number
@@ -253,6 +267,7 @@ function suiteEvidence(options: {
   const meanCostMs = known.length === 0 ? 0 : known.reduce((total, cost) => total + cost, 0) / known.length
   const totalCostMs = options.units.reduce((total, unit) => total + (options.costs.get(unit) ?? meanCostMs), 0)
   return {
+    completeSelection: options.completeSelection,
     costs: options.costs,
     costsAreMs: options.costsAreMs,
     fixedMs: options.fixedMs,
@@ -260,6 +275,7 @@ function suiteEvidence(options: {
     nodeCount: Math.max(1, options.nodeCount),
     suiteMs: options.suiteMs,
     totalCostMs,
+    units: options.units,
   }
 }
 
@@ -273,7 +289,7 @@ function suiteEvidence(options: {
  *    `cli/tao-cli#4` today, and ranking today's files by yesterday's neighbours is what put a 228s
  *    shard at the end of a 1,122s run.
  * 2. The suite's recorded duration, divided by the ledger cost of the files this node holds against
- *    the cost of every file the suite runs here, with each node charged its own process startup. The
+ *    the cost of every file in the complete suite inventory, with each node charged its own process startup. The
  *    ledger's numbers are relative — they were recorded under whatever load that run had — so they
  *    only apportion the suite's measured total, never replace it. A file the ledger has not seen is
  *    charged the mean of the ones it has, as `TestShards.packFiles` does.
@@ -296,14 +312,20 @@ function estimateNodeMs(
 ): number | undefined {
   const own = RunTimings.expectedMs(timings, name)
   const isShard = TestShards.suiteOf(name) !== name && !name.includes(':')
-  if (own !== undefined && !isShard) {
+  if (own !== undefined && !isShard && evidence.completeSelection) {
     return own
   }
   const nodeCostMs = files.reduce((total, file) => total + (evidence.costs.get(file) ?? evidence.meanCostMs), 0)
   if (evidence.suiteMs !== undefined) {
     if (evidence.totalCostMs > 0) {
       const variableMs = Math.max(0, evidence.suiteMs - evidence.fixedMs)
-      return Math.round(evidence.fixedMs + variableMs * (nodeCostMs / evidence.totalCostMs))
+      return Math.round(evidence.fixedMs + variableMs * TestShards.weightShare(files, evidence.units, evidence.costs))
+    }
+    if (!evidence.completeSelection) {
+      return Math.round(
+        evidence.fixedMs + Math.max(0, evidence.suiteMs - evidence.fixedMs)
+            * TestShards.weightShare(files, evidence.units, evidence.costs),
+      )
     }
     return Math.round(evidence.suiteMs / evidence.nodeCount)
   }

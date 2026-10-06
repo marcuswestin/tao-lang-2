@@ -46,7 +46,7 @@ export async function handleCommandKey(key: string, context: CommandKeyContext):
   }
 
   if (CommandRunner.isCommandRunning()) {
-    DevLoopOutput.logDevLoop('dev', `Command already running; ignored ${formatCommandKey(key)}.`)
+    CommandRunner.reportBusy(formatCommandKey(key))
     return
   }
 

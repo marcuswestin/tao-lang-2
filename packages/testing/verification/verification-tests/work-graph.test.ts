@@ -4,6 +4,7 @@ import {
   type WorkCommand,
   WorkGraph,
   type WorkNode,
+  type WorkRunOptions,
   type WorkRunResult,
   type WorkState,
 } from '../verification-src/WorkGraph'
@@ -87,6 +88,7 @@ type NodeSpec = {
   name: string
   cost?: number
   exitCode?: number
+  exitOnCancel?: boolean
   /** Whether the node waits for the test to release it before finishing. */
   held?: boolean
   idleTimeoutMs?: number
@@ -101,6 +103,7 @@ type NodeSpec = {
 
 type ScheduledRun = {
   commandOf: (name: string) => WorkCommand | undefined
+  cancellationGraceOf: (name: string) => number | undefined
   envOf: (name: string) => Record<string, string>
   finished: Promise<WorkRunResult>
   interrupt: () => void
@@ -129,6 +132,7 @@ function schedule(
   options: {
     expectedMs?: Record<string, number>
     jobs?: number
+    slotBroker?: WorkRunOptions['slotBroker']
     stopOnFailure?: (state: WorkState) => boolean | Promise<boolean>
   } = {},
 ): ScheduledRun {
@@ -136,6 +140,7 @@ function schedule(
   const holds = new Map(specs.map(spec => [spec.name, Deferred()]))
   const environments = new Map<string, Record<string, string>>()
   const commands = new Map<string, WorkCommand>()
+  const cancellationGraces = new Map<string, number | undefined>()
   const started: string[] = []
   const states = specs.map(spec => WorkGraph.createState(workNode(spec)))
   let interrupt = () => {}
@@ -149,15 +154,22 @@ function schedule(
       environments.set(state.name, context.env)
       commands.set(state.name, context.run)
       let cancelled = false
-      context.onCancel(() => {
+      context.onCancel(graceMs => {
         cancelled = true
+        cancellationGraces.set(state.name, graceMs)
+        context.onOutput(`${state.name} stopped\n`)
         holds.get(state.name)?.resolve()
       })
       if (specsByName.get(state.name)?.held === true) {
         await holds.get(state.name)?.promise
       }
-      return { exitCode: cancelled ? null : specsByName.get(state.name)?.exitCode ?? 0 }
+      return {
+        exitCode: cancelled
+          ? specsByName.get(state.name)?.exitOnCancel === true ? 0 : null
+          : specsByName.get(state.name)?.exitCode ?? 0,
+      }
     },
+    slotBroker: options.slotBroker,
     stopOnFailure: options.stopOnFailure,
     watchInterrupt: request => {
       interrupt = request
@@ -167,6 +179,7 @@ function schedule(
 
   return {
     commandOf: name => commands.get(name),
+    cancellationGraceOf: name => cancellationGraces.get(name),
     envOf: name => environments.get(name) ?? {},
     finished,
     interrupt: () => interrupt(),
@@ -177,27 +190,46 @@ function schedule(
 }
 
 Describe('work graph scheduling', () => {
-  Test('stops admitting pending work after a definite failure and drains work already running', async () => {
+  Test('cancels running peers after a definite failure and drains before finishing', async () => {
+    const releasedSlots: number[] = []
     const run = schedule([
       { exitCode: 1, name: 'failed', priority: 2 },
-      { held: true, name: 'active', priority: 1 },
+      { exitOnCancel: true, held: true, name: 'active', priority: 1 },
       { name: 'pending' },
-    ], { jobs: 2, stopOnFailure: state => state.name === 'failed' })
+    ], {
+      jobs: 2,
+      slotBroker: {
+        tryAcquire: async slots => ({
+          release: async () => {
+            releasedSlots.push(slots)
+          },
+          slots,
+        }),
+        waitForAvailability: async () => {},
+      },
+      stopOnFailure: state => state.name === 'failed',
+    })
 
     await until(() => run.stateOf('pending').status === 'skipped', {
       description: 'the pending node to be skipped after a definite failure',
     })
     Expect(run.started).toEqual(['failed', 'active'])
-    Expect(run.stateOf('active').status).toBe('running')
+    await until(() => run.stateOf('active').status === 'skipped', {
+      description: 'the active peer to finish as incomplete after cancellation',
+    })
     Expect(run.stateOf('pending').reason).toBe('not run after definite failure: failed')
     Expect(run.stateOf('pending').failure?.kind).toBe('fail-fast')
-
-    run.release('active')
     const result = await run.finished
     Expect(result.haltedBy).toBe('failed')
     Expect(result.interrupted).toBe(false)
     Expect(run.stateOf('failed').status).toBe('failed')
-    Expect(run.stateOf('active').status).toBe('passed')
+    Expect(run.stateOf('active').status).toBe('skipped')
+    Expect(run.stateOf('active').failure?.kind).toBe('fail-fast')
+    Expect(run.stateOf('active').reason).toBe('canceled after definite failure: failed')
+    Expect(run.stateOf('active').fullOutput).toContain('active stopped')
+    Expect(run.cancellationGraceOf('active')).toBe(3_000)
+    Expect(run.started).toEqual(['failed', 'active'])
+    Expect(releasedSlots).toEqual([1, 1])
   })
 
   Test('holds admissions while an asynchronous failure classification is pending', async () => {
@@ -225,6 +257,30 @@ Describe('work graph scheduling', () => {
     classification.resolve()
     await run.finished
     Expect(run.stateOf('pending').status).toBe('skipped')
+  })
+
+  Test('preserves a timeout that started before another node confirmed fail-fast', async () => {
+    const classification = Deferred<boolean>()
+    const run = schedule([
+      { exitCode: 1, name: 'failure', priority: 1 },
+      { held: true, name: 'timed-out-peer', timeoutMs: 20 }, // budget-ok: timeout is under test.
+    ], {
+      jobs: 2,
+      stopOnFailure: state => state.name === 'failure' ? classification.promise : false,
+    })
+
+    await until(() => run.stateOf('failure').status === 'failed', {
+      description: 'the definite failure to await classification',
+    })
+    await until(() => run.stateOf('timed-out-peer').status === 'failed', {
+      description: 'the peer timeout to begin before fail-fast is confirmed',
+    })
+    classification.resolve(true)
+    const result = await run.finished
+
+    Expect(result.haltedBy).toBe('failure')
+    Expect(run.stateOf('timed-out-peer').failure?.kind).toBe('timeout')
+    Expect(run.stateOf('timed-out-peer').reason).toBe('timed out after 20ms')
   })
 
   Test('skips everything downstream of a failure and keeps independent nodes running', async () => {
@@ -597,6 +653,101 @@ Describe('work graph scheduling', () => {
       idleTimeoutMs: 30_000,
     })
     await assertDescendantTimeout(state, descendantPath, releasePath, 100)
+  })
+
+  Test('fail-fast stops an owned process tree and leaves an unrelated process alone', async () => {
+    const root = await mkTestDir('tao-work-graph-fail-fast-tree-')
+    const peerPath = FS.resolvePath('peer.pid', root)
+    const descendantPath = FS.resolvePath('descendant.pid', root)
+    const continuePath = FS.resolvePath('continue', root)
+    const unrelated = Bun.spawn(['/bin/sh', '-c', 'while :; do sleep 1; done'], {
+      detached: true,
+      stderr: 'ignore',
+      stdin: 'ignore',
+      stdout: 'ignore',
+    })
+    const unrelatedIdentity = await until(
+      () => ProcessTree.identities([unrelated.pid]).get(unrelated.pid),
+      { description: 'the unrelated process to have a tracked identity' },
+    )
+    const peer = WorkGraph.createState({
+      name: 'peer',
+      run: {
+        args: [
+          '-c',
+          'echo $$ > "$1"; trap "" TERM; sleep 300 & echo $! > "$2"; echo peer-ready; while [ ! -f "$3" ]; do sleep 0.01; done; while :; do sleep 300; done',
+          'fail-fast-peer',
+          peerPath,
+          descendantPath,
+          continuePath,
+        ],
+        command: '/bin/sh',
+      },
+    })
+    const failure = WorkGraph.createState(workNode({
+      name: 'failure',
+      priority: 1,
+      run: {
+        args: [
+          '-c',
+          'while [ ! -f "$1" ] || [ ! -f "$2" ]; do sleep 0.01; done; echo definite-failure; exit 1',
+          'fail-fast',
+          peerPath,
+          continuePath,
+        ],
+        command: '/bin/sh',
+      },
+    }))
+    let interrupt = () => {}
+    let finished = false
+    const running = WorkGraph.run([failure, peer], {
+      jobs: 2,
+      stopOnFailure: state => state.name === 'failure',
+      watchInterrupt: callback => {
+        interrupt = callback
+        return () => {}
+      },
+    })
+    void running.then(() => finished = true, () => finished = true)
+    try {
+      const peerProcess = await until(() => publishedProcess(peerPath), {
+        description: 'the running peer to publish its process identity',
+      })
+      const descendantProcess = await until(() => publishedProcess(descendantPath), {
+        description: 'the peer descendant to publish its process identity',
+      })
+      await FS.writeText(continuePath, '')
+      const result = await running
+      Expect(result.haltedBy).toBe('failure')
+      Expect(result.interrupted).toBe(false)
+      Expect(peer.fullOutput).toContain('peer-ready')
+      Expect(peer.status).toBe('skipped')
+      Expect(peer.failure?.kind).toBe('fail-fast')
+      Expect(ProcessTree.sameProcess(ProcessTree.identities([peerProcess!.pid]).get(peerProcess!.pid), peerProcess))
+        .toBe(false)
+      Expect(
+        ProcessTree.sameProcess(
+          ProcessTree.identities([descendantProcess!.pid]).get(descendantProcess!.pid),
+          descendantProcess,
+        ),
+      ).toBe(false)
+      Expect(ProcessTree.sameProcess(ProcessTree.identities([unrelated.pid]).get(unrelated.pid), unrelatedIdentity))
+        .toBe(true)
+    } finally {
+      await FS.writeText(continuePath, '')
+      if (!finished) {
+        interrupt()
+      }
+      await running
+      const currentUnrelated = ProcessTree.identities([unrelated.pid]).get(unrelated.pid)
+      if (ProcessTree.sameProcess(currentUnrelated, unrelatedIdentity)) {
+        ProcessTree.signalTracked(ProcessTree.descendants(unrelated.pid), 'SIGKILL')
+        ProcessTree.signalGroup(unrelated.pid, 'SIGKILL')
+        ProcessTree.signalTracked([unrelatedIdentity], 'SIGKILL')
+      }
+      await unrelated.exited
+      await FS.remove(root)
+    }
   })
 
   Test('a command that cannot be spawned fails the node without throwing out of the run', async () => {

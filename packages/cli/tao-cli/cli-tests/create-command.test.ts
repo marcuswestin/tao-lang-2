@@ -2,9 +2,17 @@ import { type JsonObject, ScriptedGenerationProvider } from '@generation'
 import { Errors, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { PassThrough } from 'node:stream'
-import { type CreateCommandOptions, type CreationPrompts, runCreate } from '../cli-src/create/create-command'
+import {
+  type CreateCommandOptions,
+  type CreationPrompts,
+  runCreate as runCreateWithProvider,
+} from '../cli-src/create/create-command'
 import type { CreationLane } from '../cli-src/create/creation-lanes'
 import { runTaoCliForTest } from './test-cli-files'
+
+// Existing command journeys deliberately exercise the local starter unless they select Firebase.
+const runCreate = (description: string, options: CreateCommandOptions) =>
+  runCreateWithProvider(description, { provider: 'local', ...options })
 
 const wholePlan: JsonObject = {
   name: 'Trip Planner',
@@ -81,6 +89,24 @@ async function relativeTaoFiles(directory: string): Promise<string[]> {
 }
 
 Describe('tao create command', () => {
+  Test('missing or unsupported providers fail before planning, prompts, or project writes', async () => {
+    await withRoot(async (root, output) => {
+      for (const provider of [undefined, 'appwrite']) {
+        const options = {
+          cwd: root,
+          output,
+          id: 'provider-probe',
+          provider: provider as CreateCommandOptions['provider'],
+          yes: true,
+          lanes: async () => Errors.throwUnexpected('Provider validation must precede lane detection.'),
+        }
+        await Expect(runCreateWithProvider('A notebook', options)).rejects.toThrow(
+          'Choose a datasource with --provider',
+        )
+        Expect(await FS.exists(FS.resolvePath('provider-probe', root))).toBe(false)
+      }
+    })
+  })
   Test('creates a Firebase app with local journeys and no connection setup', async () => {
     await withRoot(async (root, output, captured) => {
       const result = await runCreate('A notebook for short notes', {
@@ -547,6 +573,8 @@ Describe('tao create command', () => {
       const run = await runTaoCliForTest([
         'create',
         'A tiny list',
+        '--provider',
+        'local',
         '--ai',
         'none',
         '--yes',
@@ -557,6 +585,12 @@ Describe('tao create command', () => {
       Expect(run.stderr).toBe('')
       Expect(run.exitCode).toBe(0)
       Expect(await FS.exists(FS.resolvePath('tiny/App.tao', root))).toBe(true)
+
+      const missing = await runTaoCliForTest(['create', 'Another', '--ai', 'none', '--yes', '--id', 'missing'])
+      Expect(missing.exitCode).toBe(1)
+      Expect(missing.stderr).toContain('1. local')
+      Expect(missing.stderr).toContain('2. firebase')
+      Expect(await FS.exists(FS.resolvePath('missing', root))).toBe(false)
 
       const rejected = await runTaoCliForTest(['create', 'Another', '--ai', 'sometimes'])
       Expect(rejected.exitCode).toBe(1)

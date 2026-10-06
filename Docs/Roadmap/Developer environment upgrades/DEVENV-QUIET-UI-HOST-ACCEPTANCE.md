@@ -392,3 +392,11 @@
   denial is diagnosed, and the historical task selector is absent. Browser and Android checks remain in their
   dedicated entries. Persistent UI session control is explicitly deferred until after MVP.
 - **Source:** Developer-directed quiet development and testing workflow plan, 2026-10-01.
+
+- **Firebase diagnostic run2026-10-05:** Quiet Expo Go57.0.9 startup on reserved iPhone18Pro
+  F9FCE14B produced no bundle/database result. Session28d290dd managed stop twice timed out with
+  DOM TimeoutError while its controller remained live. After explicit Developer approval, the
+  matching recorded controller205 was terminated; repeating managed stop proved process cleanup,
+  disposal and Simulator release. Logs remain under the acceptance worktree .artifacts/dev-loops.
+  No viewer opened or unrelated iPhone17 session controlled. Preserve this as a cleanup/recovery
+  failure observation; successful recovery does not prove native app acceptance.

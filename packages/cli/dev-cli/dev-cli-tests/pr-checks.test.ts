@@ -13,7 +13,7 @@ const SLUG = 'owner/repo'
 const SHA = 'abcdef1234567890'
 const PR = { head: { ref: 'feat/example', sha: SHA }, html_url: 'https://github.com/owner/repo/pull/3', number: 3 }
 
-type Run = { conclusion: string | null; id: number; name: string; status: string }
+type Run = { completed_at?: string; conclusion: string | null; id: number; name: string; status: string }
 type WorkflowRun = { conclusion: string | null; head_sha: string; html_url: string; status: string }
 
 function run(name: string, status: string, conclusion: string | null = null, id = 1): Run {
@@ -28,6 +28,8 @@ function fakeDependencies(script: {
   mergeableState?: string
   pullRequest?: Record<string, unknown>
   statuses?: { context: string; state: string }[]
+  /** Answer every conditional status read 304, as GitHub does while nothing changed. */
+  unchangedStatuses?: boolean
   workflowRuns?: WorkflowRun[][]
 }) {
   const lines: string[] = []
@@ -39,12 +41,18 @@ function fakeDependencies(script: {
   let clock = 0
   const respond = (body: unknown, status = 200): Response =>
     new Response(JSON.stringify(body), { headers: { etag: `"${polls}"` }, status })
+  const sleeps: number[] = []
   const dependencies: PrChecksDependencies = {
     env: script.env ?? {},
     fetch: async (url, init) => {
       const path = url.replace('https://api.github.com', '')
       requested.push(path)
       requestHeaders.push(init.headers)
+      if (
+        script.unchangedStatuses === true && init.headers['If-None-Match'] !== undefined && path.endsWith('/status')
+      ) {
+        return new Response(null, { status: 304 })
+      }
       if (path.startsWith(`/repos/${SLUG}/pulls?`)) {
         return respond([PR])
       }
@@ -93,6 +101,7 @@ function fakeDependencies(script: {
       }
     },
     sleep: async ms => {
+      sleeps.push(ms)
       clock += ms
     },
     writeLine: line => lines.push(line),
@@ -105,6 +114,7 @@ function fakeDependencies(script: {
     pollCount: () => polls,
     requested,
     requestHeaders,
+    sleeps,
   }
 }
 
@@ -307,6 +317,84 @@ Describe('pr-checks', () => {
       'PASS  Partition 2/2',
     ])
     Expect(fake.lines.at(-1)).toBe('PASS  All 4 check(s) succeeded.')
+  })
+
+  Test('polls slowly while queued, faster while partitions run, fastest once one has finished', async () => {
+    const fake = fakeDependencies({
+      checkRuns: [
+        [
+          run('Verify', 'queued', null, 3),
+          run('Partition 1/2', 'queued', null, 1),
+          run('Partition 2/2', 'queued', null, 2),
+        ],
+        [
+          run('Verify', 'queued', null, 3),
+          run('Partition 1/2', 'in_progress', null, 1),
+          run('Partition 2/2', 'queued', null, 2),
+        ],
+        [
+          run('Verify', 'queued', null, 3),
+          run('Partition 1/2', 'completed', 'success', 1),
+          run('Partition 2/2', 'in_progress', null, 2),
+        ],
+        [
+          run('Verify', 'in_progress', null, 3),
+          run('Partition 1/2', 'completed', 'success', 1),
+          run('Partition 2/2', 'completed', 'success', 2),
+        ],
+        [
+          { ...run('Verify', 'completed', 'success', 3), completed_at: '2026-10-06T05:14:19Z' },
+          run('Partition 1/2', 'completed', 'success', 1),
+          run('Partition 2/2', 'completed', 'success', 2),
+        ],
+      ],
+    })
+
+    const result = await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT, wait: true }, fake.dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(fake.sleeps).toEqual([30_000, 15_000, 10_000, 10_000])
+    Expect(result.lines).toContain('PASS  Verify (concluded 2026-10-06T05:14:19Z)')
+  })
+
+  Test('keeps a fixed interval when one is given', async () => {
+    const fake = fakeDependencies({
+      checkRuns: [[run('Partition 1/1', 'queued', null, 1)], [run('Verify', 'completed', 'success')]],
+    })
+    await PrChecksCommand.run({ intervalMs: 7_000, pr: 3, repositoryRoot: ROOT, wait: true }, fake.dependencies)
+    Expect(fake.sleeps).toEqual([7_000])
+  })
+
+  Test('does not wait for the archive check that starts after the merge', async () => {
+    const fake = fakeDependencies({
+      checkRuns: [[
+        run('Verify', 'completed', 'success', 3),
+        run('Partition 1/1', 'completed', 'success', 1),
+        run('Archive', 'in_progress', null, 4),
+      ]],
+    })
+
+    const result = await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT, wait: true }, fake.dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(fake.pollCount()).toBe(1)
+    Expect(fake.lines.at(-1)).toBe('PASS  All 3 check(s) succeeded.')
+  })
+
+  Test('reads commit statuses conditionally, keeping the last body on a 304', async () => {
+    const fake = fakeDependencies({
+      checkRuns: [[run('Verify', 'in_progress')], [run('Verify', 'completed', 'success')]],
+      statuses: [{ context: 'Verify (host)', state: 'success' }],
+      unchangedStatuses: true,
+    })
+
+    const result = await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT, wait: true }, fake.dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(fake.requestHeaders.filter((_, i) => fake.requested[i]?.endsWith('/status')).map(h => h['If-None-Match']))
+      .toEqual([undefined, '"1"'])
+    Expect(fake.lines).toContain('PASS  Verify (host)')
+    Expect(fake.lines.at(-1)).toBe('PASS  All 2 check(s) succeeded.')
   })
 
   Test('reports a failure with its informative annotations only', async () => {

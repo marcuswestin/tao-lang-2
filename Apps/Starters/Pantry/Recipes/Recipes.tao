@@ -97,36 +97,37 @@ scene RecipeDetail(Recipe) {
    }
    Toolbar { SaveRecipeCommand }
    render ScrollView() [screen] {
-      Col() [column, panel] {
-         Text("RECIPE") [eyebrow]
-         guard Recipe {
-            loading -> { Spinner() }
-            missing -> { TextMultiline("This recipe no longer exists.") [body] }
-            error -> Context { TextMultiline("The recipe could not be loaded: { Context.Message }") [body] }
-         }
+      Col() [column] {
+         Col() [panel] {
+            Text("RECIPE") [eyebrow]
+            guard Recipe {
+               loading -> { Spinner() }
+               missing -> { TextMultiline("This recipe no longer exists.") [body] }
+               error -> Context { TextMultiline("The recipe could not be loaded: { Context.Message }") [body] }
+            }
 
-         #recipeTitleDraft
-         TextInput(Value: TitleDraft, Label: "Title", Placeholder: "Title") {
-            on submit SaveRecipe
-         }
+            #recipeTitleDraft
+            TextInput(Value: TitleDraft, Label: "Title", Placeholder: "Title") {
+               on submit SaveRecipe
+            }
 
-         #recipeStepsDraft
-         TextInput(Value: StepsDraft, Label: "Steps", Placeholder: "Steps") {
-            on submit SaveRecipe
-         }
-         Text("Minutes: { Recipe.Minutes }") [body]
+            #recipeStepsDraft
+            TextInput(Value: StepsDraft, Label: "Steps", Placeholder: "Steps") {
+               on submit SaveRecipe
+            }
+            Text("Minutes: { Recipe.Minutes }") [body]
 
-         #recipeFavorite
-         Checkbox(Value: Recipe.Favorite is Favorite, Label: "Favorite") {
-            on change SetFavorite
-         }
+            #recipeFavorite
+            Checkbox(Value: Recipe.Favorite is Favorite, Label: "Favorite") {
+               on change SetFavorite
+            }
 
-         #saveRecipe
-         FormButton("Save recipe", Disabled: TitleDraft is empty) {
-            on press SaveRecipe
-         }
+            #saveRecipe
+            FormButton("Save recipe", Disabled: TitleDraft is empty) {
+               on press SaveRecipe
+            }
 
-         #deleteRecipe
-         FormButton("Delete recipe") [buttonDanger] {
-            on press DeleteRecipe
-}  }  }  }
+            #deleteRecipe
+            FormButton("Delete recipe") [buttonDanger] {
+               on press DeleteRecipe
+}  }  }  }  }

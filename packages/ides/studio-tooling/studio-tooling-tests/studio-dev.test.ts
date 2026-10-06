@@ -869,6 +869,36 @@ Describe('Studio smoke resource isolation', () => {
 
     Expect(environment['PATH']).toBe('/repo/.devenv/profile/bin:/usr/bin:/bin')
     Expect(environment['WATCHMAN_SOCK']).toBe('/repo/.watchman.sock')
+    Expect(environment['TAO_STUDIO_FAST_HMR']).toBe('true')
+    Expect(environment['TAO_STUDIO_FAST_FILE_MAP']).toBe('true')
+
+    const diagnosticOptOut = await StudioDev.testing.studioWatchmanEnvironment({
+      environment: {
+        PATH: '/usr/bin',
+        TAO_STUDIO_FAST_HMR: 'false',
+        TAO_STUDIO_FAST_FILE_MAP: 'false',
+      },
+      isFile: async () => true,
+      repositoryRoot: '/repo',
+      run: async (command, spec) => {
+        const args = [...(spec.args ?? [])]
+        return {
+          args,
+          command,
+          exitCode: 0,
+          signal: null,
+          stderr: '',
+          stdout: args[0] === 'list-capabilities'
+            ? '{"version":"2026.01.19.00","capabilities":["field-content.sha1hex","relative_root","suffix-set","wildmatch"]}'
+            : args.includes('get-sockname')
+            ? '{"sockname":"/repo/.watchman.sock"}'
+            : '{"watch":"/repo"}',
+        }
+      },
+      watchRoot: '/repo',
+    })
+    Expect(diagnosticOptOut['TAO_STUDIO_FAST_HMR']).toBe('false')
+    Expect(diagnosticOptOut['TAO_STUDIO_FAST_FILE_MAP']).toBe('false')
     Expect(calls[0]?.args).toEqual(['list-capabilities', '--output-encoding=json', '--no-pretty', '--no-spawn'])
     Expect(calls[1]?.args).toEqual(['--no-pretty', 'get-sockname', '--no-spawn'])
     Expect(calls[2]?.args).toEqual(['watch-project', '/repo/.artifacts/dev/studio-preview/runtime-test'])
@@ -1493,6 +1523,7 @@ Describe('Studio smoke resource isolation', () => {
 
       // The dev data fact arrives once the session has resolved its app, and keeps the gateway fact.
       await runtime.configure({
+        displayName: 'Notes — sample-project',
         devData: {
           app: 'Notes-0123abcd',
           capability: 'test_capability_0123456789abcdef0123456789abcdef',
@@ -1501,6 +1532,7 @@ Describe('Studio smoke resource isolation', () => {
         },
       })
       const configured = await FS.readJson<{ expo: Record<string, unknown> }>(FS.resolvePath('app.json', runtime.root))
+      Expect(configured.expo['name']).toBe('Notes — sample-project')
       Expect(configured.expo['extra']).toEqual({
         taoDevData: {
           app: 'Notes-0123abcd',

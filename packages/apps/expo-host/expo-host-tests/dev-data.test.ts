@@ -111,13 +111,15 @@ Describe('dev data server', () => {
       Expect(await FS.exists(FS.resolvePath(`${firstApp}/${filename}`, rootDir))).toBe(false)
       Expect(await FS.exists(FS.resolvePath(`${secondApp}/${filename}`, rootDir))).toBe(false)
       Expect(await FS.listDir(ProjectLocal.localResolve('dev-data/Notes', firstProject))).toEqual([filename])
-      Expect(await FS.listDir(ProjectLocal.cacheResolve('dev-data/locks/Notes', firstProject))).toEqual([])
-      Expect(await FS.listDir(ProjectLocal.cacheResolve('dev-data/tmp/Notes', firstProject))).toEqual([])
     } finally {
       first.close?.()
       second.close?.()
       await server.stop()
     }
+    // While a stream is open the authority relocks it on every external-refresh tick, so the lock
+    // directory is only reliably empty once the server has stopped and drained its queues.
+    Expect(await FS.listDir(ProjectLocal.cacheResolve('dev-data/locks/Notes', firstProject))).toEqual([])
+    Expect(await FS.listDir(ProjectLocal.cacheResolve('dev-data/tmp/Notes', firstProject))).toEqual([])
   })
 
   ServerTest('keeps an app ID snapshot when its display name changes across server restarts', async () => {

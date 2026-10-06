@@ -1,4 +1,4 @@
-import { CLI, FS, HCI, Repo, Text } from '@shared'
+import { CLI, FS, HCI, ProjectDevSession, Repo, Text } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { PassThrough } from 'node:stream'
 import { discoverTaoDevProjects, type TaoDevProject } from '../cli-src/dev-app-discovery'
@@ -217,6 +217,104 @@ Describe('Tao run app discovery and selection', () => {
       // Quitting closes the dashboard's alternate screen, which restores the stale selector;
       // the exit line is what tells the user the CLI actually finished.
       Expect(stripAnsi(written)).toContain('Exited Tao run.')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('ordinary interactive Tao run wires Enter to the default orphan cleanup confirmation', async () => {
+    const root = await mkTestDir('tao-dev-orphan-confirm-', { location: 'host' })
+    try {
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+      await FS.writeText(
+        FS.resolvePath('App.tao', root),
+        `app Chosen { id "chosen" version "1.0.0" name "Chosen" view MainView } ${viewSource}`,
+      )
+      const input = terminalStream()
+      const output = terminalStream()
+      let written = ''
+      output.on('data', chunk => {
+        written += chunk.toString()
+      })
+      input.end('\n')
+      let confirmed = false
+      const exitCode = await runTaoDev(root, {
+        appName: 'Chosen',
+        input,
+        output,
+        interactive: true,
+        acquireSession: async (_projectRoot, _surface, options) => {
+          Expect(options?.foregroundInteractive).toBe(true)
+          Expect(options?.confirmOrphan).toBeDefined()
+          confirmed = await options!.confirmOrphan!({
+            version: 2,
+            id: '44444444-4444-4444-8444-444444444444',
+            owner: 'cli',
+            pid: 4242,
+            ownerIdentity: { pid: 4242, startedAt: 'owner', command: 'bun' },
+            parentIdentity: { pid: 1, startedAt: 'parent', command: 'init' },
+            foregroundInteractive: true,
+          })
+          return {
+            record: {
+              version: 2,
+              id: '55555555-5555-4555-8555-555555555555',
+              owner: 'cli',
+              pid: 4343,
+              ownerIdentity: { pid: 4343, startedAt: 'owner', command: 'bun' },
+              parentIdentity: { pid: 1, startedAt: 'parent', command: 'init' },
+              foregroundInteractive: true,
+              startedAt: new Date().toISOString(),
+              status: 'active',
+            },
+            release: async () => {},
+          }
+        },
+        runLoop: async () => ({ kind: 'exit', exitCode: 0 }),
+      })
+      Expect(exitCode).toBe(0)
+      Expect(confirmed).toBe(true)
+      Expect(stripAnsi(written)).toContain('Stop orphaned Tao run')
+      Expect(stripAnsi(written)).toContain('[Y/n]')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('noninteractive Tao run never wires auto-confirm for orphan cleanup', async () => {
+    const root = await mkTestDir('tao-dev-noninteractive-orphan-', { location: 'host' })
+    try {
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+      await FS.writeText(
+        FS.resolvePath('App.tao', root),
+        `app Chosen { id "chosen" version "1.0.0" name "Chosen" view MainView } ${viewSource}`,
+      )
+      let optionsSeen: Parameters<typeof ProjectDevSession.acquire>[2] | undefined
+      const exitCode = await runTaoDev(root, {
+        appName: 'Chosen',
+        interactive: false,
+        acquireSession: async (_projectRoot, _surface, options) => {
+          optionsSeen = options
+          return {
+            record: {
+              version: 2,
+              id: '66666666-6666-4666-8666-666666666666',
+              owner: 'cli',
+              pid: 4444,
+              ownerIdentity: { pid: 4444, startedAt: 'owner', command: 'bun' },
+              parentIdentity: { pid: 1, startedAt: 'parent', command: 'init' },
+              foregroundInteractive: false,
+              startedAt: new Date().toISOString(),
+              status: 'active',
+            },
+            release: async () => {},
+          }
+        },
+        runLoop: async () => ({ kind: 'exit', exitCode: 0 }),
+      })
+      Expect(exitCode).toBe(0)
+      Expect(optionsSeen?.foregroundInteractive).toBe(false)
+      Expect(optionsSeen?.confirmOrphan).toBeUndefined()
     } finally {
       await FS.remove(root)
     }

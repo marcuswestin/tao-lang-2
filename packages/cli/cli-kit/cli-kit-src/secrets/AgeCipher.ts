@@ -1,4 +1,4 @@
-import { CLI, Errors, FS } from '@shared'
+import { CLI, Errors, FS, HCI } from '@shared'
 import type { Cipher } from './SecretStore'
 
 function failureOf(result: CLI.CommandResult): string {
@@ -14,6 +14,9 @@ export function createAgeCipher(identityPath: string, setupCommand: string): Cip
           `No secrets identity at ${FS.displayPath(identityPath)}. Run \`${setupCommand}\` once on this machine.`,
         )
       }
+      HCI.writeStderr(
+        'Unlocking the secret store with this machine’s identity. On macOS, a Secure Enclave identity may ask for Touch ID or login authorization in a native dialog.\n',
+      )
       const result = await CLI.run('age', { args: ['--decrypt', '--identity', identityPath], stdin: armor })
       if (result.exitCode !== 0) {
         Errors.throwHostEnvironment(`age could not decrypt the store key: ${failureOf(result)}`)
