@@ -1,5 +1,4 @@
-import { CLI, FS } from '@shared'
-import { createHash } from 'node:crypto'
+import { CLI, FS, Platform } from '@shared'
 
 /**
  * The editor build's input identity, and the record that lets a later build prove its published
@@ -39,12 +38,8 @@ export type BuildFreshness =
   | { status: 'grammar-unmerged' }
   | { status: 'stale'; reason: string }
 
-function sha256(bytes: Uint8Array | string): string {
-  return createHash('sha256').update(bytes).digest('hex')
-}
-
 export async function hashFile(path: string): Promise<string> {
-  return sha256(await Bun.file(path).bytes())
+  return Platform.sha256Hex(await Bun.file(path).bytes())
 }
 
 /** buildInputIdentity hashes every tracked or unignored file the build may read, plus its options. */
@@ -54,15 +49,14 @@ export async function buildInputIdentity(repositoryRoot: string, options: BuildO
     cwd: repositoryRoot,
   })
   const paths = [...new Set(listed.stdout.split('\0').filter(path => path !== ''))].sort()
-  const hash = createHash('sha256')
-  hash.update(JSON.stringify({ version: RECORD_VERSION, options }))
+  const parts = [JSON.stringify({ version: RECORD_VERSION, options })]
   for (const path of paths) {
     const absolute = FS.resolvePath(path, repositoryRoot)
     // A file deleted from the worktree but still in the index hashes as absent.
     const content = await FS.exists(absolute) ? await hashFile(absolute) : 'absent'
-    hash.update(`${path}\0${content}\0`)
+    parts.push(`${path}\0${content}\0`)
   }
-  return hash.digest('hex')
+  return Platform.sha256Hex(parts)
 }
 
 /** hashOutputs hashes every file under the given roots, keyed relative to `baseRoot`. */
