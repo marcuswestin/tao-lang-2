@@ -9,13 +9,13 @@ work, or add a merge gate. The [initial pilot](pilot.md) explains the first obse
 Run from the repository root:
 
 ```sh
-./agent qa inventory --phase 1
-./agent qa run --phase 1 --scope changed
-./agent qa run --phase 1 --scope all
-./agent qa run --phase 1 --scope changed --resume RUN-ID
-./agent qa record --file .artifacts/qa/observation.json
-./agent qa finding --file .artifacts/qa/finding.json
-./agent qa report --phase 1
+./dev qa inventory --phase 1
+./dev qa run --phase 1 --scope changed
+./dev qa run --phase 1 --scope all
+./dev qa run --phase 1 --scope changed --resume RUN-ID
+./dev qa record --file .artifacts/qa/observation.json
+./dev qa finding --file .artifacts/qa/finding.json
+./dev qa report --phase 1
 ```
 
 Use phases 1 through 5 to generate each release packet. `inventory.json` inventories active authored
@@ -50,12 +50,39 @@ tutorial source test when DOC1 is selected. Check results are bounded, scoped ev
 produce editorial, visual, installed-artifact or human acceptance. External links, anchors and
 reference links remain explicit review work. Every other declared journey is dispatched as a
 selected surface for observation; none silently passes. Capture through
-`./agent unsandboxed qa-capture PROJECT --app APP --output .artifacts/qa/CAPTURE-ID` produces images
+`./dev qa-capture PROJECT --app APP --output .artifacts/qa/CAPTURE-ID` produces images
 for later inspection. Its `source-snapshot.json` copies every cell's status from the review
 manifest and is `complete` only when every cell was captured; otherwise it is `partial`. A capture
 failure blocks that visual assessment, and capture success alone does not judge a picture. A cell
 whose own preview logged a console error or uncaught exception is `failed`, even if its picture
 looks right; the message stays out of the artifacts, so reproduce it in a dev session to read it.
+
+### Discover and capture scenario apps
+
+Adding authored `.tao` app and scenario declarations under `Apps/` automatically adds screenshot
+coverage on the next inventory, run, or report. Discovery uses the project's parser and compiler
+manifest, including view scenarios reachable from each app. Tests, ignored files, generated trees,
+platform output and credential namespaces are excluded. Invalid or missing scenario sources appear
+as discovery failures in the inventory and report; they never silently count as covered.
+
+Capture all discovered apps from the repository root:
+
+```sh
+./dev qa-capture --output .artifacts/qa/scenario-round --timeout 300
+```
+
+The batch runs one headless app capture at a time, each in an isolated source snapshot, with a
+parent-enforced deadline in seconds. A timed-out child and its descendants are stopped before the
+next app runs. `coverage.json` records every expected app and cell before the first launch and is
+updated after each app, so an interrupted run retains missing coverage. It reports `captured`,
+`missing`, and `failed` cells, launch failures, discovery failures, and unexpected cells. Missing,
+empty or changed screenshots cannot count as captured. A partial batch exits unsuccessfully and
+keeps its per-app logs and snapshots for diagnosis; it never records a visual pass.
+
+Screenshot surfaces use stable `visual:PROJECT/APP` IDs. Their channels are JSON arrays of
+`[source, group, label]`, where source is project-relative. The same group/label in another file or
+another project cannot supply that channel's evidence. Scenarios keep their authored device and
+appearance; this command does not invent an additional device matrix or design rules.
 
 Interrupted runs resume only with their original phase, scope and unchanged inputs. Completed
 checks remain immutable; an interrupted individual check can execute again. Unique run/result IDs
@@ -89,16 +116,20 @@ Reviewers are `agent`, `human`, and `developer`; record the actual reviewer. Eve
 requires existing, nonempty repository-relative evidence and notes. A visual pass additionally
 requires an image. An agent's visual pass must also cite the capture's `complete`
 `source-snapshot.json`; every cited image must be the screenshot of a `captured` cell there, by file
-name and SHA-256, and a screenshot-set channel must cite the cell the inventory names for it (for example
-`phone-dark` is `QA views/dark`). The snapshot must record the app the surface names, so a capture of
+name and SHA-256, and a screenshot-set channel must cite the source/group/label cell the inventory names.
+The snapshot must record the project and app the surface names, so a capture of
 another project cannot stand in, and an agent cannot pass a channel for which the inventory declares
 no capture cell; today that leaves every story's visual channels to a person. A person may cite a
 screenshot alone. No visual pass may cite a
 `partial` or `blocked` capture snapshot. Recording rejects source changes since the frozen run. `historical: true` with original `observedAt` and `commit`
 imports earlier observations honestly: they always need recheck against the current candidate.
 
-The `source:hnreader-browser` and `source:tutorial-replay` dev checks and the `visual:reading-list`,
-`visual:notebook` and `visual:hnreader` screenshot sets retain the pilot's limited claims. Story IDs use `story:DOC1`, etc.; document
+The `source:hnreader-browser` and `source:tutorial-replay` dev checks retain the pilot's limited
+claims. The pilot's former `visual:reading-list`, `visual:notebook` and `visual:hnreader` records
+remain historical; current screenshot sets are discovered from authored apps, and old observations
+are not transferred to new identities. The tutorial's generated scratch app is outside this
+repository-app discovery; its source journey and release story still need their own evidence.
+Story IDs use `story:DOC1`, etc.; document
 IDs use `doc:README.md`, etc. Source tests and browser previews may supplement stories, but cannot
 fill their installed CLI, marketplace, native, device, public download or TestFlight cells.
 Different visual scenarios are distinct channels. Never mark a failed dark capture passed because

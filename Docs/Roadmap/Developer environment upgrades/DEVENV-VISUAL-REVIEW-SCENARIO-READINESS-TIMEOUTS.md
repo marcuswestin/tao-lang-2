@@ -28,6 +28,17 @@
   `e3ed6940`) completed every cell, including `devices / tabletDark` and `rows / wrapping`, with the
   snapshots under `Docs/QA/evidence/recheck-0aa8ebcf/`. One clean run each on a lightly loaded host
   shows the failure is intermittent at most; it does not show the cause is gone.
+  On 2026-10-06, automatic scenario discovery on `feat/scenario-qa-discovery` found 14 apps and
+  35 cells with no discovery failures. A 90-second-per-app batch retained every expected cell and
+  recorded four app deadline failures before it was interrupted during Notebook. A separate
+  Pantry capture reached Studio, Metro and headless Chrome, then failed all six cells at the
+  existing 60-second ready/failed predicate (`last=false`). It completed in 381.2 seconds with a
+  `partial` source snapshot and exit 1, with no screenshots. The preceding package test run was
+  contended, and host load during capture was still elevated; neither observation establishes a
+  cause. Logs and manifests: `.artifacts/qa/scenario-round-marked/coverage.json`,
+  `.artifacts/qa/pantry-discovery-smoke/review.json`, its `logs/studio.log`, and
+  `.artifacts/logs/agent/qa-capture/2026-10-06T17-31-46-222Z-90049.log`.
+  Discovery and bounded failure reporting are verified separately from successful browser capture.
 - **Workaround:** Inspect every manifest cell status and keep the affected visual dimension blocked.
   A fresh HNReader capture reached the manifest but still missed one cell, so retry is not a proven
   recovery. Preserve the original failure and any partial bundle when conducting a bounded recheck.
