@@ -15,6 +15,11 @@
   owner. This landed as `20bbeff06b95`; source proof and limited Android interaction do not complete
   the host matrix. Confirmed 2026-10-04: the unified persistent controller remains post-MVP, with
   no additional implementation in the cleanup/documentation follow-up.
+  The 2026-10-06 review against main `c8a997842` recommends one controller with multiple adapters,
+  retaining semantic/browser/mobile/physical evidence differences. Scoped cleanup custody, quiet
+  CDP attachment, calendar timestamps and shared mobile adaptation are tracked in
+  [UI interaction driver hardening](<../../Archive/Plans/Repository simplification 3/Plan.md>); they do not implement
+  the deferred persistent interaction service.
 - **Workaround:** Use existing named workflows and drivers, with scoped visibility permission and
   target-specific `--show-*` options for visible checks.
 - **Proposed change:** After MVP, design one persistent session interface for attaching to owned

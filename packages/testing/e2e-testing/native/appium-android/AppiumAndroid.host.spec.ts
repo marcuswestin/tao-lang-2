@@ -9,6 +9,7 @@ import type {
 } from '@host-control'
 import { expect, test } from '@playwright/test'
 import { Errors, FS, Repo } from '@shared'
+import { hostArtifactDate } from '../../environment/HostArtifactClock'
 import type { HostJourney } from '../../journey/HostJourney'
 import { assertNativeInputValue, enterNativeInput } from '../AppiumNativeInputs'
 import {
@@ -31,6 +32,38 @@ import {
 } from './AppiumAndroidHostProof'
 
 const revision: HostRevision = { build: 'build-a', source: 'source-a' }
+
+for (const controlled of [true, false]) {
+  test(`Android observations use ${controlled ? 'the injected calendar clock' : 'current epoch time by default'}`, async () => {
+    const root = await Repo.mkScratchDir('tao-appium-android-calendar-')
+    await FS.writeFile(FS.resolvePath('host.apk', root), new Uint8Array([1]))
+    const host = createAppiumAndroidController({
+      build: build(FS.resolvePath('host.apk', root)),
+      calendarClock: controlled ? () => new Date('2026-10-06T12:34:56.000Z') : undefined,
+      client: new FakeClient('calendar'),
+      leases: new FakeLeases(),
+      receipts: new FakeReceipts(),
+      target: target('emulator-5554'),
+    })
+    try {
+      const session = await open(host, root)
+      const before = hostArtifactDate().toISOString()
+      const observation = await session.observe({
+        expectedRevision: revision,
+        target: { kind: 'tag', value: 'reading' },
+      })
+      const after = hostArtifactDate().toISOString()
+      if (controlled) {
+        expect(observation.timestamp).toBe('2026-10-06T12:34:56.000Z')
+      } else {
+        expect(observation.timestamp >= before && observation.timestamp <= after).toBe(true)
+      }
+    } finally {
+      await host.close()
+      await FS.remove(root)
+    }
+  })
+}
 
 test('accepts the run-scoped Syntax2 APK and rejects an unrelated application', async () => {
   const root = await Repo.mkScratchDir('tao-appium-android-syntax2-')
