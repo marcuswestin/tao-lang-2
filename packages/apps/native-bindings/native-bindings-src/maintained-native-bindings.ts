@@ -220,7 +220,10 @@ function capturedFingerprint(stats: readonly string[], manifests: ReadonlyMap<st
   return Platform.sha256Hex([...stats, ...captured].join('\n'))
 }
 
-async function fingerprint(watched: readonly string[], manifests: ReadonlyMap<string, Uint8Array | null>): Promise<string> {
+async function fingerprint(
+  watched: readonly string[],
+  manifests: ReadonlyMap<string, Uint8Array | null>,
+): Promise<string> {
   return capturedFingerprint(await inBatches(watched, pathFingerprint), manifests)
 }
 

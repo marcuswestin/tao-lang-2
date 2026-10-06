@@ -322,8 +322,10 @@ function estimateNodeMs(
       return Math.round(evidence.fixedMs + variableMs * TestShards.weightShare(files, evidence.units, evidence.costs))
     }
     if (!evidence.completeSelection) {
-      return Math.round(evidence.fixedMs + Math.max(0, evidence.suiteMs - evidence.fixedMs)
-        * TestShards.weightShare(files, evidence.units, evidence.costs))
+      return Math.round(
+        evidence.fixedMs + Math.max(0, evidence.suiteMs - evidence.fixedMs)
+            * TestShards.weightShare(files, evidence.units, evidence.costs),
+      )
     }
     return Math.round(evidence.suiteMs / evidence.nodeCount)
   }

@@ -124,7 +124,6 @@ Describe('maintained native binding inspection memo', () => {
     })
   })
 
-
   Test('crosses the publisher barrier when publication starts during memo acceptance', async () => {
     const root = await mkTestDir('maintained-memo-acceptance-publisher-')
     const stdlibRoot = FS.resolvePath('stdlib', root)
@@ -181,5 +180,4 @@ Describe('maintained native binding inspection memo', () => {
       Expect((await reader).status).toBe('fresh')
     })
   })
-
 })

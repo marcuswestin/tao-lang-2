@@ -1,7 +1,8 @@
 # Organization migration follow-up and merge queue rollout
 
 Status: the repository remote is now `https://github.com/tao-dev-org/tao-lang.git`, and
-`Justfile`'s `github-setup` recipe uses that identity. The transfer preparation below is retained
+`Justfile`'s `github-setup` recipe uses that identity. `.gitmodules` now points storage at
+`https://github.com/tao-dev-org/tao-lang-storage.git`. The transfer preparation below is retained
 as a follow-up audit. This document does not establish that organization settings or native merge
 queue have been enabled or tested.
 
@@ -17,8 +18,8 @@ the queue prerequisites before requiring native merge queue. The live landing co
 - [x] Move the repository identity to `tao-dev-org/tao-lang` and update the setup recipe.
 - [ ] Confirm current visibility, organization plan, queue availability and administrator access.
       Review the organization's default member access and effective repository policies.
-- [ ] Decide separately whether `tao-lang-2-storage` stays under the personal account or moves.
-      Transferring the parent does not transfer the storage repository.
+- [x] Update the storage submodule URL to `tao-dev-org/tao-lang-storage`.
+- [ ] Audit storage repository access separately; parent repository access does not prove it.
 - [ ] Record current required checks, rulesets, branch protection, allowed merge methods,
       auto-merge, Apps, Actions permissions, runners, environments and package publishing.
       An earlier audit of the personal repository required `Verify`, allowed squash, and had
@@ -48,8 +49,8 @@ the queue prerequisites before requiring native merge queue. The live landing co
    policies and SSO, Actions allowlists/token permissions, runners, environments, secrets/variables,
    deploy keys, webhooks and package access. GitHub retains many repository settings and credentials,
    but the destination organization's policies can change their effective access.
-5. Audit Pages URLs and package publishing separately. If storage moves too, update `.gitmodules`
-   and sync its URL in each affected checkout.
+5. Audit Pages URLs and package publishing separately. Sync the updated storage URL in each
+   affected checkout and verify its access separately.
 
 ## Update existing checkouts
 
@@ -68,7 +69,7 @@ Inspect worktree-specific overrides and separate clones; update those independen
 explicit push URLs. Agents should refresh cached repository identity and PR links before their next
 remote operation. New checkouts usually are unnecessary.
 
-If the storage repository also moves, after the reviewed `.gitmodules` change lands:
+After integrating the reviewed `.gitmodules` change in each checkout:
 
 ```sh
 git submodule sync --recursive
