@@ -17,3 +17,12 @@
   dispatching the single physical click. Keep the existing fold assertions and retain failed-run
   evidence; this does not establish a shared click-helper fix or ten consecutive green complements.
 - **Source:** Second and third landings of `feat/landing-route-tooling` (#25), 2026-10-06.
+- **Separate request-lifetime evidence (2026-10-06):** PR #59 merged before its complement
+  failed at initial chat readiness (`2026-10-06T18-52-53-172Z-55524-86256e74`); an unchanged
+  retry failed later waiting for the stale-undo refusal (`2026-10-06T18-57-56-270Z-45344-fcd47cac`).
+  Both `studio-agent-browser.log` files report Bun's ten-second request idle timeout, without
+  identifying the request. The streamed approval response can wait quietly for the turn to finish;
+  the lazy browser bundle also awaits a build before responding. Studio now exempts these exact
+  GET bundle and POST stream routes, alongside beta shipping, from the request idle timeout.
+  Ordinary requests retain their default timeout. This closes an HTTP lifetime gap; it does not
+  prove which request timed out in either retained failure or settle the shared click-helper work.
