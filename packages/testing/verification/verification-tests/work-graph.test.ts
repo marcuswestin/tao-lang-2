@@ -890,4 +890,11 @@ Describe('work graph scheduling', () => {
     Expect(events.filter(event => event.startsWith('complete'))).toEqual(['complete a', 'complete b'])
     Expect(events.at(-1)).toBe('done')
   })
+
+  Test('an unrequested width takes the machine up to the cap, never below one slot', () => {
+    Expect(WorkGraph.defaultCapacity(4)).toBe(4)
+    Expect(WorkGraph.defaultCapacity(12)).toBe(12)
+    Expect(WorkGraph.defaultCapacity(18)).toBe(WorkGraph.DEFAULT_WIDTH_CAP)
+    Expect(WorkGraph.defaultCapacity(0)).toBe(1)
+  })
 })

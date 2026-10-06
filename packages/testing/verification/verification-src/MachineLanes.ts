@@ -10,6 +10,7 @@ import {
 import { CLI, Errors, FS, Platform, Time, VerificationTimeouts } from '@shared'
 import { type LaneInterval, type OverlapReport, RunHistory } from './RunHistory'
 import { VerificationLanes } from './VerificationLanes'
+import { WorkGraph } from './WorkGraph'
 
 export { MachineResourceBusyError }
 export type { MachineResourceOwner, ProcessIdentity }
@@ -231,7 +232,8 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
     lane: options.lane,
     maxSlots: Math.max(
       1,
-      options.requestedJobs ?? (options.cpuCount === undefined ? environmentJobs() : undefined) ?? cpuCount,
+      options.requestedJobs ?? (options.cpuCount === undefined ? environmentJobs() : undefined)
+        ?? WorkGraph.defaultCapacity(cpuCount),
     ),
     ...(parentLaneId === undefined || parentLaneId.length === 0 ? {} : { parentLaneId }),
     pid: Platform.runtimeProcess.pid,
