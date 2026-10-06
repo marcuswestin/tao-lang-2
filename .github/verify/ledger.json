@@ -3481,7 +3481,7 @@
       "suite": "language/project-tooling"
     },
     "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectFileWatch.integration.test.ts::seeded file cost": {
-      "durationMs": 81650,
+      "durationMs": 56233,
       "file": "packages/language/project-tooling/project-tooling-tests/ProjectFileWatch.integration.test.ts",
       "fileIdentity": "seeded",
       "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectFileWatch.integration.test.ts::seeded file cost",
@@ -3521,7 +3521,7 @@
       "suite": "language/project-tooling"
     },
     "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectToolingService.test.ts::seeded file cost": {
-      "durationMs": 63275,
+      "durationMs": 75894,
       "file": "packages/language/project-tooling/project-tooling-tests/ProjectToolingService.test.ts",
       "fileIdentity": "seeded",
       "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectToolingService.test.ts::seeded file cost",
@@ -5261,7 +5261,7 @@
       "suite": "language/project-tooling"
     },
     "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts::seeded file cost": {
-      "durationMs": 48794,
+      "durationMs": 59535,
       "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts",
       "fileIdentity": "seeded",
       "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts::seeded file cost",
@@ -5281,7 +5281,7 @@
       "suite": "language/project-tooling"
     },
     "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts::seeded file cost": {
-      "durationMs": 48794,
+      "durationMs": 68857,
       "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts",
       "fileIdentity": "seeded",
       "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts::seeded file cost",
@@ -5291,7 +5291,7 @@
       "suite": "language/project-tooling"
     },
     "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts::seeded file cost": {
-      "durationMs": 48794,
+      "durationMs": 33074,
       "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts",
       "fileIdentity": "seeded",
       "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts::seeded file cost",
@@ -5301,7 +5301,7 @@
       "suite": "language/project-tooling"
     },
     "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceipt.test.ts::seeded file cost": {
-      "durationMs": 153330,
+      "durationMs": 71599,
       "file": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceipt.test.ts",
       "fileIdentity": "seeded",
       "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceipt.test.ts::seeded file cost",
@@ -5311,7 +5311,7 @@
       "suite": "language/project-tooling"
     },
     "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptInputs.test.ts::seeded file cost": {
-      "durationMs": 207698,
+      "durationMs": 89838,
       "file": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptInputs.test.ts",
       "fileIdentity": "seeded",
       "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptInputs.test.ts::seeded file cost",
@@ -5321,7 +5321,7 @@
       "suite": "language/project-tooling"
     },
     "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptResolution.test.ts::seeded file cost": {
-      "durationMs": 109388,
+      "durationMs": 104698,
       "file": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptResolution.test.ts",
       "fileIdentity": "seeded",
       "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptResolution.test.ts::seeded file cost",
@@ -5331,7 +5331,7 @@
       "suite": "language/project-tooling"
     },
     "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptHost.test.ts::seeded file cost": {
-      "durationMs": 140460,
+      "durationMs": 84185,
       "file": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptHost.test.ts",
       "fileIdentity": "seeded",
       "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptHost.test.ts::seeded file cost",
@@ -5341,7 +5341,7 @@
       "suite": "language/project-tooling"
     },
     "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRaces.test.ts::seeded file cost": {
-      "durationMs": 142185,
+      "durationMs": 96703,
       "file": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRaces.test.ts",
       "fileIdentity": "seeded",
       "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRaces.test.ts::seeded file cost",
@@ -5479,6 +5479,116 @@
       "name": "seeded file cost",
       "outcome": "passed",
       "suite": "performance-checks"
+    },
+    "compiler::packages/compiler/compiler-tests/workspace/workspace-native-cache.test.ts::seeded file cost": {
+      "durationMs": 21557,
+      "file": "packages/compiler/compiler-tests/workspace/workspace-native-cache.test.ts",
+      "fileIdentity": "seeded",
+      "id": "compiler::packages/compiler/compiler-tests/workspace/workspace-native-cache.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-06T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "compiler"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectFileWatchTopology.integration.test.ts::seeded file cost": {
+      "durationMs": 58101,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectFileWatchTopology.integration.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectFileWatchTopology.integration.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-06T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectFileWatchRefresh.integration.test.ts::seeded file cost": {
+      "durationMs": 47998,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectFileWatchRefresh.integration.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectFileWatchRefresh.integration.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-06T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsBodies.test.ts::seeded file cost": {
+      "durationMs": 66817,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsBodies.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsBodies.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-06T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceiptSignatures.test.ts::seeded file cost": {
+      "durationMs": 109425,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceiptSignatures.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceiptSignatures.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-06T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScriptConsumers.test.ts::seeded file cost": {
+      "durationMs": 109530,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScriptConsumers.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScriptConsumers.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-06T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRepairs.test.ts::seeded file cost": {
+      "durationMs": 64873,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRepairs.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRepairs.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-06T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptOwnership.test.ts::seeded file cost": {
+      "durationMs": 65045,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptOwnership.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptOwnership.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-06T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectFileWatchSidecar.integration.test.ts::seeded file cost": {
+      "durationMs": 70704,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectFileWatchSidecar.integration.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectFileWatchSidecar.integration.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-06T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectFileWatchSidecarRoot.integration.test.ts::seeded file cost": {
+      "durationMs": 52822,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectFileWatchSidecarRoot.integration.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectFileWatchSidecarRoot.integration.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-06T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectFileWatchDependencies.integration.test.ts::seeded file cost": {
+      "durationMs": 21725,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectFileWatchDependencies.integration.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectFileWatchDependencies.integration.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-06T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
     }
   },
   "version": 1

@@ -23,7 +23,7 @@ variations:
    Developer has told to use it, never a way past a wait you find inconvenient.
 2. The same command starts the local complement beside `Verify`: `verify-complement`, one locked
    lane of exactly the gates CI cannot run, derived from the catalog's `requiresUnsandboxed` and
-   `requiresMacOS` gates minus whatever `CI_HOST_GATES` in `.github/workflows/verify.yml` admits
+   `requiresMacOS` gates minus whatever `CI_HOST_GATES` in `.github/workflows/ci-macos.yml` admits
    (about five minutes today). It posts the `Verify (host)` status on the head, which
    `pr-checks` follows beside `Verify`, and leaves a receipt (`complement.json`) beside the lane's
    `summary.json`. Never run the sandbox-capable gates locally as merge evidence: hosted `Verify`
@@ -108,13 +108,17 @@ green tree. It proves the portable gates only; the local complement in the route
 rest. Read the current workflow and lane membership when deciding what
 the complement is; a gate the workflow admits leaves the local list.
 
-The same workflow's `CI macOS` job (`macos-26`, not required, not waited for by `Verify`) runs
+The `CI macOS` workflow (`.github/workflows/ci-macos.yml`, `macos-26`, not required) runs
 `verify-full-ci`: the host gates `CI_HOST_GATES` admits plus the prepare nodes they read, every
-other host gate reported as `Pending CI host admission`, no green record. A dispatched run's
-`host_gates` input tries one admission for that run without editing the file, which is how a gate
-is measured before it is admitted. Admitting a gate removes it from the local complement, and
-`CI macOS` is not required, so admit one only once its hosted run is reliable and with the
-`main` ruleset requiring `CI macOS` by name; until then the complement stays the proof.
+other host gate reported as `Pending CI host admission`, no green record. It is a workflow of its
+own so a `Verify` run ends with its Linux partitions; as a job inside `Verify` it held the run in
+progress for its 16-minute wall, and `open-pr`'s admission and the `plan` job count such a run as
+holding the pool. It runs on pushes to `main` and on dispatch; a dispatched run's `host_gates`
+input tries one admission for that run without editing the file, which is how a gate is measured
+before it is admitted. Admitting a gate removes it from the local complement, and `CI macOS` is
+not required, so admit one only once its hosted run is reliable, in the same change that adds the
+`pull_request` trigger, and with the `main` ruleset requiring `CI macOS` by name; until then the
+complement stays the proof.
 
 For feature work, refresh affected documents, review and commit the exact task paths, and prepare
 the reviewed message at `.artifacts/merge/<branch>.msg` without paying for local broad verification
