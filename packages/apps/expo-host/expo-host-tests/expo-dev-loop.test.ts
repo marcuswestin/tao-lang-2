@@ -465,11 +465,14 @@ Describe('Expo dev-loop command helpers', () => {
         ],
       },
       logRoot: root,
+      resourceIndexRoot: FS.resolvePath('resource-inventory', root),
       runtimeToolchainSourceRoot: root,
     })
     try {
       const captured = await withCapturedOutput(async () => {
         await server.start()
+        const records = await FS.listDir(FS.resolvePath('resource-inventory', root))
+        Expect(records.filter(name => name.endsWith('.json'))).toHaveLength(1)
         await until(async () => {
           const raw = await FS.readText(FS.resolvePath(FS.basename(config.EXPO_LOG_PATH), root))
           return raw.includes('WARN Native Firebase persistence unavailable')

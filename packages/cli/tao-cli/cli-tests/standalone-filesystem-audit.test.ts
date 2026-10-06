@@ -293,13 +293,39 @@ Describe('standalone filesystem audit', () => {
         '/admin/Library/Caches/com.apple.amsaccountsd/Cache.db-shm',
         '/admin/Library/Caches/com.apple.containermanagerd/Dead',
         '/admin/Library/Caches/com.apple.remindd/Cache.db',
+        '/admin/Library/Caches/com.apple.AMPLibraryAgent/Cache.db-wal',
+        '/admin/Library/Caches/com.apple.Spotlight/index',
+        '/admin/Library/Caches/com.apple.helpd/HelpCache.plist',
+        '/admin/Library/Caches/com.apple.tipsd/Cache.db-wal',
+        '/admin/Library/Caches/com.apple.geoanalyticsd/APDB.db-shm',
+        '/admin/Library/Caches/com.apple.geoanalyticsd/APDB.db-wal',
+        '/admin/Library/Caches/com.google.GoogleUpdater/Cache.db-wal',
         '/admin/Library/HTTPStorages/com.apple.akd/httpstorages.sqlite-wal',
         '/admin/Library/HTTPStorages/com.apple.amsaccountsd/httpstorages.sqlite-wal',
         '/admin/Library/HTTPStorages/com.apple.appleaccountd/httpstorages.sqlite-wal',
         '/admin/Library/HTTPStorages/com.apple.appstoreagent/httpstorages.sqlite-wal',
         '/admin/Library/HTTPStorages/com.apple.itunescloudd/httpstorages.sqlite-wal',
+        '/admin/Library/HTTPStorages/com.apple.AMPLibraryAgent/httpstorages.sqlite-wal',
+        '/admin/Library/HTTPStorages/com.apple.tipsd/httpstorages.sqlite-wal',
+        '/admin/Library/HTTPStorages/com.apple.weatherd/httpstorages.sqlite-wal',
+        '/admin/Library/HTTPStorages/com.google.GoogleUpdater/httpstorages.sqlite-wal',
         '/admin/Library/Assistant/assistantdDidLaunch',
         '/admin/Library/Logs/Assistant/log',
+        '/admin/Library/Logs/DiagnosticReports/tao.diag',
+        '/admin/Library/Logs/CrashReporter/DiagnosticLogs/Search/spotlight_heartbeat_last.log',
+        '/admin/Library/Logs/PhotosSearch.aapbz',
+        '/admin/Library/Safari/PasswordBreachStore.plist',
+        '/admin/Library/Google',
+        '/admin/Library/Google/GoogleSoftwareUpdate',
+        '/admin/Library/Google/GoogleSoftwareUpdate/Actives',
+        '/admin/Library/Google/GoogleSoftwareUpdate/GoogleSoftwareUpdate.bundle/Contents/Info.plist',
+        '/admin/Library/LaunchAgents',
+        '/admin/Library/LaunchAgents/com.google.GoogleUpdater.wake.plist',
+        '/admin/Library/LaunchAgents/com.google.keystone.agent.plist',
+        '/admin/Library/LaunchAgents/com.google.keystone.xpcservice.plist',
+        '/admin/Library/PPM',
+        '/admin/Library/PPM/PAT',
+        '/admin/Library/PPM/PAT/Tokens_22_09_2026_06_46_01.pat',
         '/admin/Library/Sharing/AirDropHashDB/data',
         '/admin/Library/Sharing/AutoUnlock/pairing-records.plist',
         '/admin/Library/Shortcuts/Shortcuts.sqlite-wal',
@@ -310,6 +336,12 @@ Describe('standalone filesystem audit', () => {
         '/admin/Library/com.apple.iTunesCloud/play_activity.sqlitedb-wal',
         '/Library/Application Support/CrashReporter/AnonymousIdentifier.plist',
         '/Library/Application Support/com.apple.TCC/REG.db',
+        '/Library/CoreAnalytics',
+        '/Library/CoreAnalytics/taskedConfig.json',
+        '/Library/OSAnalytics/Diagnostics/com.apple.osanalytics.submissionStatus.plist',
+        '/Library/Receipts',
+        '/Library/Receipts/InstallHistory.plist',
+        '/Library/Updates/index.plist',
         '/Library/Bluetooth/com.apple.MobileBluetooth.ledevices.paired.db-wal',
         '/Library/Caches/com.apple.amsengagementd.classicdatavault/analytics/jetpackByteCode',
         '/Library/Keychains/System.keychain',
@@ -317,6 +349,10 @@ Describe('standalone filesystem audit', () => {
         '/Library/SystemExtensions/.staging',
         '/MobileSoftwareUpdate/restore.log',
         '/Volumes/Macintosh HD',
+        '/admin/Movies',
+        '/admin/Movies/TV',
+        '/admin/Movies/TV/Media.localized/.Media Preferences.plist',
+        '/admin/Movies/TV/TV Library.tvlibrary/Library.tvdb',
         '/private/tmp/powerlog',
         '/private/var/dirs_cleaner',
         '/private/var/networkd/db/netusage.sqlite-wal',
@@ -328,6 +364,9 @@ Describe('standalone filesystem audit', () => {
         '/private/var/run/syslog.pid',
         '/private/var/run/com.apple.launchd.aB123',
         '/private/var/run/com.apple.launchd.aB123/Listeners',
+        '/tmp/com.google.GoogleUpdater.GoogleUpdater_chrome_url_fetcher_.dFjktf',
+        '/tmp/com.google.GoogleUpdater.GoogleUpdater_chrome_url_fetcher_.dFjktf/8fbe8b1374dbf567b9f5b2b92af1edc52456ad43f2b528caf34b104961aa6899',
+        '/tmp/com.google.GoogleUpdater.GoogleUpdater_chrome_url_fetcher_.dFjktf/decoded_xz',
         ...[
           '.AddressBookLocks',
           'AudioComponentRegistrar',
@@ -351,8 +390,24 @@ Describe('standalone filesystem audit', () => {
         '/admin/.zsh_sessions-adjacent/session',
         '/admin/Library/Caches/com.apple.akd-unknown/file',
         '/admin/Library/Caches/com.apple.unknown/file',
+        '/admin/Library/Caches/com.apple.geoanalyticsd-adjacent/APDB.db-wal',
+        '/admin/Library/Caches/com.google.GoogleUpdater-adjacent/Cache.db',
         '/admin/Library/HTTPStorages/com.apple.akd-unknown/file',
+        '/admin/Library/HTTPStorages/com.apple.weatherd-adjacent/httpstorages.sqlite',
+        '/admin/Library/HTTPStorages/com.google.GoogleUpdater-adjacent/httpstorages.sqlite',
         '/admin/Library/Sharing/unknown/file',
+        '/admin/Library/Safari/PasswordBreachStore.plist-adjacent',
+        '/admin/Library/Logs/CrashReporter/DiagnosticLogs/Search-adjacent/log',
+        '/admin/Library/Logs/PhotosSearch.aapbz-adjacent',
+        '/admin/Library/Google/unexpected',
+        '/admin/Library/Google/GoogleSoftwareUpdate/unexpected',
+        '/admin/Library/Google/GoogleSoftwareUpdate/Actives-adjacent/item',
+        '/admin/Library/Google/GoogleSoftwareUpdate/GoogleSoftwareUpdate.bundle-adjacent/Contents/Info.plist',
+        '/admin/Library/LaunchAgents/com.google.other.plist',
+        '/admin/Library/LaunchAgents/com.google.keystone.agent.plist-adjacent',
+        '/admin/Library/PPM/other',
+        '/admin/Library/PPM/PAT-adjacent/token.pat',
+        '/admin/Library/PPM/PAT/Tokens_2_09_2026_06_46_01.pat',
         '/Library/Application Support/com.apple.unknown/file',
         '/Library/Bluetooth/unexpected',
         '/Library/Caches/com.apple.unknown/file',
@@ -374,9 +429,42 @@ Describe('standalone filesystem audit', () => {
         '/tmp/BlobRegistryFiles-unknown',
         '/tmp/CFNetworkDownload_unknown.tmp',
         '/tmp/tao-test-runs/file',
+        '/tmp/assistantd-adjacent/file',
+        '/tmp/siriknowledged-adjacent/file',
+        '/tmp/com.google.GoogleUpdater.GoogleUpdater_chrome_url_fetcher_.short/file',
+        '/tmp/com.google.GoogleUpdater.GoogleUpdater_chrome_url_fetcher_.dFjktf/unexpected',
+        '/tmp/com.google.GoogleUpdater.GoogleUpdater_chrome_url_fetcher_.dFjktf/decoded_xz/unexpected',
+        '/tmp/com.google.GoogleUpdater.other_chrome_url_fetcher_.dFjktf/file',
         '/admin/.tao/file',
         '/acceptance/home/.zsh_sessions/session',
         '/acceptance/home/Library/Caches/com.apple.akd/file',
+        '/Library/CoreAnalytics/unexpected',
+        '/Library/Receipts/unexpected',
+        '/Library/Updates/unexpected',
+        '/Library/OSAnalytics-adjacent/unexpected',
+        '/admin/Movies/unexpected',
+        '/admin/Movies/TV/unexpected',
+        '/admin/Movies/TV/Media.localized-adjacent/leak',
+        '/admin/Movies/TV/TV Library.tvlibrary-adjacent/leak',
+        '/acceptance/home/Library/Caches/com.apple.AMPLibraryAgent/leak',
+        '/acceptance/home/Library/Caches/com.apple.Spotlight/leak',
+        '/acceptance/home/Library/Caches/com.apple.helpd/leak',
+        '/acceptance/home/Library/Caches/com.apple.tipsd/leak',
+        '/acceptance/home/Library/HTTPStorages/com.apple.AMPLibraryAgent/leak',
+        '/acceptance/home/Library/HTTPStorages/com.apple.tipsd/leak',
+        '/acceptance/home/Library/Logs/DiagnosticReports/leak',
+        '/acceptance/home/Library/Safari/PasswordBreachStore.plist',
+        '/acceptance/home/Movies/TV/Media.localized/leak',
+        '/acceptance/home/Movies/TV/TV Library.tvlibrary/leak',
+        '/acceptance/home/Library/Caches/com.apple.geoanalyticsd/APDB.db-wal',
+        '/acceptance/home/Library/Caches/com.google.GoogleUpdater/Cache.db-wal',
+        '/acceptance/home/Library/HTTPStorages/com.apple.weatherd/httpstorages.sqlite-wal',
+        '/acceptance/home/Library/HTTPStorages/com.google.GoogleUpdater/httpstorages.sqlite-wal',
+        '/acceptance/home/Library/Google/GoogleSoftwareUpdate/GoogleSoftwareUpdate.bundle/Contents/Info.plist',
+        '/acceptance/home/Library/LaunchAgents/com.google.keystone.agent.plist',
+        '/acceptance/home/Library/Logs/CrashReporter/DiagnosticLogs/Search/log',
+        '/acceptance/home/Library/Logs/PhotosSearch.aapbz',
+        '/acceptance/home/Library/PPM/PAT/Tokens_22_09_2026_06_46_01.pat',
       ]
       try {
         await FS.writeJson(scopePath, { guestHome: '/admin', guestTemp: '/tmp', root: '/acceptance' })
@@ -541,6 +629,93 @@ Describe('standalone filesystem audit', () => {
           Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain(news)
         }
       }
+    } finally {
+      await FS.remove(fixture)
+    }
+  })
+
+  Test('allows only the exact added Xcode Chrome staging pair', async () => {
+    const fixture = await mkTestDir('tao-filesystem-chrome-staging-')
+    const before = FS.resolvePath('before.json', fixture)
+    const after = FS.resolvePath('after.json', fixture)
+    const diffPath = FS.resolvePath('diff.json', fixture)
+    const reportPath = FS.resolvePath('diff.txt', fixture)
+    const scopePath = FS.resolvePath('scope.json', fixture)
+    const root = '/guest/tmp/scoped_dirGsLsRE'
+    const marker = `${root}/.com.google.Chrome.FWBpoh`
+    const acceptanceArtifact = '/guest/acceptance/home/.tao'
+    const directory = { kind: 'directory', mode: 0o40700, size: 96, uid: 501, gid: 20, modifiedMs: 1 }
+    const emptyMarker = { kind: 'file', mode: 0o100600, size: 0, uid: 501, gid: 20, modifiedMs: 1 }
+    const snapshot = { issues: [], root: '/guest', skippedMounts: [] }
+    const pair = { [root]: directory, [marker]: emptyMarker }
+    const compare = () =>
+      CLI.run(Platform.runtimeProcess.execPath, {
+        args: ['run', AUDIT, 'compare', before, after, diffPath, reportPath, scopePath],
+      })
+    const rejected = async (entries: Record<string, unknown>, expected: string[]) => {
+      await FS.writeJson(before, { ...snapshot, entries: {} })
+      await FS.writeJson(after, { ...snapshot, entries: { [acceptanceArtifact]: { kind: 'directory' }, ...entries } })
+      Expect((await compare()).exitCode).not.toBe(0)
+      const { violations } = await FS.readJson<{ violations: string[] }>(diffPath)
+      for (const path of expected) {
+        Expect(violations).toContain(path)
+      }
+    }
+    try {
+      await FS.writeJson(scopePath, { guestHome: '/admin', guestTemp: '/tmp', root: '/acceptance', vmProfile: 'xcode' })
+      await FS.writeJson(before, { ...snapshot, entries: {} })
+      await FS.writeJson(after, { ...snapshot, entries: { [acceptanceArtifact]: { kind: 'directory' }, ...pair } })
+      const stagingResult = await compare()
+      Expect(stagingResult.exitCode).toBe(0)
+      Expect(await FS.readJson<{ violations: string[] }>(diffPath)).toMatchObject({ violations: [] })
+
+      const nonempty = { ...emptyMarker, size: 1 }
+      const wrongType = { ...emptyMarker, kind: 'directory', mode: 0o40700 }
+      const invalidCases = [
+        { entries: { [root]: directory }, expected: [root] },
+        { entries: { ...pair, [marker]: nonempty }, expected: [root, marker] },
+        { entries: { ...pair, [marker]: wrongType }, expected: [root, marker] },
+        { entries: { ...pair, [root]: { ...directory, mode: 0o40701 } }, expected: [root] },
+        { entries: { ...pair, [marker]: { ...emptyMarker, mode: 0o100640 } }, expected: [marker] },
+        { entries: { ...pair, [root]: { ...directory, uid: 502 } }, expected: [root] },
+        { entries: { ...pair, [marker]: { ...emptyMarker, gid: 21 } }, expected: [marker] },
+        { entries: { ...pair, [`${root}/unexpected`]: emptyMarker }, expected: [`${root}/unexpected`] },
+        {
+          entries: { ...pair, '/guest/tmp/scoped_dirGsLsRE-adjacent': directory },
+          expected: ['/guest/tmp/scoped_dirGsLsRE-adjacent'],
+        },
+        {
+          entries: {
+            ...pair,
+            '/guest/acceptance/home/tmp/scoped_dirGsLsRE': directory,
+            '/guest/acceptance/home/tmp/scoped_dirGsLsRE/.com.google.Chrome.FWBpoh': emptyMarker,
+          },
+          expected: [
+            '/guest/acceptance/home/tmp/scoped_dirGsLsRE',
+            '/guest/acceptance/home/tmp/scoped_dirGsLsRE/.com.google.Chrome.FWBpoh',
+          ],
+        },
+      ]
+      for (const testCase of invalidCases) {
+        await rejected(testCase.entries, testCase.expected)
+      }
+
+      // A pre-existing root with a newly added marker does not form an added pair.
+      await FS.writeJson(before, {
+        ...snapshot,
+        entries: { [acceptanceArtifact]: { kind: 'directory' }, [root]: directory },
+      })
+      await FS.writeJson(after, { ...snapshot, entries: { [acceptanceArtifact]: { kind: 'directory' }, ...pair } })
+      Expect((await compare()).exitCode).not.toBe(0)
+      Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain(marker)
+
+      await FS.writeJson(scopePath, {
+        guestHome: '/admin',
+        guestTemp: '/tmp',
+        root: '/acceptance',
+        vmProfile: 'vanilla',
+      })
+      await rejected(pair, [root, marker])
     } finally {
       await FS.remove(fixture)
     }

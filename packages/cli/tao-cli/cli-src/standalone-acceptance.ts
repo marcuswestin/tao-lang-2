@@ -548,6 +548,7 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
     while (port === undefined) {
       port = /Waiting on http:\/\/localhost:(\d+)/.exec(output)?.[1]
       if (port === undefined && (dev.exitCode !== null || Date.now() > deadline)) {
+        await collectDevStartupDiagnostics(dev.pid)
         Errors.throwUnexpected(`tao run did not start Metro:\n${output}`)
       }
       await Time.sleep(250)
@@ -591,6 +592,43 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
     await dev.waitForClose()
     if (ACCEPTANCE_LOG_DIR !== undefined) {
       await FS.writeText(FS.resolvePath('dev-loop.log', ACCEPTANCE_LOG_DIR), output)
+    }
+  }
+}
+
+/** Preserve the live startup stack before terminating a failed installed run. */
+async function collectDevStartupDiagnostics(pid: number | undefined): Promise<void> {
+  if (ACCEPTANCE_LOG_DIR === undefined) {
+    return
+  }
+  const commands = [
+    { name: 'dev-start-processes.log', command: '/bin/ps', args: ['-axo', 'pid,ppid,etime,%cpu,command'] },
+    ...(pid === undefined
+      ? []
+      : [{
+        name: 'dev-start-sample-command.log',
+        command: '/usr/bin/sample',
+        args: [String(pid), '5', '-file', FS.resolvePath('dev-start-sample.log', ACCEPTANCE_LOG_DIR)],
+      }, { name: 'dev-start-open-files.log', command: '/usr/sbin/lsof', args: ['-p', String(pid)] }]),
+    {
+      name: 'dev-start-diagnostic-reports.log',
+      command: '/bin/sh',
+      args: [
+        '-c',
+        'for report in /Library/Logs/DiagnosticReports/tao_*.diag; do [ -f "$report" ] || continue; printf "\\n%s\\n" "$report"; /bin/cat "$report"; done',
+      ],
+    },
+  ]
+  for (const diagnostic of commands) {
+    try {
+      const result = await CLI.run(diagnostic.command, {
+        args: diagnostic.args,
+        processPolicy: 'test',
+        timeoutMs: 30_000,
+      })
+      await FS.writeText(FS.resolvePath(diagnostic.name, ACCEPTANCE_LOG_DIR), result.stdout + result.stderr)
+    } catch (error) {
+      await FS.writeText(FS.resolvePath(diagnostic.name, ACCEPTANCE_LOG_DIR), Errors.formatForUser(error))
     }
   }
 }
