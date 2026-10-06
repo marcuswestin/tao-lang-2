@@ -122,15 +122,47 @@ await runWithCommands(commands => {
 
   commands
     .command('qa-capture')
-    .description('Capture headless review evidence; requires a separate visual judgment.')
-    .argument('<project>')
-    .requiredOption('--app <name>')
+    .description(
+      'Capture one app, or discover and capture every scenario app with bounded headless runs; needs visual judgment.',
+    )
+    .argument('[project]')
+    .option('--app <name>', 'App in the explicit project')
     .requiredOption('--output <path>')
-    .action(async (project: string, options: { app: string; output: string }) => {
+    .option('--timeout <seconds>', 'Deadline per app in a discovered batch (default: 300)')
+    .action(async (project: string | undefined, options: { app?: string; output: string; timeout?: string }) => {
+      if (project === undefined) {
+        if (options.app !== undefined) {
+          Errors.throwUserInput('--app requires a project; omit both to capture all discovered scenario apps.')
+        }
+        const { QaScenarioCaptures } = await import('./qa/QaScenarioCaptures')
+        const result = await new QaScenarioCaptures(Repo.getRoot()).run({
+          output: options.output,
+          timeoutSeconds: Number(options.timeout ?? 300),
+        })
+        HCI.writeLine(JSON.stringify(result, null, 2))
+        if (result.status !== 'complete') {
+          Platform.runtimeProcess.setExitCode(1)
+        }
+        return
+      }
+      if (!options.app) {
+        Errors.throwUserInput('An explicit QA capture project requires --app; omit both to discover all scenario apps.')
+      }
+      if (options.timeout !== undefined) {
+        Errors.throwUserInput(
+          '--timeout applies to discovered batches; omit the project and --app to use a per-app deadline.',
+        )
+      }
       const { runStudioReview } = await import('@studio-tooling/StudioReview')
       const { QaCapture } = await import('./qa/QaCapture')
-      const result = await new QaCapture(Repo.getRoot(), runStudioReview).run(project, options)
+      const result = await new QaCapture(Repo.getRoot(), runStudioReview).run(project, {
+        app: options.app,
+        output: options.output,
+      })
       HCI.writeLine(JSON.stringify(result, null, 2))
+      if (result.status !== 'complete') {
+        Platform.runtimeProcess.setExitCode(1)
+      }
     })
 
   commands

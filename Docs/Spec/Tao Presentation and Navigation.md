@@ -130,7 +130,7 @@ on the root app's SelectionNav and every reachable variant of that root.
 One source module may declare several apps. Generated modules expose a registry local to that module,
 and the module owning the selected app becomes the generated default entry. `run AppName` resolves
 the declaration through ordinary local/import visibility.
-Ordinary tooling uses `tao compile PATH --app NAME` and `dev PATH --app NAME`. Without `--app`, an
+Ordinary tooling uses `tao compile PATH --app NAME` and `tao run PATH --app NAME`. Without `--app`, an
 interactive terminal asks which app to use; a noninteractive process fails before code generation or
 Expo startup and lists the available names. Filename, source order, and a global name registry never
 select an app.

@@ -114,11 +114,20 @@ Describe('Studio visual review', () => {
     Expect(run.browserClosed).toBe(true)
     Expect(run.studioStopped).toBe(true)
     Expect(run.manifest.cells[0]?.status).toBe('captured')
+    Expect(run.activationClicks).toBe(0)
     Expect(await FS.readJson(FS.resolvePath('logs/browser-events.json', run.artifactRoot))).toEqual([{
       kind: 'console',
       level: 'error',
       timestamp: 17,
     }])
+  })
+
+  Test('activates an inactive scenario before waiting for its preview and capturing it', async () => {
+    const run = await reviewOneCell([], 'cell-frame', false)
+
+    Expect(run.activationClicks).toBe(1)
+    Expect(run.manifest.cells[0]?.status).toBe('captured')
+    Expect(run.captureSelectors).toHaveLength(2)
   })
 
   Test('fails a screenshot whose own preview logged an error, without copying the message', async () => {
@@ -355,7 +364,11 @@ Describe('Studio visual review', () => {
   })
 })
 
-async function reviewOneCell(events: readonly StudioCdpBrowserEvent[], frameId: string | null = 'cell-frame') {
+async function reviewOneCell(
+  events: readonly StudioCdpBrowserEvent[],
+  frameId: string | null = 'cell-frame',
+  initiallyActive = true,
+) {
   const root = await mkGitTestDir('tao-studio-review-test-')
   const projectRoot = FS.resolvePath('project', root)
   const artifactRoot = FS.resolvePath('output', root)
@@ -378,6 +391,39 @@ async function reviewOneCell(events: readonly StudioCdpBrowserEvent[], frameId: 
       sourceVersions: { 'Main.tao': 'source-4' },
     },
   } as const
+  let activationClicks = 0
+  let active = initiallyActive
+  class Element {
+    dataset: Record<string, string> = {
+      taoReviewKey: surface.cells[0].key,
+      taoReviewStatus: active ? 'ready' : 'pending',
+    }
+    scrollIntoView() {}
+    querySelector(selector: string) {
+      Expect(selector).toBe('.studio-preview-activation-toggle[aria-pressed="false"]')
+      return active ? null : activation
+    }
+  }
+  class Button extends Element {
+    click() {
+      activationClicks += 1
+      active = true
+      frame.dataset['taoReviewStatus'] = 'ready'
+    }
+  }
+  const frame = new Element()
+  const activation = new Button()
+  const document = {
+    querySelectorAll: (selector: string) => {
+      Expect([
+        '.studio-preview-cell[data-tao-review-key]',
+        '[data-tao-review-capture]',
+      ]).toContain(selector)
+      return [frame]
+    },
+  }
+  const evaluateCell = (expression: string) =>
+    new Function('document', 'HTMLElement', 'HTMLButtonElement', `return ${expression}`)(document, Element, Button)
   const captureSelectors: string[] = []
   let browserClosed = false
   let studioStopped = false
@@ -394,14 +440,18 @@ async function reviewOneCell(events: readonly StudioCdpBrowserEvent[], frameId: 
         browserClosed = true
       },
       evaluate: async <Result>(expression: string) => {
-        return (expression.includes('rawManifest') ? surface : true) as Result
+        return (expression.includes('rawManifest') ? surface : evaluateCell(expression)) as Result
       },
       frameIdOf: async () => frameId ?? undefined,
       goto: async url => {
         navigatedTo = url
       },
       rendererFingerprint: async () => renderer,
-      waitFor: async () => {},
+      waitFor: async expression => {
+        if (expression.includes('data-tao-review-key') && !evaluateCell(expression)) {
+          Errors.throwHostEnvironment('The scenario preview remained inactive while capture waited for readiness.')
+        }
+      },
     }),
     now: () => new Date('2026-09-03T12:00:00.000Z'),
     randomId: () => '12345678-rest',
@@ -426,6 +476,7 @@ async function reviewOneCell(events: readonly StudioCdpBrowserEvent[], frameId: 
     }),
   })
   return {
+    activationClicks,
     artifactRoot,
     browserClosed,
     captureSelectors,

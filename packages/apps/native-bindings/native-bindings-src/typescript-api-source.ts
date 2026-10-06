@@ -80,9 +80,14 @@ export function resolveTypeScriptApiEngineInput(fromDirectory: string): string {
   return enginePath
 }
 
+// Evaluated directly, not required: Bun's transpiler would cache the 9 MB engine under the user's
+// home directory, outside the installed CLI's own storage. Each engine still loads once per process.
+const loadedEngines = new Map<string, typeof TS>()
+
 function typescriptEngine(fromDirectory: string): typeof TS {
   const enginePath = resolveTypeScriptApiEngineInput(fromDirectory)
-  const engine = engineRequire(enginePath) as typeof TS
+  const engine = loadedEngines.get(enginePath) ?? Platform.evaluateCommonJsFile(enginePath) as typeof TS
+  loadedEngines.set(enginePath, engine)
   Assert.input(
     engine.ScriptTarget?.ESNext !== undefined && engine.ModuleResolutionKind?.Bundler !== undefined
       && typeof engine.createProgram === 'function' && typeof engine.resolveModuleName === 'function'

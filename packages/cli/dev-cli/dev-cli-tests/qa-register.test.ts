@@ -18,6 +18,13 @@ async function fixture(exitCode = 0): Promise<{ root: string; qa: QaRegister }> 
         '.agents/skills/example/SKILL.md': 'Generated skill copy',
         'packages/ai/tao-skills/skills/tao-data/SKILL.md': 'Packaged skill',
         'Apps/Starters/Notebook/.claude/skills/tao-data/SKILL.md': 'Starter copy of the packaged skill',
+        'Apps/Starters/Notebook/.tao/.gitignore': 'local/\n',
+        'Apps/Starters/Notebook/App.tao': `app Notebook { id "notebook" }
+scenarios Notebook "devices" {
+  device phone
+  scenario "phone" {}
+  scenario "tabletDark" { appearance dark device tablet }
+}`,
         'Docs/ArChIvE/old.md': 'Frozen historical document',
         'LICENSE': 'Fixture license',
         'packages/example/source.ts': 'export const value = 1\n',
@@ -44,6 +51,21 @@ async function input(root: string, name: string, value: unknown): Promise<string
 }
 
 Describe('QA evidence register', () => {
+  Test('reports scenario discovery failures alongside the inventory and release packet', async () => {
+    const { root, qa } = await fixture()
+    await FS.writeText(FS.resolvePath('Apps/Broken/.tao/.gitignore', root), 'local/\n')
+    await FS.writeText(
+      FS.resolvePath('Apps/Broken/Scenarios.tao', root),
+      'scenarios "broken" { scenario "unfinished" {',
+    )
+    const inventory = await new QaInventory(root).build(1)
+    Expect(inventory.scenarioDiscoveryFailures.some(failure => failure.source === 'Apps/Broken/Scenarios.tao')).toBe(
+      true,
+    )
+    await qa.report(1)
+    Expect(await FS.readText(FS.resolvePath('Docs/QA/release-1.md', root))).toContain('**failed discovery**')
+  })
+
   Test(
     'inventories hidden canonical and extensionless documents, all 49 additive stories, and explicit exclusions',
     async () => {
@@ -176,9 +198,9 @@ Describe('QA evidence register', () => {
       await Expect(qa.recordFile(
         await input(root, 'visual-no-image', {
           ...observation,
-          surfaceId: 'visual:notebook',
+          surfaceId: 'visual:Apps/Starters/Notebook/Notebook',
           dimension: 'visual',
-          channel: 'phone',
+          channel: '["App.tao","devices","phone"]',
           evidence: ['README.md'],
         }),
       )).rejects.toThrow('requires an inspected image')
@@ -186,7 +208,12 @@ Describe('QA evidence register', () => {
       const tablet = '.artifacts/capture/tablet.png'
       await FS.writeText(FS.resolvePath(image, root), 'phone image bytes')
       await FS.writeText(FS.resolvePath(tablet, root), 'tablet image bytes')
-      const visual = { ...observation, surfaceId: 'visual:notebook', dimension: 'visual', channel: 'phone' }
+      const visual = {
+        ...observation,
+        surfaceId: 'visual:Apps/Starters/Notebook/Notebook',
+        dimension: 'visual',
+        channel: '["App.tao","devices","phone"]',
+      }
       const hashes = (await qa.recordFile(
         await input(root, 'visual-friction', { ...visual, outcome: 'friction', evidence: [image, tablet] }),
       )).evidence.map(item => item.sha256)
@@ -201,9 +228,18 @@ Describe('QA evidence register', () => {
           owner: 'qa-capture',
           status,
           app,
+          originalProject: await FS.realPath(FS.resolvePath('Apps/Starters/Notebook', root)),
           cells: [
-            { group: 'devices', label: 'phone', status: 'captured', screenshot: phoneShot, sha256: hashes[0] },
             {
+              key: '["App.tao"]',
+              group: 'devices',
+              label: 'phone',
+              status: 'captured',
+              screenshot: phoneShot,
+              sha256: hashes[0],
+            },
+            {
+              key: '["App.tao"]',
               group: 'devices',
               label: 'tabletDark',
               status: tabletStatus,
@@ -230,16 +266,25 @@ Describe('QA evidence register', () => {
         qa.recordFile(
           await input(root, 'visual-failed-cell', {
             ...visual,
-            channel: 'tablet-dark',
+            channel: '["App.tao","devices","tabletDark"]',
             evidence: [tablet, failedCell],
           }),
         ),
       ).rejects.toThrow('captured cell')
       await Expect(
         qa.recordFile(
-          await input(root, 'visual-other-cell', { ...visual, channel: 'tablet-dark', evidence: [image, failedCell] }),
+          await input(root, 'visual-other-cell', {
+            ...visual,
+            channel: '["App.tao","devices","tabletDark"]',
+            evidence: [image, complete],
+          }),
         ),
       ).rejects.toThrow('shown by capture cell devices/tabletDark')
+      const omitted = '.artifacts/capture/omitted.json'
+      const receipt = await FS.readJson<{ cells: unknown[] }>(FS.resolvePath(complete, root))
+      await FS.writeJson(FS.resolvePath(omitted, root), { ...receipt, cells: receipt.cells.slice(0, 1) })
+      await Expect(qa.recordFile(await input(root, 'visual-omitted', { ...visual, evidence: [image, omitted] })))
+        .rejects.toThrow('missing a required captured cell: devices/tabletDark')
       const otherApp = await snapshot('other-app', 'complete', 'captured', { app: 'Pantry' })
       await Expect(qa.recordFile(await input(root, 'visual-other-app', { ...visual, evidence: [image, otherApp] })))
         .rejects.toThrow('shown by captures of Notebook')

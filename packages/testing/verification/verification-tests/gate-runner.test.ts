@@ -642,6 +642,72 @@ Describe('repository gate runner', () => {
     }
   })
 
+  Test('a partition records only the suites wholly inside it, never one sharded across partitions', async () => {
+    const root = await mkTestDir('tao-gate-partition-record-')
+    const original = TestRunner.testNodesFor
+    const files = ['one', 'two', 'three'].map(name => `packages/shared/shared-tests/${name}.test.ts`)
+    const restorePlan = testPlanSlot.install(async options => {
+      if (options.repositoryRoot !== root) {
+        return original(options)
+      }
+      const plan = TestNodes.build({
+        ledger: { version: 1, tests: {} },
+        timings: { version: 1, nodes: {} },
+        selected: files.map((file, index) => ({
+          name: `fixture-${index}`,
+          files: [file],
+          buildProcess: (_name, selected) => ({ command: 'fixture-runner', args: [], files: selected }),
+        })),
+      })
+      // Equal unknown costs place by name: split#1 on partition 1, split#2 on partition 2, whole on 1.
+      const shapes = [['split-suite', 'split-suite#1'], ['split-suite', 'split-suite#2'], [
+        'whole-suite',
+        'whole-suite',
+      ]]
+      for (const [index, state] of plan.states.entries()) {
+        state.suite = shapes[index]![0]!
+        state.name = shapes[index]![1]!
+      }
+      return { ...plan, states: [...plan.states] }
+    })
+    try {
+      for (const file of files) {
+        await FS.writeText(FS.resolvePath(file, root), '// test inventory fixture\n')
+      }
+      const started: string[] = []
+      // The suites read every generated tree, so a record stands for them only beside the generators.
+      const generated = async (_root: string, outputs: readonly GeneratedOutput[]): Promise<GeneratedEvidence> => ({
+        outputs: Object.fromEntries(outputs.map(output => [output, { inputs: 'inputs', outputs: 'outputs' }])),
+        version: 1,
+      })
+      const summary = await runGates({
+        gates: ['_compile-word-flower-app', '_ide-extension-build', '_parser-gen', '_test'],
+        greenTree: { captureGenerated: generated, hashTree: async () => 'tree-1', lanes: ['verify'] },
+        jobs: 1,
+        lane: 'verify',
+        logRoot: FS.resolvePath('logs', root),
+        machineLoadAverage: IDLE_MACHINE,
+        partition: { count: 2, index: 0 },
+        registryRoot: FS.resolvePath('registry', root),
+        repositoryRoot: root,
+        runGate: async name => {
+          started.push(name)
+          return { exitCode: 0, output: '' }
+        },
+      })
+
+      Expect(summary.status).toBe('passed')
+      Expect(started.filter(name => name.includes('suite')).toSorted()).toEqual(['split-suite#1', 'whole-suite'])
+      const records = (await GreenTree.load(root)).gates
+      // The other partition's shard never ran here, so the suite is not proved by this run.
+      Expect(records['split-suite']).toBeUndefined()
+      Expect(records['whole-suite']?.treeHash).toBe('tree-1')
+    } finally {
+      restorePlan()
+      await FS.remove(root)
+    }
+  })
+
   Test('skips the macOS-only gates off macOS and runs them on it', async () => {
     const macOnly = ['studio-canary']
     const linux = await run(['_repo-lint', ...macOnly], {}, { hostPlatform: 'linux' })
