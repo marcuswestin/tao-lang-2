@@ -370,9 +370,6 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
       name: 'native-receipt',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts'],
     }, {
-      name: 'native-receipt-signatures',
-      files: ['packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceiptSignatures.test.ts'],
-    }, {
       name: 'native-typescript',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts'],
     }, {
