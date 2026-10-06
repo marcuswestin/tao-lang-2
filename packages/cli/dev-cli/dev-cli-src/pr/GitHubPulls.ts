@@ -171,10 +171,10 @@ export function gitHubPulls(run: GhRunner, root: string, writeLine: (line: strin
         '--silent',
       ])
     },
-    /** The `Verify` workflow's runs for one commit, newest first. */
-    async verifyRuns(sha: string): Promise<WorkflowRun[]> {
+    /** Runs for one commit, newest first; defaults to Verify unless all workflows are requested. */
+    async verifyRuns(sha: string, allWorkflows = false): Promise<WorkflowRun[]> {
       const body = await api<{ workflow_runs: WorkflowRun[] }>([
-        `${REPOSITORY}/actions/workflows/verify.yml/runs?head_sha=${sha}&per_page=100`,
+        `${REPOSITORY}/actions/${allWorkflows ? 'runs' : 'workflows/verify.yml/runs'}?head_sha=${sha}&per_page=100`,
       ])
       return body.workflow_runs.filter(run => run.head_sha === sha)
     },

@@ -17,14 +17,19 @@ export async function cancelVerifyRuns(
   github: GitHub,
   sha: string,
   report: (line: string) => void,
+  allWorkflows = false,
 ): Promise<number> {
-  const active = (await github.verifyRuns(sha)).filter(run => run.status !== 'completed')
+  const active = (await github.verifyRuns(sha, allWorkflows)).filter(run => run.status !== 'completed')
   for (const run of active) {
     await github.cancelRun(run.id)
-    report(`PASS  Cancelled Verify run ${run.id} (${run.status}) on ${sha.slice(0, 8)}: ${run.html_url}`)
+    report(
+      `PASS  Cancelled ${allWorkflows ? 'workflow' : 'Verify'} run ${run.id} (${run.status}) on ${
+        sha.slice(0, 8)
+      }: ${run.html_url}`,
+    )
   }
   if (active.length === 0) {
-    report(`PASS  No Verify run is in flight on ${sha.slice(0, 8)}.`)
+    report(`PASS  No ${allWorkflows ? 'workflow' : 'Verify'} run is in flight on ${sha.slice(0, 8)}.`)
   }
   return active.length
 }
@@ -40,7 +45,7 @@ const defaultDependencies: CancelVerifyDependencies = { run: CLI.run, writeLine:
 /** CancelVerifyCommand cancels the `Verify` runs in flight for this worktree's HEAD. */
 export const CancelVerifyCommand = {
   async run(
-    options: { repositoryRoot?: string; sha?: string } = {},
+    options: { repositoryRoot?: string; sha?: string; allWorkflows?: boolean } = {},
     dependencies: CancelVerifyDependencies = defaultDependencies,
   ): Promise<{ cancelled: number; exitCode: number; lines: string[] }> {
     const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
@@ -52,7 +57,7 @@ export const CancelVerifyCommand = {
     const sha = options.sha
       ?? (await dependencies.run('git', { args: ['rev-parse', 'HEAD'], cwd: root, stdio: 'pipe' })).stdout.trim()
     const github = gitHubPulls(dependencies.run, root, dependencies.writeLine)
-    const cancelled = await cancelVerifyRuns(github, sha, report)
+    const cancelled = await cancelVerifyRuns(github, sha, report, options.allWorkflows)
     return { cancelled, exitCode: 0, lines }
   },
 } as const
