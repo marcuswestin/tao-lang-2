@@ -122,12 +122,15 @@ Describe('Studio visual review', () => {
     }])
   })
 
-  Test('activates an inactive scenario before waiting for its preview and capturing it', async () => {
-    const run = await reviewOneCell([], 'cell-frame', false)
+  Test('activates an inactive review cell once, waits through initialization, and preserves active cells', async () => {
+    const inactive = await reviewOneCell([], 'cell-frame', { initiallyActivated: false, initiallyDisabled: true })
+    Expect(inactive.activationClicks).toBe(1)
+    Expect(inactive.manifest.cells[0]?.status).toBe('captured')
+    Expect(inactive.captureSelectors).toHaveLength(2)
 
-    Expect(run.activationClicks).toBe(1)
-    Expect(run.manifest.cells[0]?.status).toBe('captured')
-    Expect(run.captureSelectors).toHaveLength(2)
+    const active = await reviewOneCell([], 'cell-frame', { initiallyActivated: true })
+    Expect(active.activationClicks).toBe(0)
+    Expect(active.manifest.cells[0]?.status).toBe('captured')
   })
 
   Test('fails a screenshot whose own preview logged an error, without copying the message', async () => {
@@ -367,7 +370,7 @@ Describe('Studio visual review', () => {
 async function reviewOneCell(
   events: readonly StudioCdpBrowserEvent[],
   frameId: string | null = 'cell-frame',
-  initiallyActive = true,
+  activation: { initiallyActivated?: boolean; initiallyDisabled?: boolean } = {},
 ) {
   const root = await mkGitTestDir('tao-studio-review-test-')
   const projectRoot = FS.resolvePath('project', root)
@@ -381,7 +384,7 @@ async function reviewOneCell(
       key: '["Main.tao","states","phone"]',
       label: 'phone',
       renderInputs: { arguments: { State: 'ready' } },
-      status: 'ready',
+      status: activation.initiallyActivated === false ? 'pending' : 'ready',
     }],
     manifest: {
       appName: 'Cards',
@@ -391,28 +394,40 @@ async function reviewOneCell(
       sourceVersions: { 'Main.tao': 'source-4' },
     },
   } as const
+  const captureSelectors: string[] = []
   let activationClicks = 0
-  let active = initiallyActive
-  class Element {
-    dataset: Record<string, string> = {
-      taoReviewKey: surface.cells[0].key,
-      taoReviewStatus: active ? 'ready' : 'pending',
+  class MockHtmlElement {
+    readonly dataset: Record<string, string | undefined>
+    constructor(status: string) {
+      this.dataset = { taoReviewKey: surface.cells[0].key, taoReviewStatus: status }
     }
-    scrollIntoView() {}
-    querySelector(selector: string) {
-      Expect(selector).toBe('.studio-preview-activation-toggle[aria-pressed="false"]')
-      return active ? null : activation
+    querySelector(selector: string): MockHtmlButton | null {
+      return selector === '.studio-preview-activation-toggle[aria-pressed="false"]'
+          && activationButton.ariaPressed === 'false'
+        ? activationButton
+        : null
     }
+    scrollIntoView(): void {}
   }
-  class Button extends Element {
-    click() {
+  class MockHtmlButton {
+    ariaPressed: string
+    disabled: boolean
+    constructor() {
+      this.ariaPressed = activation.initiallyActivated === false ? 'false' : 'true'
+      this.disabled = activation.initiallyDisabled ?? false
+    }
+    click(): void {
+      if (this.disabled) {
+        return
+      }
       activationClicks += 1
-      active = true
+      this.ariaPressed = 'true'
+      this.disabled = true
       frame.dataset['taoReviewStatus'] = 'ready'
     }
   }
-  const frame = new Element()
-  const activation = new Button()
+  const activationButton = new MockHtmlButton()
+  const frame = new MockHtmlElement(surface.cells[0].status)
   const document = {
     querySelectorAll: (selector: string) => {
       Expect([
@@ -422,9 +437,12 @@ async function reviewOneCell(
       return [frame]
     },
   }
-  const evaluateCell = (expression: string) =>
-    new Function('document', 'HTMLElement', 'HTMLButtonElement', `return ${expression}`)(document, Element, Button)
-  const captureSelectors: string[] = []
+  const evaluateExpression = (expression: string): unknown =>
+    new Function('document', 'HTMLElement', 'HTMLButtonElement', `return ${expression}`)(
+      document,
+      MockHtmlElement,
+      MockHtmlButton,
+    )
   let browserClosed = false
   let studioStopped = false
   let navigatedTo = ''
@@ -440,17 +458,33 @@ async function reviewOneCell(
         browserClosed = true
       },
       evaluate: async <Result>(expression: string) => {
-        return (expression.includes('rawManifest') ? surface : evaluateCell(expression)) as Result
+        if (expression.includes('rawManifest')) {
+          return {
+            ...surface,
+            cells: surface.cells.map(cell => ({
+              ...cell,
+              status: frame.dataset['taoReviewStatus'] as 'ready' | 'pending',
+            })),
+          } as Result
+        }
+        return evaluateExpression(expression) as Result
       },
       frameIdOf: async () => frameId ?? undefined,
       goto: async url => {
         navigatedTo = url
       },
       rendererFingerprint: async () => renderer,
-      waitFor: async expression => {
-        if (expression.includes('data-tao-review-key') && !evaluateCell(expression)) {
-          Errors.throwHostEnvironment('The scenario preview remained inactive while capture waited for readiness.')
+      waitFor: async (expression: string) => {
+        if (!expression.includes('const key =')) {
+          return
         }
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          if (evaluateExpression(expression) === true) {
+            return
+          }
+          activationButton.disabled = false
+        }
+        Errors.throwHostEnvironment('Mock review cell did not settle.')
       },
     }),
     now: () => new Date('2026-09-03T12:00:00.000Z'),

@@ -1,0 +1,123 @@
+{
+  "cells": [
+    {
+      "environment": {
+        "network": {
+          "latencyMs": 0,
+          "outcome": "normal"
+        },
+        "scheme": {
+          "capability": "reactive-browser",
+          "requested": "light",
+          "resolved": "light",
+          "source": "scenario"
+        },
+        "viewport": {
+          "height": 844,
+          "presetId": "phone",
+          "width": 390
+        }
+      },
+      "error": "Timed out waiting for browser expression: (() => {\n      const key = \"[\\\"ReadingList.tao\\\",\\\"QA views\\\",\\\"phone\\\",\\\"{\\\\\\\"arguments\\\\\\\":{},\\\\\\\"fixtureId\\\\\\\":\\\\\\\"/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/scratch/qa-capture/b2dc7b60-c4e6-468d-80a2-3a993fe8d510/project/ReadingList.tao#fixture:Sample\\\\\\\",\\\\\\\"prepare\\\\\\\":[],\\\\\\\"stateLayers\\\\\\\":[],\\\\\\\"steps\\\\\\\":[]}\\\",\\\"{\\\\\\\"network\\\\\\\":{\\\\\\\"latencyMs\\\\\\\":0,\\\\\\\"outcome\\\\\\\":\\\\\\\"normal\\\\\\\"},\\\\\\\"scheme\\\\\\\":{\\\\\\\"capability\\\\\\\":\\\\\\\"reactive-browser\\\\\\\",\\\\\\\"requested\\\\\\\":\\\\\\\"light\\\\\\\",\\\\\\\"resolved\\\\\\\":\\\\\\\"light\\\\\\\",\\\\\\\"source\\\\\\\":\\\\\\\"scenario\\\\\\\"},\\\\\\\"viewport\\\\\\\":{\\\\\\\"height\\\\\\\":844,\\\\\\\"presetId\\\\\\\":\\\\\\\"phone\\\\\\\",\\\\\\\"width\\\\\\\":390}}\\\"]\"\n      const frame = [...document.querySelectorAll('.studio-preview-cell[data-tao-review-key]')]\n        .find(candidate => candidate instanceof HTMLElement && candidate.dataset.taoReviewKey === key)\n      if (!(frame instanceof HTMLElement)) return false\n      if (['ready', 'failed'].includes(frame.dataset.taoReviewStatus ?? '')) return true\n      frame.scrollIntoView({ block: 'center', inline: 'center' })\n      return false\n    })(); last=false",
+      "group": "QA views",
+      "key": "[\"ReadingList.tao\",\"QA views\",\"phone\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":\\\"/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/scratch/qa-capture/b2dc7b60-c4e6-468d-80a2-3a993fe8d510/project/ReadingList.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"light\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "label": "phone",
+      "renderInputs": {
+        "arguments": {},
+        "fixtureId": "/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/scratch/qa-capture/b2dc7b60-c4e6-468d-80a2-3a993fe8d510/project/ReadingList.tao#fixture:Sample",
+        "prepare": [],
+        "stateLayers": [],
+        "steps": []
+      },
+      "status": "failed"
+    },
+    {
+      "environment": {
+        "network": {
+          "latencyMs": 0,
+          "outcome": "normal"
+        },
+        "scheme": {
+          "capability": "reactive-browser",
+          "requested": "light",
+          "resolved": "light",
+          "source": "scenario"
+        },
+        "viewport": {
+          "height": 900,
+          "presetId": "tablet",
+          "width": 1280
+        }
+      },
+      "error": "Timed out waiting for browser expression: (() => {\n      const key = \"[\\\"ReadingList.tao\\\",\\\"QA views\\\",\\\"desktop\\\",\\\"{\\\\\\\"arguments\\\\\\\":{},\\\\\\\"fixtureId\\\\\\\":\\\\\\\"/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/scratch/qa-capture/b2dc7b60-c4e6-468d-80a2-3a993fe8d510/project/ReadingList.tao#fixture:Sample\\\\\\\",\\\\\\\"prepare\\\\\\\":[],\\\\\\\"stateLayers\\\\\\\":[],\\\\\\\"steps\\\\\\\":[]}\\\",\\\"{\\\\\\\"network\\\\\\\":{\\\\\\\"latencyMs\\\\\\\":0,\\\\\\\"outcome\\\\\\\":\\\\\\\"normal\\\\\\\"},\\\\\\\"scheme\\\\\\\":{\\\\\\\"capability\\\\\\\":\\\\\\\"reactive-browser\\\\\\\",\\\\\\\"requested\\\\\\\":\\\\\\\"light\\\\\\\",\\\\\\\"resolved\\\\\\\":\\\\\\\"light\\\\\\\",\\\\\\\"source\\\\\\\":\\\\\\\"scenario\\\\\\\"},\\\\\\\"viewport\\\\\\\":{\\\\\\\"height\\\\\\\":900,\\\\\\\"presetId\\\\\\\":\\\\\\\"tablet\\\\\\\",\\\\\\\"width\\\\\\\":1280}}\\\"]\"\n      const frame = [...document.querySelectorAll('.studio-preview-cell[data-tao-review-key]')]\n        .find(candidate => candidate instanceof HTMLElement && candidate.dataset.taoReviewKey === key)\n      if (!(frame instanceof HTMLElement)) return false\n      if (['ready', 'failed'].includes(frame.dataset.taoReviewStatus ?? '')) return true\n      frame.scrollIntoView({ block: 'center', inline: 'center' })\n      return false\n    })(); last=false",
+      "group": "QA views",
+      "key": "[\"ReadingList.tao\",\"QA views\",\"desktop\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":\\\"/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/scratch/qa-capture/b2dc7b60-c4e6-468d-80a2-3a993fe8d510/project/ReadingList.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"light\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":900,\\\"presetId\\\":\\\"tablet\\\",\\\"width\\\":1280}}\"]",
+      "label": "desktop",
+      "renderInputs": {
+        "arguments": {},
+        "fixtureId": "/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/scratch/qa-capture/b2dc7b60-c4e6-468d-80a2-3a993fe8d510/project/ReadingList.tao#fixture:Sample",
+        "prepare": [],
+        "stateLayers": [],
+        "steps": []
+      },
+      "status": "failed"
+    },
+    {
+      "environment": {
+        "network": {
+          "latencyMs": 0,
+          "outcome": "normal"
+        },
+        "scheme": {
+          "capability": "reactive-browser",
+          "requested": "dark",
+          "resolved": "dark",
+          "source": "scenario"
+        },
+        "viewport": {
+          "height": 844,
+          "presetId": "phone",
+          "width": 390
+        }
+      },
+      "error": "Timed out waiting for browser expression: (() => {\n      const key = \"[\\\"ReadingList.tao\\\",\\\"QA views\\\",\\\"dark\\\",\\\"{\\\\\\\"arguments\\\\\\\":{},\\\\\\\"fixtureId\\\\\\\":\\\\\\\"/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/scratch/qa-capture/b2dc7b60-c4e6-468d-80a2-3a993fe8d510/project/ReadingList.tao#fixture:Sample\\\\\\\",\\\\\\\"prepare\\\\\\\":[],\\\\\\\"stateLayers\\\\\\\":[],\\\\\\\"steps\\\\\\\":[]}\\\",\\\"{\\\\\\\"network\\\\\\\":{\\\\\\\"latencyMs\\\\\\\":0,\\\\\\\"outcome\\\\\\\":\\\\\\\"normal\\\\\\\"},\\\\\\\"scheme\\\\\\\":{\\\\\\\"capability\\\\\\\":\\\\\\\"reactive-browser\\\\\\\",\\\\\\\"requested\\\\\\\":\\\\\\\"dark\\\\\\\",\\\\\\\"resolved\\\\\\\":\\\\\\\"dark\\\\\\\",\\\\\\\"source\\\\\\\":\\\\\\\"scenario\\\\\\\"},\\\\\\\"viewport\\\\\\\":{\\\\\\\"height\\\\\\\":844,\\\\\\\"presetId\\\\\\\":\\\\\\\"phone\\\\\\\",\\\\\\\"width\\\\\\\":390}}\\\"]\"\n      const frame = [...document.querySelectorAll('.studio-preview-cell[data-tao-review-key]')]\n        .find(candidate => candidate instanceof HTMLElement && candidate.dataset.taoReviewKey === key)\n      if (!(frame instanceof HTMLElement)) return false\n      if (['ready', 'failed'].includes(frame.dataset.taoReviewStatus ?? '')) return true\n      frame.scrollIntoView({ block: 'center', inline: 'center' })\n      return false\n    })(); last=false",
+      "group": "QA views",
+      "key": "[\"ReadingList.tao\",\"QA views\",\"dark\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":\\\"/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/scratch/qa-capture/b2dc7b60-c4e6-468d-80a2-3a993fe8d510/project/ReadingList.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"dark\\\",\\\"resolved\\\":\\\"dark\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "label": "dark",
+      "renderInputs": {
+        "arguments": {},
+        "fixtureId": "/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/scratch/qa-capture/b2dc7b60-c4e6-468d-80a2-3a993fe8d510/project/ReadingList.tao#fixture:Sample",
+        "prepare": [],
+        "stateLayers": [],
+        "steps": []
+      },
+      "status": "failed"
+    }
+  ],
+  "createdAt": "2026-10-06T17:19:42.585Z",
+  "project": {
+    "appName": "ReadingList",
+    "entryPath": "ReadingList.tao"
+  },
+  "renderer": {
+    "colorGamut": "srgb",
+    "deviceScaleFactor": 1,
+    "fontFingerprint": "[]",
+    "jsVersion": "15.4.80.20",
+    "locale": "en-US",
+    "platform": "MacIntel",
+    "product": "Chrome/154.0.8037.98",
+    "protocolVersion": "1.3",
+    "timezone": "America/New_York",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36"
+  },
+  "reviewId": "2026-10-06T17-19-42Z-399b1ef5",
+  "studio": {
+    "compileRevision": 1,
+    "manifestRevision": "compile:1",
+    "sourceVersions": {
+      "ReadingList.tao": "text-v1:6173:0omh0uq147mgkm"
+    }
+  },
+  "version": 1
+}

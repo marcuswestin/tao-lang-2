@@ -109,6 +109,7 @@ export async function runManagedLoopChromeInteraction(options: {
   const cdp = await (options.attach ?? StudioCdp.attach)({
     artifactRoot: options.artifactRoot,
     baseUrl: browser.devToolsUrl,
+    viewport: { width: 1440, height: 900 },
     // StudioCdp's selector uses startsWith; a complete origin plus slash cannot match another port.
     targetUrlPrefix: `${new URL(receipt.url).origin}/`,
   })

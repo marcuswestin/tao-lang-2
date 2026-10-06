@@ -1,0 +1,39 @@
+{
+  "id": "QA-TUTORIAL-RENAME-PROSE",
+  "status": "fixed-awaiting-qa",
+  "phase": 1,
+  "surfaceId": "doc:Docs/Tutorials/Your First Tao App.md",
+  "dimension": "text",
+  "channel": "source",
+  "severity": "minor",
+  "title": "Tutorial explains syntax its snippet does not use",
+  "observed": "Prose explains \"`Books as CurrentlyReading` renames the source\", but the snippet at :501 writes `query CurrentlyReading = Books with {`.",
+  "impact": "The reader looks for code they never wrote and may try the unsupported spelling.",
+  "location": "Docs/Tutorials/Your First Tao App.md:501, 552",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "Prose describes the code in the adjacent snippet.",
+  "recheck": "Reread step prose against its snippet.",
+  "evidence": [
+    "Docs/Tutorials/Your First Tao App.md"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "Docs/Tutorials/Your First Tao App.md",
+      "sha256": "7a4b7e1952404036618d0f2c89693d58e1afd2f311c6a24c050120649fd4d1c6"
+    }
+  ],
+  "createdAt": "2026-09-29T16:13:51.846Z",
+  "updatedAt": "2026-10-06T18:46:39.168Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "agent",
+  "relatedStories": [
+    "DOC1"
+  ],
+  "notes": "Refreshing source/browser/capture proof after integration of current main. Original reviewer and release boundaries remain unchanged."
+}

@@ -9,7 +9,6 @@ import { Errors, FS } from '@shared'
 import type { DevLoopMobilePublication } from '@shared/DevLoopControl'
 import type {
   AppiumAndroidClient,
-  AppiumAndroidElement,
   AppiumAndroidWebDriverSession,
 } from './appium-android/AppiumAndroidController'
 import type {
@@ -434,11 +433,11 @@ function devServerOrigin(url: string): string {
   return Errors.throwHostEnvironment('The managed mobile development server URL is unidentifiable.')
 }
 
-function iosSession(remote: WireSession): AppiumWebDriverSession {
-  const elements = new Map<string, WireElement>()
+/** Element bindings belong to one session, even when a remote ID is reused elsewhere. */
+function commonSession(remote: WireSession) {
+  const elements = new WeakMap<AppiumElement, WireElement>()
   const wrap = (element: WireElement): AppiumElement => {
-    elements.set(element.id, element)
-    return {
+    const adapted: AppiumElement = {
       click: async () => await element.click(),
       getAttribute: async name => await element.getAttribute(name),
       getRect: async () => requiredRect(await element.getRect(), element.id),
@@ -447,11 +446,35 @@ function iosSession(remote: WireSession): AppiumWebDriverSession {
       isDisplayed: async () => await element.visible(),
       sendKeys: async text => await element.sendKeys(text),
     }
+    elements.set(adapted, element)
+    return adapted
   }
-  const wire = (element: AppiumElement): WireElement => elements.get(element.id) ?? unknownElement(element.id)
+  const wire = (element: AppiumElement): WireElement => elements.get(element) ?? unknownElement(element.id)
   return {
-    activateApp: async appId => await remote.activateApplication(appId),
-    deleteSession: async () => await remote.delete(),
+    wire,
+    findWithin: async (scope: AppiumElement, locator: Parameters<WireSession['find']>[0]) =>
+      wrap(await wire(scope).find(locator)),
+    findAllWithin: async (scope: AppiumElement, locator: Parameters<WireSession['find']>[0]) =>
+      (await wire(scope).findAll(locator)).map(wrap),
+    session: {
+      activateApp: async (appId: string) => await remote.activateApplication(appId),
+      deleteSession: async () => await remote.delete(),
+      findElement: async (locator: Parameters<WireSession['find']>[0]) => wrap(await remote.find(locator)),
+      findElements: async (locator: Parameters<WireSession['find']>[0]) => (await remote.findAll(locator)).map(wrap),
+      id: remote.id,
+      pressKey: async (key: string) => await remote.actions(keyActions(key)),
+      screenshot: async () => await remote.screenshot(),
+      terminateApp: async (appId: string) => await remote.terminateApplication(appId),
+    },
+  }
+}
+
+function iosSession(remote: WireSession): AppiumWebDriverSession {
+  const common = commonSession(remote)
+  return {
+    ...common.session,
+    findElementFrom: common.findWithin,
+    findElementsFrom: common.findAllWithin,
     dismissAlertIfPresent: async () => {
       if (remote.dismissAlert === undefined) {
         return
@@ -470,64 +493,33 @@ function iosSession(remote: WireSession): AppiumWebDriverSession {
         'Appium XCUITest could not drain the pre-existing system alert queue after 10 dismissals.',
       )
     },
-    findElement: async locator => wrap(await remote.find(locator)),
-    findElementFrom: async (scope, locator) => wrap(await wire(scope).find(locator)),
-    findElements: async locator =>
-      await Promise.all((await remote.findAll(locator)).map(async element => wrap(element))),
-    findElementsFrom: async (scope, locator) =>
-      await Promise.all((await wire(scope).findAll(locator)).map(async element => wrap(element))),
-    id: remote.id,
     openDeepLink: async (url, appId) => await remote.executeScript('mobile: deepLink', [{ bundleId: appId, url }]),
-    pressKey: async key => await remote.actions(keyActions(key)),
-    screenshot: async () => await remote.screenshot(),
     revealElement: async element =>
-      await remote.executeScript('mobile: scrollToElement', [{ elementId: wire(element).id }]),
+      await remote.executeScript('mobile: scrollToElement', [{ elementId: common.wire(element).id }]),
     scroll: async input =>
       await remote.executeScript('mobile: scroll', [{
-        ...(input.element === undefined ? {} : { elementId: wire(input.element).id }),
+        ...(input.element === undefined ? {} : { elementId: common.wire(input.element).id }),
         direction: scrollDirection(input),
       }]),
-    terminateApp: async appId => await remote.terminateApplication(appId),
   }
 }
 
 function androidSession(remote: WireSession): AppiumAndroidWebDriverSession {
-  const elements = new Map<string, WireElement>()
-  const wrap = (element: WireElement): AppiumAndroidElement => {
-    elements.set(element.id, element)
-    return {
-      click: async () => await element.click(),
-      getAttribute: async name => await element.getAttribute(name),
-      getRect: async () => requiredRect(await element.getRect(), element.id),
-      getText: async () => await element.getText() ?? '',
-      id: element.id,
-      isDisplayed: async () => await element.visible(),
-      sendKeys: async text => await element.sendKeys(text),
-    }
-  }
-  const wire = (element: AppiumAndroidElement): WireElement => elements.get(element.id) ?? unknownElement(element.id)
+  const common = commonSession(remote)
   return {
-    activateApp: async appId => await remote.activateApplication(appId),
-    deleteSession: async () => await remote.delete(),
-    findElement: async locator => wrap(await remote.find(locator)),
-    findElementWithin: async (scope, locator) => wrap(await wire(scope).find(locator)),
-    findElements: async locator =>
-      await Promise.all((await remote.findAll(locator)).map(async element => wrap(element))),
-    findElementsWithin: async (scope, locator) =>
-      await Promise.all((await wire(scope).findAll(locator)).map(async element => wrap(element))),
-    id: remote.id,
+    ...common.session,
+    findElementWithin: common.findWithin,
+    findElementsWithin: common.findAllWithin,
     pressKey: async key =>
       key === 'Back'
         ? await remote.executeScript('mobile: pressKey', [{ keycode: 4 }])
         : await remote.actions(keyActions(key)),
-    screenshot: async () => await remote.screenshot(),
     scroll: async input =>
       await remote.executeScript('mobile: scrollGesture', [{
         direction: scrollDirection(input),
-        elementId: input.element === undefined ? undefined : wire(input.element).id,
+        elementId: input.element === undefined ? undefined : common.wire(input.element).id,
         percent: 0.75,
       }]),
-    terminateApp: async appId => await remote.terminateApplication(appId),
   }
 }
 

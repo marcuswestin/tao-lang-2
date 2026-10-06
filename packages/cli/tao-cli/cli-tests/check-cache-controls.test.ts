@@ -1,15 +1,19 @@
 import { FS, Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { CheckCache } from '../cli-src/check-cache'
-import { checkedWorkspaces, NESTED_WORKSPACE, TWO_WORKSPACES } from './helpers/check-cache-fixtures'
+import {
+  checkedWorkspaces,
+  NESTED_WORKSPACE,
+  TWO_WORKSPACES,
+  withStampedWorkspaces,
+} from './helpers/check-cache-fixtures'
 import { copyMaintainedBindingPayload } from './maintained-bindings-fixture'
 import { withTaoFixture } from './test-cli-files'
 
 Describe('tao check cache controls', () => {
   for (const key of CheckCache.NO_CACHE_ENV_KEYS) {
     Test(`checks every workspace from source when ${key} is set`, async () => {
-      await withTaoFixture(TWO_WORKSPACES, async rootDir => {
-        await checkedWorkspaces(rootDir)
+      await withStampedWorkspaces(async rootDir => {
         const previous = Platform.runtimeProcess.env[key]
         Platform.runtimeProcess.env[key] = 'true'
         try {
