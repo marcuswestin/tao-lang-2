@@ -10,6 +10,11 @@ name: Verify
 # which need a window server and an unsandboxed host. The landing route runs those locally while
 # this workflow runs (`agents/skills/verification-lanes/references/hosted-verification.md`).
 #
+# The contributor-agreement check is a job here rather than a workflow of its own, so a push to a
+# pull request shows as one run in the Actions list instead of two. It runs on the same token as
+# the partitions, which a fork's pull request receives read-only; the job then still decides, and
+# only its explanatory comment is lost (`CONTRIBUTING.md` says the same thing).
+#
 # The partition count is one number, `PARTITIONS` below, read by the `plan` job; nothing else in
 # this file states it. Never cache `.artifacts`: the plan reads recorded timings, and partitions
 # that restored different ones would place nodes differently. Each partition instead seeds them
@@ -53,7 +58,7 @@ env:
   #
   #   concurrency 11 (measured on 2026-10-06: 11 jobs start together, the twelfth queues):
   #     N = 10  one wave, about 405 s, one slot left for the small jobs that share the limit
-  #             (the aggregate, Contributor agreement, Archive merged branch)
+  #             (the aggregate, the contributor agreement, Archive merged branch)
   #     N = 11  one wave only while nothing else runs; any other job adds a second wave
   #     N = 12  two waves, about 760 s (the second wave is one partition the others wait for)
   #   concurrency 20 or more (the Team plan documents 60 total jobs):
@@ -79,6 +84,84 @@ env:
     Apps/Hosted CRUD/node_modules
 
 jobs:
+  # Holds a pull request until its author has accepted CLA.md by posting the agreement sentence on a
+  # pull request in this repository. The comment is the signature: GitHub authenticates who posted
+  # it, timestamps it, and keeps its edit history. It is this job's result, not a commit status, so a
+  # ruleset can require "Contributor agreement" on `main` by that name once the repository is
+  # public. A sentence posted after this ran counts on the next push, or when a maintainer re-runs
+  # the failed jobs of this run. Not on `edited`: a title change is not new code, and this workflow's
+  # other jobs would fan out with it.
+  cla:
+    name: Contributor agreement
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: write
+    env:
+      CLA_SENTENCE: I have read the Tao Contributor License Agreement, version 1.0, and I agree to it.
+      MARKER: '<!-- tao-cla -->'
+    steps:
+      - name: Check the author has accepted the agreement
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          # The repository belongs to an organization, so the maintainer is named rather than read
+          # from the owner, which is now the organization's login.
+          MAINTAINER: marcuswestin
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Each check reads a whole value first: grep -q in a pipeline would end it early and fail it.
+          signed() { grep -qiF -- "$CLA_SENTENCE" <<<"$1"; }
+          comments_by() {
+            gh api --paginate "repos/$REPO/issues/$1/comments" --jq ".[] | select(.user.login == \"$AUTHOR\") | .body"
+          }
+          # The maintainer holds the rights already.
+          accepted=false
+          if [ "$AUTHOR" = "$MAINTAINER" ]; then
+            accepted=true
+          # This pull request's description, or a comment on it, by its author.
+          elif signed "$(gh api "repos/$REPO/pulls/$NUMBER" --jq '.body // ""')" || signed "$(comments_by "$NUMBER")"; then
+            accepted=true
+          else
+            # An earlier pull request where the author accepted it.
+            for other in $(gh api -X GET search/issues \
+                -f q="repo:$REPO is:pr involves:$AUTHOR \"$CLA_SENTENCE\"" --jq '.items[].number'); do
+              body=$(gh api "repos/$REPO/pulls/$other" --jq "select(.user.login == \"$AUTHOR\") | .body")
+              if signed "$body" || signed "$(comments_by "$other")"; then
+                accepted=true
+                break
+              fi
+            done
+          fi
+
+          if [ "$accepted" = true ]; then
+            echo "@$AUTHOR has accepted the agreement."
+            exit 0
+          fi
+
+          echo "::error::@$AUTHOR has not accepted CLA.md. Post the agreement sentence as a comment on this pull request, then push or re-run this job."
+          # Explain once on the pull request; a fork's read-only token cannot, and this log says it then.
+          existing=$(gh api --paginate "repos/$REPO/issues/$NUMBER/comments" --jq '.[].body')
+          if ! grep -qF -- "$MARKER" <<<"$existing"; then
+            gh pr comment "$NUMBER" --repo "$REPO" --body "$MARKER
+          Thank you for the pull request, @$AUTHOR. Before it can be merged, please read the
+          [Tao Contributor License Agreement](https://github.com/$REPO/blob/main/CLA.md) and, if you agree,
+          post this sentence as a comment, exactly as written:
+
+          > $CLA_SENTENCE
+
+          Then push again or ask a maintainer to re-run the \"Contributor agreement\" check. It covers this
+          and every later contribution. You keep the copyright in your work; the agreement lets the
+          maintainer license Tao, your contribution included, under any terms." \
+              || echo "::warning::Could not post the explanation on the pull request; the token is read-only."
+          fi
+          exit 1
+
   # Turns the one partition count into the matrix the partitions fan out over. A matrix cannot read
   # `env`, so this job is the only place the count is resolved; it also records the override that
   # applied, so a run's summary says how it was split.
