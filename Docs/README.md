@@ -1,7 +1,5 @@
 # Docs
 
-<!-- Landing workflow smoke test: 2026-09-22. -->
-
 Written material about Tao, in six folders.
 
 - **`MVP Roadmap/`** — what remains before Tao is released to outside developers, split into the
