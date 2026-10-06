@@ -9,6 +9,11 @@ import { CLI, Errors, FS, Platform, Time } from '@shared'
 import { createManagedAppiumAndroidController } from './appium-android/AppiumAndroidController'
 import { createManagedAppiumXcuiTestController } from './appium/AppiumXcuiTestController'
 import { appiumAndroidClient, appiumXcuiTestClient } from './AppiumMobileClients'
+import {
+  type ManagedFirebaseEvidence,
+  type ManagedFirebaseWeb,
+  runManagedFirebaseFixture,
+} from './ManagedFirebaseFixture'
 import { type ManagedMobileGrant, type ManagedMobileIdentity, settleManagedMobileProof } from './ManagedMobileGrant'
 import { managedMobileResources } from './ManagedMobileResources'
 
@@ -69,6 +74,7 @@ export type ManagedMobileFixtureEvidence = Readonly<{
   identity: ManagedMobileIdentity
   workspaceName: string
   screenshots: readonly string[]
+  firebaseSync?: ManagedFirebaseEvidence
   driverClosed: true
   targetReservationPreserved: true
 }>
@@ -83,6 +89,8 @@ export async function runManagedMobileFixture(options: {
   beforeFixtureAction?: (phase: 'input' | 'add' | 'observe', grant: ManagedMobileGrant) => Promise<void>
   beforeDriverDeletion?: () => Promise<void>
   assertOwnedDiagnosticTargetCurrent?: () => Promise<void>
+  assertFirebaseStartupCurrent?: () => Promise<void>
+  openFirebaseWeb?: () => Promise<ManagedFirebaseWeb>
 }, dependencies: {
   startServer?: typeof startMobileAppiumServer
   resources?: typeof managedMobileResources
@@ -92,6 +100,11 @@ export async function runManagedMobileFixture(options: {
   const { grant } = options
   const { platform, id } = grant.identity.target
   const runtime = grant.identity.runtime
+  if (
+    options.assertFirebaseStartupCurrent !== undefined && (platform !== 'ios' || options.openFirebaseWeb === undefined)
+  ) {
+    Errors.throwUserInput('Managed Firebase startup requires the iOS Firebase sync fixture.')
+  }
   const revision = { build: runtime.compiledRevision, source: runtime.sourceRevision }
   const resources = (dependencies.resources ?? managedMobileResources)()
   let server: Awaited<ReturnType<typeof startMobileAppiumServer>> | undefined
@@ -141,6 +154,9 @@ export async function runManagedMobileFixture(options: {
             || request.purpose === 'managed-diagnostic'
             || request.path === '/session'
           ) {
+            if (request.method === 'POST' && request.path === '/session') {
+              await options.assertFirebaseStartupCurrent?.()
+            }
             await grant.assertRequestCurrent()
           } else {
             await grant.assertCurrent()
@@ -150,10 +166,18 @@ export async function runManagedMobileFixture(options: {
     }))
     controller = dependencies.controller !== undefined ? dependencies.controller() : platform === 'ios'
       ? createManagedAppiumXcuiTestController({
-        client: appiumXcuiTestClient(factory, grant),
+        client: appiumXcuiTestClient(
+          factory,
+          grant,
+          options.assertOwnedDiagnosticTargetCurrent === undefined ? undefined : {
+            artifactRoot,
+            assertOwnedTargetCurrent: options.assertOwnedDiagnosticTargetCurrent,
+          },
+        ),
         grant,
         leases: resources.leases,
         beforeDriverDeletion: options.beforeDriverDeletion,
+        firebaseStartupGuard: options.assertFirebaseStartupCurrent,
         target: { kind: 'simulator', udid: id, appId: runtime.appId },
       })
       : createManagedAppiumAndroidController({
@@ -178,58 +202,73 @@ export async function runManagedMobileFixture(options: {
       revision,
       target: id,
     })
-    const observe = async (target: HostTarget): Promise<HostObservation> => {
-      const result = await session!.observe({ expectedRevision: revision, target })
-      if (!result.visible) {
-        Errors.throwHostEnvironment('The managed fixture target is not visible.')
+    if (options.openFirebaseWeb !== undefined) {
+      const firebaseSync = await runManagedFirebaseFixture({
+        grant,
+        session,
+        openWeb: options.openFirebaseWeb,
+        artifactRoot,
+      })
+      evidence = {
+        identity: grant.identity,
+        workspaceName: firebaseSync.nativeMarker,
+        screenshots: firebaseSync.screenshots,
+        firebaseSync,
       }
-      return result
-    }
-    const screenshots: string[] = []
-    screenshots.push((await session.captureScreenshot('before-workspace')).artifactPath)
-    const workspaceName = `Managed ${Platform.randomUUID().slice(0, 8)}`
-    const input = await observe({
-      kind: 'scoped',
-      scope: { kind: 'tag', value: 'workspaceName' },
-      target: { kind: 'accessibility', role: 'textbox', name: '' },
-    })
-    await options.beforeFixtureAction?.('input', grant)
-    await session.perform({
-      kind: 'type',
-      observation: input,
-      text: workspaceName,
-      expectedRevision: revision,
-      lease: session.descriptor().lease,
-    })
-    const add = await observe({ kind: 'tag', value: 'addWorkspace' })
-    await options.beforeFixtureAction?.('add', grant)
-    await session.perform({
-      kind: 'click',
-      observation: add,
-      expectedRevision: revision,
-      lease: session.descriptor().lease,
-    })
-    await options.beforeFixtureAction?.('observe', grant)
-    const row = await Time.pollUntil(async () => {
-      try {
-        return await observe({
-          kind: 'scoped',
-          scope: { kind: 'tag', value: 'workspaces' },
-          target: { kind: 'text', value: workspaceName },
-        })
-      } catch (error) {
-        await grant.assertCurrent()
-        if (grant.signal.aborted) {
-          throw error
+    } else {
+      const observe = async (target: HostTarget): Promise<HostObservation> => {
+        const result = await session!.observe({ expectedRevision: revision, target })
+        if (!result.visible) {
+          Errors.throwHostEnvironment('The managed fixture target is not visible.')
         }
-        return undefined
+        return result
       }
-    }, { timeoutMs: 30_000, intervalMs: 100 })
-    if (row === undefined || row.text !== workspaceName) {
-      Errors.throwHostEnvironment('Data MVP did not render the workspace created by managed native input.')
+      const screenshots: string[] = []
+      screenshots.push((await session.captureScreenshot('before-workspace')).artifactPath)
+      const workspaceName = `Managed ${Platform.randomUUID().slice(0, 8)}`
+      const input = await observe({
+        kind: 'scoped',
+        scope: { kind: 'tag', value: 'workspaceName' },
+        target: { kind: 'accessibility', role: 'textbox', name: '' },
+      })
+      await options.beforeFixtureAction?.('input', grant)
+      await session.perform({
+        kind: 'type',
+        observation: input,
+        text: workspaceName,
+        expectedRevision: revision,
+        lease: session.descriptor().lease,
+      })
+      const add = await observe({ kind: 'tag', value: 'addWorkspace' })
+      await options.beforeFixtureAction?.('add', grant)
+      await session.perform({
+        kind: 'click',
+        observation: add,
+        expectedRevision: revision,
+        lease: session.descriptor().lease,
+      })
+      await options.beforeFixtureAction?.('observe', grant)
+      const row = await Time.pollUntil(async () => {
+        try {
+          return await observe({
+            kind: 'scoped',
+            scope: { kind: 'tag', value: 'workspaces' },
+            target: { kind: 'text', value: workspaceName },
+          })
+        } catch (error) {
+          await grant.assertCurrent()
+          if (grant.signal.aborted) {
+            throw error
+          }
+          return undefined
+        }
+      }, { timeoutMs: 30_000, intervalMs: 100 })
+      if (row === undefined || row.text !== workspaceName) {
+        Errors.throwHostEnvironment('Data MVP did not render the workspace created by managed native input.')
+      }
+      screenshots.push((await session.captureScreenshot('after-workspace')).artifactPath)
+      evidence = { identity: grant.identity, workspaceName, screenshots }
     }
-    screenshots.push((await session.captureScreenshot('after-workspace')).artifactPath)
-    evidence = { identity: grant.identity, workspaceName, screenshots }
   } catch (error) {
     failure = error
   } finally {

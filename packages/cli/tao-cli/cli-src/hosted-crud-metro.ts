@@ -4,7 +4,7 @@ import {
   startStudioProcessTree,
   stopStudioProcessTree,
 } from '@expo-host/dev-loop/StudioProcessTree'
-import { Errors, FS, HCI, Json, Platform, ProjectLocal, Text, Time } from '@shared'
+import { DevAppLogFilter, Errors, FS, HCI, Json, Platform, ProjectLocal, Text, Time } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { renderTerminalQr } from './hosted-crud-qr'
 import METRO_EVENTS_PRELOAD from './metro-events-preload.cjs.txt'
@@ -121,7 +121,7 @@ export async function runMetroSession(options: MetroSessionOptions): Promise<voi
 
     const showActions = () =>
       screen.line(
-        'Actions: r reload · i iOS Simulator · a Android emulator · c Show connection · d Device (Android/iPhone) · q quit',
+        'Actions: r reload · i iOS Simulator · a Android emulator · c Show connection · d Device (Android/iPhone) · ? show this again · q quit',
       )
     const pendingActions = new Set<Promise<void>>()
     const onKey = async (key: string) => {
@@ -341,7 +341,11 @@ function showEvent(event: MetroEvent, builds: Map<string, Build>, screen: Screen
       screen.line(typeof error.message === 'string' ? error.message : 'Metro gave no message.')
     },
     client_log() {
-      screen.line(`${HCI.dim(`app ${String(event.level ?? 'log')}:`)} ${formatLogData(event.data)}`)
+      const message = formatLogData(event.data)
+      if (event.level !== 'error' && DevAppLogFilter.isPromotion(message)) {
+        return
+      }
+      screen.line(`${HCI.dim(`app ${String(event.level ?? 'log')}:`)} ${message}`)
     },
   }
   // Metro reports many more event kinds; this screen shows only these.

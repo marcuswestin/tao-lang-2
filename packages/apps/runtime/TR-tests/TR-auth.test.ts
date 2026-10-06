@@ -1143,6 +1143,138 @@ Describe('mounted app authentication', () => {
     harness.scope.dispose()
   })
 
+  Test('private account access requires provider opt-in and keeps Account relations bound to the account', async () => {
+    const privateDefinition: TR.DataSchemaDefinition = {
+      name: 'ScopedNotes',
+      entities: {
+        Account: { collection: 'Accounts', fields: { DisplayName: { kind: 'text' } } },
+        Note: {
+          collection: 'Notes',
+          fields: { Body: { kind: 'text' }, Owner: { kind: 'relation', relation: 'Account' } },
+        },
+        OptionalNote: {
+          collection: 'OptionalNotes',
+          fields: { Owner: { kind: 'relation', relation: 'Account', optional: true } },
+        },
+      },
+    }
+    const snapshot = JSON.stringify({
+      formatVersion: 1,
+      schemaVersion: 1,
+      nextId: 1,
+      rows: {
+        Account: [{ Id: 'account-a', DisplayName: 'Alice' }, { Id: 'account-b', DisplayName: 'Bob' }],
+        Note: [
+          { Id: 'alice-note', Body: 'mine', Owner: 'account-a' },
+          { Id: 'bob-note', Body: 'foreign', Owner: 'account-b' },
+        ],
+        OptionalNote: [{ Id: 'unowned-note', Owner: null }],
+      },
+    })
+    const connect = (): TR.DataConnection => ({ load: () => snapshot, save: () => undefined })
+    const binding = {
+      accountId: 'account-a',
+      generation: 1,
+      signal: new AbortController().signal,
+      credential: async () => '',
+    }
+    const defaultDeny = TR.Data.Schema(privateDefinition)
+    defaultDeny.bindConfigured(
+      TR.Data.Configure(TR.Data.Declaration('GrantBased', { connect }), {}),
+      undefined,
+      binding,
+    )
+    await TR.Data.Settle(defaultDeny)
+    Expect(defaultDeny.query({ entity: 'Account', filters: [] })).toHaveLength(0)
+    Expect(defaultDeny.query({ entity: 'Note', filters: [] })).toHaveLength(0)
+    Expect(defaultDeny.query({ entity: 'OptionalNote', filters: [] })).toHaveLength(0)
+
+    const authored = TR.Data.Schema({
+      ...privateDefinition,
+      entities: {
+        ...privateDefinition.entities,
+        Note: {
+          ...privateDefinition.entities['Note']!,
+          grants: [{ operations: ['read'], principal: ['Owner'] }],
+        },
+      },
+    })
+    authored.bindConfigured(
+      TR.Data.Configure(
+        TR.Data.Declaration('PrivateWithGrants', {
+          authenticatedAccess: 'private-account',
+          connect,
+        }),
+        {},
+      ),
+      undefined,
+      binding,
+    )
+    await TR.Data.Settle(authored)
+    Expect(authored.query({ entity: 'Note', filters: [] })).toHaveLength(1)
+    Expect(() =>
+      TR.Data.Update(TR.Value(authored.entity('Note', 'alice-note')), {
+        Body: TR.Value('denied'),
+      })
+    ).toThrow('permission')
+
+    const store = TR.Data.Schema(privateDefinition)
+    store.bindConfigured(
+      TR.Data.Configure(
+        TR.Data.Declaration('Private', {
+          authenticatedAccess: 'private-account',
+          connect,
+        }),
+        {},
+      ),
+      undefined,
+      binding,
+    )
+    await TR.Data.Settle(store)
+    Expect(store.query({ entity: 'Account', filters: [] })).toHaveLength(1)
+    Expect(store.query({ entity: 'Note', filters: [] })).toHaveLength(1)
+    Expect(store.query({ entity: 'OptionalNote', filters: [] })).toHaveLength(1)
+    const own = store.entity('Note', 'alice-note')
+    Expect(TR.Data.Read(own, 'Body')).toBe('mine')
+    Expect(TR.Data.EntityAvailability(store.entity('Account', 'account-b'))).toEqual({ status: 'unauthorized' })
+    Expect(TR.Data.EntityAvailability(store.entity('Note', 'bob-note'))).toEqual({ status: 'unauthorized' })
+    Expect(() => createNote(store, 'forged', 'account-b')).toThrow('permission')
+    Expect(() =>
+      TR.Data.Update(TR.Value(own), {
+        Owner: TR.Value(store.entity('Account', 'account-b')),
+      })
+    ).toThrow('permission')
+    Expect(() =>
+      TR.Data.Update(TR.Value(store.entity('OptionalNote', 'unowned-note')), {
+        Owner: TR.Value(store.entity('Account', 'account-a')),
+      })
+    ).toThrow('permission')
+    Expect(TR.Data.Read(own, 'Owner')).toBe(store.entity('Account', 'account-a'))
+    TR.Data.Update(TR.Value(own), { Body: TR.Value('edited') })
+    await TR.Data.Settle(store)
+    Expect(TR.Data.Read(own, 'Body')).toBe('edited')
+
+    const fixtureStore = TR.Data.Schema(privateDefinition)
+    fixtureStore.bindConfigured(
+      TR.Data.Configure(
+        TR.Data.Declaration('PrivateFixture', {
+          authenticatedAccess: 'private-account',
+          connect,
+        }),
+        {},
+      ),
+      undefined,
+      { ...binding, testing: true },
+    )
+    await TR.Data.Settle(fixtureStore)
+    fixtureStore.withFixtureActor('account-b', () => {
+      Expect(fixtureStore.query({ entity: 'Account', filters: [] })).toHaveLength(0)
+      Expect(fixtureStore.query({ entity: 'Note', filters: [] })).toHaveLength(0)
+      Expect(() => createNote(fixtureStore, 'foreign fixture', 'account-b')).toThrow('permission')
+    })
+    Expect(fixtureStore.query({ entity: 'Note', filters: [] })).toHaveLength(1)
+  })
+
   Test('rejects an async data action whose account switched before transaction commit', async () => {
     const gate = Deferred<void>()
     const harness = authHarness({ restore: async () => alice })

@@ -105,6 +105,7 @@ const toggleTextStyle = {
 export function DevMenu(): React.JSX.Element | null {
   const RN = requireReactNativeRuntime()
   const mode = Dev.useMode()
+  const hostTools = Dev.useHostDeveloperTools()
   const [overlayOpen, setOverlayOpen] = React.useState(false)
   const [position, setPosition] = React.useState(defaultMenuPosition)
   const dragStart = React.useRef<DevMenuDragStart | undefined>(undefined)
@@ -178,6 +179,20 @@ export function DevMenu(): React.JSX.Element | null {
             style: [toggleBaseStyle, mode.layoutBounds ? toggleOnStyle : toggleOffStyle],
           },
           createElement(RN.Text, { style: toggleTextStyle }, `Layout bounds ${mode.layoutBounds ? 'On' : 'Off'}`),
+        ),
+        hostTools === undefined ? null : createElement(
+          RN.Pressable,
+          {
+            accessibilityLabel: hostTools.label,
+            accessibilityRole: 'button',
+            onPress: (event: any) => {
+              event?.stopPropagation?.()
+              setOverlayOpen(false)
+              hostTools.open()
+            },
+            style: [toggleBaseStyle, toggleOffStyle],
+          },
+          createElement(RN.Text, { style: toggleTextStyle }, hostTools.label),
         ),
       ),
     ),

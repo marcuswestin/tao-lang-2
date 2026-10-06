@@ -9,6 +9,11 @@ function createExpoAppConfig(config, projectRoot, env = process.env) {
   config = withNativeCapabilities(config)
   const shipManifestPath = nodePath.resolve(projectRoot, '_gen_tao-app', 'ship.json')
   if (!nodeFs.existsSync(shipManifestPath)) {
+    const appName = env.TAO_DEV_APP_NAME?.trim()
+    const projectName = env.TAO_DEV_PROJECT_NAME?.trim()
+    if (appName) {
+      config = { ...config, name: projectName ? `${appName} — ${projectName}` : appName }
+    }
     return withDevData(config, env)
   }
 

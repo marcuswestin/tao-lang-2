@@ -36,13 +36,17 @@ app FirebaseNotesSignOutTest {
 }
 
 test "Firebase Notes" {
-   test "fills validation credentials without signing in" {
+   test "fills either validation account without signing in" {
       run FirebaseNotesSignInTest
 
       expect text "Sign in to Firebase Notes"
-      press #fillValidationCredentials
-      expect input label "Email" value "tao-hosted-validation@example.test"
-      expect input label "Password" value "Tao-validation-only-2026!"
+      press #fillCrudAccount
+      expect input label "Email" value "narcvs+crud@gmail.com"
+      expect input label "Password" value "123456789"
+      expect text "Sign in to Firebase Notes"
+      press #fillMainAccount
+      expect input label "Email" value "narcvs@gmail.com"
+      expect input label "Password" value "123456789"
       expect text "Sign in to Firebase Notes"
    }
    test "signs in with an existing account" {

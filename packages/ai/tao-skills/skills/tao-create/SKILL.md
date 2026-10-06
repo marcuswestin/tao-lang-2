@@ -7,7 +7,9 @@ description: >-
 
 # Tao Create
 
-Run `tao create "<description>"` in release 1. The command chooses or confirms a lowercase
+Run `tao create "<description>" --provider local` in release 1. The provider is required;
+development builds also offer `--provider firebase` for sign-in and synchronized data.
+Omitting it reports the available choices and creates nothing. The command chooses or confirms a lowercase
 project id, writes a formatted project, checks it, and runs its behavior tests. AI-assisted creation
 is deferred; a development checkout can use `--ai none` to force the plain starter. Use `--id <id>`
 to choose the directory, `--yes` for noninteractive acceptance, and

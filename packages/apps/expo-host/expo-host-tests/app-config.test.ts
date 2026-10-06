@@ -203,6 +203,15 @@ Describe('Expo ship host configuration', () => {
     Expect(createExpoAppConfig(fallbackConfig, projectRoot, {})).toBe(fallbackConfig)
   })
 
+  Test('names development entries after the app and project without changing shipped identity', async () => {
+    const projectRoot = await mkTestDir('tao-app-config-dev-name-')
+    const env = { TAO_DEV_APP_NAME: 'FlowNotes', TAO_DEV_PROJECT_NAME: 'flow-notes-test-2' }
+    Expect(createExpoAppConfig(fallbackConfig, projectRoot, env).name).toBe('FlowNotes — flow-notes-test-2')
+    Expect(createExpoAppConfig(fallbackConfig, projectRoot, { TAO_DEV_APP_NAME: 'FlowNotes' }).name).toBe('FlowNotes')
+    await FS.writeJson(FS.resolvePath('_gen_tao-app/ship.json', projectRoot), shipManifest)
+    Expect(createExpoAppConfig(fallbackConfig, projectRoot, env).name).toBe(shipManifest.name)
+  })
+
   Test('writes the dev data bootstrap fact the dev loop places in the environment, and only then', async () => {
     const projectRoot = await mkTestDir('tao-app-config-dev-data-')
 

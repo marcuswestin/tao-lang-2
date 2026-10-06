@@ -5,6 +5,23 @@ import { validStudioProofArgs } from '../agent-cli-src/agent-config/StudioProofA
 
 const session = '0fe7bb54-bbc8-4133-897f-e9d0b2d6b37a'
 
+Test('Firebase sync requires a recorded session and iOS without credential, path or URL selectors', () => {
+  Expect(parseManagedLoopAcceptanceArgs(['--case', 'firebase-sync', '--session', session, '--target', 'ios']))
+    .toEqual({ case: 'firebase-sync', session, target: 'ios' })
+  for (
+    const extra of [
+      [],
+      ['--session', session],
+      ['--session', session, '--target', 'android'],
+      ['--session', session, '--target', 'ios', '--password', 'sample'],
+      ['--session', session, '--target', 'ios', '--project', 'arbitrary'],
+      ['--session', session, '--target', 'ios', '--url', 'http://127.0.0.1:1'],
+    ]
+  ) {
+    Expect(() => parseManagedLoopAcceptanceArgs(['--case', 'firebase-sync', ...extra])).toThrow()
+  }
+})
+
 Test('cleanup and combined proofs are fixed owned cases without caller target or failure selectors', () => {
   for (const selected of ['ios-cleanup', 'combined-lifecycle', 'combined-target-failure']) {
     Expect(parseManagedLoopAcceptanceArgs(['--case', selected]).case).toBe(selected)

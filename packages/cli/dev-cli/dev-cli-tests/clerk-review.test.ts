@@ -190,6 +190,8 @@ Test('nonlocal Instant endpoints and loopback phone hosts fail before loading cr
       'localhost HTTP',
     )
     await Expect(runClerkReview({ host: '127.0.0.1' }, f.environment)).rejects.toThrow('reachable LAN IPv4')
+    await Expect(runClerkReview({ host: '127.0.0.1' }, f.environment)).rejects.toThrow('System Settings > Network')
+    await Expect(runClerkReview({ host: '127.0.0.1' }, f.environment)).rejects.toThrow('same LAN')
     await Expect(runClerkReview({ device: ' ' }, f.environment)).rejects.toThrow('physical device name or UDID')
     Expect(f.events).toEqual([])
   } finally {

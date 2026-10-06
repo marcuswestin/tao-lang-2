@@ -199,7 +199,9 @@ ${fields}
   return `// The data catalog. Every entity the app stores is declared here, so what a row contains is
 // readable on one page.
 
-${firebase ? 'package\ndata Accounts / Account {\n   DisplayName text,\n}\n\n' : ''}${entities.join('\n\n')}
+${firebase ? 'package\ndata Accounts / Account {\n   DisplayName text (default ""),\n}\n\n' : ''}${
+    entities.join('\n\n')
+  }
 `
 }
 
@@ -315,17 +317,25 @@ ${validationButton}   }
 function firebaseReadme(plan: CreationPlan, validationTools: boolean): string {
   return `# ${plan.name}
 
-This app stores each signed-in account's data in a private Firebase store. Set up a Firebase
-project with Email/Password sign-in and Firestore before running the app.
+This app stores each signed-in account's data in a private Firebase store.
 
 From this project directory:
 
-1. Run \`tao connect firebase .\` to save the public connection settings locally in
-   \`.tao/local/connections.json\`. The checked-in placeholders in \`App.tao\` are overridden locally.
-2. Run \`tao firebase generate . --app ${appIdentifier(plan.name)} --output .tao/firebase-backend\`.
-   Review and combine those rules with any existing rules in that Firebase project before deploying:
-   a Firestore rules deployment replaces the project's current rules. Generation does not deploy.
-3. Run \`tao run . --app ${appIdentifier(plan.name)}\` and sign in or create an account.
+1. Run \`tao connect firebase --app ${appIdentifier(plan.name)}\`. Complete Google sign-in locally if
+   requested, select your existing Firebase project, and review the proposed setup. Tao retrieves
+   the public app config, enables Email/Password sign-in, and configures the default Firestore
+   database and the app's private rules. Public settings are saved in \`.tao/local/connections.json\`;
+   the checked-in placeholders in \`App.tao\` are overridden locally.
+2. Run \`tao run . --app ${appIdentifier(plan.name)}\` and sign in or create an account.
+
+For Console setup instead, run \`tao connect firebase --manual\` and follow its direct project links.
+To generate deployment files without deploying, run
+\`tao firebase generate --app ${appIdentifier(plan.name)} --output .tao/firebase-backend\`.
+The command creates the local \`.tao/firebase-backend\` folder with \`firestore.rules\`,
+\`firestore.indexes.json\`, and \`firebase.json\`; no separate backend server is needed.
+Review existing project rules before deployment. If API setup stops for unfamiliar rules,
+review its downloaded current rules and generated candidate, then rerun with \`--rules\` and
+that reviewed combined file. Keep rules for other apps using the same Firebase project.
 
 Run \`tao test .\` for the local Memory/TestAuth journeys. They do not contact Firebase.
 ${
@@ -628,7 +638,8 @@ ${flagActions.map(action => `${action}\n`).join('')}   action Delete${singular}(
    }
    Toolbar { Save${singular}Command }
    render ScrollView() [screen] {
-      Col() [column, panel] {
+      Col() [column] {
+         Col() [panel] {
          Text(${taoString(humanize(singular).toUpperCase())}) [eyebrow]
          guard ${singular} {
             loading -> { Spinner() }
@@ -647,6 +658,7 @@ ${detailInputs.join('\n')}${detailNumbers.join('')}${detailFlags.join('\n')}
          #delete${singular}
          FormButton(${taoString(`Delete ${singularWords}`)}) [buttonDanger] {
             on press Delete${singular}
+         }
          }
       }
    }
