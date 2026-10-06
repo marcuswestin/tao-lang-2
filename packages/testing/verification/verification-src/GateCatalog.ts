@@ -459,7 +459,9 @@ const STUDIO_LANE_COST = 1
  * other gates every ported smoke ran two to four times its solo time (studio-smoke 15 s to 64 s,
  * studio-metro-refresh 80 s to 142 s), and studio-agent-browser starved outright: Verify run
  * 37529644139 failed it twice on partition 7/11 at load ~10 on 4 CPUs, first an approval-box settle
- * timeout, then a DevToolsActivePort timeout.
+ * timeout, then a DevToolsActivePort timeout. The two gates ported at one slot then failed the same
+ * way: studio-metro-refresh in run 37535079423 (partition 19/20, load 9.5) and studio-dialog-browser
+ * in run 37543031174 (partition 3/20, load 6.9), both timing out on DevToolsActivePort.
  */
 const HOSTED_BROWSER_LANE_COST = 4
 /** The release proof runs CPU-heavy Expo exports rather than waiting on an interactive host. */
@@ -663,6 +665,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
           'studio-dialog-browser',
           'packages/ides/studio-tooling/studio-smoke/studio-dialog-browser.test.ts',
         ),
+        cost: HOSTED_BROWSER_LANE_COST,
         runsOnHostedLinux: true,
       },
     ],
@@ -673,6 +676,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
           'studio-metro-refresh',
           'packages/ides/studio-tooling/studio-smoke/studio-metro-refresh.test.ts',
         ),
+        cost: HOSTED_BROWSER_LANE_COST,
         runsOnHostedLinux: true,
       },
     ],
