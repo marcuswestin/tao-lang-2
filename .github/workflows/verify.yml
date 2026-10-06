@@ -266,10 +266,31 @@ jobs:
             ${{ github.workspace }}/.devenv/portable-generations
           key: tao-nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'packages/cli/dev-cli/dev-cli-src/environment/nix-bootstrap.sh', 'packages/cli/dev-cli/dev-cli-src/environment/portable-profile.nix', 'packages/cli/dev-cli/dev-cli-src/environment/toolchain-packages.nix') }}
 
-      # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then runs
-      # `./agent setup`; the same path the native Linux contributor acceptance proves.
+      # The maintained native bindings, a generated tree setup would otherwise write in 6–10 s. The
+      # generator checks every input and output identity first and rewrites only a stale tree, so a
+      # restore from another key, or none, costs a regeneration and never a stale binding.
+      - name: Restore the generated native bindings
+        id: native-bindings
+        uses: actions/cache/restore@v4
+        with:
+          path: packages/apps/stdlib/.tao-ts/native-bindings
+          key: tao-native-bindings-${{ runner.os }}-${{ hashFiles('bun.lock', 'packages/apps/native-bindings/native-bindings-src/**', 'packages/apps/stdlib/@tao/device/**') }}
+          restore-keys: |
+            tao-native-bindings-${{ runner.os }}-
+
+      # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then prepares
+      # only what the lane reads (`--verify-setup`): the full `./agent setup` also writes agent
+      # configuration, Git hooks, and shell completion, which no gate reads.
       - name: Bootstrap Nix, the pinned toolchain, and Tao setup
-        run: ./.config/bootstrap-tao-dev-env --install-nix
+        run: ./.config/bootstrap-tao-dev-env --install-nix --verify-setup
+
+      - name: Save the generated native bindings
+        if: steps.native-bindings.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: packages/apps/stdlib/.tao-ts/native-bindings
+          key: ${{ steps.native-bindings.outputs.cache-primary-key }}
 
       # TEMPORARY measurement for the fixed-cost slice; removed before landing.
       - name: Measure the restored node_modules
