@@ -77,11 +77,10 @@ on its size.
 
 ## Working inside a busy machine
 
-- GitHub CI is the default for final portable verification and hosted landing; local checks remain
-  useful for iteration, diagnosis, faster appropriate proof, and host-only acceptance. Read
-  [hosted verification](references/hosted-verification.md) for route selection, offline limits,
-  auto-merge readiness, and direct merging of a fully verified PR. Reuse current green PR evidence;
-  do not repeat covered verification through local `land`.
+- Landing is one route, spelled out at the top of
+  [hosted verification](references/hosted-verification.md): `open-pr --auto-merge` plus the local
+  host-only gates in parallel, GitHub merging on green `Verify`. Local checks beyond that are for
+  iteration and diagnosis; never repeat CI-covered verification locally.
 - Never background a gate and then poll for its output in a sleep loop: run it in the foreground with
   a timeout, since the gate is no faster for being backgrounded. **Reporting while a lane runs**,
   below, is the one exception — a lane too long to wait out, with the Developer waiting on it.
@@ -98,9 +97,9 @@ on its size.
 
 ## Hosted verification
 
-Read [hosted verification](references/hosted-verification.md) for CI-default routing, contention,
-CI coverage, offline limits, readiness, and merging an already verified pull request. It owns the
-choice between `open-pr` / `merge-pr` and local `land`, including evidence and authorization.
+Read [hosted verification](references/hosted-verification.md) for the landing route, contention,
+CI coverage, offline limits, and what `merge-pr` still does after GitHub has merged. Local `land`
+is for `dev/<name>` branches and for when GitHub is unavailable.
 
 A change meant to make CI faster carries its own `./agent ci-timings` before-and-after
 (`references/ci-speed.md`).
