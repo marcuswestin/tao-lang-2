@@ -17,3 +17,16 @@
   dispatching the single physical click. Keep the existing fold assertions and retain failed-run
   evidence; this does not establish a shared click-helper fix or ten consecutive green complements.
 - **Source:** Second and third landings of `feat/landing-route-tooling` (#25), 2026-10-06.
+- **Related tutorial readiness evidence (2026-10-06):** On `feat/tutorial-first-hour`, all eight
+  host gates passed in complement `2026-10-06T17-39-44-872Z-12983-62f979ab`; its overall receipt
+  failed because preparation formatted three generated QA reports. After committing only that
+  formatting as `d3bad8c8a`, complement `2026-10-06T17-47-10-621Z-66961-57078d7d` failed the final
+  stale-undo wait at `studio-agent-browser.test.ts:263`: input re-enabled plus refusal text did not
+  appear. Bun also reported a request idle timeout after 10 seconds; four lanes overlapped and load
+  peaked at 88.1 on 18 CPUs. The unchanged isolated command passed one test and 21 assertions in
+  42.7 seconds, with its receipt at
+  `.artifacts/logs/agent/studio-smoke/2026-10-06T17-48-52-063Z-46943.log`. This establishes an
+  intermittent failure, not its cause or ten consecutive passing complements. A stalled request
+  and a missed approval click remain distinguishable hypotheses; capture approval controls, chat
+  input state, chat-log tail and model-call count on recurrence. No assertions, timeouts or
+  ownership checks were weakened.

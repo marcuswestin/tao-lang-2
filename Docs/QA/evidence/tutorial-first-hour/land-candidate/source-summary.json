@@ -1,0 +1,47 @@
+{
+  "contention": {
+    "contended": true,
+    "cpuCount": 18,
+    "peakLanes": 6,
+    "peakLoadAverage": 52.3
+  },
+  "elapsedMs": 254709,
+  "gates": [
+    {
+      "elapsedMs": 159819,
+      "exitCode": 0,
+      "expectedMs": 18759,
+      "logPath": "/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/logs/dev-test/2026-10-06T19-04-56-434Z-42962-b9512f4c/cli_tao-cli.log",
+      "name": "cli/tao-cli",
+      "needs": [
+        "_compile-word-flower-app",
+        "_ide-extension-build",
+        "_parser-gen",
+        "_fix-tao",
+        "_fix-dprint"
+      ],
+      "reason": "timed out under machine contention; passed on an isolated retry",
+      "retried": true,
+      "status": "passed",
+      "suite": "cli/tao-cli"
+    }
+  ],
+  "lane": "dev-test",
+  "logRoot": "/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/logs/dev-test/2026-10-06T19-04-56-434Z-42962-b9512f4c",
+  "schedule": {
+    "capacity": 12,
+    "idleSlotSeconds": 1508,
+    "makespanMs": 138987,
+    "serialFloorMs": 159819,
+    "serialFloorPath": [
+      "cli/tao-cli"
+    ],
+    "waits": []
+  },
+  "status": "passed",
+  "version": 2,
+  "warnings": [
+    "machine contention: 6 Tao lanes ran at once; load peaked at 52.3 on 18 CPUs",
+    "passed only on an isolated retry after failing under contention: cli/tao-cli"
+  ]
+}

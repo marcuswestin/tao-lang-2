@@ -28,7 +28,21 @@
   `e3ed6940`) completed every cell, including `devices / tabletDark` and `rows / wrapping`, with the
   snapshots under `Docs/QA/evidence/recheck-0aa8ebcf/`. One clean run each on a lightly loaded host
   shows the failure is intermittent at most; it does not show the cause is gone.
-  On 2026-10-06, automatic scenario discovery on `feat/scenario-qa-discovery` found 14 apps and
+- **Related observation (2026-10-06):** A first-hour tutorial capture at `eb1c7f95a` reached the
+  review manifest, then timed out waiting for `ready` or `failed` on all three `QA views` cells
+  (phone, desktop, dark). Studio and Metro started and the web bundle completed. The capture command
+  exited zero with three failed cells, and its source snapshot correctly remained partial. Durable
+  receipts and the canonical, same-file scenario source are under
+  `Docs/QA/evidence/tutorial-first-hour/capture/` and `capture-source.tao.txt` in that evidence
+  directory. This reproduction had a concrete cause: freshly staged session state has no active
+  cells, and capture waited for ready without activating them. The first-hour slice repairs capture
+  to invoke the existing activation control before waiting, including initially disabled controls.
+  Its DOM-expression regression passes all 11 review tests. An unchanged tutorial recapture completed
+  all three cells in 46.6 seconds; all images were inspected, with complete receipts under
+  `Docs/QA/evidence/tutorial-first-hour/capture-complete/`. This proves the tutorial repair, not the
+  causes of every older failure; complete HNReader and Notebook rechecks remain this entry's acceptance.
+- **Related scenario-discovery observation (2026-10-06):** Automatic discovery on
+  `feat/scenario-qa-discovery` found 14 apps and
   35 cells with no discovery failures. A 90-second-per-app batch retained every expected cell and
   recorded four app deadline failures before it was interrupted during Notebook. A separate
   Pantry capture reached Studio, Metro and headless Chrome, then failed all six cells at the

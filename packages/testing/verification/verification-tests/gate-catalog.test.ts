@@ -18,6 +18,7 @@ const STUDIO_BROWSER_SMOKES = [
   'studio-smoke-simulated-user',
   'keyboard-navigation-smoke',
   'studio-dialog-browser',
+  'studio-metro-refresh',
   'studio-agent-browser',
   'studio-network-simulation',
 ]
@@ -437,13 +438,14 @@ Describe('gate catalog metadata', () => {
     Expect(nodeOf('studio-smoke-simulated-user').resources).toBeUndefined()
     Expect(nodeOf('keyboard-navigation-smoke').resources).toBeUndefined()
     Expect(nodeOf('studio-dialog-browser').resources).toBeUndefined()
+    Expect(nodeOf('studio-metro-refresh').resources).toBeUndefined()
     Expect(nodeOf('studio-agent-browser').resources).toBeUndefined()
     Expect(nodeOf('studio-network-simulation').resources).toBeUndefined()
   })
 
   Test('only browser gates proved on hosted Linux stay in a hosted Linux lane that skips unsandboxed gates', () => {
     const hostedLinux = HOST_ONLY_GATES.filter(name => GateCatalog.metadata(name).runsOnHostedLinux === true)
-    Expect(hostedLinux.toSorted()).toEqual(['studio-dialog-browser', 'studio-smoke'])
+    Expect(hostedLinux.toSorted()).toEqual(['studio-dialog-browser', 'studio-metro-refresh', 'studio-smoke'])
     for (const name of HOST_ONLY_GATES) {
       // A local sandboxed lane skips every one of them, hosted-Linux or not.
       Expect(GateCatalog.skippedUnsandboxed(name)).toBe(true)

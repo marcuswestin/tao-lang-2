@@ -1,0 +1,24 @@
+test-file: running — log /Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/logs/agent/test-file/2026-10-06T17-32-29-335Z-98182.log
+
+REPORT:
+test-file: passed (exit 0) in 41.6s
+WARNING: machine contention: 4 Tao lanes ran at once; load peaked at 33.2 on 18 CPUs
+parser generate: up to date
+compile app: up to date
+
+Test selection:
+- selected cli/tao-cli: exact requested file
+dev-test: running 1 node — logs: .artifacts/logs/dev-test/2026-10-06T17-32-29-902Z-98228-c8d57218
+cli/tao-cli: started at 13:32:29
+cli/tao-cli: passed in 40.9s — log: .artifacts/logs/dev-test/2026-10-06T17-32-29-902Z-98228-c8d57218/cli_tao-cli.log
+
+Test suite summary:
+- cli/tao-cli: passed; tests 3; pass 3; fail 0; expect n/a; duration 40.9s
+Total: 1 suites in 1 processes tests 3 pass 3 fail 0 expect 0+n/a(1) wall 41.1s suite sum 40.9s
+
+Machine contention: 4 Tao lanes ran at once; load peaked at 33.2 on 18 CPUs.
+test suites ok
+Summary: .artifacts/logs/dev-test/2026-10-06T17-32-29-902Z-98228-c8d57218/summary.json
+dev-test: PASSED in 41.1s
+/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/logs/agent/test-file/2026-10-06T17-32-29-335Z-98182.log
+

@@ -1,0 +1,13 @@
+{
+  "args": [
+    "/Users/ro/.codex/worktrees/5894/tao-lang-2/packages/testing/e2e-testing/node_modules/@playwright/test/cli.js",
+    "test",
+    "--config",
+    "packages/testing/e2e-testing/playwright.config.ts",
+    "--project",
+    "browser"
+  ],
+  "command": "node",
+  "exitCode": 0,
+  "signal": null
+}

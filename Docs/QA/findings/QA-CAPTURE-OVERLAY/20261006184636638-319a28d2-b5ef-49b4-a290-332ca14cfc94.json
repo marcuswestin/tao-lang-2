@@ -1,0 +1,33 @@
+{
+  "id": "QA-CAPTURE-OVERLAY",
+  "status": "fixed-awaiting-qa",
+  "phase": 1,
+  "surfaceId": "visual:reading-list",
+  "dimension": "visual",
+  "channel": "desktop",
+  "severity": "minor",
+  "title": "desktop evidence contains a transient zoom indicator",
+  "observed": "The desktop screenshot includes a transient 100% zoom indicator.",
+  "impact": "Review-tool chrome contaminates app evidence.",
+  "location": "Docs/QA/evidence/pilot/reading-list-desktop.png:bottom zoom bubble",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "A settled app capture contains app content with no transient review zoom indicator.",
+  "recheck": "capture a settled app view with review overlays absent.",
+  "evidence": [
+    "Docs/QA/evidence/tutorial-first-hour/README.md",
+    "Docs/QA/evidence/tutorial-first-hour/capture-complete/source-snapshot.json"
+  ],
+  "evidenceHashes": [],
+  "createdAt": "2026-09-26T22:52:29.463Z",
+  "updatedAt": "2026-10-06T18:46:36.638Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "agent",
+  "relatedStories": [],
+  "notes": "Refreshing source/browser/capture proof after integration of current main. Original reviewer and release boundaries remain unchanged."
+}
