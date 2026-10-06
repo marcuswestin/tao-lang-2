@@ -43,16 +43,17 @@ jobs:
       fail-fast: false
       matrix:
         # Chrome launches `--headless=new`; run 37498890787 passed the dialog gate with and without
-        # a virtual display, so the display stays a dimension only for a gate that needs it.
-        gate:
-          - studio-smoke
-          - studio-proof-real-app
-          - studio-smoke-simulated-user
-          - keyboard-navigation-smoke
-          - studio-dialog-browser
-          - studio-agent-browser
-          - studio-network-simulation
-        display: [headless]
+        # a virtual display. Run 37499414529 ran all seven headless: six passed, and
+        # studio-proof-real-app failed three of four tests twice. Its diagnostics show Metro in CI
+        # mode ("reloads are disabled. Remove CI=true") and React Native DevTools aborting on its
+        # SUID sandbox helper; each variant below removes one of the two.
+        #   ci-false: the gate step runs with CI=false.
+        #   userns:   unprivileged user namespaces re-enabled, so DevTools' Chrome needs no SUID helper.
+        include:
+          - gate: studio-proof-real-app
+            display: ci-false
+          - gate: studio-proof-real-app
+            display: userns
     steps:
       - uses: actions/checkout@v4
 
@@ -129,6 +130,10 @@ jobs:
           fi
           echo "APT_SECONDS=$(( $(date +%s) - start ))"
 
+      - name: Re-enable unprivileged user namespaces
+        if: matrix.display == 'userns'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Locate Watchman in the profile
         run: |
           .devenv/profile/bin/watchman --version || true
@@ -149,6 +154,8 @@ jobs:
           status=0
           if [ "$DISPLAY_MODE" = xvfb ]; then
             xvfb-run -a --server-args='-screen 0 1920x1080x24' ./agent unsandboxed verify-full-ci --ci-host-gates "$GATE" || status=$?
+          elif [ "$DISPLAY_MODE" = ci-false ]; then
+            CI=false ./agent unsandboxed verify-full-ci --ci-host-gates "$GATE" || status=$?
           else
             ./agent unsandboxed verify-full-ci --ci-host-gates "$GATE" || status=$?
           fi
@@ -175,14 +182,18 @@ jobs:
 
       - name: Collect the run's summary and logs
         if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
         run: |
           mkdir -p "$RUNNER_TEMP/gate-logs"
           latest=.artifacts/logs/verify-full-ci/latest
           if [ -e "$latest" ]; then
             cp -RL "$latest/." "$RUNNER_TEMP/gate-logs/"
           fi
-          if [ -d .artifacts/tests/studio-smoke ]; then
-            cp -RL .artifacts/tests/studio-smoke "$RUNNER_TEMP/gate-logs/studio-smoke" || true
+          # The smoke tree holds each launch project's installed node_modules (3.3 GB for the real-app
+          # gate), which made the upload outlast the gate; keep only what explains a failure.
+          if [ "$JOB_STATUS" != success ] && [ -d .artifacts/tests/studio-smoke ]; then
+            rsync -a --prune-empty-dirs --exclude node_modules .artifacts/tests/studio-smoke/ "$RUNNER_TEMP/gate-logs/studio-smoke/" || true
           fi
 
       - name: Upload the run's summary and logs
