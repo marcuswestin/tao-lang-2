@@ -330,8 +330,12 @@ export async function inspectMaintainedNativeBindings(
       await observers.afterInspection?.()
     }
   }
+  const inspectLocked = () =>
+    FS.withFileMutationLock(first, parent, () => inspectUnlocked(location), { timeoutMs: INSPECTION_LOCK_WAIT_MS })
   let firstAttempt = true
-  for (let attempt = 0; attempt < 3; attempt++) {
+  // Two unlocked passes, then one under the lock: other readers' barriers and stale confirmations
+  // hold the same lock as a publisher, so the final probe cannot tell them apart.
+  for (let attempt = 0; attempt < 2; attempt++) {
     const barrierRequired = !firstAttempt || !canInspectOptimistically || await FS.exists(lock)
     firstAttempt = false
     if (barrierRequired) {
@@ -366,14 +370,11 @@ export async function inspectMaintainedNativeBindings(
         pass.remember?.()
         return pass.result
       }
-      return await FS.withFileMutationLock(first, parent, () => inspectUnlocked(location), {
-        timeoutMs: INSPECTION_LOCK_WAIT_MS,
-      })
+      return await inspectLocked()
     }
   }
-  Errors.throwHostEnvironment(
-    'Maintained native binding files kept changing during inspection. Retry the check after publication finishes.',
-  )
+  // Errors raised here, such as an unreadable manifest, surface as themselves.
+  return await inspectLocked()
 }
 
 /**

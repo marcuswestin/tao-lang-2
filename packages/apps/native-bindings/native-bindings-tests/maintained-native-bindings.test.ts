@@ -610,4 +610,38 @@ Describe('maintained native binding publication', () => {
       Expect(await snapshot(paths)).toEqual(previous)
     }, { verbatim: true })
   })
+
+  Test('lets many concurrent readers finish after a publication without failing each other', async () => {
+    await withTaoFiles('maintained-many-readers', declarations(), async (_paths, root) => {
+      const request = options(root)
+      await generateMaintainedNativeBindings({ ...request, mode: 'write' })
+      const fresh = await Promise.all(Array.from({ length: 16 }, () => inspectMaintainedNativeBindings(request)))
+      Expect(fresh.map(result => result.status)).toEqual(fresh.map(() => 'fresh'))
+      const output = FS.resolvePath('.tao-ts/native-bindings/files/Bindings.ts', request.stdlibRoot)
+      await FS.writeText(output, 'drifted output')
+      // Stale readers each confirm under the lock, which every other reader's final probe observes.
+      const stale = await Promise.all(Array.from({ length: 64 }, () => inspectMaintainedNativeBindings(request)))
+      Expect(stale.map(result => result.status)).toEqual(stale.map(() => 'stale'))
+    }, { verbatim: true })
+  })
+
+  Test('surfaces an unreadable manifest as its own error rather than a changing-files retry', async () => {
+    await withTaoFiles('maintained-unreadable-manifest', declarations(), async (_paths, root) => {
+      const request = options(root)
+      await generateMaintainedNativeBindings({ ...request, mode: 'write' })
+      const manifestPath = FS.resolvePath('.tao-ts/native-bindings/files/maintained.json', request.stdlibRoot)
+      await FS.chmod(manifestPath, 0o000)
+      let reported: string
+      try {
+        reported = await inspectMaintainedNativeBindings(request).then(
+          result => result.diagnostics.map(item => item.message).join('\n'),
+          (error: unknown) => String(error),
+        )
+      } finally {
+        await FS.chmod(manifestPath, 0o644)
+      }
+      Expect(reported).not.toContain('kept changing')
+      Expect(reported).toMatch(/EACCES|permission denied/i)
+    }, { verbatim: true })
+  })
 })
