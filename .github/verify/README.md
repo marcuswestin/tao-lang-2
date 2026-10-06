@@ -44,12 +44,14 @@ nodes are harmless to the plan and can be deleted by hand.
 
 ## Seed provenance
 
-The node durations retain the CI refit from [Verify run 37409494450](https://github.com/tao-dev-org/tao-lang/actions/runs/37409494450),
-whose measured nodes are dated October 6, 2026, at 03:42:30 UTC. Host-only entries retain their
+The node durations retain the CI refit from [Verify run 37438651568](https://github.com/tao-dev-org/tao-lang/actions/runs/37438651568),
+whose measured nodes are dated October 6, 2026, at 09:14:35 UTC. Host-only entries retain their
 previous estimates. Numbered shard histories remain in the snapshot for the refit; the planner
 uses current membership and relative file costs when a suite estimate is available.
 
-The ledger retains its existing relative costs and supplements 90 previously unrepresented,
+Files that have their own `filePartitions` node in project-tooling, plus the compiler's
+workspace native-cache test, carry that node's CI time from Verify run 37423624990 as their ledger cost.
+The ledger retains its other relative costs and supplements 90 previously unrepresented,
 currently present files from the October 5 reconstruction of
 [PR15 Verify 37356653198](https://github.com/marcuswestin/tao-lang-2/actions/runs/37356653198)
 and [main Verify 37358101885](https://github.com/marcuswestin/tao-lang-2/actions/runs/37358101885).
