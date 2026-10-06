@@ -863,9 +863,23 @@ function nestedRunnerBudgetKeys(command: WorkCommand): readonly string[] {
   return subcommand === 'test' && runner === 'tao' ? [BUDGET_ENV_KEYS.taoTest] : []
 }
 
-/** resolveCapacity resolves the worker width of a run: `--jobs`, then the whole machine. */
+/**
+ * DEFAULT_WIDTH_CAP bounds a run's worker width when nothing asked for one. Replaying a recorded
+ * green `verify-full` through this scheduler (`Docs/Roadmap/Verification speed research.md`, §10)
+ * put the simulated makespan at 362 s at width 12 and 371 s at width 18 once per-slot inflation on
+ * the machine's twelve usable cores is counted: past twelve, every extra slot slows the slots already
+ * running by more than it adds. `--jobs` and `TAO_VERIFY_JOBS` still set any width explicitly.
+ */
+const DEFAULT_WIDTH_CAP = 12
+
+/** resolveCapacity resolves the worker width of a run: `--jobs`, then the machine up to the cap. */
 function resolveCapacity(requestedJobs: number | undefined): number {
-  return requestedJobs ?? Platform.cpuCount()
+  return requestedJobs ?? defaultCapacity(Platform.cpuCount())
+}
+
+/** defaultCapacity is the width a run takes on a machine of `cpuCount` cores when none was asked for. */
+function defaultCapacity(cpuCount: number): number {
+  return Math.max(1, Math.min(DEFAULT_WIDTH_CAP, cpuCount))
 }
 
 function watchProcessInterrupt(interrupt: () => void): () => void {
@@ -917,8 +931,10 @@ function exitCodeFor(result: WorkRunResult): number {
 /** WorkGraph owns dependency-aware, prioritized scheduling for every parallel repository lane. */
 export const WorkGraph = {
   BUDGET_ENV_KEYS,
+  DEFAULT_WIDTH_CAP,
   OUTPUT_LINE_LIMIT,
   createState,
+  defaultCapacity,
   elapsedMs,
   exitCodeFor,
   nodeLabel,

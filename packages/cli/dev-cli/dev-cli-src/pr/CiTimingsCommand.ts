@@ -1,4 +1,5 @@
 import { Errors, FS, Repo } from '@shared'
+import { CiDurationsImport } from './CiDurationsImport'
 import { defaultDependencies, gitHub, type PrChecksDependencies, repositorySlug } from './PrChecksCommand'
 
 /*
@@ -10,6 +11,9 @@ import { defaultDependencies, gitHub, type PrChecksDependencies, repositorySlug 
  *
  * It reads the public REST API the way `pr-checks` does, so it runs in the sandbox with no
  * credentials, and costs three requests per run against the anonymous limit.
+ *
+ * `--import-durations` is the other half of the loop: instead of comparing, it folds the per-node
+ * durations a run's partitions measured into the committed seed — see `CiDurationsImport`.
  */
 
 const WORKFLOW = 'verify.yml'
@@ -20,6 +24,11 @@ const PARTITION_INDEX = /\b\d+\/(\d+)\b/gu
 export type CiTimingsOptions = {
   /** The before run; by default, the newest green `Verify` push to `main`. */
   compare?: number
+  /**
+   * Fold the run's measured per-node durations into `.github/verify/durations.json` instead of
+   * comparing runs; `--run` then defaults to the newest green `Verify` push to `main`.
+   */
+  importDurations?: boolean
   repositoryRoot?: string
   /** The after run; by default, the newest `Verify` run of this worktree's branch. */
   run?: number
@@ -49,6 +58,9 @@ export const CiTimingsCommand = {
     options: CiTimingsOptions = {},
     dependencies: PrChecksDependencies = defaultDependencies,
   ): Promise<{ exitCode: number; lines: string[] }> {
+    if (options.importDurations === true) {
+      return await CiDurationsImport.run({ repositoryRoot: options.repositoryRoot, run: options.run }, dependencies)
+    }
     const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
     const slug = await repositorySlug(dependencies, root)
     const github = gitHub(dependencies)

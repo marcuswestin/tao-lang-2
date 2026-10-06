@@ -2,6 +2,7 @@ import { CLI, FS, Platform, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import { type LaneRecord, type MachineLane, MachineLanes } from '../verification-src/MachineLanes'
 import { VerificationLanes } from '../verification-src/VerificationLanes'
+import { WorkGraph } from '../verification-src/WorkGraph'
 
 /**
  * The registry is what one worktree knows about the others, so every test here is about two lanes
@@ -188,6 +189,17 @@ Describe('machine lanes', () => {
     await nested.release()
     await explicit.release()
     Expect(await leaseFiles(registryRoot)).toEqual([])
+  })
+
+  Test('an unrequested width on a wide machine stops at the scheduler cap', async () => {
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    const wide = await MachineLanes.acquire({ cpuCount: 18, lane: 'verify', registryRoot, repositoryRoot: '/here' })
+    const narrow = await MachineLanes.acquire({ cpuCount: 4, lane: 'verify', registryRoot, repositoryRoot: '/there' })
+
+    Expect(wide.ceiling).toBe(WorkGraph.DEFAULT_WIDTH_CAP)
+    Expect(narrow.ceiling).toBe(4)
+    await wide.release()
+    await narrow.release()
   })
 
   Test('a nested lane observes peer contention without registering a second time', async () => {

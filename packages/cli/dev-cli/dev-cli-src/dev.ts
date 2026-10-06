@@ -958,10 +958,15 @@ await runWithCommands(commands => {
     )
     .option('--run <id>', "The after run; by default, the newest Verify run of this worktree's branch.")
     .option('--compare <id>', 'The before run; by default, the newest green Verify push to main.')
-    .action(async (options: { compare?: string; run?: string } = {}) => {
+    .option(
+      '--import-durations',
+      "Fold the run's measured per-node durations into .github/verify/durations.json instead of comparing; --run defaults to main's newest green push, and the artifact download needs GH_TOKEN or a gh login.",
+    )
+    .action(async (options: { compare?: string; importDurations?: boolean; run?: string } = {}) => {
       await runExitCommand(async () =>
         (await CiTimingsCommand.run({
           compare: parseOptionalPositiveInteger(options.compare, '--compare'),
+          importDurations: options.importDurations === true,
           run: parseOptionalPositiveInteger(options.run, '--run'),
         })).exitCode
       )

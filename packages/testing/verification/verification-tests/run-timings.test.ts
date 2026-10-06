@@ -149,4 +149,34 @@ Describe('run timings store', () => {
       Expect(await FS.exists(FS.resolvePath(RunTimings.HISTORY_PATH, root))).toBe(false)
     })
   })
+
+  Test('the committed seed sits under the local store, and recording never writes it back', async () => {
+    await withRepository(async root => {
+      const timing = (emaMs: number) => ({ emaMs, lastMs: emaMs, lastRunAt: '2026-10-05T00:00:00.000Z', samples: 1 })
+      await FS.writeJson(FS.resolvePath(RunTimings.SEED_PATH, root), {
+        nodes: { _typecheck: timing(40_000), 'dead-exports': timing(9_000) },
+        version: 1,
+      })
+      await FS.writeJson(FS.resolvePath(RunTimings.DURATIONS_PATH, root), {
+        nodes: { _typecheck: timing(25_000) },
+        version: 1,
+      })
+
+      const layered = await RunTimings.load({ repositoryRoot: root })
+      Expect(RunTimings.expectedMs(layered, '_typecheck')).toBe(25_000)
+      Expect(RunTimings.expectedMs(layered, 'dead-exports')).toBe(9_000)
+
+      await RunTimings.record({
+        durations: new Map([['_lint', { wallMs: 3_000 }]]),
+        lane: 'verify',
+        repositoryRoot: root,
+        stamp: 'one',
+      })
+      const local = await FS.readJson<{ nodes: Record<string, unknown> }>(
+        FS.resolvePath(RunTimings.DURATIONS_PATH, root),
+      )
+      Expect(Object.keys(local.nodes).sort()).toEqual(['_lint', '_typecheck'])
+      Expect(RunTimings.expectedMs(await RunTimings.load({ repositoryRoot: root }), 'dead-exports')).toBe(9_000)
+    })
+  })
 })
