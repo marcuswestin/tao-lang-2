@@ -1,7 +1,7 @@
 import { Diagnostic, FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { type CheckWorkspaceOutcome, runCheck } from '../cli-src/source-commands'
-import { checkedWorkspaces, TWO_WORKSPACES } from './helpers/check-cache-fixtures'
+import { checkedWorkspaces, TWO_WORKSPACES, withStampedWorkspaces } from './helpers/check-cache-fixtures'
 import { withGitTaoFixture, withTaoFixture } from './test-cli-files'
 
 Describe('tao check cache external inputs', () => {
@@ -29,8 +29,7 @@ Describe('tao check cache external inputs', () => {
   })
 
   Test('does not replay through a mutable root node_modules installation', async () => {
-    await withTaoFixture(TWO_WORKSPACES, async rootDir => {
-      await checkedWorkspaces(rootDir)
+    await withStampedWorkspaces(async rootDir => {
       await FS.writeText(
         FS.resolvePath('AppOne/node_modules/installed/package.json', rootDir),
         '{"name":"installed","version":"1.0.0"}\n',
@@ -40,11 +39,7 @@ Describe('tao check cache external inputs', () => {
   })
 
   Test('replays with only the repository-owned runtime link installed', async () => {
-    await withTaoFixture({
-      ...TWO_WORKSPACES,
-      'packages/apps/runtime/package.json': '{"name":"@tao/runtime","version":"1.0.0"}\n',
-    }, async rootDir => {
-      await checkedWorkspaces(rootDir)
+    await withStampedWorkspaces(async rootDir => {
       const scope = FS.resolvePath('AppOne/node_modules/@tao', rootDir)
       await FS.mkdir(scope)
       await FS.symlink(FS.resolvePath('packages/apps/runtime', rootDir), FS.resolvePath('runtime', scope))

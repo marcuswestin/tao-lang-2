@@ -1,4 +1,4 @@
-import { FS, HCI } from '@shared'
+import { Errors, FS, HCI } from '@shared'
 import { watch } from 'chokidar'
 import { type ProjectNativeBindingInventory, projectNativeBindingInventory } from './ProjectNativeBindingInventory'
 import { createProjectRefreshLane } from './ProjectRefreshLane'
@@ -43,6 +43,31 @@ export async function startProjectFileWatch(
   let nativeScan: Promise<void> | undefined
   let nativePlan: ProjectNativeBindingInventory | undefined
   let nativeInventory: string | undefined
+  let starting = true
+  const startupWatchers = new Set<ReturnType<typeof watch>>()
+  const progress = (phase: string): void => {
+    if (starting) {
+      options.startupSignal?.throwIfAborted()
+      options.onStartupProgress?.(phase)
+    }
+  }
+  const awaitStartup = <T>(action: Promise<T>): Promise<T> => {
+    const signal = starting ? options.startupSignal : undefined
+    if (signal === undefined) {
+      return action
+    }
+    let abort!: () => void
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      abort = () => reject(signal.reason ?? Errors.abortError('Project watch startup was cancelled.'))
+      signal.addEventListener('abort', abort, { once: true })
+      if (signal.aborted) {
+        abort()
+      }
+    })
+    return Promise.race([action, cancelled]).finally(() => {
+      signal.removeEventListener('abort', abort)
+    })
+  }
 
   const stopNativeScan = async (): Promise<void> => {
     if (nativeTimer !== undefined) {
@@ -89,8 +114,10 @@ export async function startProjectFileWatch(
         nativeBindingAncestors,
       ),
   })
+  startupWatchers.add(watcher)
 
   const attachWatcher = async (path: string): Promise<ReturnType<typeof watch>> => {
+    progress(`watching ${path}`)
     const addedWatcher = watchFiles(path, {
       ignoreInitial: true,
       ignored: (candidate: string) =>
@@ -105,13 +132,18 @@ export async function startProjectFileWatch(
           nativeBindingAncestors,
         ),
     })
+    if (starting) {
+      startupWatchers.add(addedWatcher)
+    }
     addedWatcher.on('all', onWatchEvent)
     addedWatcher.on('error', onError)
     try {
-      await new Promise<void>((resolve, reject) => {
-        addedWatcher.once('ready', resolve)
-        addedWatcher.once('error', reject)
-      })
+      await awaitStartup(
+        new Promise<void>((resolve, reject) => {
+          addedWatcher.once('ready', resolve)
+          addedWatcher.once('error', reject)
+        }),
+      )
       return addedWatcher
     } catch (error) {
       await addedWatcher.close()
@@ -287,6 +319,9 @@ export async function startProjectFileWatch(
           || !nativeBindingPaths.has(absolute) && !nativeBindingAncestors.has(absolute)
       },
     })
+    if (starting) {
+      startupWatchers.add(nativeWatcher)
+    }
     nativeBindingWatchers.set(key, nativeWatcher)
     nativeWatcher.on('all', (_event, candidate) => {
       if (nativeBindingPaths.has(FS.resolvePath(candidate)) && !FS.isFileMutationAuxiliaryPath(candidate)) {
@@ -294,10 +329,13 @@ export async function startProjectFileWatch(
       }
     })
     nativeWatcher.on('error', onError)
-    await new Promise<void>((resolve, reject) => {
-      nativeWatcher.once('ready', resolve)
-      nativeWatcher.once('error', reject)
-    })
+    progress(`watching native binding inputs (${exact.length} paths)`)
+    await awaitStartup(
+      new Promise<void>((resolve, reject) => {
+        nativeWatcher.once('ready', resolve)
+        nativeWatcher.once('error', reject)
+      }),
+    )
     nativePlan = plan
     nativeInventory = await readNativeInventory(plan)
     if (baseline !== nativeInventory) {
@@ -308,7 +346,9 @@ export async function startProjectFileWatch(
   }
 
   const lane = createProjectRefreshLane(async requestOptions => {
+    progress('refreshing project sources and TypeScript')
     let result = await refresh(requestOptions)
+    progress('attaching project inputs')
     let dependencyAttached = await updateDependencyRoots(result)
     let configAttached = await updateConfigInputs(result)
     let sidecarAttached = await updateExternalSidecarInputs(result)
@@ -318,7 +358,9 @@ export async function startProjectFileWatch(
     // events, so read again after attaching new resolution inputs.
     let attached = dependencyAttached || configAttached || sidecarAttached || ownershipAttached || nativeAttached
     while (attached) {
+      progress('refreshing newly attached project inputs')
       result = await refresh({ force: true })
+      progress('attaching refreshed project inputs')
       dependencyAttached = await updateDependencyRoots(result)
       configAttached = await updateConfigInputs(result)
       sidecarAttached = await updateExternalSidecarInputs(result)
@@ -368,23 +410,31 @@ export async function startProjectFileWatch(
   watcher.on('all', onWatchEvent)
   watcher.on('error', onError)
   try {
-    await new Promise<void>((resolve, reject) => {
-      watcher.once('ready', resolve)
-      watcher.once('error', reject)
-    })
-    await lane.requestRefresh()
+    progress(`watching project ${projectRoot}`)
+    await awaitStartup(
+      new Promise<void>((resolve, reject) => {
+        watcher.once('ready', resolve)
+        watcher.once('error', reject)
+      }),
+    )
+    await awaitStartup(lane.requestRefresh())
+    starting = false
+    startupWatchers.clear()
   } catch (error) {
     disposed = true
     if (timer !== undefined) {
       clearTimeout(timer)
     }
     await stopNativeScan()
-    await watcher.close()
+    await Promise.all([...startupWatchers].map(pendingWatcher => pendingWatcher.close()))
     await Promise.all([...dependencyWatchers.values()].map(dependencyWatcher => dependencyWatcher.close()))
     await Promise.all([...externalConfigWatchers.values()].map(configWatcher => configWatcher.close()))
     await Promise.all([...externalSidecarWatchers.values()].map(sidecarWatcher => sidecarWatcher.close()))
     await Promise.all([...sidecarOwnershipWatchers.values()].map(ownershipWatcher => ownershipWatcher.close()))
     await Promise.all([...nativeBindingWatchers.values()].map(nativeWatcher => nativeWatcher.close()))
+    // Drain an in-flight refresh before its service releases shared sessions.
+    // The command's signal/timeout race still releases its lease immediately.
+    await lane.dispose()
     throw error
   }
 

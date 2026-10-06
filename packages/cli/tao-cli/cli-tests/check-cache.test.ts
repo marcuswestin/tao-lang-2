@@ -2,8 +2,8 @@ import { CLI, Diagnostic, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { CheckCache } from '../cli-src/check-cache'
 import { runCheck, runFix } from '../cli-src/source-commands'
-import { CANONICAL_VIEW, checkedWorkspaces, TWO_WORKSPACES } from './helpers/check-cache-fixtures'
-import { withGitTaoFixture, withTaoFixture } from './test-cli-files'
+import { CANONICAL_VIEW, checkedWorkspaces, withStampedWorkspaces } from './helpers/check-cache-fixtures'
+import { withGitTaoFixture } from './test-cli-files'
 
 /**
  * `tao check` skips a workspace whose inputs are byte-identical to the ones behind its last clean
@@ -92,8 +92,7 @@ function Total() returns number {
   })
 
   Test('re-checks only the workspace whose Tao source changed', async () => {
-    await withTaoFixture(TWO_WORKSPACES, async rootDir => {
-      await checkedWorkspaces(rootDir)
+    await withStampedWorkspaces(async rootDir => {
       await FS.writeText(
         FS.resolvePath('AppOne/Main.tao', rootDir),
         'use Text from @tao/ui\n\nview MainView() {\n   render Text("Goodbye")\n}\n',
@@ -104,9 +103,7 @@ function Total() returns number {
   })
 
   Test('invalidates a clean verdict when root configuration or the shared lock changes', async () => {
-    await withTaoFixture(TWO_WORKSPACES, async rootDir => {
-      await checkedWorkspaces(rootDir)
-      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
+    await withStampedWorkspaces(async rootDir => {
       await FS.writeText(
         FS.resolvePath('AppOne/tsconfig.json', rootDir),
         '{"extends":"./.tao/cache/typescript/tsconfig.json","compilerOptions":{"strict":false}}\n',
@@ -118,8 +115,7 @@ function Total() returns number {
   })
 
   Test('re-checks a workspace when a file is added beside the ones it was asked about', async () => {
-    await withTaoFixture(TWO_WORKSPACES, async rootDir => {
-      await checkedWorkspaces(rootDir)
+    await withStampedWorkspaces(async rootDir => {
       await FS.writeText(
         FS.resolvePath('AppOne/Second.tao', rootDir),
         'use Text from @tao/ui\n\nview SecondView() {\n   render Text("Second")\n}\n',
@@ -130,26 +126,18 @@ function Total() returns number {
   })
 
   Test('re-checks a workspace when a TypeScript sidecar beside its declarations changed', async () => {
-    await withTaoFixture(
-      { ...TWO_WORKSPACES, 'AppOne/@ui/Shell.ts': 'export const shell = 1\n' },
-      async rootDir => {
-        await checkedWorkspaces(rootDir)
-        await FS.writeText(FS.resolvePath('AppOne/@ui/Shell.ts', rootDir), 'export const shell = 2\n')
+    await withStampedWorkspaces(async rootDir => {
+      await FS.writeText(FS.resolvePath('AppOne/@ui/Shell.ts', rootDir), 'export const shell = 2\n')
 
-        Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'replayed' })
-      },
-    )
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'replayed' })
+    })
   })
 
   Test('re-checks every workspace when the Tao stdlib changed', async () => {
-    await withTaoFixture(
-      { ...TWO_WORKSPACES, 'packages/apps/stdlib/@tao/ui/Shell.ts': 'export const shell = 1\n' },
-      async rootDir => {
-        await checkedWorkspaces(rootDir)
-        await FS.writeText(FS.resolvePath('packages/apps/stdlib/@tao/ui/Shell.ts', rootDir), 'export const shell = 2\n')
+    await withStampedWorkspaces(async rootDir => {
+      await FS.writeText(FS.resolvePath('packages/apps/stdlib/@tao/ui/Shell.ts', rootDir), 'export const shell = 2\n')
 
-        Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })
-      },
-    )
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })
+    })
   })
 })

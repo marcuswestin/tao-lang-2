@@ -164,6 +164,8 @@ export type SuiteTuning = {
    * is the measurement — rather than guessing.
    */
   fixedMs?: number
+  /** The most shards this suite may become, for a runner whose own pool already fills a machine. */
+  maxShards?: number
   priority?: number
   /** File classes the suite reads; narrower than the default only where that is provable. */
   reads?: readonly SourceClass[]
@@ -270,13 +272,25 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
     reads: ['gen-parser', 'tao', 'ts'],
   }],
 
-  // Jest's own worker pool already parallelizes the whole run, so splitting it into single-worker
-  // processes adds startups without adding parallelism: 30 files in one process at `--maxWorkers=3`
-  // measure 19.7s, and the same files as three processes at one worker each measure 21.3s. It is
-  // handed a reservation and the matching `--maxWorkers`, and left whole.
+  // Jest's own worker pool already parallelizes a run, so on one machine more processes add startups
+  // without adding parallelism: 30 files in one process at `--maxWorkers=3` measured 19.7s, and as
+  // three single-worker processes 21.3s. Hosted Verify is many machines, though, and one process can
+  // only use one of them: in run 37503086586 this suite was a single 237s node, the longest in the
+  // run, and partition 2 took 355s because of it. Three shards, each keeping the whole suite's
+  // three-worker reservation, let the partition plan put each on its own machine; on one machine
+  // they wait for room like any other node. The count is a number of machines, not a quotient of the
+  // duration, which at the planner's 4s target would ask for dozens of Jest startups.
   [
     'runtime-jest',
-    { afterPreflight: true, cost: 3, priority: 4, reads: ['gen-parser', 'tao', 'ts'], shardable: false },
+    {
+      afterPreflight: true,
+      coldShardCount: 3,
+      cost: 3,
+      maxShards: 3,
+      priority: 4,
+      reads: ['gen-parser', 'tao', 'ts'],
+      shardCost: 3,
+    },
   ],
   // The Tao behavior tests validate and compile once per lane, then each `./tao test` shard runs
   // Jest against its own app roots in the shared compiled run.
@@ -600,7 +614,10 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // its public recipe.
     [
       'studio-smoke',
-      studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts'),
+      {
+        ...studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts'),
+        runsOnHostedLinux: true,
+      },
     ],
     [
       'studio-proof-real-app',

@@ -195,6 +195,8 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
   ].map(path => FS.resolvePath(path, guestHome))
   const forbiddenTemp = ['metro-cache', 'tao-test-runs', 'tao-ship-coordination']
     .map(path => FS.resolvePath(path, guestTemp))
+  // These OS allowances are inferred from exact service/product-named VM snapshot paths;
+  // the audit evidence does not independently identify the writer process for each artifact.
   const guestCache = [
     'CloudKit',
     'GeoServices',
@@ -222,6 +224,12 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     'com.apple.amsaccountsd',
     'com.apple.containermanagerd',
     'com.apple.remindd',
+    'com.apple.AMPLibraryAgent',
+    'com.apple.Spotlight',
+    'com.apple.helpd',
+    'com.apple.tipsd',
+    'com.apple.geoanalyticsd',
+    'com.google.GoogleUpdater',
   ].map(name => FS.resolvePath(`Library/Caches/${name}`, guestHome))
   const guestSystem = [
     // The base image's login shell runs outside the isolated acceptance HOME.
@@ -246,6 +254,10 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     'Library/HTTPStorages/com.apple.appleaccountd',
     'Library/HTTPStorages/com.apple.appstoreagent',
     'Library/HTTPStorages/com.apple.itunescloudd',
+    'Library/HTTPStorages/com.apple.AMPLibraryAgent',
+    'Library/HTTPStorages/com.apple.tipsd',
+    'Library/HTTPStorages/com.apple.weatherd',
+    'Library/HTTPStorages/com.google.GoogleUpdater',
     'Library/AppleMediaServices',
     'Library/Application Scripts',
     'Library/Application Support',
@@ -265,6 +277,10 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     'Library/IdentityServices',
     'Library/Keychains',
     'Library/Logs/com.apple.CloudTelemetry',
+    'Library/Logs/DiagnosticReports',
+    'Library/Logs/CrashReporter/DiagnosticLogs/Search',
+    'Library/Google/GoogleSoftwareUpdate/Actives',
+    'Library/Google/GoogleSoftwareUpdate/GoogleSoftwareUpdate.bundle',
     'Library/Messages',
     'Library/Metadata',
     'Library/Passes',
@@ -282,6 +298,7 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     '/System/Library/AssetsV2',
     '/System/Library/Caches',
     '/Library/Trial',
+    '/Library/OSAnalytics',
     '/Library/Application Support/CrashReporter',
     '/Library/Application Support/com.apple.TCC',
     '/Library/Caches/com.apple.amsengagementd.classicdatavault',
@@ -294,6 +311,25 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     '/private/var/protected',
     '/private/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress',
   ].map(onVolume)
+  const systemExact = [
+    '/Library/CoreAnalytics/taskedConfig.json',
+    '/Library/Receipts/InstallHistory.plist',
+    '/Library/Updates/index.plist',
+  ].map(onVolume)
+  const guestSystemExact = [
+    'Library/Safari/PasswordBreachStore.plist',
+    'Library/Caches/com.apple.Safari.SafeBrowsing/Cache.db-wal',
+    'Library/LaunchAgents/com.google.GoogleUpdater.wake.plist',
+    'Library/LaunchAgents/com.google.keystone.agent.plist',
+    'Library/LaunchAgents/com.google.keystone.xpcservice.plist',
+    'Library/Logs/PhotosSearch.aapbz',
+  ].map(path => FS.resolvePath(path, guestHome))
+  const guestSystemTrees = [
+    // Apple documents Movies/TV as the default location for TV media libraries:
+    // https://support.apple.com/en-ie/guide/tvapp-mac/atvebf18f94f/mac
+    'Movies/TV/Media.localized',
+    'Movies/TV/TV Library.tvlibrary',
+  ].map(path => FS.resolvePath(path, guestHome))
   const systemParents = [
     '/System',
     '/System/Library',
@@ -316,6 +352,8 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     '/Volumes',
     '/Volumes/Macintosh HD',
     '/Library/Logs',
+    '/Library/CoreAnalytics',
+    '/Library/Receipts',
     '/Library/Updates',
     '/Library/Updates/ProductMetadata.plist',
     '/private',
@@ -388,9 +426,16 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     FS.resolvePath('Library/homeenergyd', guestHome),
     FS.resolvePath('Library/HTTPStorages', guestHome),
     FS.resolvePath('Library/Logs', guestHome),
+    FS.resolvePath('Library/Google', guestHome),
+    FS.resolvePath('Library/Google/GoogleSoftwareUpdate', guestHome),
+    FS.resolvePath('Library/LaunchAgents', guestHome),
+    FS.resolvePath('Library/PPM', guestHome),
+    FS.resolvePath('Library/PPM/PAT', guestHome),
     FS.resolvePath('Library/Safari', guestHome),
     FS.resolvePath('Library/Photos', guestHome),
     FS.resolvePath('Library/Photos/Libraries', guestHome),
+    FS.resolvePath('Movies', guestHome),
+    FS.resolvePath('Movies/TV', guestHome),
     ...['', '-shm', '-wal'].map(suffix =>
       FS.resolvePath(`Library/Safari/IgnoredSiriSuggestedSites.db${suffix}`, guestHome)
     ),
@@ -404,6 +449,16 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     FS.resolvePath('CFNetworkDownload_TZj7l3.tmp', guestTemp),
   ]
   const runtimeRoot = onVolume('/private/var/run')
+  const ppmPatRoot = FS.resolvePath('Library/PPM/PAT', guestHome)
+  const ppmPatArtifact = (path: string) =>
+    path === ppmPatRoot
+    || /^Tokens_\d{2}_\d{2}_\d{4}_\d{2}_\d{2}_\d{2}\.pat$/u.test(FS.relativePath(ppmPatRoot, path))
+  const googleUpdaterTempPath = (path: string) => {
+    const [root, child, ...rest] = FS.relativePath(guestTemp, path).split('/')
+    return /^com\.google\.GoogleUpdater\.GoogleUpdater_chrome_url_fetcher_\.[A-Za-z0-9]{6}$/u.test(root ?? '')
+      && rest.length === 0
+      && (child === undefined || child === 'decoded_xz' || /^[a-f0-9]{64}$/u.test(child))
+  }
   const launchdDirectory = (path: string) =>
     /^com\.apple\.launchd\.[A-Za-z0-9]+$/.test(
       FS.relativePath(runtimeRoot, path),
@@ -434,6 +489,17 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     FS.resolvePath('.rbenv/shims', guestHome),
     ...['assistantd', 'assistantd/TemporaryItems', 'siriknowledged'].map(name => FS.resolvePath(name, guestTemp)),
   ]
+  const xcodeTemporaryDirectories = scope.vmProfile === 'xcode'
+    ? ['assistantd', 'assistantd/TemporaryItems', 'siriknowledged'].map(name => FS.resolvePath(name, guestTemp))
+    : []
+  const xcodeTemporaryDirectoryChanges = new Set(
+    diff.changed.filter(change =>
+      xcodeTemporaryDirectories.includes(change.path)
+      && change.before.kind === 'directory' && change.after.kind === 'directory'
+      && JSON.stringify({ ...change.before, device: 0, inode: 0, modifiedMs: 0 })
+        === JSON.stringify({ ...change.after, device: 0, inode: 0, modifiedMs: 0 })
+    ).map(change => change.path),
+  )
   const timestampChanged = new Set(
     diff.changed.filter(change =>
       change.before.kind === 'directory' && change.after.kind === 'directory'
@@ -488,6 +554,30 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
       && retainedChanges.has(FS.resolvePath('CRX_INSTALL', FS.dirname(path)))
     ).map(path => FS.dirname(path)),
   )
+  // Chromium corroborates scoped_dir and bundle-ID temp naming, not the writer here:
+  // https://chromium.googlesource.com/chromium/src/+/refs/tags/127.0.6527.0/base/files/scoped_temp_dir.cc
+  // https://chromium.googlesource.com/chromium/src/+/refs/tags/129.0.6668.39/base/files/file_util_posix.cc
+  // Treat this as an inferred writer only for the exact empty Xcode staging pair observed in the snapshot.
+  const xcodeChromeStagingPaths = new Set<string>()
+  if (scope.vmProfile === 'xcode') {
+    for (const root of diff.added.filter(path => /^scoped_dir[A-Za-z0-9]{6}$/.test(FS.relativePath(guestTemp, path)))) {
+      const marker = diff.added.find(path =>
+        FS.dirname(path) === root && /^\.com\.google\.Chrome\.[A-Za-z0-9]{6}$/.test(FS.basename(path))
+      )
+      const directory = afterEntries[root]
+      const file = marker === undefined ? undefined : afterEntries[marker]
+      if (
+        marker !== undefined
+        && directory?.kind === 'directory' && directory.mode === 0o40700 && directory.size === 96
+        && directory.uid === 501 && directory.gid === 20
+        && file?.kind === 'file' && file.mode === 0o100600 && file.size === 0
+        && file.uid === 501 && file.gid === 20
+      ) {
+        xcodeChromeStagingPaths.add(root)
+        xcodeChromeStagingPaths.add(marker)
+      }
+    }
+  }
   const cryptexRoot = onVolume('/private/var/run/com.apple.security.cryptexd')
   const xcodeCryptex = (path: string) => {
     if (scope.vmProfile !== 'xcode') {
@@ -509,7 +599,7 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
       || /^cryptex\.personalize\.[A-Za-z0-9]{6}(?:\/im4m)?$/.test(FS.relativePath(guestTemp, path))
       || /^cryptex_personalized_manifest\.[A-Za-z0-9]{6}$/.test(FS.relativePath(guestTemp, path))
     )
-  const allowedSystem = [...system, ...guestSystem, ...guestCache, ...xcodeSystem]
+  const allowedSystem = [...system, ...guestSystem, ...guestCache, ...guestSystemTrees, ...xcodeSystem]
   const changed = [
     ...diff.added,
     ...diff.changed.map(change => change.path),
@@ -526,7 +616,11 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
       return true
     }
     if (
-      xcodeExact.includes(path) || xcodeCryptex(path) || xcodeRemoved(path)
+      xcodeExact.includes(path) || systemExact.includes(path) || guestSystemExact.includes(path)
+      || ppmPatArtifact(path) || googleUpdaterTempPath(path)
+      || xcodeChromeStagingPaths.has(path)
+      || xcodeCryptex(path) || xcodeRemoved(path)
+      || xcodeTemporaryDirectoryChanges.has(path)
       || (scope.vmProfile === 'xcode' && xcodeTimestampDirectories.includes(path) && timestampChanged.has(path))
       || (path === newsDirectory && timestampChanged.has(path))
       || observedMetadataChanges.has(path)

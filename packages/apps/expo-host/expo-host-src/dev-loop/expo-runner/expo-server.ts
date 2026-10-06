@@ -70,6 +70,7 @@ export class ExpoServer {
     this.child = await startStudioProcessTree(launcher.executable, {
       args: [...(launcher.argsPrefix ?? []), ...startArgs],
       cwd: this.runtimeRoot,
+      resourceIndexRoot: this.options.resourceIndexRoot,
       env: {
         ...this.config.EXPO_START_ENV,
         ...this.options.env,

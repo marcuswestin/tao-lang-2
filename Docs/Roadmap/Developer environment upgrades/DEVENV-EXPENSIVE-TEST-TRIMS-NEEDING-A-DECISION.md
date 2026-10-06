@@ -3,8 +3,9 @@
 - **Status:** Candidate
 - **Section:** External
 - **Area:** `studio-real-app.test.ts`, `studio-simulated-user.test.ts`,
-  `runtime-keyboard-navigation.test.ts`, and the per-partition prepare nodes in hosted Verify.
-- **Impact:** These four trims would each save a measured cost, but each changes what a gate proves or
+  `runtime-keyboard-navigation.test.ts`, the per-partition prepare nodes in hosted Verify, and the
+  Jest transform caches there.
+- **Impact:** These trims would each save a measured cost, but each changes what a gate proves or
   how Verify is built. They wait for the Developer's decision rather than landing as routine trims.
 - **Evidence:** Audit of 2026-10-06, from Verify run 37503086586 (`c8a997842`), local complement
   summaries of the same day, and hosted Linux runs of the browser gates.
@@ -35,8 +36,19 @@
     measurement (the verification-lanes hosted-verification notes) found that running prepare once in
     `plan` adds more serial time than it saves, and each partition must still fail on unformatted or
     stale generated files, so this is CI plumbing that needs a design, not a test trim.
+  - **E. Jest transform cache for runtime-jest and the tao-apps shards.** In hosted Verify both Jest
+    caches live under the lane's `TAO_HOME`, `.artifacts/testing/tao-home/cache/` (`jest-standalone-v2`
+    for runtime-jest, `jest-transform-cache-v2` for `./tao test`), not under `~/.tao`. The workflow
+    forbids caching `.artifacts`, so a cache would have to restore outside it and move the directory
+    in before the lane and out before saving. Proving the hoped-for 20 s on runtime-jest also costs
+    two extra full Verify runs on the shared pool, cold then warm, through a `workflow_dispatch` save
+    path, because a pull request restores only what `main` saved. Dropped on 2026-10-06: once runtime-jest
+    runs as three shards of about 78 s, the saving spreads to about 7 s a shard, off every partition's
+    critical path, and the tao-cli trims' measured −52.7 s against a ledger estimate several times
+    larger says per-file estimates overstate what CI walls return. Revisit when a runtime-jest shard
+    is again the longest node of its partition.
 - **Workaround:** None; the gates pass as they are.
-- **Proposed change:** Decide each of A–D separately. Before landing A, the Metro-claims branch must
+- **Proposed change:** Decide each of A–D separately; E waits for its revisit condition. Before landing A, the Metro-claims branch must
   carry the three Metro-unique claims; before B, confirm the session tests' overlap coverage.
 - **Dependencies:** A depends on the Metro-claims branch (see
   DEVENV-VERIFY-TRIMS-LEFT-TO-OTHER-BRANCHES-POST-MVP); the others on none.

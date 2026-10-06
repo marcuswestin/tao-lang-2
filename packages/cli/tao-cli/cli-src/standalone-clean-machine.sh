@@ -45,6 +45,20 @@ if [ "$#" -eq 2 ] && { [ "$1" = --diagnose ] || [ "$1" = --stop ] || [ "$1" = --
     printf 'Saved snapshot policy replay only; no guest was run or base qualified.\n'
   elif [ "$1" = --diagnose ]; then
     "$bun_bin" run "$vm_helper" exec "$owned_name" 10000 /bin/ps -axo pid=,command= > "$owned_root/logs/guest-processes.log"
+    # Sample only the installed run in this owned guest, before startup cancellation can stop it.
+    while read -r tao_pid; do
+      "$bun_bin" run "$vm_helper" exec "$owned_name" 30000 /usr/sbin/lsof -p "$tao_pid" \
+        > "$owned_root/logs/guest-tao-$tao_pid-open-files.log" || true
+      project_path=$(awk '$4 == "cwd" { print $NF }' "$owned_root/logs/guest-tao-$tao_pid-open-files.log")
+      if [ -n "$project_path" ]; then
+        "$bun_bin" run "$vm_helper" exec "$owned_name" 10000 /bin/ls -la \
+          "$project_path/.tao/cache" "$project_path/node_modules/@tao" \
+          > "$owned_root/logs/guest-tao-$tao_pid-project-state.log" || true
+      fi
+      "$bun_bin" run "$vm_helper" exec "$owned_name" 30000 /usr/bin/sample "$tao_pid" 5 \
+        -file "/Users/admin/tao-harness/logs/steps/live-sample-$tao_pid.log" \
+        > "$owned_root/logs/guest-tao-$tao_pid-sample-command.log" || true
+    done < <(awk '$NF == "run" && $(NF-1) == "tao" { print $1 }' "$owned_root/logs/guest-processes.log")
     "$bun_bin" run "$vm_helper" exec "$owned_name" 15000 /usr/bin/log show --last 10m --style compact \
       --predicate 'subsystem == "com.apple.TCC"' > "$owned_root/logs/guest-privacy.log"
     printf 'Guest diagnostics: %s/logs/guest-{processes,privacy}.log\n' "$owned_root"

@@ -84,13 +84,18 @@ Describe('Tao local build and clean CLI', () => {
       await FS.symlink(FS.resolvePath('web/secret.txt', firstRoot), FS.resolvePath('web/site/escape', firstRoot))
       await servesOnlyContainedFiles(firstRoot)
 
-      const second = await runTao(['build', '--web', FS.resolvePath('Clockwork.tao', root)])
+      // The second build only has to show that a rebuild of unchanged source is retained beside the
+      // first under the same source digest, and the digest is taken from the snapshot before any
+      // target runs, so compiling without exporting a second static site proves the same thing.
+      const second = await runTao(['build', '--web', '--compile-only', FS.resolvePath('Clockwork.tao', root)])
       Expect(second).toMatchObject({ exitCode: 0 })
       const ids = (await FS.listDir(buildsRoot)).filter(name => !name.startsWith('.'))
       Expect(ids).toHaveLength(2)
       Expect(ids).toContain(firstId)
       const secondId = ids.find(id => id !== firstId)!
       const secondRecord = await FS.readJson<BuildRecord>(FS.resolvePath(`${secondId}/build.json`, buildsRoot))
+      Expect(secondRecord.mode).toBe('compile-only')
+      Expect(secondRecord.results.web?.status).toBe('succeeded')
       Expect(secondRecord.sourceDigest).toBe(firstRecord.sourceDigest)
 
       const clean = await runTao(['clean', root])

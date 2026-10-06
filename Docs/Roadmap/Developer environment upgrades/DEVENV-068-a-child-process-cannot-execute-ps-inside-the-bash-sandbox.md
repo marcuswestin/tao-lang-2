@@ -138,4 +138,12 @@
   zombie-only case requires two matching observations of exact identities. A second enumeration
   also discovers children forked after their listed parent exited. Deterministic live, denied,
   absent, late-fork and changed-zombie fixtures cover those races.
+- **Retained host evidence (2026-10-06):** The final-source complement under concurrent iteration
+  failed after the launch assertions passed: `proc_pidinfo` returned zero bytes for a PID whose
+  signal probe still succeeded. The report preserved the PID, native routine and live probe status,
+  and the wrapper stopped survivors before returning. The same unchanged launch check then passed
+  separately in 49.7 seconds; direct native audits found both run roots, the reported PID and groups
+  absent. This does not establish why the first observation was unreadable. Its log remains at
+  `.artifacts/logs/verify-complement/2026-10-06T21-36-44-146Z-52210-94cdcad6/studio-smoke.log`.
+  Complete host proof must be renewed after integrating main.
 - **Source:** 2026-09-17 process-teardown implementation.

@@ -185,6 +185,24 @@ Describe('test shard counts', () => {
     Expect(plan({ coldShardCount: 4, files: files.slice(0, 1) }).shards.length).toBe(1)
   })
 
+  Test('holds a suite to its declared most shards, measured or cold', () => {
+    const files = Array.from({ length: 10 }, (_, index) => `file-${index}.test.ts`)
+    // 240.0s measured less 0.6s startup is 239.4s: sixty shards at the 4.0s target, and the
+    // startup cap allows 399, so only the declared three can be what decides.
+    const measured = plan({ files, fixedMs: 600, maxShards: 3, measuredMs: 240_000 })
+    const cold = plan({ coldShardCount: 5, files, maxShards: 3 })
+
+    Expect(measured.shards.length).toBe(3)
+    Expect(allFiles(measured.shards)).toEqual(files.toSorted())
+    Expect(measured.reason).toBe(
+      '3 shards: 240.0s measured less 0.6s startup, 4.0s target, 399 the startup cap, 10 units, 3 at most',
+    )
+    Expect(cold.shards.length).toBe(3)
+    Expect(cold.reason).toBe('3 initial shards: no recorded duration yet')
+    // A ceiling never splits a suite the duration would keep whole.
+    Expect(plan({ files, maxShards: 3, measuredMs: 7_999 }).shards.length).toBe(1)
+  })
+
   Test('plans the same shards twice, whatever order the files arrive in', () => {
     const files = ['a', 'b', 'c', 'd', 'e', 'f'].map(name => `packages/demo/demo-tests/${name}.test.ts`)
     // Equal costs make the file-name tiebreak the only thing that can order the packing.

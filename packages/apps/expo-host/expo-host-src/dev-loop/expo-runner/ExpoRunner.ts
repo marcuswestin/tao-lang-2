@@ -34,6 +34,8 @@ export type ExpoServerOptions = {
   /** Extra environment for the Expo CLI process, such as the dev data facts `app.config.js` reads. */
   env?: Readonly<Record<string, string>>
   logRoot?: string
+  /** Installed app runs keep durable process ownership records inside the project. */
+  resourceIndexRoot?: string
   runtimeToolchainSourceRoot?: string
   stopTimeoutMs?: number
 }
