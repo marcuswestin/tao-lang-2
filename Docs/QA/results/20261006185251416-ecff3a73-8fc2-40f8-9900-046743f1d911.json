@@ -1,0 +1,45 @@
+{
+  "id": "20261006185251416-ecff3a73-8fc2-40f8-9900-046743f1d911",
+  "runId": "20261006184846632-53c0f402-4771-4f29-ae67-92872a4e03ad",
+  "createdAt": "2026-10-06T18:52:51.407Z",
+  "recordedAt": "2026-10-06T18:52:51.407Z",
+  "commit": "4bfb13da4d445e0bfe6eec755a0a2b7a75fccec4",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/tutorial-first-hour/integrated/source.json",
+      "Docs/QA/evidence/tutorial-first-hour/integrated/source.log.txt"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/498e47215055d67d072adb05f47e2a5bade867bfc80ee4a91a73e47b68c030a6.json"
+  },
+  "surfaceId": "source:tutorial-replay",
+  "dimension": "functional",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "source-test",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/integrated/source.json",
+      "sha256": "3b47518aeaccbcff2735f9c24cf153d00becccec5a6874cf919d9476474262b0"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/integrated/source.log.txt",
+      "sha256": "b80d8f5b19864d8de325da1cac59814feedac63961dd565a76299dc4f9a8b338"
+    }
+  ],
+  "notes": "Fresh automatic source replay passes all three tests: cumulative canonical snippets, documented project setup, final behavior, title edit, deliberately failing count, restored passing journey, malformed syntax and restored check. Buffered automatic failure and contention-triggered direct failure/retry are retained separately. Development proof; installed CLI and human acceptance remain pending.",
+  "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+  "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+  "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
+}

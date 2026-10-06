@@ -67,6 +67,7 @@ type GatesCommandOptions = {
    */
   cache?: boolean
   greenTree?: string[]
+  hostedLinux?: boolean
   jobs?: string
   json?: string
   lane?: string
@@ -250,7 +251,7 @@ await runWithCommands(commands => {
     )
     .option(
       '--app <subject>',
-      'Explicit subject: hnreader, clockwork, native-navigation, native-bridge, syntax2, or watchhello (watchos only).',
+      'Explicit subject: hnreader, clockwork, reading-list (browser only), native-navigation, native-bridge, syntax2, or watchhello (watchos only).',
       'hnreader',
     )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')
@@ -513,6 +514,10 @@ await runWithCommands(commands => {
     )
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
     .option(
+      '--hosted-linux',
+      'With --skip-unsandboxed on a hosted Verify Linux runner: keep the unsandboxed gates proved there.',
+    )
+    .option(
       '--ci-host-gates <names>',
       'verify-full-ci only: run these comma-separated host gates and the prepare nodes they read; empty runs none.',
     )
@@ -540,8 +545,13 @@ await runWithCommands(commands => {
         // the host gates still pending are reported, so a summary never looks fuller than it is.
         const admission = hostedCi ? CiGateAdmission.select(gates, options.ciHostGates ?? '') : undefined
         const lane = admission === undefined ? gates : admission.gates
+        if (options.hostedLinux === true && (options.skipUnsandboxed !== true || Platform.hostPlatform !== 'linux')) {
+          Errors.throwUserInput(
+            '--hosted-linux is for a hosted Verify Linux runner and goes with --skip-unsandboxed; a local lane keeps those gates in the complement.',
+          )
+        }
         const runnable = options.skipUnsandboxed === true
-          ? lane.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
+          ? lane.filter(name => !GateCatalog.skippedUnsandboxed(name, { hostedLinux: options.hostedLinux }))
           : lane
         UiVisibility.preflightGates(runnable, options.showStudio)
         // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
@@ -578,6 +588,7 @@ await runWithCommands(commands => {
               ? undefined
               : { lanes: options.greenTree, noCache: options.cache === false, sharedRoot: GreenTree.sharedRoot() },
             hostPlatform: Platform.hostPlatform,
+            hostedLinux: options.hostedLinux === true,
             jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
             jsonPath: options.json,
             lane: options.lane,

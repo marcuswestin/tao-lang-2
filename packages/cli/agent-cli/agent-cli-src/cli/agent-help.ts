@@ -32,8 +32,8 @@ async function printAgentHelp(justCommands: readonly string[]): Promise<number> 
       ...justHelpLines(result.stdout, justCommands),
       fallbackLine('tao [args...]', 'Run the Tao CLI inside the sandbox'),
       fallbackLine(
-        'resources [--json]',
-        'Inspect sessions, retained assets, worktrees and temporary directories without cleanup',
+        'resources [--json] [--task <id>]',
+        'Inspect sessions, retained assets, worktrees and temporary directories without cleanup; --register-directory <path> --task <id> --purpose <text> --cleanup-condition <text> records a task directory for review',
       ),
       fallbackLine(
         'start-branch <name>',

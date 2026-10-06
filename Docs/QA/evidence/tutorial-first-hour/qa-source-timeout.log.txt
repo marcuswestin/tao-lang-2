@@ -1,0 +1,14 @@
+test-file: running — log /Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/logs/agent/test-file/2026-10-06T17-20-29-786Z-16612.log
+
+REPORT:
+test-file: failed (exit 143) in 120.1s
+parser generate: up to date
+compile app: up to date
+
+Test selection:
+- selected cli/tao-cli: exact requested file
+dev-test: running 1 node — logs: .artifacts/logs/dev-test/2026-10-06T17-20-30-783Z-16786-57e41896
+cli/tao-cli: started at 13:20:30
+/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/logs/agent/test-file/2026-10-06T17-20-29-786Z-16612.log
+
+timed out with no output for 120s

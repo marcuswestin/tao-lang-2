@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 197 applicable release acceptance cells are incomplete.
 
-Candidate source: `4b566ac5e0bb211b7dd97d4695d9458c351e226d`. Tree digest `765087f3f7b426d8`; content hashes are stored per observation.
+Candidate source: `1b8a44f0d840a8ab2ccbe2aad454939f8baa511f`. Tree digest `537bf38960256d4d`; content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -46,20 +46,23 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 
 | Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | text      | 286            | 12       | 12           | 0             | 274     | 0       | 0        | 0    | 4.2%       | 4.2%     |
+| 1                | text      | 434            | 12       | 1            | 11            | 422     | 0       | 0        | 0    | 2.8%       | 0.2%     |
 
 ## Screenshot sets (development evidence)
 
 | Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | visual    | 7              | 7        | 0            | 7             | 0       | 0       | 0        | 0    | 100.0%     | 0.0%     |
-| 2                | visual    | 2              | 0        | 0            | 0             | 2       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 1                | visual    | 40             | 3        | 3            | 0             | 37      | 0       | 0        | 0    | 7.5%       | 7.5%     |
 
 ## Development checks
 
 | Introduced phase | Dimension  | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | ---------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | functional | 2              | 2        | 0            | 2             | 0       | 0       | 0        | 0    | 100.0%     | 0.0%     |
+| 1                | functional | 3              | 3        | 2            | 1             | 0       | 0       | 0        | 0    | 100.0%     | 66.7%    |
+
+## Scenario discovery
+
+15 scenario apps discovered. Capture availability and visual judgment remain separate.
 
 ## Recorded assessments
 
@@ -71,25 +74,26 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - [visual:notebook / visual / notes-groceries / agent](results/20261003173525288-3fb34a34-8931-4d5c-983d-bb016da95455.json): **pass**, needs-recheck; execution profile development.
 - [visual:notebook / visual / notes-ideas / agent](results/20261003173525898-a95130d7-6b03-47fa-8008-49d8922ac23a.json): **pass**, needs-recheck; execution profile development.
 - [visual:notebook / visual / tablet-dark / agent](results/20261003173524612-e3558bf0-b9c2-4fa8-af68-2bd1d6de7c35.json): **pass**, needs-recheck; execution profile development.
-- [visual:reading-list / visual / phone-light / agent](results/20261003173522174-649e3a4d-a0e0-4230-ba18-d988c43baae4.json): **friction**, needs-recheck; execution profile development.
-- [visual:reading-list / visual / desktop / agent](results/20261003173523322-4a99baea-8f7f-44eb-a5dc-654912ea6f4a.json): **friction**, needs-recheck; execution profile development.
-- [visual:reading-list / visual / phone-dark / agent](results/20261003173522714-22fb1399-9d9a-4ee9-a1e6-c4d7c953c298.json): **friction**, needs-recheck; execution profile development.
-- [source:tutorial-replay / functional / source-test / agent](results/20260926234030950-0bffcf10-c348-45bf-a81d-17168b22b136.json): **pass**, needs-recheck; execution profile development.
-- [doc:README.md / text / source / agent](results/20261003205750252-56902b36-9574-4f84-be2f-fcd6e665e57a.json): **pass**, current; execution profile development.
-- [doc:Docs/Tutorials/Your First Tao App.md / text / source / agent](results/20261003205750931-eabd9bc1-a36e-40c4-bc10-95a3c411cbe4.json): **pass**, current; execution profile development.
-- [doc:packages/ai/tao-skills/skills/tao-data/SKILL.md / text / source / agent](results/20261003205752366-4daddc71-50f1-421e-8a2b-456b56efe373.json): **pass**, current; execution profile development.
-- [doc:packages/ai/tao-skills/skills/tao-run-and-ship/SKILL.md / text / source / agent](results/20261003205754511-613435ca-99fb-4756-95c5-55ab0e584a7a.json): **pass**, current; execution profile development.
-- [doc:packages/ai/tao-skills/skills/tao-testing/SKILL.md / text / source / agent](results/20261003205755510-555b36a3-00d8-4e85-ab87-b34d248e6f54.json): **pass**, current; execution profile development.
-- [doc:packages/ai/tao-skills/skills/tao-design/SKILL.md / text / source / agent](results/20261003205753071-3a375037-6bdc-4d1c-b128-46bed4310102.json): **pass**, current; execution profile development.
-- [doc:packages/ai/tao-skills/skills/tao-visibility/SKILL.md / text / source / agent](results/20261003205756494-b1d1d8f7-49fb-4374-94be-df86cadf383f.json): **pass**, current; execution profile development.
-- [doc:Apps/Starters/Notebook/AGENTS.md / text / source / agent](results/20261003205758111-9276e900-f04a-47a0-910a-d4da964e6185.json): **pass**, current; execution profile development.
-- [doc:Apps/Starters/Pantry/AGENTS.md / text / source / agent](results/20261003205758829-6ef6fee3-4af7-4607-a287-cfdf29d52e73.json): **pass**, current; execution profile development.
-- [doc:packages/ides/ide-extension/README.md / text / source / agent](results/20261003205757361-eefc161c-9221-4452-81aa-73ae22cf64db.json): **pass**, current; execution profile development.
+- [visual:reading-list / visual / phone-light / agent](results/20261006191118086-f5fee980-e927-4e8f-8530-c998930276a0.json): **pass**, current; execution profile development.
+- [visual:reading-list / visual / desktop / agent](results/20261006191130428-8133991f-5ccc-4f40-8a4f-dd4025447ef7.json): **pass**, current; execution profile development.
+- [visual:reading-list / visual / phone-dark / agent](results/20261006191143283-21680c5d-f992-49ae-8c4e-bb6b4e9c5923.json): **pass**, current; execution profile development.
+- [source:tutorial-replay / functional / source-test / agent](results/20261006191508618-ac0373eb-ea22-4663-9180-0fb7f7ee67d0.json): **pass**, current; execution profile development.
+- [doc:README.md / text / source / agent](results/20261003205750252-56902b36-9574-4f84-be2f-fcd6e665e57a.json): **pass**, needs-recheck; execution profile development.
+- [doc:Docs/Tutorials/Your First Tao App.md / text / source / agent](results/20261006191520308-4aaddedc-5273-4cff-89e2-d8bfdb6c01a0.json): **pass**, current; execution profile development.
+- [doc:packages/ai/tao-skills/skills/tao-data/SKILL.md / text / source / agent](results/20261003205752366-4daddc71-50f1-421e-8a2b-456b56efe373.json): **pass**, needs-recheck; execution profile development.
+- [doc:packages/ai/tao-skills/skills/tao-run-and-ship/SKILL.md / text / source / agent](results/20261003205754511-613435ca-99fb-4756-95c5-55ab0e584a7a.json): **pass**, needs-recheck; execution profile development.
+- [doc:packages/ai/tao-skills/skills/tao-testing/SKILL.md / text / source / agent](results/20261003205755510-555b36a3-00d8-4e85-ab87-b34d248e6f54.json): **pass**, needs-recheck; execution profile development.
+- [doc:packages/ai/tao-skills/skills/tao-design/SKILL.md / text / source / agent](results/20261003205753071-3a375037-6bdc-4d1c-b128-46bed4310102.json): **pass**, needs-recheck; execution profile development.
+- [doc:packages/ai/tao-skills/skills/tao-visibility/SKILL.md / text / source / agent](results/20261003205756494-b1d1d8f7-49fb-4374-94be-df86cadf383f.json): **pass**, needs-recheck; execution profile development.
+- [doc:Apps/Starters/Notebook/AGENTS.md / text / source / agent](results/20261003205758111-9276e900-f04a-47a0-910a-d4da964e6185.json): **pass**, needs-recheck; execution profile development.
+- [doc:Apps/Starters/Pantry/AGENTS.md / text / source / agent](results/20261003205758829-6ef6fee3-4af7-4607-a287-cfdf29d52e73.json): **pass**, needs-recheck; execution profile development.
+- [doc:packages/ides/ide-extension/README.md / text / source / agent](results/20261003205757361-eefc161c-9221-4452-81aa-73ae22cf64db.json): **pass**, needs-recheck; execution profile development.
 - [story:DOC1 / text / public-docs / agent](results/20260929164745704-ed103852-c9b5-4943-88e7-845ce08c5db6.json): **fail**, needs-recheck; execution profile development.
 - [story:CLI10 / text / public-docs / agent](results/20260929164746126-3212fbd6-713d-476c-9933-d8fdf1c912c3.json): **fail**, needs-recheck; execution profile development.
-- [visual:notebook / visual / tablet-dark / developer](results/20261003215642084-91c248d9-653a-46de-883b-0936ebfd4f4c.json): **pass**, current; execution profile development.
-- [doc:packages/ai/tao-skills/skills/tao-create/SKILL.md / text / source / agent](results/20261003205751575-29aa8baa-6053-49ba-8ea0-614742016167.json): **pass**, current; execution profile development.
-- [doc:packages/ai/tao-skills/skills/tao-project/SKILL.md / text / source / agent](results/20261003205753790-3f282d51-cff3-4af7-bf17-8cd415f2eed2.json): **pass**, current; execution profile development.
+- [visual:notebook / visual / tablet-dark / developer](results/20261003215642084-91c248d9-653a-46de-883b-0936ebfd4f4c.json): **pass**, needs-recheck; execution profile development.
+- [doc:packages/ai/tao-skills/skills/tao-create/SKILL.md / text / source / agent](results/20261003205751575-29aa8baa-6053-49ba-8ea0-614742016167.json): **pass**, needs-recheck; execution profile development.
+- [doc:packages/ai/tao-skills/skills/tao-project/SKILL.md / text / source / agent](results/20261003205753790-3f282d51-cff3-4af7-bf17-8cd415f2eed2.json): **pass**, needs-recheck; execution profile development.
+- [source:tutorial-replay / functional / browser-preview / agent](results/20261006191100850-4980bc1b-437a-4549-b0d8-59c50c1a4287.json): **pass**, current; execution profile development.
 
 ## Unresolved findings and accepted limitations
 
@@ -97,16 +101,13 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - QA-TUTORIAL-ENTRY (fixed-awaiting-qa; major; phase 1): the tutorial omits the execution instructions
 - QA-README-AVAILABILITY (fixed-awaiting-qa; major; phase 1): the front door mixes future and initial release surfaces
 - QA-NOTEBOOK-DARK-CAPTURE (triaged; major; phase 1): one starter scenario has no usable image
-- QA-TUTORIAL-NAVIGATION (open; major; phase 1): navigation choices read as one label
-- QA-TUTORIAL-VERTICAL-SPACE (open; minor; phase 1): phone sections are separated by a large empty area
-- QA-TUTORIAL-DARK-PALETTE (open; minor; phase 1): dark scenario retains the light presentation
-- QA-CAPTURE-OVERLAY (open; minor; phase 1): desktop evidence contains a transient zoom indicator
+- QA-TUTORIAL-DARK-PALETTE (accepted-limitation; minor; phase 1): dark scenario retains the light presentation
 - QA-HNREADER-CAPTURE (triaged; major; phase 2): The wrapping state remains unreviewed
 - QA-IDE-README-SHIPPING (fixed-awaiting-qa; minor; phase 1): Extension README promises shipping and links a checkout-only route
 - QA-README-COMMAND-PREFIX (fixed-awaiting-qa; minor; phase 1): README command table uses tao where only ./tao works
 - QA-README-CREATE-VS-TUTORIAL (fixed-awaiting-qa; major; phase 1): README and tutorial start from incompatible projects
 - QA-README-DEV-NO-TARGET (fixed-awaiting-qa; major; phase 1): README never names the one target release 1 can run
-- QA-README-LICENCE-PENDING (open; minor; phase 1): README defers the app licence question to the release it ships in
+- QA-README-LICENCE-PENDING (fixed-awaiting-qa; minor; phase 1): README defers the app licence question to the release it ships in
 - QA-SKILL-DATA-PROVIDERS (fixed-awaiting-qa; major; phase 1): Data skill offers providers release 1 rejects
 - QA-SKILL-DATA-QUERY-SYNTAX (fixed-awaiting-qa; major; phase 1): Data skill teaches query syntax the grammar rejects
 - QA-SKILL-DESIGN-ADVANCED (fixed-awaiting-qa; major; phase 1): Design skill teaches advanced design as implemented
@@ -115,6 +116,7 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - QA-STARTER-AGENTS-LATER-TOOLS (fixed-awaiting-qa; major; phase 1): Starter agent guide makes tao review part of the edit loop
 - QA-STARTER-DESIGN-COMMENT (fixed-awaiting-qa; minor; phase 1): Release-1 starter design comment names removed element defaults
 - QA-NOTEBOOK-PANEL-STRETCH (closure-needs-recheck; major; phase 1): Notebook panels and rows grow to fill spare height
+- QA-NOTEBOOK-TABLET-COLUMN (closure-needs-recheck; minor; phase 1): the Notebook column hugs the left edge on tablet
 - QA-HNREADER-SKETCH-FIXTURES (fixed-awaiting-qa; minor; phase 2): committed Studio sketches ship inside the HNReader demo
 
 ## Applicable gaps
@@ -316,15 +318,55 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - story:COMT4 / text / public-docs / human: not-run
 - story:COMT5 / text / public-docs / agent: not-run
 - story:COMT5 / text / public-docs / developer: not-run
-- visual:reading-list / visual / phone-light / agent: needs-recheck
-- visual:reading-list / visual / phone-dark / agent: needs-recheck
-- visual:reading-list / visual / desktop / agent: needs-recheck
-- visual:notebook / visual / phone / agent: needs-recheck
-- visual:notebook / visual / tablet-dark / agent: needs-recheck
-- visual:notebook / visual / notes-groceries / agent: needs-recheck
-- visual:notebook / visual / notes-ideas / agent: needs-recheck
+- doc:Apps/Starters/Notebook/AGENTS.md / text / source / agent: needs-recheck
+- doc:Apps/Starters/Pantry/AGENTS.md / text / source / agent: needs-recheck
+- doc:README.md / text / source / agent: needs-recheck
+- doc:packages/ai/tao-skills/skills/tao-create/SKILL.md / text / source / agent: needs-recheck
+- doc:packages/ai/tao-skills/skills/tao-data/SKILL.md / text / source / agent: needs-recheck
+- doc:packages/ai/tao-skills/skills/tao-design/SKILL.md / text / source / agent: needs-recheck
+- doc:packages/ai/tao-skills/skills/tao-project/SKILL.md / text / source / agent: needs-recheck
+- doc:packages/ai/tao-skills/skills/tao-run-and-ship/SKILL.md / text / source / agent: needs-recheck
+- doc:packages/ai/tao-skills/skills/tao-testing/SKILL.md / text / source / agent: needs-recheck
+- doc:packages/ai/tao-skills/skills/tao-visibility/SKILL.md / text / source / agent: needs-recheck
+- doc:packages/ides/ide-extension/README.md / text / source / agent: needs-recheck
+- visual:Apps/Firebase Live Acceptance/FirebaseLiveAcceptancePreview / visual / ["Scenarios.tao","devices","phone"] / agent: not-run
+- visual:Apps/HNReader/HNReader / visual / ["@/studio/View5.tao","sketch","draft"] / agent: not-run
+- visual:Apps/HNReader/HNReader / visual / ["HNReader.scenarios.tao","devices","offline"] / agent: not-run
+- visual:Apps/HNReader/HNReader / visual / ["HNReader.scenarios.tao","devices","phone"] / agent: not-run
+- visual:Apps/HNReader/HNReader / visual / ["HNReader.scenarios.tao","devices","tabletDark"] / agent: not-run
+- visual:Apps/HNReader/HNReader / visual / ["HNReader.scenarios.tao","rows","leading"] / agent: not-run
+- visual:Apps/HNReader/HNReader / visual / ["HNReader.scenarios.tao","rows","wrapping"] / agent: not-run
+- visual:Apps/HNReader/HNReaderStub / visual / ["@/studio/View5.tao","sketch","draft"] / agent: not-run
+- visual:Apps/HNReader/HNReaderStub / visual / ["HNReader.scenarios.tao","rows","leading"] / agent: not-run
+- visual:Apps/HNReader/HNReaderStub / visual / ["HNReader.scenarios.tao","rows","wrapping"] / agent: not-run
+- visual:Apps/Hosted Firebase/FirebaseNotesPreview / visual / ["Scenarios.tao","devices","phone"] / agent: not-run
+- visual:Apps/Starters/Notebook/Notebook / visual / ["Scenarios.tao","devices","phone"] / agent: not-run
+- visual:Apps/Starters/Notebook/Notebook / visual / ["Scenarios.tao","devices","tabletDark"] / agent: not-run
+- visual:Apps/Starters/Notebook/Notebook / visual / ["Scenarios.tao","notes states","groceries"] / agent: not-run
+- visual:Apps/Starters/Notebook/Notebook / visual / ["Scenarios.tao","notes states","ideas"] / agent: not-run
+- visual:Apps/Starters/Pantry/Pantry / visual / ["Scenarios.tao","devices","phone"] / agent: not-run
+- visual:Apps/Starters/Pantry/Pantry / visual / ["Scenarios.tao","devices","tabletDark"] / agent: not-run
+- visual:Apps/Starters/Pantry/Pantry / visual / ["Scenarios.tao","ingredients states","eggs"] / agent: not-run
+- visual:Apps/Starters/Pantry/Pantry / visual / ["Scenarios.tao","ingredients states","oliveOil"] / agent: not-run
+- visual:Apps/Starters/Pantry/Pantry / visual / ["Scenarios.tao","recipes states","omelette"] / agent: not-run
+- visual:Apps/Starters/Pantry/Pantry / visual / ["Scenarios.tao","recipes states","tomatoPasta"] / agent: not-run
+- visual:Apps/Test Apps/Auth Review/AuthReviewClerk / visual / ["Auth Review.tao","Clerk and InstantDB","iPhone"] / agent: not-run
+- visual:Apps/Test Apps/Auth Review/AuthReviewConvexClerk / visual / ["Auth Review.tao","Clerk and Convex","iPhone"] / agent: not-run
+- visual:Apps/Test Apps/Auth Review/AuthReviewPylon / visual / ["Auth Review.tao","Pylon auth and data","iPhone"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlower / visual / ["WordFlower.tao","devices","phone"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlower / visual / ["WordFlower.tao","devices","tabletDark"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlower / visual / ["WordFlower.tao","interaction","held"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlower / visual / ["WordFlower.tao","states","novel"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlowerDark / visual / ["WordFlower.tao","dark theme","library"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlowerDark / visual / ["WordFlower.tao","interaction","held"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlowerDark / visual / ["WordFlower.tao","states","novel"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlowerDrawer / visual / ["WordFlower.tao","interaction","held"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlowerDrawer / visual / ["WordFlower.tao","states","novel"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlowerInstantDB / visual / ["WordFlower.tao","interaction","held"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlowerInstantDB / visual / ["WordFlower.tao","states","novel"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlowerLocalInstantDB / visual / ["WordFlower.tao","interaction","held"] / agent: not-run
+- visual:Apps/WordFlower/1 - Current/WordFlowerLocalInstantDB / visual / ["WordFlower.tao","states","novel"] / agent: not-run
 - source:hnreader-browser / functional / browser-preview / agent: needs-recheck
-- source:tutorial-replay / functional / source-test / agent: needs-recheck
 
 ## Deferred beyond release 5
 
@@ -334,7 +376,7 @@ These are scoped observations; supplementary source checks do not fill public-ar
 
 - 2: Generated harness copy; canonical .rulesync or agents source is inventoried.
 - 44: Starter copy of the packaged Tao skills; the canonical packages/ai/tao-skills source is inventoried.
-- 163: Frozen archive; outside active-document review.
-- 10: QA evidence or generated register output; excluded from its own freshness inputs.
+- 193: Frozen archive; outside active-document review.
+- 26: QA evidence or generated register output; excluded from its own freshness inputs.
 
 Every excluded path and reason: [inventory](inventory.json).

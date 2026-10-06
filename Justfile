@@ -15,7 +15,7 @@ IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extensio
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/packages/services/tao-cloud/tao-cloud-src/local"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
-VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-network-simulation studio-canary"
+VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-metro-refresh studio-agent-browser studio-network-simulation studio-canary"
 VERIFY_FULL_SKIPPED := ""
 
 # Print available recipes
@@ -226,6 +226,11 @@ qa *ARGS:
 [group('Host proofs')]
 studio-proof-real-app run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts
+
+# Prove Studio's Metro serves new modules, fast-refreshes edits, and draws after a Code save
+[group('Host proofs')]
+studio-metro-refresh run_id="local":
+    ./dev studio-smoke --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-metro-refresh.test.ts
 
 # Export WordFlower and prove its physical keyboard path in real headless Chrome
 [group('Host proofs')]
@@ -763,12 +768,13 @@ verify-full no_cache='false' show_studio='false' jobs='': _deps
 diagnose-verification: _deps
     TAO_VERIFY_NO_TIMEOUTS=true TAO_VERIFY_JOBS=1 ./dev gates {{ VERIFY_FULL_GATES }} --lane diagnose-verification --jobs 1 --output lines --no-cache
 
-# Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree; --partition k/n runs one CI machine's share
+# Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree; --partition k/n runs one CI machine's share; --hosted-linux (hosted Verify only) keeps the host gates proved on its Linux runners
+[arg('hosted_linux', long='hosted-linux', value='true')]
 [arg('no_cache', long='no-cache', value='true')]
 [arg('partition', long='partition')]
 [group('Dev')]
-verify-full-sandbox no_cache='false' partition='':
-    ./dev gates {{ VERIFY_FULL_GATES }} --skip-unsandboxed --lane verify-full-sandbox {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }} {{ if partition == "" { "" } else { "--partition " + partition } }}
+verify-full-sandbox no_cache='false' partition='' hosted_linux='false':
+    ./dev gates {{ VERIFY_FULL_GATES }} --skip-unsandboxed {{ if hosted_linux == "true" { "--hosted-linux" } else { "" } }} --lane verify-full-sandbox {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }} {{ if partition == "" { "" } else { "--partition " + partition } }}
 
 # The local half of a landing: the host-only gates hosted Verify does not admit, derived from the workflow, run under the lock and GUI lease, reported as the Verify (host) status on HEAD
 [arg('status', long='no-status', value='false')]

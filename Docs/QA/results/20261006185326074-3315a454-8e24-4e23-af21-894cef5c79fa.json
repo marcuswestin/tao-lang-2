@@ -1,0 +1,45 @@
+{
+  "id": "20261006185326074-3315a454-8e24-4e23-af21-894cef5c79fa",
+  "runId": "20261006184846632-53c0f402-4771-4f29-ae67-92872a4e03ad",
+  "createdAt": "2026-10-06T18:53:26.073Z",
+  "recordedAt": "2026-10-06T18:53:26.073Z",
+  "commit": "4bfb13da4d445e0bfe6eec755a0a2b7a75fccec4",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/tutorial-first-hour/integrated/capture/source-snapshot.json",
+      "Docs/QA/evidence/tutorial-first-hour/integrated/capture/screenshots/qa-views-dark-2b84c5e37826.png"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/498e47215055d67d072adb05f47e2a5bade867bfc80ee4a91a73e47b68c030a6.json"
+  },
+  "surfaceId": "visual:reading-list",
+  "dimension": "visual",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "phone-dark",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/integrated/capture/source-snapshot.json",
+      "sha256": "e38c040073e4e6155298fe4ba88f678bf9a4087f2b8b5b74c41c0d794a63c58a"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/integrated/capture/screenshots/qa-views-dark-2b84c5e37826.png",
+      "sha256": "680b9ac1bdf45019c98bb2600899fdae917dce41a82f2acf76565bb848029318"
+    }
+  ],
+  "notes": "Inspected fresh dark-system phone capture. The explicitly documented paper palette remains light and readable; distinct navigation and compact list layout. This confirms the accepted intentional light showcase, not a reactive dark theme.",
+  "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+  "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+  "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
+}

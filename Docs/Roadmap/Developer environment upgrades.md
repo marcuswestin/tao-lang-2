@@ -18,14 +18,15 @@ change that addressed it.
 - [DEVENV-024 — Branch-local semantic cleanup](<Developer environment upgrades/DEVENV-024-branch-local-semantic-cleanup.md>) — Blocked
 - [DEVENV-ARCHIVE-WORKFLOW-CANNOT-ARCHIVE-A-WORKFLOW-CHANGE — the Archive workflow cannot archive a workflow change](<Developer environment upgrades/DEVENV-ARCHIVE-WORKFLOW-CANNOT-ARCHIVE-A-WORKFLOW-CHANGE.md>) — Candidate
 - [DEVENV-CLOUD-AGENT-EXECUTIONS-LACK-PORTABLE-BOOTSTRAP — Cloud agent executions lack a portable bootstrap](<Developer environment upgrades/DEVENV-CLOUD-AGENT-EXECUTIONS-LACK-PORTABLE-BOOTSTRAP.md>) — In progress
+- [DEVENV-DEV-SESSION-OWNERSHIP-TESTS-FAIL-IN-AGENT-SANDBOX — Dev-session ownership tests fail in the agent sandbox](<Developer environment upgrades/DEVENV-DEV-SESSION-OWNERSHIP-TESTS-FAIL-IN-AGENT-SANDBOX.md>) — Open
 - [DEVENV-FINALIZE-HIDES-PROGRESS-IN-A-SECOND-LOG — Finalize hides progress in a second log](<Developer environment upgrades/DEVENV-FINALIZE-HIDES-PROGRESS-IN-A-SECOND-LOG.md>) — Candidate
 - [DEVENV-IOS-BUILD-HIDES-POD-INSTALL-FAILURES — iOS build hides pod install failures](<Developer environment upgrades/DEVENV-IOS-BUILD-HIDES-POD-INSTALL-FAILURES.md>) — Candidate
 - [DEVENV-NATIVE-MODULE-CHECK-CANNOT-LIST-SWIFT-PACKAGE-PODS — native module check cannot list Swift package Pods](<Developer environment upgrades/DEVENV-NATIVE-MODULE-CHECK-CANNOT-LIST-SWIFT-PACKAGE-PODS.md>) — Candidate
-- [DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS — Nested Tao journeys run in overlapping shards](<Developer environment upgrades/DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS.md>) — Open
 - [DEVENV-NO-FRONT-DOOR-REPEATS-A-TEST-UNDER-CPU-LOAD — No front door repeats a test under CPU load](<Developer environment upgrades/DEVENV-NO-FRONT-DOOR-REPEATS-A-TEST-UNDER-CPU-LOAD.md>) — Candidate
 - [DEVENV-PERSISTENT-UI-CONTROLLER-POST-MVP — Persistent UI controller after MVP](<Developer environment upgrades/DEVENV-PERSISTENT-UI-CONTROLLER-POST-MVP.md>) — Planned
 - [DEVENV-STANDALONE-SERVER-STARTUP-HIDES-CHILD-FAILURE — Standalone server startup hides child failure](<Developer environment upgrades/DEVENV-STANDALONE-SERVER-STARTUP-HIDES-CHILD-FAILURE.md>) — Candidate
 - [DEVENV-STUDIO-STARTUP-STAGES-NEED-MEASUREMENT — Studio startup stages need measurement](<Developer environment upgrades/DEVENV-STUDIO-STARTUP-STAGES-NEED-MEASUREMENT.md>) — Planned
+- [DEVENV-VERIFY-TRIMS-LEFT-TO-OTHER-BRANCHES-POST-MVP — Verification trims left to other branches, checked after MVP](<Developer environment upgrades/DEVENV-VERIFY-TRIMS-LEFT-TO-OTHER-BRANCHES-POST-MVP.md>) — Planned
 
 ## External and observational findings
 
@@ -96,10 +97,13 @@ change that addressed it.
 - [DEVENV-DIRENV-RELOAD-REPORTS-RUNNING-COMMAND-NOT-FOUND — direnv reload reports Running command not found](<Developer environment upgrades/DEVENV-DIRENV-RELOAD-REPORTS-RUNNING-COMMAND-NOT-FOUND.md>) — Candidate
 - [DEVENV-DOCTOR-PASSES-A-BUN-OLDER-THAN-THE-DEVENV-PIN — `./agent doctor` passes a Bun older than the one devenv pins](<Developer environment upgrades/DEVENV-DOCTOR-PASSES-A-BUN-OLDER-THAN-THE-DEVENV-PIN.md>) — In progress
 - [DEVENV-EVERY-TAO-APP-SHARD-COMPILES-THE-PROJECT-AGAIN — Every Tao app shard compiles the project again](<Developer environment upgrades/DEVENV-EVERY-TAO-APP-SHARD-COMPILES-THE-PROJECT-AGAIN.md>) — In progress on `feat/verification-throughput`; idle-machine wall-time acceptance remains to be measured.
+- [DEVENV-EXPENSIVE-TEST-TRIMS-NEEDING-A-DECISION — Expensive test trims that need a decision](<Developer environment upgrades/DEVENV-EXPENSIVE-TEST-TRIMS-NEEDING-A-DECISION.md>) — Candidate
 - [DEVENV-FAILING-UNTIL-WAIT-STALLS-TEST-FILE — A failing `until` wait stalls `test-file` for minutes](<Developer environment upgrades/DEVENV-FAILING-UNTIL-WAIT-STALLS-TEST-FILE.md>) — Candidate
 - [DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START — File watching depends on a Watchman server no agent can start](<Developer environment upgrades/DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START.md>) — Candidate
 - [DEVENV-GIT-WORKTREE-TIMEOUTS-RECUR-AFTER-COMPLETION-REPAIR — Git worktree timeouts recur after completion repair](<Developer environment upgrades/DEVENV-GIT-WORKTREE-TIMEOUTS-RECUR-AFTER-COMPLETION-REPAIR.md>) — Candidate
 - [DEVENV-HOOK-REVIEW-IGNORES-DESCRIPTIVE-NAMES — Hook review ignores descriptive names](<Developer environment upgrades/DEVENV-HOOK-REVIEW-IGNORES-DESCRIPTIVE-NAMES.md>) — Blocked
+- [DEVENV-HOST-CONTROLS-COLD-BUILD-TIMEOUTS — Host controls cold builds time out](<Developer environment upgrades/DEVENV-HOST-CONTROLS-COLD-BUILD-TIMEOUTS.md>) — Candidate
+- [DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS — Host effect lint has baseline findings](<Developer environment upgrades/DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS.md>) — Candidate
 - [DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS — iOS builds lack CocoaPods metadata access](<Developer environment upgrades/DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS.md>) — In progress
 - [DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED — A landing tests a Codex config it never regenerated](<Developer environment upgrades/DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED.md>) — Candidate
 - [DEVENV-LAZY-TEST-REGISTRATION-FAILS-CI-IMPORT — Lazy test registration fails CI import](<Developer environment upgrades/DEVENV-LAZY-TEST-REGISTRATION-FAILS-CI-IMPORT.md>) — In progress
@@ -112,9 +116,7 @@ change that addressed it.
 - [DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP — iOS dev loop can stall after an Android loop stops](<Developer environment upgrades/DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP.md>) — Candidate
 - [DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG — Model routing trails the installed catalog](<Developer environment upgrades/DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG.md>) — Candidate
 - [DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES — Native kit omits provider transitives](<Developer environment upgrades/DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES.md>) — In progress
-- [DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME — Native session timestamps use monotonic time](<Developer environment upgrades/DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME.md>) — Candidate
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
-- [DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL — Output hook requires an unavailable read tool](<Developer environment upgrades/DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL.md>) — Candidate
 - [DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT — Following checks spends GitHub's anonymous API limit](<Developer environment upgrades/DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT.md>) — Candidate
 - [DEVENV-PROCESS-GROUP-PROBE-REJECTS-PS-SNAPSHOT — Process group probe rejects the system process snapshot](<Developer environment upgrades/DEVENV-PROCESS-GROUP-PROBE-REJECTS-PS-SNAPSHOT.md>) — Candidate
 - [DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES — Profile lacks direnv while doctor passes](<Developer environment upgrades/DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES.md>) — Candidate

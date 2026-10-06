@@ -92,6 +92,106 @@ function stubRemote(overrides: Partial<AppiumSession>): AppiumSession {
   }
 }
 
+for (const platform of ['ios', 'android'] as const) {
+  test(`${platform} adaptation keeps scoped element identity local while forwarding common operations`, async () => {
+    const events: string[] = []
+    const rect = { x: 1, y: 2, width: 3, height: 4 }
+    const child = wireElement('child', events)
+    const parent = wireElement('shared-id', events, {
+      find: async locator => {
+        events.push(`within:${locator.value}`)
+        return child
+      },
+      findAll: async locator => {
+        events.push(`all-within:${locator.value}`)
+        return [child]
+      },
+      getRect: async () => rect,
+    })
+    const remote = stubRemote({
+      find: async () => parent,
+      findAll: async () => [parent],
+      activateApplication: async appId => {
+        events.push(`activate:${appId}`)
+      },
+      terminateApplication: async appId => {
+        events.push(`terminate:${appId}`)
+      },
+      delete: async () => {
+        events.push('delete')
+      },
+      screenshot: async () => new Uint8Array([1, 2]),
+    })
+    const factory = { createSession: async () => remote }
+    const makeSession = () =>
+      platform === 'ios'
+        ? appiumXcuiTestClient(factory).createSession({})
+        : appiumAndroidClient(factory).createSession({})
+    const session = await makeSession()
+    const other = await makeSession()
+    const locator = { using: 'accessibility id', value: 'parent' } as const
+    const observed = await session.findElement(locator)
+    const foreign = await other.findElement(locator)
+    const within = 'findElementWithin' in session ? session.findElementWithin : session.findElementFrom!
+    const allWithin = 'findElementsWithin' in session ? session.findElementsWithin : session.findElementsFrom!
+    expect(observed.id).toBe(foreign.id)
+    await expect(within(foreign, locator)).rejects.toThrow('lost WebDriver element')
+    await expect(allWithin(foreign, locator)).rejects.toThrow('lost WebDriver element')
+    expect(events).toEqual([])
+    expect((await within(observed, { ...locator, value: 'child' })).id).toBe('child')
+    expect((await allWithin(observed, { ...locator, value: 'children' })).map(element => element.id)).toEqual(['child'])
+    expect((await session.findElements(locator)).map(element => element.id)).toEqual(['shared-id'])
+    expect(await observed.getRect!()).toEqual(rect)
+    expect(await observed.getText!()).toBe('')
+    expect(await observed.getAttribute!('label')).toBe('label')
+    expect(await observed.isDisplayed()).toBe(true)
+    await observed.click()
+    await observed.sendKeys('input')
+    expect(await session.screenshot!()).toEqual(new Uint8Array([1, 2]))
+    await session.activateApp!('application')
+    await session.terminateApp!('application')
+    await session.deleteSession()
+    expect(events).toEqual([
+      'within:child',
+      'all-within:children',
+      'click:shared-id',
+      'type:input',
+      'activate:application',
+      'terminate:application',
+      'delete',
+    ])
+  })
+
+  test(`${platform} adaptation refuses missing native element bounds`, async () => {
+    const remote = stubRemote({ find: async () => wireElement('unbounded', []) })
+    const session = await (platform === 'ios' ? appiumXcuiTestClient : appiumAndroidClient)({
+      createSession: async () => remote,
+    }).createSession({})
+    const observed = await session.findElement({ using: 'accessibility id', value: 'unbounded' })
+    await expect(observed.getRect!()).rejects.toThrow("Appium did not return bounds for WebDriver element 'unbounded'.")
+  })
+}
+
+function wireElement(id: string, events: string[], overrides: Partial<AppiumElement> = {}): AppiumElement {
+  return {
+    id,
+    click: async () => {
+      events.push(`click:${id}`)
+    },
+    find: async () => Errors.throwUnexpected('Unexpected element query.'),
+    findAll: async () => [],
+    getAttribute: async name => name,
+    getRect: async () => undefined,
+    getText: async () => undefined,
+    observe: async () => ({ visible: true }),
+    sendKeys: async text => {
+      events.push(`type:${text}`)
+    },
+    visible: async () => true,
+    ...overrides,
+  }
+}
+
 test('Android Back invokes the native keycode instead of typing the word into an input', async () => {
   const scripts: Array<{ args: readonly unknown[]; script: string }> = []
   let keyboardActions = 0

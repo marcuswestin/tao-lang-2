@@ -53,6 +53,8 @@ export default defineConfig({
       name: 'browser',
       testMatch: Platform.runtimeProcess.env['TAO_HOST_TEST_APP'] === 'clockwork'
         ? ['browser/clockwork*.host.spec.ts']
+        : Platform.runtimeProcess.env['TAO_HOST_TEST_APP'] === 'reading-list'
+        ? ['browser/reading-list.host.spec.ts']
         : ['browser/hnreader*.host.spec.ts'],
       use: {
         browserName: 'chromium',
