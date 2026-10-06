@@ -1,7 +1,7 @@
 import { OutputText } from '@cli-kit'
 import * as Shared from '@shared'
 import { type ContentionReport, MachineLanes } from './MachineLanes'
-import { describesTimeout } from './RunSummary'
+import { describesTimeout, processEnding } from './RunSummary'
 import type { SuiteState } from './TestRunner'
 
 type SuiteTestSummary = {
@@ -59,7 +59,7 @@ function printResultSummary(
 
   Shared.HCI.writeErrorLine('\nFailed test suites:')
   for (const state of failed) {
-    Shared.HCI.writeErrorLine(`${state.name}: exit ${state.exitCode ?? 'unknown'}`)
+    Shared.HCI.writeErrorLine(`${state.name}: ${processEnding(state.exitCode, state.signal)}`)
     if (options.includeFailureOutput === true) {
       printFailureOutput(state, options.failureOutputLineLimit ?? FAILURE_OUTPUT_LINE_LIMIT)
     }
