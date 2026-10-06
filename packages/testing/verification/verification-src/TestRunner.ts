@@ -432,7 +432,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   const mode = options.mode ?? WorkReporter.resolveMode()
   const graphStates = TaoAppSharedRun.attach(states, location.logRoot, location.repositoryRoot)
   await RunArtifacts.assignLogPaths(graphStates, location)
-  const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
+  const expectedMs = TestNodes.expectedMsFor(states, timings)
   const reporter = WorkReporter.create({ lane: location.lane, logRoot: location.logRoot, mode })
   const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
   const failure = FailurePolicy.create({

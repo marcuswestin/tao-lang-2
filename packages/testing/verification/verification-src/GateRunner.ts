@@ -241,7 +241,10 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const testPlan = testGate === undefined ? undefined : await testNodes(testGate, location)
   const suiteOfNode = new Map((testPlan?.states ?? []).map(state => [state.name, state.suite]))
   const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
-  const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
+  // A test node weighs what the planner estimated for the files it holds; a recipe gate weighs its
+  // own history. The scheduler's ranking, the partition plan and the summary all read this one
+  // answer, so a shard is never ranked at `cost × 1s` while the partition plan charges it 30s.
+  const expectedMs = TestNodes.expectedMsFor(testPlan?.states ?? [], timings)
 
   // One machine's share of a lane split across several. It is planned over every reader before any
   // record is consulted, because records can differ between machines and the plan must not.
@@ -525,7 +528,10 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     interrupted: result.interrupted,
     lane: location.lane,
     logRoot: location.logRoot,
-    order: [...recipeGates, ...suiteOfNode.keys()],
+    // Every scheduled node reports, including the shared-run nodes `TaoAppSharedRun` attached
+    // beside the suites: a `summary.json` without `tao-apps:prepare` hides the one node every
+    // partition pays for and leaves a schedule replay guessing at it.
+    order: [...new Set([...recipeGates, ...suiteOfNode.keys(), ...states.map(state => state.name)])],
     schedule,
     states,
     suiteOf: name => suiteOfNode.get(name),

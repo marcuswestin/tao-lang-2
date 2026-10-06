@@ -75,6 +75,15 @@ export type RecordRunOptions = RunTimingsOptions & {
 }
 
 const DURATIONS_PATH = '.artifacts/timings/durations.json'
+/**
+ * The committed seed: what CI copies over `DURATIONS_PATH` before it plans, and what a checkout that
+ * has never run a node reads *under* its own store. Without it a fresh worktree ranks every node at
+ * `cost × 1 s` and plans every partition at a flat unknown cost, which is how a 228 s shard came to
+ * start at 893 s of a 1,122 s run. A local record always wins over the seed, and `record` never
+ * writes the seed back into the local store — the seed was measured on another machine and is a
+ * prior, not a sample.
+ */
+const SEED_PATH = '.github/verify/durations.json'
 const HISTORY_PATH = '.artifacts/timings/history.jsonl'
 const LOCK_PATH = '.artifacts/timings/transaction-lock'
 /** Long enough for a sibling lane's merge, short enough never to hold a finished run open. */
@@ -119,10 +128,20 @@ function emptyStore(): TimingsStore {
   return { nodes: {}, version: 1 }
 }
 
-/** load reads the timings store, treating anything unreadable as a cold start. */
+/**
+ * load reads the timings store layered over the committed seed, treating anything unreadable as a
+ * cold start. Every node the checkout has measured itself keeps its own record; a node it has not
+ * takes the seed's.
+ */
 async function load(options: RunTimingsOptions = {}): Promise<TimingsStore> {
+  const [seed, local] = await Promise.all([readStore(seedPath(options)), readStore(durationsPath(options))])
+  return { nodes: { ...seed.nodes, ...local.nodes }, version: 1 }
+}
+
+/** readStore reads one store file, treating a missing or malformed one as empty. */
+async function readStore(path: string): Promise<TimingsStore> {
   try {
-    const store = await FS.readJson<TimingsStore>(durationsPath(options))
+    const store = await FS.readJson<TimingsStore>(path)
     return store.nodes === undefined || typeof store.nodes !== 'object' ? emptyStore() : store
   } catch {
     return emptyStore()
@@ -160,7 +179,8 @@ async function record(options: RecordRunOptions): Promise<void> {
   }
   const lease = await acquireLease(options)
   try {
-    const store = await load(options)
+    // Local-only on purpose: the merge folds samples into this machine's records, never into the seed.
+    const store = await readStore(durationsPath(options))
     const lastRunAt = new Date().toISOString()
     for (const [name, sample] of durations) {
       const previous = store.nodes[name]
@@ -259,10 +279,15 @@ function historyPath(options: RunTimingsOptions): string {
   return FS.resolvePath(HISTORY_PATH, options.repositoryRoot ?? Repo.getRoot())
 }
 
+function seedPath(options: RunTimingsOptions): string {
+  return FS.resolvePath(SEED_PATH, options.repositoryRoot ?? Repo.getRoot())
+}
+
 /** RunTimings owns the measured durations that order the work graph. */
 export const RunTimings = {
   DURATIONS_PATH,
   HISTORY_PATH,
+  SEED_PATH,
   expectedMs,
   load,
   record,
