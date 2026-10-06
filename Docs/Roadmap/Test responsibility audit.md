@@ -309,7 +309,8 @@ counts are separate from the 154 controlled host cases and the unexercised real-
 no repository-wide baseline is inferred from filename or assertion counts. The final sharded sandbox
 run reports 143 Tao executions because the nested Runtime Default journey runs in both its
 parent and child shards: 142 distinct ordinary journeys remain. This existing scheduling
-overlap is recorded in [the environment ledger](<Developer environment upgrades/DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS.md>); the useful authored test and completed scheduler
+overlap was repaired on `feat/unique-journey-shards` with disjoint recursive roots and retained
+nested cost estimates, as recorded in [the environment ledger](<Developer environment upgrades/Archive/DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS.md>); the useful authored test and completed scheduler
 changes are retained. It receives no deletion credit.
 
 The final E2E and host-spec reviews retain real session isolation, stale lease/observation/
