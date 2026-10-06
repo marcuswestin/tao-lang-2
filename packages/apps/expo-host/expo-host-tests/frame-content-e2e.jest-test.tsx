@@ -19,7 +19,7 @@ Describe('view content runtime', () => {
         }
 
         view Card(Title text) {
-          @actions = empty
+          @actions: empty
 
           render Col() [gap 8, pad 12] {
             Row() [content spread center] {
@@ -54,7 +54,7 @@ Describe('view content runtime', () => {
             WordBadge(3) [margin top 5]
             Card("Draft") [claim 2] {
               Text("Unsaved changes")
-              @actions FormButton("Reset to signed out") {
+              @actions: FormButton("Reset to signed out") {
                 #resetSignedOut
                 on press -> { }
               }

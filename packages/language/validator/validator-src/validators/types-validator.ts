@@ -11,6 +11,7 @@ import {
 
 /** typeValidationMessages declares diagnostics for custom types, constructors is item, and member access. */
 export const typeValidationMessages = {
+  namedStateBoolean: (name: string) => `Named state '${name}' requires a same-name yes/no type.`,
   unknownType: (name: string) => `Unknown type '${name}'.`,
   duplicateItemField: (name: string) => `Item field '${name}' is declared more than once.`,
   slotDefaultType: (name: string, expected: string, actual: string) =>
@@ -37,6 +38,20 @@ export const typeValidationMessages = {
 
 /** typeValidationChecks validates custom type declarations and item/list/custom expression forms. */
 export const typeValidationChecks = {
+  [AST.StateDeclaration.$type]: (state, ctx) => {
+    if (!AST.isNamedStateShorthand(state)) {
+      return
+    }
+    const declaration = AST.namedStateTypeDeclaration(state)
+    if (!declaration) {
+      ctx.error(state, typeValidationMessages.unknownType(state.name))
+      return
+    }
+    const type = Type.ofDefinition(declaration)
+    if (type.kind !== 'unresolved' && (type.kind !== 'primitive' || type.primitive !== 'boolean')) {
+      ctx.error(state, typeValidationMessages.namedStateBoolean(state.name))
+    }
+  },
   [AST.TypeDeclaration.$type]: validateTypeDeclaration,
   [AST.DerivedTypeExpression.$type]: validateDerivedType,
   [AST.ItemTypeExpression.$type]: validateItemType,
@@ -188,6 +203,33 @@ function validateDerivedType(derived: AST.DerivedTypeExpression, ctx: Validation
   if (base.kind === 'unresolved') {
     return
   }
+  // Numeric with-bodies carry directly owned unit tables. Their shape and scales are checked
+  // by the numeric-units validator rather than the item-slot inheritance rules below.
+  if (base.kind === 'primitive' && base.primitive === 'numeric') {
+    return
+  }
+  if (
+    base.kind === 'primitive' && ['text', 'number'].includes(base.primitive)
+    && derived.slots.properties.length === 0
+    && (derived.slots.methods.length > 0 || derived.slots.converters.length > 0)
+  ) {
+    return
+  }
+  if (
+    base.kind === 'item'
+    && derived.slots.properties.length === 0
+    && (derived.slots.actions.length > 0 || derived.slots.methods.length > 0
+      || derived.slots.views.length > 0 || derived.slots.converters.length > 0)
+  ) {
+    return
+  }
+  if (
+    base.kind === 'item' && !base.item && derived.slots.properties.length === 0
+    && (derived.slots.actions.length > 0 || derived.slots.methods.length > 0
+      || derived.slots.views.length > 0 || derived.slots.converters.length > 0)
+  ) {
+    return
+  }
   if (base.kind !== 'item' || !base.item) {
     ctx.error(derived.base, typeValidationMessages.derivedBaseShape(Type.referenceName(derived.base)))
     return
@@ -279,6 +321,9 @@ function validateNamedTypeReference(reference: AST.NamedTypeReference, ctx: Vali
   }
   const root = Type.rootOfReference(reference)
   if (!root.definition) {
+    if (Type.ofReference(reference).kind !== 'unresolved') {
+      return
+    }
     ctx.error(reference, typeValidationMessages.unknownType(Type.referenceName(reference)))
     return
   }
@@ -302,6 +347,13 @@ function validateNamedTypeReference(reference: AST.NamedTypeReference, ctx: Vali
 function validateTypedConstructor(constructor: AST.TypedConstructor, ctx: ValidationContext): void {
   const expected = Type.ofConstructorReference(constructor.type)
   if (expected.kind === 'unresolved') {
+    return
+  }
+  if (Type.isAbstractDomain(expected)) {
+    ctx.error(
+      constructor,
+      typeValidationMessages.abstractTypeConstruction(Type.referenceName(constructor.type)),
+    )
     return
   }
   const expectedKind = constructorLiteralKind(expected)
@@ -433,9 +485,13 @@ function typeDefinitionReferencesRoot(
 
 function typeExpressionReferencesRoot(
   root: AST.TypeDefinition,
-  type: AST.TypeExpression,
+  type: AST.TypeExpression | AST.CapabilityTypeExpression,
   seen: Set<AST.TypeDefinition>,
 ): boolean {
+  // Callable domains/results may refer to their owner; this is not a stored-value type cycle.
+  if (AST.isCapabilityTypeExpression(type)) {
+    return false
+  }
   if (AST.isItemTypeExpression(type)) {
     return type.properties.some(property => typeDefinitionReferencesRoot(root, property, new Set(seen)))
   }
@@ -475,6 +531,7 @@ function typeReferenceReferencesRoot(
       return typeDefinitionReferencesRoot(root, target, seen)
     },
     PrimitiveTypeReference: () => false,
+    YesNoTypeExpression: () => false,
   })
 }
 
@@ -491,12 +548,19 @@ function typePropertyOwner(property: AST.TypeProperty): AST.TypeDefinition | und
 }
 
 function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: ValidationContext): void {
-  let current = Type.ofValueDeclaration(memberAccess.target.ref, memberAccess)
+  let current = Type.ofReferenceRoot(memberAccess)
   if (current.kind === 'unresolved') {
     return
   }
   let typeName = Type.displayName(current)
-  for (const member of memberAccess.members) {
+  const parent = memberAccess.$container
+  const action = ASTUtils.resolveAssociatedActionTarget(memberAccess)
+  const members = action?.associated?.receiver.kind === 'member-path'
+    ? action.associated.receiver.members
+    : AST.isMethodCallExpression(parent) && parent.callee === memberAccess
+    ? memberAccess.members.slice(0, -1)
+    : memberAccess.members
+  for (const member of members) {
     if (
       (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text')) && member === 'Count'
     ) {
@@ -533,7 +597,7 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
         typeName = Type.displayName(current)
         continue
       }
-      const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
+      const field = Type.dataFieldForMember(current.entity, member)
       if (!field) {
         ctx.error(memberAccess, typeValidationMessages.unknownMember(typeName, member))
         return
@@ -546,7 +610,9 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
       ctx.error(memberAccess, typeValidationMessages.memberNotItem(member))
       return
     }
-    const property = Type.itemFields(current.item).find(candidate => candidate.name === member)
+    const property = Type.itemFields(current.item).find(candidate =>
+      candidate.name === member || (AST.isEntityDataField(candidate) && candidate.negativeName === member)
+    )
     if (!property) {
       ctx.error(memberAccess, typeValidationMessages.unknownMember(typeName, member))
       return

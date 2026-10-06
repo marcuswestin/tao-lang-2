@@ -73,7 +73,7 @@ export const StudioFeedLoopSource = {
       ),
     )
     for (const statement of file.statements.filter(AST.isUseStatement)) {
-      statement.importedDeclarations.forEach(reference => names.add(reference.$refText))
+      statement.importedDeclarations.forEach(specifier => names.add(AST.importLocalName(specifier)))
     }
     const packageContext = await Packages.createContext(input.projectRoot, { sourcePaths: Object.keys(sources) })
     const imports: Array<{ name: string; path: string }> = [{ name: 'Col', path: '@tao/ui' }]
@@ -158,13 +158,14 @@ export const StudioFeedLoopSource = {
     const additions: string[] = []
     const uses = file.statements.filter(AST.isUseStatement)
     for (const entry of imports) {
-      const existing = uses.flatMap(use => use.importedDeclarations.map(reference => ({ reference, use })))
-        .filter(candidate => candidate.reference.$refText === entry.name)
+      const existing = uses.flatMap(use => use.importedDeclarations.map(specifier => ({ specifier, use })))
+        .filter(candidate => AST.importLocalName(candidate.specifier) === entry.name)
       const declared = file.statements.some(statement => 'name' in statement && statement.name === entry.name)
       Assert.input(!declared, `Feed loop import conflicts with a declaration: ${entry.name}`)
       Assert.input(
         existing.every(candidate =>
-          candidate.use.importPath !== undefined && importMatches(viewPath, candidate.use.importPath, entry.path)
+          AST.importSourceName(candidate.specifier) === entry.name
+          && candidate.use.importPath !== undefined && importMatches(viewPath, candidate.use.importPath, entry.path)
         ),
         `Feed loop import conflicts: ${entry.name}`,
       )

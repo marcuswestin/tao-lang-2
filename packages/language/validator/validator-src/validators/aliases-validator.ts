@@ -243,7 +243,9 @@ function collectRenderChildBlocks(block: ViewOwnedBlock, blocks: ViewOwnedBlock[
       for (const branch of statement.branches) {
         collectRenderChildBlocks(branch.block, blocks)
       }
-      collectRenderChildBlocks(statement.otherwise.block, blocks)
+      if (statement.otherwise) {
+        collectRenderChildBlocks(statement.otherwise.block, blocks)
+      }
     }
     if (AST.isGuardRenderStatement(statement)) {
       for (const branch of ASTUtils.guardBranches(statement)) {
@@ -255,7 +257,7 @@ function collectRenderChildBlocks(block: ViewOwnedBlock, blocks: ViewOwnedBlock[
     if (AST.isIfRenderStatement(statement)) {
       collectRenderChildBlocks(statement.block, blocks)
     }
-    if (AST.isForStatement(statement)) {
+    if (AST.isForStatement(statement) && AST.isBlock(statement.block)) {
       collectRenderChildBlocks(statement.block, blocks)
     }
   }

@@ -113,10 +113,16 @@ function validateUseStatement(useStatement: AST.UseStatement, options: ValidateU
     : targetFiles.flatMap(declarationsInFile))
     .filter(declaration => declaration.name.length > 0)
   const importedNames = useStatement.all
-    ? [...new Set(declarations.map(declaration => declaration.name))]
-    : useStatement.importedDeclarations.map(reference => reference.$refText)
-  for (const importedName of importedNames) {
-    validateImportedName(importedName, {
+    ? [...new Set(declarations.map(declaration => declaration.name))].map(name => ({
+      sourceName: name,
+      localName: name,
+    }))
+    : useStatement.importedDeclarations.map(specifier => ({
+      sourceName: AST.importSourceName(specifier),
+      localName: AST.importLocalName(specifier),
+    }))
+  for (const { sourceName, localName } of importedNames) {
+    validateImportedName(sourceName, localName, {
       useStatement,
       declarations,
       resolution,
@@ -173,7 +179,7 @@ type ValidateImportedNameOptions = {
   }
 }
 
-function validateImportedName(importedName: string, options: ValidateImportedNameOptions): void {
+function validateImportedName(importedName: string, localName: string, options: ValidateImportedNameOptions): void {
   const { useStatement, declarations, resolution, ctx, seen } = options
   const matches = declarations.filter(declaration => declaration.name === importedName)
   if (matches.length === 0) {
@@ -186,8 +192,8 @@ function validateImportedName(importedName: string, options: ValidateImportedNam
     return
   }
   for (const namespace of new Set(visibleMatches.map(match => match.namespace))) {
-    if (seen.localDeclarationNames.has(`${namespace}:${importedName}`)) {
-      ctx.error(useStatement, useValidationMessages.localDeclarationCollision(importedName))
+    if (seen.localDeclarationNames.has(`${namespace}:${localName}`)) {
+      ctx.error(useStatement, useValidationMessages.localDeclarationCollision(localName))
     }
   }
   const matchesByNamespace = new Map<AST.DeclarationNamespace, DeclarationRecord[]>()
@@ -201,9 +207,9 @@ function validateImportedName(importedName: string, options: ValidateImportedNam
     return
   }
   for (const match of visibleMatches) {
-    const key = declarationRecordKey(match)
+    const key = `${match.namespace}:${localName}`
     if (seen.previouslyImportedNames.has(key)) {
-      ctx.error(useStatement, useValidationMessages.repeatedImport(importedName), {
+      ctx.error(useStatement, useValidationMessages.repeatedImport(localName), {
         code: useValidationCodes.repeatedImport,
       })
     } else {
@@ -224,15 +230,24 @@ function importLabel(useStatement: AST.UseStatement): string {
 }
 
 function reportDuplicateImports(useStatement: AST.UseStatement, ctx: ValidationContext): void {
-  const seen = new Set<string>()
-  for (const name of useStatement.importedDeclarations.map(reference => reference.$refText)) {
-    if (seen.has(name)) {
+  const bindings = AST.resolvedImportedBindings(useStatement)
+  const seen = new Map<string, Set<string>>()
+  for (const specifier of useStatement.importedDeclarations) {
+    const name = AST.importLocalName(specifier)
+    const namespaces = new Set(
+      bindings.filter(binding => binding.specifier === specifier).map(binding => binding.namespace),
+    )
+    const keys: readonly string[] = namespaces.size > 0 ? [...namespaces] : ['unresolved']
+    const previous = seen.get(name) ?? new Set<string>()
+    if (
+      keys.some(key => previous.has(key))
+      || (previous.size > 0 && (previous.has('unresolved') || namespaces.size === 0))
+    ) {
       ctx.error(useStatement, useValidationMessages.duplicateImport(name), {
         code: useValidationCodes.duplicateImport,
       })
-      continue
     }
-    seen.add(name)
+    seen.set(name, new Set([...previous, ...keys]))
   }
 }
 
@@ -244,7 +259,7 @@ function reportUnusedImports(
   if (useStatement.all) {
     return
   }
-  for (const name of new Set(useStatement.importedDeclarations.map(reference => reference.$refText))) {
+  for (const name of new Set(useStatement.importedDeclarations.map(AST.importLocalName))) {
     if (!referencedNames.has(name)) {
       ctx.warning(useStatement, useValidationMessages.unusedImport(name), {
         code: useValidationCodes.unusedImport,

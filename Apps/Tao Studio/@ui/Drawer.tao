@@ -162,15 +162,15 @@ view StudioFeedRowControl(Label text, Selected boolean, Select action(), Disable
 
 view StudioFeedDrag(Payload text, Label text, Disabled boolean) accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-function StudioFeedEntityPayload(Entity text) returns text {
+func StudioFeedEntityPayload(Entity text) -> text {
    return StudioFeedEntityPayload(Entity) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioFeedSourcePayload(Source text) returns text {
+func StudioFeedSourcePayload(Source text) -> text {
    return StudioFeedSourcePayload(Source) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioFeedSeedPayload(Seed text) returns text {
+func StudioFeedSeedPayload(Seed text) -> text {
    return StudioFeedSeedPayload(Seed) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
@@ -183,7 +183,7 @@ view StudioDataTableView(Table StudioDataPanelTable) {
 
 view StudioDataRows(Rows list of text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-function StudioDataTableTitle(Datasource text, Entity text) returns text {
+func StudioDataTableTitle(Datasource text, Entity text) -> text {
    return StudioDataTableTitle(Datasource: Datasource, Entity: Entity) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
@@ -306,6 +306,6 @@ view StudioSearchHitRow(Row StudioSearchPanelRow, Dispatch action(text, text)) {
 
 view StudioSearchHit(Label text, Kind text, Detail text, Path text, Line number, Column number, Open action()) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-function StudioPanelSelected(Tab text, Panel text) returns boolean {
+func StudioPanelSelected(Tab text, Panel text) -> boolean {
    return StudioPanelSelected(Tab: Tab, Panel: Panel) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }

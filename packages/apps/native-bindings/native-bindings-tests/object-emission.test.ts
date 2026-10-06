@@ -6,6 +6,7 @@ import { runAction } from '@runtime/TR-action-transactions'
 import { nativeByteControls } from '@runtime/TR-native-bytes'
 import { nativeCallCallbacks } from '@runtime/TR-native-call-callbacks'
 import { createNativeReferenceGroup } from '@runtime/TR-native-references'
+import { TaoActionOwner } from '@runtime/TR-native-subscription'
 import { nativeValueControls } from '@runtime/TR-native-values'
 import { Assert, Errors, FS, Repo } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
@@ -255,6 +256,23 @@ async function executable() {
 }
 
 Describe('catalog object emission', () => {
+  Test('associated actions retain native identity, receiver ordering and explicit release', async () => {
+    const { call, generated } = await executable()
+    const file = call('File_NewFile', 'before')
+    Expect(call('File_Append', file, '!')).toBe(file)
+    Expect(call('File_CatalogAppend', file, '?')).toBe(file)
+    Expect(call('File_Text', file)).toBe('before!?')
+    call('File_CatalogWrite', file, 'after')
+    Expect(call('File_CatalogText', file)).toBe('after')
+    call('File_ReleaseReference', file)
+    Expect(() => call('File_Text', file)).toThrow('released')
+    const source = generated.files['Bindings.tao']!
+    Expect(source).toContain('static action NewFile(Text text) returns File from ./Bindings.ts')
+    Expect(source).toContain('action CatalogAppend(Text text) returns File from ./Bindings.ts')
+    Expect(source).toContain('action ReleaseReference() from ./Bindings.ts')
+    Expect(source).toContain('action CatalogAppend(Receiver File, Text text)')
+  })
+
   Test('preserves union elements through generated result, record and callback types consumed by Tao', async () => {
     const entry: NativeApiType = { kind: 'union', members: [{ kind: 'reference', name: 'Directory' }, file] }
     const entries: NativeApiType = { kind: 'list', element: entry }
@@ -508,16 +526,7 @@ Describe('catalog object emission', () => {
       const events: string[] = []
       let late: (() => void) | undefined
       let failed = false
-      const owner = {
-        active: true,
-        subscriptions: new Set<() => void>(),
-        dispose() {
-          this.active = false
-          for (const cancel of this.subscriptions) {
-            cancel()
-          }
-        },
-      }
+      const owner = new TaoActionOwner()
       const action = {
         invokeOwned(actualOwner: unknown, active: () => boolean) {
           Expect(actualOwner).toBe(owner)

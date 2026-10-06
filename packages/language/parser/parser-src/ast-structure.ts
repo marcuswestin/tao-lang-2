@@ -11,6 +11,43 @@ export type RenderablePrimitive = 'view' | 'scene' | 'nav'
 const resolvedUseTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, readonly AST.Declaration[]>()
 const visibleWorkspaceFiles = new WeakMap<AST.TaoFile, readonly AST.TaoFile[]>()
 
+/** numericUnitConstructionInputIsAllowed checks the selected literal or grouped source form. */
+export function numericUnitConstructionInputIsAllowed(node: AST.NumericUnitConstruction): boolean {
+  const unit = Langium.GrammarUtils.findNodesForProperty(node.$cstNode, 'unit')[0]
+  const cst = node.$cstNode
+  if (!cst || !unit) {
+    return false
+  }
+  const tokens = [...Langium.CstUtils.streamCst(cst)]
+    .filter(Langium.isLeafCstNode)
+    .filter(token => !token.hidden && token.offset >= cst.offset && token.end <= unit.offset)
+    .map(token => token.text)
+  if (AST.isNumberLiteral(node.input) && tokens.length === 1) {
+    return true
+  }
+  if (
+    AST.isUnaryExpression(node.input) && node.input.operator === '-'
+    && AST.isNumberLiteral(node.input.operand) && tokens.length === 2 && tokens[0] === '-'
+  ) {
+    return true
+  }
+  if (tokens[0] !== '(' || tokens[tokens.length - 1] !== ')') {
+    return false
+  }
+  let depth = 0
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (tokens[index] === '(') {
+      depth += 1
+    } else if (tokens[index] === ')') {
+      depth -= 1
+      if (depth === 0 && index < tokens.length - 1) {
+        return false
+      }
+    }
+  }
+  return depth === 0
+}
+
 /** readContextDeclaration finds the intrinsic public contract without making its name implicit. */
 export function readContextDeclaration(node: AST.Node): AST.TypeDeclaration | undefined {
   const root = findRoot(node)
@@ -21,6 +58,20 @@ export function readContextDeclaration(node: AST.Node): AST.TypeDeclaration | un
     AST.getDocument(file).uri.path.endsWith('/@tao/data/ReadContext.tao')
   )
   return contract?.statements.filter(AST.isTypeDeclaration).find(declaration => declaration.name === 'ReadContext')
+}
+
+/** actionFailureContextDeclaration resolves the actual intrinsic canonical action payload contract. */
+export function actionFailureContextDeclaration(node: AST.Node): AST.TypeDeclaration | undefined {
+  const root = findRoot(node)
+  if (!AST.isTaoFile(root)) {
+    return undefined
+  }
+  const contract = (visibleWorkspaceFiles.get(root) ?? []).find(file =>
+    AST.getDocument(file).uri.path.endsWith('/@tao/actions/ActionFailureContext.tao')
+  )
+  return contract?.statements.filter(AST.isTypeDeclaration).find(declaration =>
+    declaration.name === 'ActionFailureContext'
+  )
 }
 
 /**
@@ -177,25 +228,84 @@ export function configurableTypeAliasResolution(
     : { kind: 'invalid', target: current }
 }
 
-/** resolvedImportedDeclarations returns requested declarations, preserving identity across data forms and namespace peers. */
-export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AST.Declaration[] {
-  const names = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
-  const declarations = resolvedUseTargets.get(useStatement)
-    ?? useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isDeclaration)
+/** importSourceName is the exported spelling selected by a named import. */
+export function importSourceName(specifier: AST.NamedImport): string {
+  return specifier.target?.$refText ?? ''
+}
+
+/** importLocalName is the spelling a named import binds in its receiving file. */
+export function importLocalName(specifier: AST.NamedImport): string {
+  return specifier.alias ?? importSourceName(specifier)
+}
+
+/** importSpecifierText preserves the authored source and local names of a named import. */
+export function importSpecifierText(specifier: AST.NamedImport): string {
+  const sourceName = importSourceName(specifier)
+  return specifier.alias ? `${sourceName} as ${specifier.alias}` : sourceName
+}
+
+export type ImportedBinding = {
+  specifier: AST.NamedImport | undefined
+  declaration: AST.Declaration
+  sourceName: string
+  localName: string
+  namespace: DeclarationNamespace
+}
+
+/** resolvedImportedBindings retains source forms and namespace peers without changing declaration identity. */
+export function resolvedImportedBindings(
+  useStatement: AST.UseStatement,
+  candidates?: readonly AST.Declaration[],
+): ImportedBinding[] {
+  // Scope providers pass candidates before linking, so this path never touches a recursive ref.
+  const declarations = [
+    ...new Set(
+      candidates ?? resolvedUseTargets.get(useStatement)
+        ?? useStatement.importedDeclarations.map(specifier => specifier.target?.ref).filter(AST.isDeclaration),
+    ),
+  ]
+  const binding = (declaration: AST.Declaration, sourceName: string, specifier?: AST.NamedImport): ImportedBinding => ({
+    specifier,
+    declaration,
+    sourceName,
+    localName: specifier ? importLocalName(specifier) : sourceName,
+    namespace: AST.isEntityDataDeclaration(declaration) && sourceName === declaration.singularName
+      ? 'type'
+      : declarationNamespace(declaration),
+  })
   if (useStatement.all) {
-    return [...new Set(declarations)]
+    return declarations.flatMap(declaration => {
+      const names = AST.isEntityDataDeclaration(declaration)
+        ? [declaration.name, declaration.singularName]
+        : [declaration.name]
+      return names.filter(Boolean).map(name => binding(declaration, name))
+    })
   }
-  return [...new Set(declarations)].filter(declaration =>
-    names.has(declaration.name) || (AST.isEntityDataDeclaration(declaration) && names.has(declaration.singularName))
-  )
+  return useStatement.importedDeclarations.flatMap(specifier => {
+    const sourceName = importSourceName(specifier)
+    if (!sourceName || !importLocalName(specifier)) {
+      return []
+    }
+    return declarations.filter(declaration =>
+      sourceName === declaration.name
+      || (AST.isEntityDataDeclaration(declaration) && sourceName === declaration.singularName)
+    ).map(declaration => binding(declaration, sourceName, specifier))
+  })
+}
+
+/** resolvedImportedDeclarations projects bindings onto their deduplicated real declarations. */
+export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AST.Declaration[] {
+  return [...new Set(resolvedImportedBindings(useStatement).map(binding => binding.declaration))]
 }
 
 type ArgumentListOwner =
   | AST.Render
+  | AST.RenderSlotUse
   | AST.AppView
   | AST.DoStatement
   | AST.CommandDoClause
   | AST.FunctionCallExpression
+  | AST.MethodCallExpression
   | AST.ContextualPresentStatement
   | AST.ViewBinding
   | AST.AskStatement
@@ -522,7 +632,7 @@ export function renderPrefixTarget(prefix: RenderPrefix): AST.Statement | undefi
 }
 
 /** renderPrefixCluster returns only contiguous metadata immediately before this occurrence. */
-export function renderPrefixCluster(node: AST.Render | AST.ForStatement): RenderPrefix[] {
+export function renderPrefixCluster(node: AST.Render | AST.RenderSlotUse | AST.ForStatement): RenderPrefix[] {
   const block = node.$container
   if (!AST.isBlock(block)) {
     return []
@@ -536,7 +646,7 @@ export function renderPrefixCluster(node: AST.Render | AST.ForStatement): Render
 }
 
 /** attachedTag preserves the occurrence tag even when accessibility metadata intervenes. */
-export function attachedTag(node: AST.Render | AST.ForStatement): AST.TagStatement | undefined {
+export function attachedTag(node: AST.Render | AST.RenderSlotUse | AST.ForStatement): AST.TagStatement | undefined {
   return renderPrefixCluster(node).find(AST.isTagStatement)
 }
 
@@ -675,7 +785,7 @@ export function renderablePrimitiveOfParameter(
 }
 
 function renderablePrimitiveOfTypeExpression(
-  type: AST.TypeExpression,
+  type: AST.TypeExpression | AST.CapabilityTypeExpression,
   seen: Set<AST.TypeDeclaration>,
 ): RenderablePrimitive | undefined {
   const base = AST.isDerivedTypeExpression(type) ? type.base : type
@@ -736,7 +846,7 @@ export function configurationPropertyIsKey(property: ConfigurationProperty): boo
 }
 
 function configurationPrimitiveOfTypeExpression(
-  type: AST.TypeExpression,
+  type: AST.TypeExpression | AST.CapabilityTypeExpression,
   seen: Set<AST.TypeDeclaration>,
 ): ConfigurationFamily | undefined {
   const base = AST.isDerivedTypeExpression(type) ? type.base : type
@@ -751,23 +861,48 @@ function configurationPrimitiveOfTypeExpression(
 }
 
 function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclaration | undefined {
-  return visibleFileDeclarations(node, AST.isTypeDeclaration).find(declaration => declaration.name === name)
+  return visibleFileBindings(node, AST.isTypeDeclaration).find(binding => binding.localName === name)?.declaration
 }
 
-/** visibleFileDeclarations returns local, folder-visible and imported declarations, optionally selecting one import form. */
-export function visibleFileDeclarations<DeclarationT extends AST.Node>(
+export type VisibleFileBinding<DeclarationT extends AST.Node> = {
+  declaration: DeclarationT
+  sourceName: string
+  localName: string
+  namespace: DeclarationNamespace
+}
+
+/** visibleFileBindings retains the visible spelling alongside each original declaration. */
+export function visibleFileBindings<DeclarationT extends AST.Node>(
   node: AST.Node,
   guard: (candidate: unknown) => candidate is DeclarationT,
   importedName?: (declaration: DeclarationT) => string,
-): DeclarationT[] {
+): VisibleFileBinding<DeclarationT>[] {
   const root = findRoot(node)
   if (!AST.isTaoFile(root)) {
     return []
   }
-  const declarations: DeclarationT[] = []
+  const bindings: VisibleFileBinding<DeclarationT>[] = []
+  const add = (declaration: DeclarationT) => {
+    const name = importedName ? importedName(declaration) : 'name' in declaration ? String(declaration.name) : ''
+    const names = !importedName && AST.isEntityDataDeclaration(declaration)
+      ? [declaration.name, declaration.singularName]
+      : [name]
+    for (const sourceName of names.filter(Boolean)) {
+      bindings.push({
+        declaration,
+        sourceName,
+        localName: sourceName,
+        namespace: AST.isEntityDataDeclaration(declaration) && sourceName === declaration.singularName
+          ? 'type'
+          : AST.isDeclaration(declaration)
+          ? declarationNamespace(declaration)
+          : 'value',
+      })
+    }
+  }
   for (const statement of root.statements) {
     if (guard(statement)) {
-      declarations.push(statement)
+      add(statement)
     }
   }
   const currentPath = AST.getDocument(root).uri.path
@@ -779,52 +914,65 @@ export function visibleFileDeclarations<DeclarationT extends AST.Node>(
     }
     for (const statement of file.statements) {
       if (guard(statement) && 'visibility' in statement && statement.visibility === 'folder') {
-        declarations.push(statement)
+        add(statement)
       }
     }
   }
-  for (const statement of root.statements) {
-    if (!AST.isUseStatement(statement)) {
-      continue
-    }
-    for (const declaration of resolvedImportedDeclarations(statement)) {
-      if (
-        guard(declaration)
-        && (statement.all || !importedName
-          || statement.importedDeclarations.some(reference => reference.$refText === importedName(declaration)))
-      ) {
-        declarations.push(declaration)
+  for (const statement of root.statements.filter(AST.isUseStatement)) {
+    for (const binding of resolvedImportedBindings(statement)) {
+      const declaration = binding.declaration
+      if (guard(declaration) && (!importedName || binding.sourceName === importedName(declaration))) {
+        bindings.push({
+          declaration,
+          sourceName: binding.sourceName,
+          localName: binding.localName,
+          namespace: binding.namespace,
+        })
       }
     }
   }
-  return declarations
+  return bindings
+}
+
+/** visibleFileDeclarations projects visible bindings onto original declaration identities. */
+export function visibleFileDeclarations<DeclarationT extends AST.Node>(
+  node: AST.Node,
+  guard: (candidate: unknown) => candidate is DeclarationT,
+  importedName?: (declaration: DeclarationT) => string,
+): DeclarationT[] {
+  return [...new Set(visibleFileBindings(node, guard, importedName).map(binding => binding.declaration))]
 }
 
 /**
- * visibleValueDeclarations returns the effective file-level value table used by ordinary value
+ * visibleValueBindings returns the effective file-level value table used by ordinary value
  * references. The order deliberately matches ValueScopeProvider: `folder` siblings and explicit
  * imports occupy its inner imported scope, while declarations in this file are the outer fallback.
  * The guard is applied before names are claimed so the type and value namespaces remain distinct.
  */
-export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
+export function visibleValueBindings<DeclarationT extends AST.Declaration>(
   node: AST.Node,
   guard: (candidate: unknown) => candidate is DeclarationT,
-): readonly DeclarationT[] {
+): readonly VisibleFileBinding<DeclarationT>[] {
   const root = findRoot(node)
   if (!AST.isTaoFile(root)) {
     return []
   }
-  const visible: DeclarationT[] = []
+  const visible: VisibleFileBinding<DeclarationT>[] = []
   const names = new Set<string>()
-  const add = (declaration: AST.Node) => {
+  const add = (declaration: AST.Node, localName?: string) => {
     if (
       AST.isDeclaration(declaration)
       && declarationNamespace(declaration) === 'value'
       && guard(declaration)
-      && !names.has(declaration.name)
+      && !names.has(localName ?? declaration.name)
     ) {
-      names.add(declaration.name)
-      visible.push(declaration)
+      names.add(localName ?? declaration.name)
+      visible.push({
+        declaration,
+        sourceName: declaration.name,
+        localName: localName ?? declaration.name,
+        namespace: 'value',
+      })
     }
   }
   const currentPath = AST.getDocument(root).uri.path
@@ -846,10 +994,9 @@ export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
   }
   for (const statement of root.statements) {
     if (AST.isUseStatement(statement)) {
-      const names = new Set(statement.importedDeclarations.map(reference => reference.$refText))
-      for (const declaration of resolvedImportedDeclarations(statement)) {
-        if (statement.all || names.has(declaration.name)) {
-          add(declaration)
+      for (const binding of resolvedImportedBindings(statement)) {
+        if (binding.sourceName === binding.declaration.name) {
+          add(binding.declaration, binding.localName)
         }
       }
     }
@@ -858,6 +1005,14 @@ export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
     add(declaration)
   }
   return visible
+}
+
+/** visibleValueDeclarations returns the effective value table's original declarations. */
+export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
+  node: AST.Node,
+  guard: (candidate: unknown) => candidate is DeclarationT,
+): readonly DeclarationT[] {
+  return [...new Set(visibleValueBindings(node, guard).map(binding => binding.declaration))]
 }
 
 function effectiveConfigurationProperties(
@@ -998,7 +1153,8 @@ export function configuredPrimitiveOfExpression(
     return configuredPrimitiveOfValueDeclaration(expression.target.ref, seen)
   }
   if (AST.isValueReference(expression)) {
-    return configuredPrimitiveOfValueDeclaration(expression.target.ref, seen)
+    const target = expression.target.ref
+    return AST.isEntityDataDeclaration(target) ? undefined : configuredPrimitiveOfValueDeclaration(target, seen)
   }
   return undefined
 }
@@ -1024,7 +1180,14 @@ export function caseSetOwningCase(caseSetCase: AST.CaseSetCase): AST.TypeDeclara
 }
 
 /** parametersOf returns the parameters declared by a parameterized declaration. */
-export function parametersOf(declaration: AST.ParameterizedDeclaration): AST.ParameterDeclaration[] {
+export function parametersOf(
+  declaration:
+    | AST.ParameterizedDeclaration
+    | AST.AssociatedFunctionDeclaration
+    | AST.AssociatedViewDeclaration
+    | AST.CapabilityMethodDeclaration
+    | AST.CapabilityActionDeclaration,
+): AST.ParameterDeclaration[] {
   // A view alias has no parameter list of its own; its interface is its target's.
   if (AST.isViewDeclaration(declaration) && declaration.aliasTarget) {
     const target = viewAliasTarget(declaration)
@@ -1034,12 +1197,16 @@ export function parametersOf(declaration: AST.ParameterizedDeclaration): AST.Par
 }
 
 /** returnStatementsOf returns every function return in source order, including early returns. */
-export function returnStatementsOf(declaration: AST.FunctionDeclaration): AST.ReturnStatement[] {
+export function returnStatementsOf(
+  declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | AST.AssociatedConverterDeclaration,
+): AST.ReturnStatement[] {
   return returnsInFunctionBlock(declaration.block)
 }
 
 /** functionHasFallthroughReturn reports whether every one-sided early-return path has a final fallback. */
-export function functionHasFallthroughReturn(declaration: AST.FunctionDeclaration): boolean {
+export function functionHasFallthroughReturn(
+  declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | AST.AssociatedConverterDeclaration,
+): boolean {
   return AST.isReturnStatement(declaration.block.statements.at(-1))
 }
 
@@ -1071,11 +1238,76 @@ export function statementsOf(block: AST.Block | undefined): AST.Statement[] {
   return block?.statements || []
 }
 
-/** renderSlotDeclarationsOf returns the direct named visual slots owned by one view. */
+/** renderSlotDeclarationsOf follows a view alias to its cycle-safe named slot contract. */
 export function renderSlotDeclarationsOf(
   view: AST.ViewDeclaration,
 ): Array<AST.RenderSlotDeclaration | AST.ForeignViewSlotDeclaration> {
+  if (view.aliasTarget) {
+    const target = viewAliasTarget(view)
+    return target && AST.isViewDeclaration(target) ? renderSlotDeclarationsOf(target) : []
+  }
   return view.block?.statements.filter(AST.isRenderSlotDeclaration) ?? view.foreign?.slots ?? []
+}
+
+export type RenderSlotParameterOwner = AST.RenderSlotDeclaration | AST.ForeignViewSlotDeclaration
+
+/** renderSlotParametersOf returns only the actual typed slot parameters. */
+export function renderSlotParametersOf(owner: RenderSlotParameterOwner): AST.ParameterDeclaration[] {
+  return owner.parameterList?.parameters ?? []
+}
+
+/** renderSlotParameterOwner returns the declaration that owns a real slot parameter. */
+export function renderSlotParameterOwner(parameter: AST.ParameterDeclaration): RenderSlotParameterOwner | undefined {
+  const list = parameter.$container
+  if (!AST.isParameterList(list)) {
+    return undefined
+  }
+  const owner = list.$container
+  if (!AST.isRenderSlotDeclaration(owner) && !AST.isForeignViewSlotDeclaration(owner)) {
+    return undefined
+  }
+  return owner.parameterList === list && list.parameters.includes(parameter) ? owner : undefined
+}
+
+export type RenderSlotBody =
+  | { kind: 'named'; renderer: NonNullable<AST.RenderSlotUse['renderer']> }
+  | { kind: 'forwarded'; slot: NonNullable<AST.RenderSlotUse['forwardedSlot']> }
+  | { kind: 'empty' }
+  | { kind: 'render'; render: AST.ViewRender }
+  | { kind: 'block'; block: AST.Block }
+  | { kind: 'absent' }
+
+/** renderSlotBodyOf exposes the parsed RHS without conflating a fill and a placement. */
+export function renderSlotBodyOf(node: AST.RenderSlotDeclaration | AST.RenderSlotUse): RenderSlotBody {
+  if (AST.isRenderSlotUse(node) && node.forwardedSlot) {
+    return { kind: 'forwarded', slot: node.forwardedSlot }
+  }
+  if (node.renderer) {
+    return { kind: 'named', renderer: node.renderer }
+  }
+  if (node.empty) {
+    return { kind: 'empty' }
+  }
+  if (node.render) {
+    return { kind: 'render', render: node.render }
+  }
+  if (node.block) {
+    return { kind: 'block', block: node.block }
+  }
+  return { kind: 'absent' }
+}
+
+/** isRenderSlotFill distinguishes colon fills from bare slot placements. */
+export function isRenderSlotFill(use: AST.RenderSlotUse): boolean {
+  return use.fill === true
+}
+
+/** renderSlotInvocationOf retains the actual direct invocation receiving one slot fill. */
+export function renderSlotInvocationOf(use: AST.RenderSlotUse): AST.Render | undefined {
+  const block = use.$container
+  return isRenderSlotFill(use) && AST.isBlock(block) && AST.isRender(block.$container)
+    ? block.$container
+    : undefined
 }
 
 /**
@@ -1121,7 +1353,7 @@ export type RenderFragment =
 export function isRenderFragment(statement: AST.Statement): statement is RenderFragment {
   return AST.isRender(statement)
     || AST.isCallerContentStatement(statement)
-    || (AST.isRenderSlotUse(statement) && !statement.render)
+    || (AST.isRenderSlotUse(statement) && !isRenderSlotFill(statement))
     || AST.isWhenRenderStatement(statement)
     || AST.isGuardRenderStatement(statement)
     || AST.isIfRenderStatement(statement)
@@ -1226,6 +1458,11 @@ export function findOwningView(node: AST.Node): AST.ViewDeclaration | undefined 
   return findAncestor(node, AST.isViewDeclaration)
 }
 
+/** findOwningAssociatedView returns the associated view that contains `node`, if any. */
+export function findOwningAssociatedView(node: AST.Node): AST.AssociatedViewDeclaration | undefined {
+  return findAncestor(node, AST.isAssociatedViewDeclaration)
+}
+
 /** findOwningAction returns the action declaration that owns `node`, if any. */
 export function findOwningAction(node: AST.Node): AST.ActionDeclaration | undefined {
   return findAncestor(node, AST.isActionDeclaration)
@@ -1246,6 +1483,254 @@ export function findOwningFunction(node: AST.Node): AST.FunctionDeclaration | un
   return findAncestor(node, AST.isFunctionDeclaration)
 }
 
+/** findOwningAssociatedFunction returns the associated function containing `node`. */
+export function findOwningAssociatedFunction(node: AST.Node): AST.AssociatedFunctionDeclaration | undefined {
+  return findAncestor(node, AST.isAssociatedFunctionDeclaration)
+}
+
+/** Converters retain their actual source body and containing ownership declaration. */
+export function findOwningAssociatedConverter(node: AST.Node): AST.AssociatedConverterDeclaration | undefined {
+  return findAncestor(node, AST.isAssociatedConverterDeclaration)
+}
+
+export function associatedConverterOwner(
+  declaration: AST.AssociatedConverterDeclaration,
+): AST.TypeDeclaration | undefined {
+  const item = declaration.$container
+  if (!AST.isItemTypeExpression(item) || !item.converters.includes(declaration)) {
+    return undefined
+  }
+  const container = item.$container
+  if (AST.isTypeDeclaration(container)) {
+    return container.type === item || container.associated === item ? container : undefined
+  }
+  if (!AST.isDerivedTypeExpression(container) || container.slots !== item) {
+    return undefined
+  }
+  const owner = container.$container
+  return AST.isTypeDeclaration(owner) && owner.type === container ? owner : undefined
+}
+
+/** The converter body receives its stated source domain, independently of attachment ownership. */
+export function associatedConverterSourceOwner(
+  declaration: AST.AssociatedConverterDeclaration,
+): AST.TypeDeclaration | undefined {
+  const source = declaration.conversionSource
+  return AST.isNamedTypeReference(source) && source.members.length === 0
+    ? visibleFileBindings(source, AST.isTypeDeclaration, owner => owner.name)
+      .find(binding => binding.localName === source.root)?.declaration
+    : undefined
+}
+
+/** associatedFunctionOwner returns the real declaration whose own body contains this method. */
+export function associatedFunctionOwner(
+  declaration: AST.AssociatedFunctionDeclaration,
+): AST.TypeDeclaration | AST.PrimitiveDeclaration | AST.EntityDataDeclaration | undefined {
+  const item = declaration.$container
+  if (AST.isEntityDataDeclarationBlock(item) && item.entries.includes(declaration)) {
+    const owner = item.$container
+    return AST.isEntityDataDeclaration(owner) && owner.block === item ? owner : undefined
+  }
+  if (!AST.isItemTypeExpression(item) || !item.methods.includes(declaration)) {
+    return undefined
+  }
+  const container = item.$container
+  if (AST.isPrimitiveDeclaration(container)) {
+    return container.slots === item ? container : undefined
+  }
+  if (AST.isTypeDeclaration(container)) {
+    return container.type === item || container.associated === item ? container : undefined
+  }
+  if (!AST.isDerivedTypeExpression(container) || container.slots !== item) {
+    return undefined
+  }
+  const owner = container.$container
+  return AST.isTypeDeclaration(owner) && owner.type === container ? owner : undefined
+}
+
+/** associatedViewOwner resolves only a view actually contained in its owner's body. */
+export function associatedViewOwner(
+  declaration: AST.AssociatedViewDeclaration,
+): AST.TypeDeclaration | AST.PrimitiveDeclaration | AST.EntityDataDeclaration | undefined {
+  const item = declaration.$container
+  if (AST.isEntityDataDeclarationBlock(item) && item.entries.includes(declaration)) {
+    const owner = item.$container
+    return AST.isEntityDataDeclaration(owner) && owner.block === item ? owner : undefined
+  }
+  if (!AST.isItemTypeExpression(item) || !item.views.includes(declaration)) {
+    return undefined
+  }
+  const container = item.$container
+  if (AST.isPrimitiveDeclaration(container)) {
+    return container.slots === item ? container : undefined
+  }
+  if (AST.isTypeDeclaration(container)) {
+    return container.type === item || container.associated === item ? container : undefined
+  }
+  if (!AST.isDerivedTypeExpression(container) || container.slots !== item) {
+    return undefined
+  }
+  const owner = container.$container
+  return AST.isTypeDeclaration(owner) && owner.type === container ? owner : undefined
+}
+
+/** An entity receiver exists only for a qualified method/view directly stored in that entity. */
+export function associatedEntityReceiverOwner(
+  declaration: AST.AssociatedFunctionDeclaration | AST.AssociatedViewDeclaration,
+): AST.EntityDataDeclaration | undefined {
+  const block = declaration.$container
+  if (!AST.isEntityDataDeclarationBlock(block) || !block.entries.includes(declaration)) {
+    return undefined
+  }
+  if (AST.isAssociatedFunctionDeclaration(declaration) && declaration.static) {
+    return undefined
+  }
+  const owner = block.$container
+  return AST.isEntityDataDeclaration(owner) && owner.block === block && declaration.receiverName === owner.singularName
+    ? owner
+    : undefined
+}
+
+/** An associated action belongs only to the entity block that actually contains it. */
+export function associatedActionOwner(declaration: AST.ActionDeclaration): AST.EntityDataDeclaration | undefined {
+  const block = declaration.$container
+  if (!AST.isEntityDataDeclarationBlock(block) || !block.entries.includes(declaration)) {
+    return undefined
+  }
+  const owner = block.$container
+  return AST.isEntityDataDeclaration(owner) && owner.block === block ? owner : undefined
+}
+
+/** associatedNominalActionOwner returns the nominal declaration whose own body stores an action. */
+export function associatedNominalActionOwner(
+  declaration: AST.ActionDeclaration,
+): AST.TypeDeclaration | AST.EntityDataDeclaration | undefined {
+  const container = declaration.$container
+  if (AST.isEntityDataDeclarationBlock(container) && container.entries.includes(declaration)) {
+    const owner = container.$container
+    return AST.isEntityDataDeclaration(owner) && owner.block === container ? owner : undefined
+  }
+  if (!AST.isItemTypeExpression(container) || !container.actions.includes(declaration)) {
+    return undefined
+  }
+  const parent = container.$container
+  if (AST.isTypeDeclaration(parent)) {
+    return parent.type === container || parent.associated === container ? parent : undefined
+  }
+  if (!AST.isDerivedTypeExpression(parent) || parent.slots !== container) {
+    return undefined
+  }
+  const owner = parent.$container
+  return AST.isTypeDeclaration(owner) && owner.type === parent ? owner : undefined
+}
+
+/** Dispatch follows the authored action marker; entity actions remain instance actions. */
+export function associatedActionDispatch(declaration: AST.ActionDeclaration): 'instance' | 'static' {
+  return declaration.static && AST.isTypeDeclaration(associatedNominalActionOwner(declaration)) ? 'static' : 'instance'
+}
+
+/** Own actions stay separate from functions, preserving their command effects and witness identity. */
+export function ownAssociatedActions(
+  owner: AST.TypeDeclaration | AST.EntityDataDeclaration,
+): readonly AST.ActionDeclaration[] {
+  if (AST.isEntityDataDeclaration(owner)) {
+    return owner.block.entries.filter(AST.isActionDeclaration)
+  }
+  const type = owner.type
+  const slots = type && AST.isDerivedTypeExpression(type)
+    ? type.slots
+    : type && AST.isItemTypeExpression(type)
+    ? type
+    : undefined
+  return [...(slots?.actions ?? []), ...(owner.associated?.actions ?? [])]
+}
+
+/** An action's actual receiver qualifier selects one row or that entity's collection. */
+export function associatedEntityActionReceiver(
+  declaration: AST.ActionDeclaration,
+): Readonly<{ owner: AST.EntityDataDeclaration; cardinality: 'one' | 'many' }> | undefined {
+  if (declaration.static) {
+    return undefined
+  }
+  const owner = associatedActionOwner(declaration)
+  if (!owner) {
+    return undefined
+  }
+  if (declaration.receiverName === owner.singularName) {
+    return { owner, cardinality: 'one' }
+  }
+  return declaration.receiverName === owner.name ? { owner, cardinality: 'many' } : undefined
+}
+
+/** The runtime binding of a contextual receiver preserves singular or collection cardinality. */
+export function associatedReceiverBindingName(reference: AST.Node): string | undefined {
+  const owner = associatedReceiverOwner(reference)
+  if (!owner) {
+    return undefined
+  }
+  if (!AST.isEntityDataDeclaration(owner)) {
+    return owner.name
+  }
+  const action = findOwningAction(reference)
+  const receiver = action && associatedEntityActionReceiver(action)
+  return receiver?.owner === owner && receiver.cardinality === 'many' ? owner.name : owner.singularName
+}
+
+/** associatedReceiverOwner recognizes only references linked to a real instance receiver. */
+export function associatedReceiverOwner(
+  reference: AST.Node,
+): AST.TypeDeclaration | AST.EntityDataDeclaration | undefined {
+  if (!AST.isValueReference(reference) && !AST.isMemberAccessExpression(reference)) {
+    return undefined
+  }
+  const method = findOwningAssociatedFunction(reference)
+  const view = findOwningAssociatedView(reference)
+  const callable = method ?? view
+  if (!callable) {
+    const action = findOwningAction(reference)
+    const nominalActionOwner = action && associatedNominalActionOwner(action)
+    if (
+      action && AST.isTypeDeclaration(nominalActionOwner)
+      && associatedActionDispatch(action) === 'instance'
+      && reference.target.ref === nominalActionOwner
+    ) {
+      let current: AST.Node | undefined = reference
+      while (current && current !== action.block) {
+        current = current.$container
+      }
+      return current ? nominalActionOwner : undefined
+    }
+    const receiver = action && associatedEntityActionReceiver(action)
+    if (action && receiver && reference.target.ref === receiver.owner) {
+      let current: AST.Node | undefined = reference
+      while (current && current !== action.block) {
+        current = current.$container
+      }
+      return current ? receiver.owner : undefined
+    }
+    const converter = findOwningAssociatedConverter(reference)
+    const source = converter && associatedConverterSourceOwner(converter)
+    return source && reference.target.ref === source ? source : undefined
+  }
+  if (method?.static) {
+    return undefined
+  }
+  let current: AST.Node | undefined = reference
+  while (current && current !== callable.block) {
+    current = current.$container
+  }
+  if (!current) {
+    return undefined
+  }
+  const owner = associatedEntityReceiverOwner(callable)
+    ?? (method ? associatedFunctionOwner(method) : view && associatedViewOwner(view))
+  return owner && (AST.isTypeDeclaration(owner)
+      || (AST.isEntityDataDeclaration(owner) && associatedEntityReceiverOwner(callable) === owner))
+      && reference.target.ref === owner
+    ? owner
+    : undefined
+}
+
 /** findOwningPhrase returns the phrase declaration that owns `node`, if any. */
 export function findOwningPhrase(node: AST.Node): AST.PhraseDeclaration | undefined {
   return findAncestor(node, AST.isPhraseDeclaration)
@@ -1264,6 +1749,20 @@ export function findOwningAlias(node: AST.Node): AST.AliasDeclaration | undefine
 /** findOwningState returns the state declaration that owns `node`, if any. */
 export function findOwningState(node: AST.Node): AST.StateDeclaration | undefined {
   return findAncestor(node, AST.isStateDeclaration)
+}
+
+/** Named state shorthand resolves its same-name type independently of the writable value. */
+export function namedStateTypeDeclaration(state: AST.StateDeclaration): AST.TypeDeclaration | undefined {
+  if (!isNamedStateShorthand(state)) {
+    return undefined
+  }
+  return visibleFileBindings(state, AST.isTypeDeclaration, declaration => declaration.name)
+    .find(binding => binding.localName === state.name)?.declaration
+}
+
+export function isNamedStateShorthand(state: AST.StateDeclaration): boolean {
+  return !state.type && AST.isBooleanLiteral(state.value) && state.$cstNode !== undefined
+    && Langium.GrammarUtils.findNodesForKeyword(state.$cstNode, '=').length === 0
 }
 
 /** findOwningFromExpression returns the bridge expression whose names denote module exports. */

@@ -1,6 +1,11 @@
 import type { FormatHandlers } from '../formatting'
 
 export const UseFormatter = {
+  /** NamedImport formats the optional local alias. */
+  NamedImport(f) {
+    f.oneSpaceAround('as')
+  },
+
   /** UseStatement formats named imports and `use all from path`. */
   UseStatement(f) {
     f.oneSpaceAfter('use', 'all')

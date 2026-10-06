@@ -55,7 +55,7 @@ Describe('compiler: effect outcomes', () => {
       'await TR.WhenDo(() => TR.Do(_Scope.SaveAndExport.evaluate()), { name: "SaveAndExport", declared: ["Full", "TooLarge"], }',
     )
     Expect(code).toContain(
-      '["rejected", async _TaoCasePayload => TR.BlockScope(_Scope, async _Scope => { _Scope.Problem = _TaoCasePayload',
+      '["rejected", async _TaoCasePayload => TR.BlockScope(_Scope, _Scope => TR.ActionScope(() => { const _TaoActionContinuation = TR.ActionContinuation() _Scope.Problem = _TaoCasePayload',
     )
     Expect(code).toContain('_Scope.Run = TR.Action(async () =>')
   })

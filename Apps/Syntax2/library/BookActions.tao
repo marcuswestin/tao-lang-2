@@ -1,0 +1,22 @@
+use Time from @tao/time
+use CreateTemporaryPDF, DeleteTemporaryFile, InvalidInput, UploadFile from ./BookIO
+use Book, NewBook from ./Library
+
+// Validation rejection is handled locally; storage failures retain the app boundary.
+public
+action Add(NewBook) {
+   if NewBook.Title is empty {
+      fail InvalidInput "Enter a title"
+   }
+   create Book with NewBook
+}
+
+// Completion samples elapsed time before joining LIFO file cleanup.
+public
+action Export(Book) {
+   let Timer = Time.StartTimer()
+   let File = do CreateTemporaryPDF(Book)
+   defer DeleteTemporaryFile(File)
+   do UploadFile(File)
+   return Timer.Duration()
+}

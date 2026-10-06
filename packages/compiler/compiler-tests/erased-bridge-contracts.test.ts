@@ -1,3 +1,4 @@
+import { AST } from '@parser'
 import { Assert, CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import * as ts from 'typescript'
@@ -16,6 +17,41 @@ const nativeOptions: ts.CompilerOptions = {
 }
 
 Describe('compiler: erased native bridge checks', () => {
+  Test('shares explicit contextual result types without guessing untyped native results', async () => {
+    await withTaoFiles('tao-bridge-context-', {
+      'Main.tao': `
+        type Reading is number
+        function Read() returns Reading { return Read() from ./Native.ts }
+        let Sample is Reading = Sample from ./Native.ts
+        type Settings is { Sample Reading is Sample from ./Native.ts }
+        let Unknown = Unknown from ./Native.ts
+      `,
+      'Native.ts': '',
+    }, async (paths, root) => {
+      const validation = await (await Workspace.open(root)).validate(paths['Main.tao'])
+      const errors = validation.diagnostics.filter(diagnostic => diagnostic.severity === 'error')
+      Expect(errors).toHaveLength(1)
+      Expect(errors[0]?.nodeType).toBe('FromExpression')
+      Expect(errors[0]?.range?.start.line).toBe(4)
+      const file = validation.files.find(file => file.path === paths['Main.tao'])
+      Assert.defined(file, 'contextual native test source is validated')
+      const expressions = [...AST.streamAllContents(file.ast)].filter(AST.isFromExpression)
+      Expect(expressions).toHaveLength(4)
+      const reading = file.ast.statements.find(statement =>
+        AST.isTypeDeclaration(statement) && statement.name === 'Reading'
+      )
+      Assert.defined(reading, 'the declared nominal native result type exists')
+      const results = expressions.map(BridgeMetadata.bridgeResultType)
+      for (const result of results.slice(0, 3)) {
+        Assert.defined(result, 'explicit native result type is available')
+        Expect(BridgeMetadata.resultType(result)).toBe('number')
+        Assert(result.kind === 'primitive', 'the native reading has primitive storage')
+        Expect(result.nominal).toBe(reading)
+      }
+      Expect(results[3]).toBeUndefined()
+    })
+  })
+
   Test('preserves signature, parameter-count, and result compatibility directions', async () => {
     await withTaoFiles('tao-erased-bridge-types-', {
       'Main.tao': 'action Read(Value text) returns text from ./Native.ts\naction Write(Value text) from ./Native.ts',

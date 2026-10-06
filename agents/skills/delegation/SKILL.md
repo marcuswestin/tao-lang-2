@@ -9,7 +9,7 @@ description: >-
 
 # Delegation
 
-Optimize wall-clock time to finish the whole task. A subagent pays a startup cost and needs a self-contained brief; delegate when it saves more than it costs. This skill owns delegation, tier selection, briefs, and return checks. `references/parallel-implementation.md` owns concurrent writers; `references/review-fanout.md` owns dividing a large review.
+Delegate when it saves more time than startup and briefing cost. This skill owns delegation, tiers, briefs, and return checks. `references/parallel-implementation.md` owns concurrent writers; `references/review-fanout.md` owns dividing a large review.
 
 ## Delegate when
 
@@ -71,7 +71,7 @@ Apply the lower-than-yourself rule first, then the GPT policy, then the table; s
 
 The agent sees the brief and nothing else. Every brief carries: **goal** and why it matters; **what is already known** — paths, findings, things ruled out; **decisions already made**, so it does not silently re-decide them; **boundaries** — paths it owns, must not touch, and whether it may write; **return format** and length; and a **stop condition** — what "done" is and what to do when the answer is not there.
 
-Resume an agent when its earlier context helps the next question; start fresh when its history is large and unrelated. Review each parallel implementation wave's diff before the next wave or integration, and keep whole-diff review before landing.
+Resume when earlier context helps; start fresh for unrelated work. Review each implementation wave's diff before integration, and the whole diff before landing.
 
 For an agent you launch into this worktree, the `subagentStart` hook gives every Claude Code and Codex subagent the repository's standing rules (worktree root, `rg`, no Git index changes, no ledger edits, no agent identity), so a brief does not repeat them; a Cursor brief still does.
 
@@ -79,7 +79,7 @@ A brief the Developer asks you to print takes none of that worktree boilerplate:
 
 ## The return contract and what you do with it
 
-Ask for, and hold agents to, three to seven hundred dense tokens for a routine finding, and up to two thousand only for a review or a design judgment whose reasoning is the deliverable: conclusion first; evidence as `file:line`, commands, or output, not description of evidence; decisions taken and reasoning not obvious from them; open questions and what it did not check. Name the budget in the brief — an agent told nothing writes to the larger figure, and a routine answer at that length is padding the caller pays to read. Agent-to-agent text is exempt from the response shape the Developer reads, not from these:
+Ask for, and hold agents to, three to seven hundred dense tokens for a routine finding, and up to two thousand only for a review or a design judgment whose reasoning is the deliverable: conclusion first; evidence as `file:line`, commands, or output, not description of evidence; decisions taken and reasoning not obvious from them; open questions and what it did not check. Name the budget in the brief — an agent told nothing writes to the larger figure, and a routine answer at that length is padding the caller pays to read. Commit coherent reviewed implementation slices at sensible milestones, using only owned paths; a shared-checkout worker returns its diff for the assigning agent to commit. Agent-to-agent text is exempt from the response shape the Developer reads, not from these:
 
 - **Restate nothing the brief said.** Answer what was asked, in the order asked, and stop.
 - **Read `Docs/Roadmap/Developer environment upgrades/` before calling a finding new.** It often holds it, and may record the numbers it rests on as withdrawn — `DEVENV-046` had, for durations an analysis was later built on.

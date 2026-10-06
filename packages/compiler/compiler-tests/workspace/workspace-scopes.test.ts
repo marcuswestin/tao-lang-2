@@ -102,7 +102,7 @@ Describe('what a workspace reference may resolve to', () => {
         const importedLabel = () => {
           const file = main.parseResult.value
           Expect.Is(file, AST.isTaoFile)
-          return file.statements.find(AST.isUseStatement)?.importedDeclarations[0]?.ref
+          return file.statements.find(AST.isUseStatement)?.importedDeclarations[0]?.target.ref
         }
         const before = importedLabel()
         Expect(before && AST.findRoot(before)).toBe(data.parseResult.value)

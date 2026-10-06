@@ -2,7 +2,13 @@ import React from 'react'
 import { currentExternalEffectRevision } from './TR-action-transactions'
 import { createElement } from './TR-create-element'
 import { DataControls } from './TR-data'
-import { isRedactedKey, warnContainedFailure } from './TR-errors'
+import {
+  actionFailurePublicMessage,
+  isRedactedKey,
+  TaoActionFailure,
+  type TaoActionFailureReport,
+  warnContainedFailure,
+} from './TR-errors'
 import type { RuntimeAppDefinition } from './TR-navigation-app'
 import { requireReactNativeRuntime } from './TR-react-native'
 import {
@@ -19,6 +25,10 @@ export type TaoErrorBoundaryProps = Readonly<{
   children?: React.ReactNode
   frame: TaoRuntimeFailureFrame | (() => TaoRuntimeFailureFrame)
   stateKey: string | number | (() => string | number)
+  actionBoundary?: object
+  actionFailure?: TaoActionFailureReport
+  onActionRecovery?: () => void
+  renderActionFailure?: (failure: TaoActionFailureReport) => React.ReactNode
 }>
 
 type ResolvedDiagnostics = Readonly<{
@@ -27,6 +37,7 @@ type ResolvedDiagnostics = Readonly<{
 }>
 
 type FailureState = Readonly<{
+  actionFailure?: TaoActionFailureReport
   componentStack?: string
   error: unknown
   fingerprint: string
@@ -66,6 +77,41 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
   #effectRevision = 0
   #resolvedDiagnostics: ResolvedDiagnostics | undefined
   #retryFingerprint: string | undefined
+  #lastActionFailure: TaoActionFailureReport | undefined
+
+  override componentDidMount(): void {
+    this.#acceptActionFailure()
+  }
+
+  override componentDidUpdate(previous: TaoErrorBoundaryProps): void {
+    if (previous.actionBoundary !== this.props.actionBoundary) {
+      this.#lastActionFailure = undefined
+      this.#retryFingerprint = undefined
+      this.#resolvedDiagnostics = undefined
+      this.setState({ phase: 'healthy', revision: this.state.revision + 1 })
+      return
+    }
+    this.#acceptActionFailure()
+  }
+
+  #acceptActionFailure(): void {
+    const actionFailure = this.props.actionFailure
+    if (actionFailure === this.#lastActionFailure) {
+      return
+    }
+    this.#lastActionFailure = actionFailure
+    if (!actionFailure) {
+      return
+    }
+    const error = new TaoActionFailure(actionFailure.case, actionFailurePublicMessage(actionFailure))
+    this.#resolvedDiagnostics = undefined
+    const diagnostics = this.#diagnostics()
+    const fingerprint = failureFingerprint(error, diagnostics.stateKey)
+    const repeated = this.#retryFingerprint === fingerprint
+    const failure: FailureState = { error, fingerprint, retryEligible: actionFailure.retryEligible, actionFailure }
+    void publishFailure(runtimeFailure(this.props, diagnostics.frame, failure, repeated))
+    this.setState({ failure, phase: repeated ? 'stopped' : 'failed', revision: this.state.revision })
+  }
 
   static getDerivedStateFromError(error: unknown): Partial<BoundaryState> {
     return { error, phase: 'diagnostic' }
@@ -96,6 +142,12 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
     }
     if (this.state.phase === 'escalate') {
       return createElement(EscalationThrower, { error: this.state.error })
+    }
+    if (this.state.failure.actionFailure && this.props.renderActionFailure) {
+      return createElement(ActionFailureSurface, {
+        failure: this.state.failure.actionFailure,
+        renderFailure: this.props.renderActionFailure,
+      })
     }
     return createElement(FailureSurface, {
       app: this.props.app,
@@ -136,12 +188,14 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
       return
     }
     this.#retryFingerprint = this.state.failure.fingerprint
+    this.props.onActionRecovery?.()
     this.#resolvedDiagnostics = undefined
     this.setState({ phase: 'healthy', revision: this.state.revision + 1 })
   }
 
   #restart(): void {
     this.props.app?.reset()
+    this.props.onActionRecovery?.()
     this.#retryFingerprint = undefined
     this.#resolvedDiagnostics = undefined
     this.setState({ phase: 'healthy', revision: this.state.revision + 1 })
@@ -185,6 +239,13 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
     }
     return this.#resolvedDiagnostics
   }
+}
+
+function ActionFailureSurface(props: {
+  failure: TaoActionFailureReport
+  renderFailure: (failure: TaoActionFailureReport) => React.ReactNode
+}): React.ReactNode {
+  return props.renderFailure(props.failure)
 }
 
 class DiagnosticPass extends React.Component<{

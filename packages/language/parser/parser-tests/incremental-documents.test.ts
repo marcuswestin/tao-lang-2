@@ -77,7 +77,7 @@ Describe('parser document reuse', () => {
 
   Test('recovers an unclosed call and returns current diagnostics across same-source reverts', async () => {
     const context = Parser.createContext()
-    const complete = 'function Echo(Value text) returns text { return Value }\nlet Result = Echo("ready")'
+    const complete = 'func Echo(Value text) -> text { return Value }\nlet Result = Echo("ready")'
     const before = await Parser.parseSource(context, complete)
     Expect(before.diagnostics).toEqual([])
     const incomplete = complete.slice(0, -1)

@@ -10,6 +10,6 @@ type Pasteboard is {
 // `Clipboard()` constructs one pasteboard value. Expo's module and result shapes remain behind the
 // TypeScript boundary; the Tao contract exposes only text and actions.
 public
-function Clipboard() returns Pasteboard {
+func Clipboard() -> Pasteboard {
    return Clipboard() from ./Clipboard.ts
 }

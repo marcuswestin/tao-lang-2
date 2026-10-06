@@ -112,6 +112,34 @@ Describe('validator: workspace structure', () => {
     accepts(`use ReadContext from @tao/data\n${stubApp('view ReadError(Context ReadContext) { render Fixture() }')}`),
   )
 
+  Test('loads the real action failure payload contract without making its name implicit', async () => {
+    await withValidationParse(stubApp(), ({ result }) => {
+      const contract = AST.actionFailureContextDeclaration(result.entry.ast)
+      Expect.Is(contract, AST.isTypeDeclaration)
+      Expect(contract.name).toBe('ActionFailureContext')
+      Expect(AST.getDocument(contract).uri.path).toContain('/@tao/actions/ActionFailureContext.tao')
+      Expect.Is(contract.type, AST.isItemTypeExpression)
+      Expect(contract.type.properties.map(property => property.name)).toEqual(['Message'])
+    })
+  })
+
+  Test(
+    'requires an explicit import to name the intrinsic action failure context',
+    rejects(
+      stubApp('view Failure(Context ActionFailureContext) { render Fixture() }'),
+      typeValidationMessages.unknownType('ActionFailureContext'),
+    ),
+  )
+
+  Test(
+    'accepts the public action failure context with an explicit import',
+    accepts(
+      `use ActionFailureContext from @tao/actions\n${
+        stubApp('view Failure(Context ActionFailureContext) { render Fixture() }')
+      }`,
+    ),
+  )
+
   Test(
     'rejects primitive declarations outside the pinned prelude',
     rejects('primitive text', preludeValidationMessages.location),

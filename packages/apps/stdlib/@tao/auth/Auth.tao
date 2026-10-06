@@ -43,7 +43,7 @@ type LoginFlow is {
 
 // Without a Method the flow uses Password when the app's Auth offers it, and otherwise the method it lists first.
 public
-function SignInFlow(Method text? default none) returns LoginFlow {
+func SignInFlow(Method text? default none) -> LoginFlow {
    return SignInFlow(Method: Method) from ./AuthFlow.ts
 }
 

@@ -29,6 +29,7 @@ The sole public entry is `native-bindings-src/native-bindings.ts`. Implementatio
 - `typescript-api-types.ts`: structural value reflection and adapter-declared resource contracts.
 - `generate.ts`: common Tao declarations, JavaScript calls, and catalog emitter.
 - `emit-values.ts`: generated enum, record, callback, and resource conversions.
+- `emit-associated-actions.ts`: reference-owned instance/static actions sharing the checked flat wrappers.
 - `write-bindings.ts`: source selection, diagnostics, and safe output publication.
 
 `NativeBindings.generate({ source, packageName, fromDirectory, exportName?, exclude? })` returns the catalog,
@@ -37,6 +38,13 @@ writer. New readers implement `NativeApiSource`; they do not require source-spec
 The current invocation backend calls JavaScript modules in Expo/React Native. A future direct
 Android reader would also need a compatible invocation backend and host packaging; adding a reader
 alone does not make Kotlin or Java callable.
+
+Reference methods and properties publish associated actions; constructors publish static actions.
+For example, `do File.Construct(...)` creates a reference and `do Handle.ReadBytes(...)` reads through
+its captured receiver. Generated `Owner_Member` exports forward to the existing checked wrappers,
+and flat actions remain compatible. `ReleaseReference()` invalidates only the Tao wrapper; native
+`Close`, `Cancel` and `Release` operations retain their separate upstream meanings. Register cleanup
+with `defer` at acquisition so it also runs on failure.
 
 The package uses `@shared` and the repository's existing TypeScript toolchain. It has no compiler or
 CLI dependency. Source tests live here; generated-source compilation and CLI contract tests remain

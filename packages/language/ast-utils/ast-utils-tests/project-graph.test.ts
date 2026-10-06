@@ -235,7 +235,7 @@ Describe('project publication graph', () => {
         .toEqual(['Helper.tao', 'Icon.tao', 'Widget.tao'])
       const use = result.entry.ast.statements.filter(AST.isUseStatement)
         .find(statement => statement.importPath === '@widgets')
-      Expect(use?.importedDeclarations[0]?.ref?.name).toBe('Widget')
+      Expect(use?.importedDeclarations[0]?.target.ref?.name).toBe('Widget')
 
       await FS.writeText(
         FS.resolvePath('Publications.tao', library),

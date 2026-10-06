@@ -191,7 +191,9 @@ export function requireDesignValueName(value: string, label: string): void {
     )
   }
   const tokens = Parser.lexCode(value).tokens
-  if (tokens.length !== 1 || tokens[0]!.tokenType.name !== 'ID') {
+  const tokenType = tokens[0]?.tokenType
+  const isIdentifier = tokenType?.name === 'ID' || tokenType?.CATEGORIES?.some(category => category.name === 'ID')
+  if (tokens.length !== 1 || !isIdentifier) {
     Errors.throwUserInput(`Studio ${label} name '${value}' is a Tao keyword; choose another name.`)
   }
 }

@@ -1,8 +1,13 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
-import { deferTransactionCommit } from '../TaoRuntime-src/TR-action-transactions'
+import { Deferred, Describe, Expect, Test } from '@shared/test'
+import {
+  captureActionContinuation,
+  deferTransactionCommit,
+  resumeActionContinuation,
+} from '../TaoRuntime-src/TR-action-transactions'
 import type { TaoDataSchemaDefinition } from '../TaoRuntime-src/TR-data'
-import type { TaoEffectContract } from '../TaoRuntime-src/TR-effect-outcomes'
+import { runJoinedEffectOutcome, type TaoEffectContract } from '../TaoRuntime-src/TR-effect-outcomes'
+import { actionExitOf, TaoActionFailure, UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
 
 const definition: TaoDataSchemaDefinition = {
   name: 'OutcomeNotes',
@@ -76,6 +81,18 @@ async function runOutcome(
   await TR.Data.Settle(schema)
   stop()
   return { ran, reports, schema, tail }
+}
+
+/** Canonical outcome tests keep root failures observable rather than letting the root consume them. */
+async function joinedRoot(body: () => unknown): Promise<void> {
+  const reports: unknown[] = []
+  const stop = TR.Errors.onFailure(report => reports.push(report))
+  try {
+    await TR.Action(body, { name: 'JoinedRoot' }).jsValue.invoke()
+  } finally {
+    stop()
+  }
+  Expect(reports).toEqual([])
 }
 
 Describe('Tao effect outcomes', () => {
@@ -543,5 +560,198 @@ Describe('Tao effect outcomes', () => {
     await newest
 
     Expect(ran).toEqual(['C saved'])
+  })
+})
+
+Describe('Tao canonical joined outcomes', () => {
+  Test('forwards the actual joined result value to done without replacing its identity', async () => {
+    const { saved, schema } = notesSchema()
+    const read = TR.ForeignAction(
+      () => {
+        TR.Data.Create(schema, 'Note', { Title: TR.Value('Read') })
+        return { Title: 'Result' }
+      },
+      'Read',
+      [],
+    )
+    let result: TR.Value<{ Title: string }> | undefined
+    await joinedRoot(async () => {
+      const handled = await runJoinedEffectOutcome(
+        async () => {
+          result = await TR.DoResult<{ Title: string }>(read)
+          return result
+        },
+        { name: 'Read', declared: [], open: true },
+        [
+          ['done', payload => {
+            Expect(payload).toBe(result)
+            Expect(TR.Member(result!, ['Title']).evaluate().jsValue).toBe('Result')
+            TR.Data.Create(schema, 'Note', { Title: TR.Value('Handler') })
+            return 'handled'
+          }],
+        ],
+      )
+      Expect(handled).toBe('handled')
+    })
+    await TR.Data.Settle(schema)
+
+    Expect(titles(schema)).toEqual(['Read', 'Handler'])
+    Expect(saved).toHaveLength(1)
+  })
+
+  Test('keeps synchronous done payload and handler results synchronous', async () => {
+    const value = TR.Value('Actual result')
+    const handled = { done: true }
+    await joinedRoot(() => {
+      const result = runJoinedEffectOutcome(() => value, { name: 'Sync', declared: [] }, [
+        ['done', payload => {
+          Expect(payload).toBe(value)
+          return handled
+        }],
+      ])
+      Expect(result).toBe(handled)
+    })
+  })
+
+  Test('delivers a Message record to the named case before broad error and restores the savepoint', async () => {
+    const { saved, schema } = notesSchema()
+    const seen: string[] = []
+    await joinedRoot(async () => {
+      TR.Data.Create(schema, 'Note', { Title: TR.Value('Caller') })
+      await runJoinedEffectOutcome(() => TR.Do(failingExport(schema, 'Offline')), contract, [
+        ['error', () => seen.push('broad error')],
+        ['Offline', payload => {
+          Expect(Object.isFrozen(payload)).toBe(true)
+          Expect(TR.Member(TR.Value(payload), ['Message']).evaluate().jsValue).toBe('Offline sentence.')
+          Expect(titles(schema)).toEqual(['Caller'])
+          seen.push('named')
+          TR.Data.Create(schema, 'Note', { Title: TR.Value('Handler') })
+        }],
+      ])
+      TR.Data.Create(schema, 'Note', { Title: TR.Value('Tail') })
+    })
+    await TR.Data.Settle(schema)
+
+    Expect(seen).toEqual(['named'])
+    Expect(titles(schema)).toEqual(['Caller', 'Handler', 'Tail'])
+    Expect(saved).toHaveLength(1)
+  })
+
+  Test('uses broad error for known, additional modeled, and raw foreign failures', async () => {
+    for (
+      const [mode, declared] of [
+        ['TooLarge', ['TooLarge']],
+        ['TooLarge', []],
+        ['foreign throw', []],
+      ] as const
+    ) {
+      const { schema } = notesSchema()
+      const seen: unknown[] = []
+      const callee = mode === 'TooLarge' ? failingExport(schema, mode) : TR.ForeignAction(
+        () => {
+          TR.Data.Create(schema, 'Note', { Title: TR.Value('Foreign') })
+          TR.Errors.failHost('The disk went away.')
+        },
+        'Export',
+        [],
+      )
+      await joinedRoot(async () => {
+        TR.Data.Create(schema, 'Note', { Title: TR.Value('Caller') })
+        await runJoinedEffectOutcome(() => TR.Do(callee), { name: 'Export', declared }, [
+          ['error', payload => seen.push(TR.Member(TR.Value(payload), ['Message']).evaluate().jsValue)],
+        ])
+        seen.push('tail')
+      })
+      await TR.Data.Settle(schema)
+
+      Expect(seen).toEqual(mode === 'TooLarge' ? ['TooLarge sentence.', 'tail'] : ['The disk went away.', 'tail'])
+      Expect(titles(schema)).toEqual(['Caller'])
+    }
+  })
+
+  Test('joins an unawaited async done handler before draining lexical cleanup', async () => {
+    const gate = Deferred()
+    const started = Deferred()
+    const { saved, schema } = notesSchema()
+    const seen: string[] = []
+    let pending: unknown
+    const action = joinedRoot(() =>
+      TR.ActionScope(() => {
+        TR.Defer(() => {
+          seen.push('cleanup')
+          TR.Data.Create(schema, 'Note', { Title: TR.Value('Cleanup') })
+        })
+        pending = runJoinedEffectOutcome(() => TR.Value('result'), { name: 'Read', declared: [] }, [
+          ['done', async () => {
+            const continuation = captureActionContinuation()
+            started.resolve()
+            await gate.promise
+            resumeActionContinuation(continuation)
+            seen.push('handler')
+            TR.Data.Create(schema, 'Note', { Title: TR.Value('Handler') })
+            return 'handled'
+          }],
+        ])
+        seen.push('body-end')
+      })
+    )
+    await started.promise
+    const beforeRelease = [...seen]
+    const savedBeforeRelease = [...saved]
+    gate.resolve()
+    const settled = await Promise.allSettled([action, Promise.resolve(pending)])
+    await TR.Data.Settle(schema)
+
+    Expect(beforeRelease).toEqual(['body-end'])
+    Expect(savedBeforeRelease).toEqual([])
+    Expect(settled).toEqual([
+      { status: 'fulfilled', value: undefined },
+      { status: 'fulfilled', value: 'handled' },
+    ])
+    Expect(seen).toEqual(['body-end', 'handler', 'cleanup'])
+    Expect(titles(schema)).toEqual(['Handler', 'Cleanup'])
+    Expect(saved).toHaveLength(1)
+  })
+
+  Test('retains the original primary and all cleanup faults when no canonical failure arm handles them', async () => {
+    const primary = Object.freeze(new TaoActionFailure('Offline', 'Offline sentence.'))
+    const firstCleanup = new UnexpectedBehaviorError('First cleanup failed.')
+    const lastCleanup = new UnexpectedBehaviorError('Last cleanup failed.')
+    const { schema } = notesSchema()
+    let caught: unknown
+    let originalExit: unknown
+    const callee = TR.Action(() => {
+      try {
+        return TR.ActionScope(() => {
+          TR.Data.Create(schema, 'Note', { Title: TR.Value('Callee') })
+          TR.Defer(() => {
+            throw firstCleanup
+          })
+          TR.Defer(() => {
+            throw lastCleanup
+          })
+          throw primary
+        })
+      } catch (error) {
+        originalExit = error
+        throw error
+      }
+    }, { name: 'Export' })
+    await joinedRoot(async () => {
+      TR.Data.Create(schema, 'Note', { Title: TR.Value('Caller') })
+      try {
+        await runJoinedEffectOutcome(() => TR.Do(callee), contract, [['done', () => undefined]])
+      } catch (error) {
+        caught = error
+      }
+      Expect(titles(schema)).toEqual(['Caller'])
+    })
+    await TR.Data.Settle(schema)
+
+    Expect(caught).toBe(originalExit)
+    Expect(actionExitOf(caught)?.primary).toBe(primary)
+    Expect(actionExitOf(caught)?.cleanupFailures).toEqual([lastCleanup, firstCleanup])
+    Expect(actionExitOf(caught)?.stage).toBe('body')
+    Expect(titles(schema)).toEqual(['Caller'])
   })
 })

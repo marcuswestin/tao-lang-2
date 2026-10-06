@@ -7,7 +7,7 @@ Describe('compiler: Studio scenario app metadata', () => {
     await withTaoFiles('tao-studio-synthetic-metadata-', {
       'Main.tao': `
         app Base { id "com.tao.base" version "1.0.0" name "Base" view Home }
-        let Variant = Base with { id "com.tao.variant" version "2.0.0-beta.1" name "Variant" }
+        app Variant = Base with { id "com.tao.variant", version "2.0.0-beta.1", name "Variant" }
         view Home() { render inject ${fence}ts return null ${fence} }
         scenarios Home "states" {
           device phone
