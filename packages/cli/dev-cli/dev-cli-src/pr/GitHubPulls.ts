@@ -5,7 +5,8 @@ import { type CLI, Errors } from '@shared'
  * `gh api`, not through `gh pr`: the `gh pr` subcommands speak GraphQL, which a cloud agent host's
  * GitHub proxy may refuse, while REST answers the same wherever `gh` is logged in. `{owner}/{repo}`
  * is gh's own placeholder, filled from the checkout's `origin`. Turning auto-merge on or off and
- * marking a draft ready have no GitHub REST endpoint, so those two stay on `gh pr` in their callers;
+ * marking a draft ready have no GitHub REST endpoint, so those two stay on `gh pr` in their callers,
+ * and a pull request's place in the merge queue is read through GraphQL, which REST does not expose;
  * for auto-merge, a cloud agent host's proxy offers REST routes of its own under `/ccr/`, which
  * `open-pr` falls back to where `gh pr` is refused and which GitHub itself does not serve.
  */
@@ -19,6 +20,11 @@ const PR_BRANCH_PREFIXES = [
 ] as const
 
 const REPOSITORY = 'repos/{owner}/{repo}'
+const QUEUE_STATE_QUERY = 'query($owner: String!, $name: String!, $number: Int!) {'
+  + ' repository(owner: $owner, name: $name) { pullRequest(number: $number) {'
+  + ' mergeQueueEntry { state } autoMergeRequest { enabledAt } } } }'
+
+type QueueFields = { autoMergeRequest: object | null; mergeQueueEntry: object | null }
 
 /** GhRunner is the injectable process seam every `git` and `gh` call goes through. */
 export type GhRunner = (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
@@ -97,6 +103,30 @@ export function gitHubPulls(run: GhRunner, root: string, writeLine: (line: strin
         `${REPOSITORY}/commits/${sha}/check-runs?check_name=${encodeURIComponent(name)}&filter=latest`,
       ])
       return runs.check_runs[0]?.conclusion ?? undefined
+    },
+    /** Whether `branch`'s active rules require a merge queue, which refuses a direct merge. */
+    async mergeQueueRequired(branch: string): Promise<boolean> {
+      const rules = await api<{ type: string }[]>([`${REPOSITORY}/rules/branches/${encodeURIComponent(branch)}`])
+      return rules.some(rule => rule.type === 'merge_queue')
+    },
+    /**
+     * Where the pull request stands with the merge queue: in it, waiting to enter it once its checks
+     * pass (auto-merge), or neither. REST does not expose queue entries, so this is GraphQL.
+     */
+    async queueState(number: number): Promise<'none' | 'queued' | 'waiting'> {
+      const data = await api<{ data: { repository: { pullRequest: QueueFields } } }>([
+        'graphql',
+        '-f',
+        `query=${QUEUE_STATE_QUERY}`,
+        '-F',
+        'owner={owner}',
+        '-F',
+        'name={repo}',
+        '-F',
+        `number=${number}`,
+      ])
+      const pr = data.data.repository.pullRequest
+      return pr.mergeQueueEntry !== null ? 'queued' : pr.autoMergeRequest !== null ? 'waiting' : 'none'
     },
     /**
      * Squash-merges with the message verbatim, pinned to `sha` so a later push cannot slip in.

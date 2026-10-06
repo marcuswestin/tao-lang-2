@@ -12,6 +12,7 @@ const ROOT = '/repo'
 const SHA = 'abcdef1234567890'
 const MESSAGE = 'Merge the example\n\n- Explain the example\n'
 const MERGE_CALL = 'api --method PUT repos/{owner}/{repo}/pulls/3/merge'
+const ENQUEUE_CALL = `gh pr merge 3 --auto --squash --match-head-commit ${SHA}`
 
 type Script = {
   branch?: string
@@ -23,6 +24,8 @@ type Script = {
   headAfter?: string
   mergeError?: string
   message?: string | undefined
+  /** `main` requires a merge queue; `already` is where the pull request stood before this ran. */
+  queue?: { already?: 'queued' | 'waiting'; drops?: boolean }
   remoteBranch?: boolean
   verdict?: string | undefined
 }
@@ -32,6 +35,8 @@ function fakeDependencies(script: Script = {}) {
   const lines: string[] = []
   let views = 0
   let merged = script.autoMerged === 'before'
+  let queue: 'none' | 'queued' | 'waiting' = script.queue?.already ?? 'none'
+  let queueReads = 0
   const result = (spec: CLI.CommandSpec, stdout: string): CLI.CommandResult => ({
     args: [...(spec.args ?? [])],
     command: '',
@@ -52,6 +57,17 @@ function fakeDependencies(script: Script = {}) {
       return { exitCode: script.checksExitCode ?? 0 }
     },
     readText: async () => script.message ?? MESSAGE,
+    sleep: async () => {
+      calls.push('sleep')
+      // The queue's merge group passes while the command waits, unless the script drops it.
+      if (queue !== 'none') {
+        if (script.queue?.drops === true) {
+          queue = 'none'
+        } else {
+          merged = true
+        }
+      }
+    },
     run: async (command, spec = {}) => {
       const args = (spec.args ?? []).join(' ')
       calls.push(`${command} ${args}`)
@@ -78,6 +94,29 @@ function fakeDependencies(script: Script = {}) {
         }
         return result(spec, JSON.stringify(args.includes('?') ? [pr] : pr))
       }
+      if (args === 'api repos/{owner}/{repo}/rules/branches/main') {
+        return result(spec, JSON.stringify(script.queue === undefined ? [] : [{ type: 'merge_queue' }]))
+      }
+      if (args.startsWith('api graphql')) {
+        queueReads += 1
+        const state = merged ? 'none' : queue
+        return result(
+          spec,
+          JSON.stringify({
+            data: {
+              repository: {
+                pullRequest: {
+                  autoMergeRequest: state === 'waiting' ? { enabledAt: 'now' } : null,
+                  mergeQueueEntry: state === 'queued' ? { state: 'QUEUED' } : null,
+                },
+              },
+            },
+          }),
+        )
+      }
+      if (`${command} ${args}` === ENQUEUE_CALL) {
+        queue = 'queued'
+      }
       if (args.startsWith('api repos/{owner}/{repo}/commits/')) {
         const verdict = 'verdict' in script ? script.verdict : 'success'
         return result(spec, JSON.stringify({ check_runs: verdict === undefined ? [] : [{ conclusion: verdict }] }))
@@ -99,7 +138,7 @@ function fakeDependencies(script: Script = {}) {
     },
     writeLine: line => lines.push(line),
   }
-  return { calls, dependencies, lines }
+  return { calls, dependencies, lines, queueReads: () => queueReads }
 }
 
 Describe('merge-pr', () => {
@@ -168,6 +207,39 @@ Describe('merge-pr', () => {
     const fake = fakeDependencies({ headAfter: '1111111122222222' })
     Expect((await MergePrCommand.run({ repositoryRoot: ROOT }, fake.dependencies)).exitCode).toBe(1)
     Expect(fake.calls.some(call => call.startsWith(`gh ${MERGE_CALL}`))).toBe(false)
+  })
+
+  Test('under a merge queue, sets the reviewed message, enqueues pinned to the head, and waits for it', async () => {
+    const fake = fakeDependencies({ queue: {} })
+    Expect((await MergePrCommand.run({ repositoryRoot: ROOT }, fake.dependencies)).exitCode).toBe(0)
+    const edit = fake.calls.findIndex(call =>
+      call.startsWith('gh api --method PATCH repos/{owner}/{repo}/pulls/3 -f body=- Explain the example')
+    )
+    const enqueue = fake.calls.indexOf(ENQUEUE_CALL)
+    Expect(edit).toBeGreaterThan(-1)
+    Expect(enqueue).toBeGreaterThan(edit)
+    Expect(fake.calls.indexOf('sleep')).toBeGreaterThan(enqueue)
+    Expect(fake.calls.some(call => call.startsWith(`gh ${MERGE_CALL}`))).toBe(false)
+    Expect(fake.calls).toContain(`git push origin ${SHA}:refs/heads/merged/example`)
+  })
+
+  Test('waits for a pull request already queued or waiting to be, without queueing it again', async () => {
+    for (const already of ['queued', 'waiting'] as const) {
+      const fake = fakeDependencies({ queue: { already } })
+      Expect((await MergePrCommand.run({ repositoryRoot: ROOT }, fake.dependencies)).exitCode).toBe(0)
+      Expect(fake.calls.some(call => call.startsWith('gh pr merge'))).toBe(false)
+      Expect(fake.calls.some(call => call.startsWith(`gh ${MERGE_CALL}`))).toBe(false)
+      Expect(fake.calls).toContain(`git push origin ${SHA}:refs/heads/merged/example`)
+    }
+  })
+
+  Test('fails without archiving when the merge queue drops the pull request', async () => {
+    const fake = fakeDependencies({ queue: { drops: true } })
+    Expect((await MergePrCommand.run({ repositoryRoot: ROOT }, fake.dependencies)).exitCode).toBe(1)
+    Expect(fake.lines.some(line => line.includes('#3 left the merge queue unmerged'))).toBe(true)
+    // One read outside the queue is confirmed by a second before it counts as a drop.
+    Expect(fake.queueReads()).toBeGreaterThan(2)
+    Expect(fake.calls.some(call => call.includes('refs/heads/merged/'))).toBe(false)
   })
 
   Test("merges a cloud agent session's branch, archived under its own prefix", async () => {

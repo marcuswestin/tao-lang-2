@@ -608,7 +608,7 @@ worktree-status:
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
 
-# Merge an already verified PR directly, or confirm and archive after auto-merge completes
+# Land an already verified PR through main's merge queue and archive it, or confirm and archive after auto-merge completes
 [group('Dev')]
 merge-pr *ARGS:
     ./dev merge-pr {{ ARGS }}
