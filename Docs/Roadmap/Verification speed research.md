@@ -394,9 +394,79 @@ Three runs of main's twelve-partition workflow, timed from each job's `started_a
 - What slice D1 caches: the Nix store (`nix-community/cache-nix-action`, keyed on `devenv.lock`
   and the profile expressions), Verify's installed `node_modules` under the same key, Gradle's
   home (`gradle/actions/setup-gradle`), and CocoaPods' spec repository and pod downloads.
+- First run with the caches, run 37418639728 on the pull request (cold: nothing saved yet):
+  android 1,691 s (`Set up Tao` 545 s, build 931 s), ios-simulator 2,015 s (`Set up Tao` 526 s,
+  build 1,076 s). Both restored nothing and saved everything; saving the Nix store alone took
+  103 s on Linux and 225 s on macOS.
+- Dispatched run on `main`, run 37454879964, after the caches landed: android 1,807 s,
+  ios-simulator 1,809 s, no better than the baseline. The caches the pull request saved were
+  invisible to it, because GitHub scopes a cache to the ref that saved it and a run on `main`
+  reads only `main`'s: android missed the Nix store (restore 1 s, `Set up Tao` 601 s, save 120 s)
+  and both missed `node_modules`. ios-simulator restored a macOS Nix store in 222 s, the one
+  `CI macOS` had saved on `main` under the same key, and its `Set up Tao` fell to 202 s from 688 s;
+  the build itself (1,145 s) is unchanged, as expected while prebuild stays clean. This run saved
+  `main`-scoped caches for both platforms, so the next nightly run is the first warm measurement;
+  until it reports, the caching is unproven on Linux and worth about 8 minutes of setup on macOS
+  less the 3.7-minute restore.
 - What it cannot cache: Expo SDK 57 (`expo ~57.0.26`, PR expo/expo#47209) makes `expo prebuild`
   clean by default, so `ios/`, `android/`, `Pods/` and Xcode's derived data (`ios/build`) are
   regenerated on every build and a restored copy would be deleted before use. Reusing them needs
   `--no-clean` in `CompanionHostBuild.ts`, which changes what the `companion-host-build` host
   operation does locally as well, so it is the Developer's call; the measured gap after caching
   the rest says whether it is worth asking for.
+
+## 18. `CI macOS`: hosted host gates (own measurement, 2026-10-06)
+
+- Shape: one `macos-26` job in `.github/workflows/ci-macos.yml`, not required, on pushes to `main`
+  and on dispatch. It began as a job inside `Verify` (PR 31) and moved to its own workflow (PR 44):
+  inside `Verify` it kept every run in progress for its whole wall (16 min 5 s on PR 31's run,
+  17 min 20 s on `main`'s first, against under 10 min for the Linux partitions), and `open-pr`'s
+  admission and the `plan` job both count a run in progress as holding the pool.
+- Cold bootstrap, `main` run 37450583514, nothing admitted: Nix install 29 s, Nix store restore a
+  miss (2 s), devenv install 21 s, `Set up Tao` 651 s, saving `node_modules` 108 s, saving the Nix
+  store 198 s; the gate step itself 8 s.
+- Warm bootstrap, the eight dispatches below (each restored `main`'s caches): Nix store restore
+  137–262 s, `node_modules` restore 51–87 s, `Set up Tao` 60–91 s, so about 4.5–7 min of fixed
+  cost before the first gate, and nothing saved. The gate step includes the prepare nodes the gate
+  reads (about 40 s).
+- One dispatch per host gate, two at a time, `host_gates` set to that gate alone:
+
+  | Gate                          | Run         | Result | Job wall | Gate step |
+  | ----------------------------- | ----------- | ------ | -------: | --------: |
+  | `studio-dialog-browser`       | 37454882949 | pass   |    398 s |      48 s |
+  | `studio-smoke`                | 37454885951 | pass   |    413 s |      93 s |
+  | `studio-agent-browser`        | 37455729998 | pass   |    556 s |     114 s |
+  | `studio-network-simulation`   | 37455755700 | pass   |    531 s |     141 s |
+  | `studio-canary`               | 37456801327 | pass   |    455 s |     109 s |
+  | `keyboard-navigation-smoke`   | 37456827248 | pass   |    479 s |     129 s |
+  | `studio-smoke-simulated-user` | 37457766663 | fail   |    511 s |     137 s |
+  | `studio-proof-real-app`       | 37457789259 | fail   |  1,073 s |     544 s |
+
+- The two failures, not retried under the stopping rule: `studio-smoke-simulated-user` failed on a
+  browser error in Studio's editor ("RangeError: Position 1837 is out of range for changeset of
+  length 1836", from `ChangeSet.mapPos` while applying published diagnostics), and
+  `studio-proof-real-app` timed out in three tests waiting for the preview to render edits
+  ("Studio publication-off preview renders edits without reloading its frame"). Both pass in the
+  local complement (122 s for `studio-proof-real-app` on PR 31's head), so each is either a race
+  the slower runner exposes or a runner difference; neither is admissible until diagnosed.
+- What admission would buy: one passing run each is not yet "reliable", which admission requires.
+  Six gates that take 48–141 s of gate time on the runner take 1–32 s each locally, in a lane
+  whose wall is about 130 s; moving them saves local machine time, not landing time, since the
+  complement already runs beside `Verify` and finishes first. Admitting any gate also needs the
+  `pull_request` trigger and the `main` ruleset requiring `CI macOS`.
+
+## 19. Hosted `Verify` at the end of slice D1 (own measurement, 2026-10-06)
+
+| Shape                      | Before D1 | After D1 | Runs                                      |
+| -------------------------- | --------: | -------: | ----------------------------------------- |
+| 20 partitions, run alone   |     390 s |    352 s | 37423624990 → 37454123705 (PR 27)         |
+| 11 partitions, pool shared |     570 s |    526 s | coordinator's figures; the share differed |
+
+- Times run from the run's creation to the `Verify` aggregate's conclusion. The 20-partition pair
+  is like for like: each run had the pool to itself. The 11-partition pair is not: how much of the
+  pool the other run held differed between the two, so the 44 s is an indication, not a result.
+  PR 44's own run (37452914617, 11 partitions, shared) took 521 s.
+- What D1 changed that a run can feel: the `CI macOS` job no longer holds a `Verify` run open
+  (§18), and the Companion hosts jobs no longer take Linux runners from the pool on pull requests
+  (`main` moved them to a nightly schedule during the slice). The partition count itself came from
+  slice A's sizing, not from D1.
