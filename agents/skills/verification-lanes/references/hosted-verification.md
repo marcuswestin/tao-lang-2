@@ -21,7 +21,7 @@ how to judge contention on either machine and what hosted `Verify` proves.
   assuming one pull request consumes one runner; a run's `Plan the partitions` summary names its
   partition count and the runs it saw. Pending `Verify` alone can mean running tests; waiting for
   approval or a prerequisite is not runner contention.
-- `./agent pr-checks --pr <number>` gives the current PR's check state, not the repository-wide
+- `./agent unsandboxed pr-checks --pr <number>` gives the current PR's check state, not the repository-wide
   runner queue. If queue observations are unavailable, report CI contention as unknown; do not
   infer free capacity from missing data or invent a repository command. State the local evidence,
   CI evidence, coverage, and chosen route briefly.

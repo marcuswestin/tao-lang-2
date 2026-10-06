@@ -39,7 +39,7 @@ What you ask for turns on whether the gates prove the change, not on its size.
 1. Run `./agent unsandboxed open-pr --auto-merge`, always with `--auto-merge`. It waits for admission, pushes, opens or reuses the pull request titled from the reviewed message, and starts hosted `Verify`; GitHub squash-merges the moment `Verify` is green on that head.
 2. The same command runs `verify-complement` beside it: the host-only gates hosted `Verify` does not run, derived by `verify-complement` from the workflow. It posts `Verify (host)` on the head. Never run the sandbox-capable gates locally as merge evidence; hosted `Verify` owns them.
 3. `open-pr` returns once GitHub has merged, printing `merged_at`, or once the complement ends, whichever is later. It runs for many minutes: run it in the foreground with a long timeout, or backgrounded under `verification-lanes`' rules for reporting while a lane runs.
-4. When it exits before the merge, follow with `./agent pr-checks --wait`. A failed partition is `verification-lanes`' to diagnose; fix, commit, and run `open-pr --auto-merge` again, which restarts both halves.
+4. When it exits before the merge, follow with `./agent unsandboxed pr-checks --wait`. A failed partition is `verification-lanes`' to diagnose; fix, commit, and run `open-pr --auto-merge` again, which restarts both halves.
 
 ### Waiting for admission
 

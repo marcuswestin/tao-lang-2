@@ -27,7 +27,7 @@ guidance. A background start receipt or successful reload dispatch is not a beha
 
 - After a broad failure, let the runner finish cleanup and release its leases, diagnose the failed scope with an explicit file or name target, fix it, then repeat broad verification. An aborted or filtered run is not complete coverage. Command help owns the failure policy; keep diagnostic scope explicit instead of repeatedly paying for a broad inventory of failures.
 - Read `.artifacts/logs/<lane>/latest/summary.json` first; it names each node's failure cause. A separately recorded retry, not concatenated output, owns the final classification: a node failing again on its isolated retry is `repository`, not `machine-contention`.
-- For hosted `Verify`, `./agent pr-checks --wait` follows the run and says why failed checks failed; a failed partition uploads its `verify-partition-<k>` logs. Diagnose from those, fix, and push again through `landing`'s route; a run link is not completion.
+- For hosted `Verify`, `./agent unsandboxed pr-checks --wait` follows the run and says why failed checks failed; a failed partition uploads its `verify-partition-<k>` logs. Diagnose from those, fix, and push again through `landing`'s route; a run link is not completion.
 
 ## The machine-wide landing lock
 
