@@ -26,6 +26,12 @@ export const VERIFY_FULL_SANDBOX = 'verify-full-sandbox'
  * landing's proof. Its membership is derived from the workflow (`VerifyComplement`), not listed.
  */
 export const VERIFY_COMPLEMENT = 'verify-complement'
+/**
+ * The hosted macOS half of the same key: the host gates the workflow's `CI_HOST_GATES` admits, with
+ * the prepare nodes they read (`CiGateAdmission`). Never a green record: it proves one runner's
+ * share, not the tree.
+ */
+export const VERIFY_FULL_CI = 'verify-full-ci'
 export const DIAGNOSE_VERIFICATION = 'diagnose-verification'
 
 /**
@@ -48,6 +54,7 @@ export const BROAD: readonly string[] = [
   VERIFY_FULL,
   VERIFY_FULL_SANDBOX,
   VERIFY_COMPLEMENT,
+  VERIFY_FULL_CI,
   DIAGNOSE_VERIFICATION,
 ]
 
@@ -77,6 +84,7 @@ export const ALL: readonly string[] = [
   VERIFY_FULL,
   VERIFY_FULL_SANDBOX,
   VERIFY_COMPLEMENT,
+  VERIFY_FULL_CI,
 ]
 
 export const VerificationLanes = {
@@ -92,5 +100,6 @@ export const VerificationLanes = {
   VERIFY_FULL,
   VERIFY_FULL_SANDBOX,
   VERIFY_COMPLEMENT,
+  VERIFY_FULL_CI,
   VERIFY_OR_WIDER,
 } as const

@@ -12,10 +12,16 @@ type PriorityProbe = {
   jobs: number
 }
 
-async function probe(lane: string): Promise<PriorityProbe> {
+/**
+ * Under a hosted runner the policy itself is off, so the probe says what the local one would:
+ * `CI` is passed explicitly rather than inherited, and the fixture is told to keep the real
+ * `setpriority` call out of a process that would otherwise be left niced for the rest of the job.
+ */
+async function probe(lane: string, ci: string | undefined = 'false'): Promise<PriorityProbe> {
   const args = [FS.resolvePath('fixtures/verification-priority.ts', import.meta.dir), lane]
   const result = await CLI.run(Platform.runtimeProcess.execPath, {
     args,
+    env: { CI: ci },
     processPolicy: 'test',
   })
   Expect({ exitCode: result.exitCode, error: result.error }).toEqual({ exitCode: 0, error: undefined })
@@ -33,7 +39,7 @@ async function probe(lane: string): Promise<PriorityProbe> {
 Describe('verification scheduling priority', () => {
   Test('full verification lowers only its own process and its gate children without changing jobs', async () => {
     const parentPriority = Platform.processPriority()
-    for (const lane of ['default', 'verify', 'verify-full', 'verify-full-sandbox']) {
+    for (const lane of ['default', 'verify', 'verify-full', 'verify-full-sandbox', 'verify-full-ci']) {
       const result = await probe(lane)
       Expect(result.priorityCalls).toBe(1)
       Expect(result.atGate).toBe(result.refused ? result.before : Math.max(result.before, 10))
@@ -53,6 +59,17 @@ Describe('verification scheduling priority', () => {
     Expect(result.gateChild).toBe(result.before)
     Expect(result.repeated).toBe(result.before)
     Expect(result.priorityCalls).toBe(1)
+  })
+
+  Test('a hosted runner keeps every lane at its inherited priority', async () => {
+    for (const lane of ['verify', 'verify-full', 'verify-full-sandbox', 'verify-full-ci']) {
+      const result = await probe(lane, 'true')
+      Expect(result.priorityCalls).toBe(0)
+      Expect(result.atGate).toBe(result.before)
+      Expect(result.gateStatus).toBe('passed')
+      Expect(result.gateChild).toBe(result.before)
+      Expect(result.jobs).toBe(3)
+    }
   })
 
   Test('leaves narrower and other gate commands at their inherited priority', async () => {

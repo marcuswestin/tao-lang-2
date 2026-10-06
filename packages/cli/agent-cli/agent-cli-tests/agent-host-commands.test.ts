@@ -26,6 +26,7 @@ const expected = [
   'verify-full',
   'diagnose-verification',
   'verify-complement',
+  'verify-full-ci',
   'cancel-verify',
   'land-fix',
   'pr-checks',
