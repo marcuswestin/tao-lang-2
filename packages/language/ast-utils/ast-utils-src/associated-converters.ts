@@ -26,7 +26,7 @@ type ConverterTypeResolution = Readonly<{
   ofTypeExpression(expression: AST.TypeExpression): TaoType
 }>
 
-/** Only converters attached to an actually visible owner participate in selection. */
+/** Enumerate the converters attached to one concrete owner. */
 export function ownAssociatedConverters(owner: AST.TypeDeclaration): readonly AST.AssociatedConverterDeclaration[] {
   const type = owner.type
   const body = AST.isDerivedTypeExpression(type) ? type.slots : AST.isItemTypeExpression(type) ? type : undefined
@@ -71,7 +71,17 @@ export function resolveAssociatedConversion(
   }
   const ancestors = sourceDomains(source, resolution)
   const applicable: { descriptor: AssociatedConverterDescriptor; distance: number }[] = []
-  for (const owner of AST.visibleFileDeclarations(expression, AST.isTypeDeclaration, declaration => declaration.name)) {
+  const owners = new Set(
+    AST.visibleFileDeclarations(expression, AST.isTypeDeclaration, declaration => declaration.name),
+  )
+  // A public field or signature can expose a nominal value without importing its owner's name.
+  // Its attached converters are still members of that concrete type, not unrelated global candidates.
+  for (const domain of [...ancestors, target]) {
+    if ('nominal' in domain && AST.isTypeDeclaration(domain.nominal)) {
+      owners.add(domain.nominal)
+    }
+  }
+  for (const owner of owners) {
     for (const declaration of ownAssociatedConverters(owner)) {
       const descriptor = associatedConverterDescriptor(declaration, resolution)!
       if (descriptor.receiver.kind === 'unresolved' || descriptor.result.kind === 'unresolved') {

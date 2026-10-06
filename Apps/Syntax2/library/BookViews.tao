@@ -18,6 +18,8 @@ view BookRow(Book) {
          "Available"
       }
       Book.Note
+
+      accessible label "Export complete { Book.Id }"
       Notice
       Row {
          if (Revision.Unseen) {

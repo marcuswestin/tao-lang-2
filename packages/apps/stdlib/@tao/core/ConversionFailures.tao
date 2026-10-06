@@ -1,0 +1,3 @@
+// Shared leaves for conversions that cannot admit a source value to a target domain.
+public
+type ConversionFailure is one of InvalidFormat, UnsupportedEncoding, OutOfRange, PrecisionLoss, ConstraintViolation

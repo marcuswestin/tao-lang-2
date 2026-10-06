@@ -13,6 +13,10 @@ app LibraryApp {
    Design LibraryDesign
    view Library
    guard {
+      loading Context -> {
+         #loading accessible label "Loading books"
+         Spinner
+      }
       error Problem -> { "{ Problem.Message }" }
 }  }
 
@@ -106,7 +110,10 @@ view Library {
       // 5. Acquisition is bounded; continuation extends this same owned window.
       guard Feed
       when Feed {
-         refreshing -> Spinner
+         refreshing -> {
+            #refreshing accessible label "Refreshing books"
+            Spinner
+         }
          empty -> "No books."
          stale -> "Showing cached books."
       }
@@ -123,8 +130,9 @@ view Library {
          on press -> do LoadAfter(Feed)
       }
       Button("Refresh") {
-         on press -> do Refresh(Feed)
-      }
+         on press -> do Refresh(Feed) then {
+            error Problem -> { set Feedback = TitleType "{ Problem.Message }" }
+      }  }
       Button("Return loaded") {
          on press -> do LoadedItems(Feed).Return()
 }  }  }
