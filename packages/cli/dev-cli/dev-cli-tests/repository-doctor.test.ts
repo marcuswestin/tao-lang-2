@@ -36,9 +36,9 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
     },
     generatedParserArtifacts: [{ path: 'packages/language/parser/parser-src/_gen_tao-parser/ast.ts', present: true }],
     githubTransport: {
-      configuredOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
+      configuredOriginUrl: 'https://github.com/tao-dev-org/tao-lang.git',
       credentialHelpers: ['!/nix/store/gh/bin/gh auth git-credential'],
-      effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
+      effectiveOriginUrl: 'https://github.com/tao-dev-org/tao-lang.git',
     },
     gitHooks: ['commit-msg', 'pre-commit'].map(event => ({
       event,
@@ -136,23 +136,23 @@ Describe('repository doctor', () => {
   Test('requires an explicit HTTPS origin and GitHub credential helper', () => {
     const ssh = doctorReport(facts({
       githubTransport: {
-        configuredOriginUrl: 'git@github.com:marcuswestin/tao-lang-2.git',
+        configuredOriginUrl: 'git@github.com:tao-dev-org/tao-lang.git',
         credentialHelpers: [],
-        effectiveOriginUrl: 'git@github.com:marcuswestin/tao-lang-2.git',
+        effectiveOriginUrl: 'git@github.com:tao-dev-org/tao-lang.git',
       },
     }))
     const rewritten = doctorReport(facts({
       githubTransport: {
-        configuredOriginUrl: 'git@github.com:marcuswestin/tao-lang-2.git',
+        configuredOriginUrl: 'git@github.com:tao-dev-org/tao-lang.git',
         credentialHelpers: ['!/nix/store/gh/bin/gh auth git-credential'],
-        effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
+        effectiveOriginUrl: 'https://github.com/tao-dev-org/tao-lang.git',
       },
     }))
     const missingHelper = doctorReport(facts({
       githubTransport: {
-        configuredOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
+        configuredOriginUrl: 'https://github.com/tao-dev-org/tao-lang.git',
         credentialHelpers: ['osxkeychain'],
-        effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
+        effectiveOriginUrl: 'https://github.com/tao-dev-org/tao-lang.git',
       },
     }))
 

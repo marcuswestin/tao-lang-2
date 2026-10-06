@@ -856,7 +856,7 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands).toContain('url.https://github.com/.insteadOf')
     Expect(commands).toContain('gh auth login --hostname github.com --git-protocol https --web')
     Expect(commands).toContain('gh auth setup-git --hostname github.com')
-    Expect(commands).toContain('git remote set-url origin https://github.com/marcuswestin/tao-lang-2.git')
+    Expect(commands).toContain('git remote set-url origin https://github.com/tao-dev-org/tao-lang.git')
     Expect(commands).toContain('git ls-remote --exit-code origin refs/heads/main')
   })
 
@@ -872,7 +872,7 @@ Describe('agent worktree profile bootstrap', () => {
     // The lanes are named for the public recipes that run the same files by hand; the graph runs
     // the smokes through the catalog's command, which is where their worker indices come from.
     Expect(commands).toContain(
-      'ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-network-simulation studio-smoke-native studio-canary',
+      'ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-network-simulation studio-canary',
     )
     Expect(commands).toContain('--lane verify-full')
     Expect(commands).not.toContain('--jobs 1')

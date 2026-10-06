@@ -373,7 +373,7 @@ async function publishStudio(repo: string): Promise<void> {
         '--title',
         `Tao Studio ${stamp.version}`,
         '--notes',
-        `Built from tao-lang-2 commit ${stamp.commit}.`,
+        `Built from tao-lang commit ${stamp.commit}.`,
       ],
       Repo.getRoot(),
       true,

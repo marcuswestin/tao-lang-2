@@ -173,7 +173,7 @@ of their own name. The Studio smokes are the exception: their catalog entries ca
 `./dev studio-smoke` command, and the graph numbers them from the `studio-smoke` worker pool as it
 admits them, so `StudioSmoke.resources()` hands each its own ports and artifact root without any
 recipe pinning a worker index. Those gates are named for the public recipes that run the same files by
-hand — `studio-smoke`, `studio-proof-real-app`, `keyboard-navigation-smoke`, `studio-smoke-native`,
+hand — `studio-smoke`, `studio-proof-real-app`, `keyboard-navigation-smoke`,
 `studio-canary` — and log under those names.
 
 `./agent doctor` reads this registry without pruning or otherwise mutating it, and reports the load
@@ -316,7 +316,8 @@ Never delete the shared registry while another worktree may be using it.
   and sorts into the order it widens in. `verify-changed` runs the fix, typecheck, lint, and build
   gates with `_test-changed` in place of `_test`, under the `verify-changed` lane; it is the
   iteration gate. `just verify` is the same graph with `_test`, under the `verify` lane; it is the
-  gate before a reviewed commit and before the merge, and `merge-with-main` runs it on the squash.
+  local complete-suite gate when useful or when CI is unreachable; the local `merge-with-main`
+  route runs it on the squash. Hosted CI is the default portable final verification route.
   `verify-full` and `verify-full-sandbox` widen from there. `--no-cache` is the one flag they share.
 - Every lane that passes `--green-tree` to `./dev gates` records what it proved under
   `.artifacts/verify/green/`, one small file per record. A record is keyed by the **whole visible
@@ -381,7 +382,14 @@ staged-squash **tree-equality assertion** runs under every combination, includin
 because it is a correctness check rather than an optimization: the squash must be the same tree the
 verification proved, and a mismatch stops the landing.
 
-Default agents run `./agent unsandboxed land` for host access. The wrapper forwards its arguments
+Agents default to hosted portable verification. When landing is authorized and required host
+acceptance is complete, they start new final CI with `./agent unsandboxed open-pr --auto-merge`,
+follow it through completion, and confirm/archive with `merge-pr`. An already fully green PR goes
+directly to `merge-pr`. Plain `open-pr` leaves auto-merge off before landing readiness; the flag
+remains explicit. Focused local checks, diagnosis, and host acceptance remain useful. When offline
+or GitHub is unreachable, agents verify locally and report publication/landing as pending.
+
+The local landing route uses `./agent unsandboxed land` for host access. The wrapper forwards its arguments
 to the ordinary landing handler; the generated harness rules allow only the named operations in
 `.rulesync/permissions.jsonc`. Landing uses a single lease-checked
 `git push --atomic` for main, the archive, and feature-branch deletion. The host process runs

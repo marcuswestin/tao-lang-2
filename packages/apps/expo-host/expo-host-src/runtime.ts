@@ -102,6 +102,7 @@ export type GeneratedApp = {
   code: string
   preview?: StudioPreviewPublication
   previewRevision?: number
+  previewPublicationSkipped?: boolean
   shipManifest?: ShipManifest
   shipManifestPath?: string
   studioManifest?: NonNullable<Awaited<ReturnType<typeof Workspace.compile>>['studioManifest']>
@@ -111,6 +112,12 @@ export type GeneratedApp = {
 
 const generationQueues = new Map<string, Promise<void>>()
 const previewPublications = new Map<string, StudioPreviewPublication>()
+type PreviewOutputSnapshot = {
+  files: ReadonlyMap<string, string>
+  metadata: string
+  attemptRevision: number
+}
+const previewOutputSnapshots = new Map<string, PreviewOutputSnapshot>()
 const studioPublicationPath = 'TaoStudioPublication.ts'
 const legacyPreviewPaths = [
   'current',
@@ -128,6 +135,10 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
   const generatedAppRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
   const shipManifestPath = FS.resolvePath('ship.json', generatedAppRoot)
   return await serializeGeneration(generatedAppRoot, async () => {
+    if (opts.preview === undefined) {
+      previewOutputSnapshots.delete(generatedAppRoot)
+      previewPublications.delete(generatedAppRoot)
+    }
     Assert(
       opts.ship === undefined || opts.validationMode === 'release',
       'a ship manifest is generated only in release validation mode',
@@ -164,13 +175,13 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     const compiled = opts.preview === undefined
       ? await Workspace.compile(sourcePath, compileOptions)
       : await compileStudioPreview(sourcePath, opts.preview, compileOptions, opts.previewWorkspace)
-    const preview = opts.preview === undefined
+    let preview = opts.preview === undefined
       ? undefined
       : previewPublication(compiled.appNames, opts.appName, opts.preview)
     if (preview !== undefined) {
       assertPreviewCanPublish(generatedAppRoot, preview)
     }
-    const compiledFiles = preview === undefined
+    let compiledFiles = preview === undefined
       ? compiled.files
       : filesWithStablePreviewRoot(
         compiled.files,
@@ -178,6 +189,38 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
         opts.preview?.publicationChecks !== false,
         previewPublications.get(generatedAppRoot),
       )
+    const previousOutput = previewOutputSnapshots.get(generatedAppRoot)
+    const output = new Map(
+      [
+        ...compiledFiles,
+        { relativePath: 'ManagedLoopIdentity.ts', code: 'export default null\n' },
+      ].filter(file => file.relativePath !== studioPublicationPath)
+        .map(file => [file.relativePath, file.code]),
+    )
+    const metadata = preview === undefined
+      ? undefined
+      : stableJson({
+        appName: preview.appName,
+        dependencyEnvironments: compiled.dependencyEnvironments,
+        manifest: compiled.studioManifest,
+        project: preview.project,
+        publicationChecks: opts.preview!.publicationChecks !== false,
+        sourceVersions: preview.sourceVersions,
+      })
+    const previewPublicationSkipped = opts.managedPublication === undefined
+      && preview !== undefined && previousOutput !== undefined
+      && metadata === previousOutput.metadata
+      && previousOutput.files.size === output.size
+      && [...output].every(([path, code]) => previousOutput.files.get(path) === code)
+    if (previewPublicationSkipped) {
+      preview = previewPublications.get(generatedAppRoot)!
+      compiledFiles = filesWithStablePreviewRoot(
+        compiled.files,
+        preview,
+        opts.preview?.publicationChecks !== false,
+        preview,
+      )
+    }
     const compiledGeneratedFiles = opts.ship === undefined
       ? compiledFiles
       : [...compiledFiles, { relativePath: 'ship.json', code: `${JSON.stringify(opts.ship, null, 2)}\n` }]
@@ -197,18 +240,28 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       relativePath: 'ManagedLoopIdentity.ts',
       code: `export default ${JSON.stringify(publication ?? null)}\n`,
     }]
-    await withGeneratedModuleLinks(generatedAppRoot, requesterRoot, compiled.dependencyEnvironments, async () => {
-      await writeGeneratedFiles(
-        generatedAppRoot,
-        generatedFiles,
-        preview === undefined ? undefined : studioPublicationPath,
-        opts.publicationHooks,
-      )
-    }, opts.moduleLinkRoot ?? requesterRoot)
-    if (preview === undefined) {
-      previewPublications.delete(generatedAppRoot)
-    } else {
+    await withGeneratedModuleLinks(
+      generatedAppRoot,
+      requesterRoot,
+      compiled.dependencyEnvironments,
+      async () => {
+        await writeGeneratedFiles(
+          generatedAppRoot,
+          generatedFiles,
+          preview === undefined ? undefined : studioPublicationPath,
+          opts.publicationHooks,
+        )
+      },
+      opts.moduleLinkRoot ?? requesterRoot,
+      { preserveUnchangedLinks: preview !== undefined },
+    )
+    if (preview !== undefined) {
       previewPublications.set(generatedAppRoot, preview)
+      previewOutputSnapshots.set(generatedAppRoot, {
+        files: output,
+        metadata: metadata!,
+        attemptRevision: opts.preview!.revision,
+      })
     }
 
     const generatedAppCode = generatedFiles.find(file => file.relativePath === 'App.tsx')?.code
@@ -225,6 +278,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
         : {
           preview,
           previewRevision: preview.revision,
+          previewPublicationSkipped,
           studioManifest: compiled.studioManifest,
         }),
     }
@@ -286,8 +340,25 @@ async function resetStudioPreviewSession(opts: { runtimePackageRoot?: string } =
   const runtimePackageRoot = opts.runtimePackageRoot ?? defaultRuntimePackageRoot()
   const generatedAppRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
   await serializeGeneration(generatedAppRoot, async () => {
+    previewOutputSnapshots.delete(generatedAppRoot)
     previewPublications.delete(generatedAppRoot)
   })
+}
+
+function stableJson(value: unknown): string {
+  const normalize = (item: unknown): unknown => {
+    if (Array.isArray(item)) {
+      return item.map(normalize)
+    }
+    if (typeof item === 'object' && item !== null) {
+      return Object.fromEntries(
+        Object.entries(item).sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, entry]) => [key, normalize(entry)]),
+      )
+    }
+    return item
+  }
+  return JSON.stringify(normalize(value)) ?? 'undefined'
 }
 
 /** Runtime exposes Expo runtime app generation functions. */
@@ -953,7 +1024,7 @@ function assertPreviewCanPublish(outputRoot: string, next: StudioPreviewPublicat
     { current, next, outputRoot },
   )
   Assert(
-    next.revision > current.revision,
+    next.revision > (previewOutputSnapshots.get(outputRoot)?.attemptRevision ?? current.revision),
     'Studio preview revision increases monotonically',
     { current, next, outputRoot },
   )

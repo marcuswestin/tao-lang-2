@@ -44,9 +44,10 @@ For a Developer-directed edit or commit in the primary `dev/<name>` checkout, do
 Use available focused checks, commit the exact reviewed paths when asked, and leave full verification
 to authorized landing. Other work may be in progress in that shared checkout.
 
-For the local route, it is the iteration-time readiness command when landing is not yet authorized, not a step of an
-already authorized landing — `./agent unsandboxed land` does
-its own preparation, integration and verification in one process. It brings a branch to ready:
+It is not a step of the hosted landing route, which needs only the reviewed message. For the local
+route, it is the iteration-time readiness command when landing is not yet authorized, not a step of
+an already authorized landing — `./agent unsandboxed land` does its own preparation, integration and
+verification in one process. It brings a branch to ready:
 asserts the branch and a clean tree, integrates `main`, runs a verification lane only when no green
 record already covers this exact tree, drafts the merge message from the branch's own commits when
 none exists, and prints what remains. An existing merge message is kept; `--redraft` is the explicit
@@ -70,17 +71,17 @@ on its size.
 - **Propose it as needing the Developer's eyes first** when the change reaches what no gate proves — Studio's or
   an app's visible behavior, a language surface the Developer has not seen, native or device paths, or anything
   covered only by the lanes a person runs: `./dev studio-manual-checks`, a device install, and
-  everything named in `FULL_VERIFY_SKIPPED`. Say exactly what needs looking at and why.
-- A green `full-verify` is not by itself an answer: a change can pass every gate and still be one the Developer
+  everything named in `VERIFY_FULL_SKIPPED`. Say exactly what needs looking at and why.
+- A green `Verify` is not by itself an answer: a change can pass every gate and still be one the Developer
   wants to see first, because the thing it changed is the thing the Developer is designing. When the two pull
   against each other, say so in the proposal.
 
 ## Working inside a busy machine
 
-- Before starting a costly local lane, compare machine contention with CI queue pressure using
-  [hosted verification](references/hosted-verification.md). Prefer CI when the machine is heavily
-  contended and CI has little or no contention, provided its gates cover the change. Reuse current
-  green PR evidence at merge time; do not repeat covered verification through local `land`.
+- Landing is one route, spelled out at the top of
+  [hosted verification](references/hosted-verification.md): `open-pr --auto-merge` plus the local
+  host-only gates in parallel, GitHub merging on green `Verify`. Local checks beyond that are for
+  iteration and diagnosis; never repeat CI-covered verification locally.
 - Never background a gate and then poll for its output in a sleep loop: run it in the foreground with
   a timeout, since the gate is no faster for being backgrounded. **Reporting while a lane runs**,
   below, is the one exception — a lane too long to wait out, with the Developer waiting on it.
@@ -97,9 +98,12 @@ on its size.
 
 ## Hosted verification
 
-Read [hosted verification](references/hosted-verification.md) for contention detection, CI coverage,
-readiness without local broad verification, and merging an already verified pull request. It owns
-the choice between `open-pr` / `merge-pr` and local `land`, including evidence and authorization.
+Read [hosted verification](references/hosted-verification.md) for the landing route, contention,
+CI coverage, offline limits, and what `merge-pr` still does after GitHub has merged. Local `land`
+is for `dev/<name>` branches and for when GitHub is unavailable.
+
+A change meant to make CI faster carries its own `./agent ci-timings` before-and-after
+(`references/ci-speed.md`).
 
 ## Periodic performance proof
 
@@ -117,7 +121,8 @@ waiting on it and a silent agent is indistinguishable from a stuck one. Backgrou
 in which to say something; it does not buy the right to say nothing.
 
 - Decide by how long the run is, not by which is tidier: a gate finishing inside a minute runs in the
-  foreground with a timeout, while `verify-full` and `./agent unsandboxed land` run backgrounded with a report.
+  foreground with a timeout, while the landing route's host-only gates, `verify-full`, and
+  `./agent unsandboxed land` run backgrounded with a report.
 - Report about every 20 seconds from start to verdict, one line each: what finished since the last
   note, what is running now, and anything that has already failed. A note that the same node is still
   running is the report the Developer wants, because it dates the silence — do not wait to be asked.

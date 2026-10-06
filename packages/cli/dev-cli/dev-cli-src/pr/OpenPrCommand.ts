@@ -1,20 +1,28 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
-import { type GhRunner, gitHubPulls, isMerged, mustSucceed, type PullRequest, requirePrBranch } from './GitHubPulls'
+import { enableAutoMerge } from './AutoMerge'
+import { cancelVerifyRuns } from './CancelVerify'
+import { type GhRunner, gitHubPulls, isMerged, type PullRequest, requirePrBranch } from './GitHubPulls'
 import { PrChecksCommand, type PrChecksOptions } from './PrChecksCommand'
 import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMergeMessage'
 
 /*
  * `open-pr` is the one command that pushes a branch, opens (or reuses) its pull request against
  * `main`, and stays attached to watch the checks the push starts. Auto-merge stays off unless the
- * caller explicitly enables it. The reviewed
+ * caller explicitly enables it; with it on, the command is the whole landing route: it also starts
+ * the local complement lane (`verify-complement`, the host-only gates hosted Verify does not admit)
+ * in parallel with the hosted run, and the two halves conclude together through the `Verify (host)`
+ * status the lane posts on the head. A complement failure while Verify still runs cancels that run
+ * and turns auto-merge off, since the head will not land as it is; one after GitHub already merged
+ * names `land-fix` as the way the fix reaches `main`. The reviewed
  * merge message is the pull request's title and description and, verbatim, auto-merge's commit
  * headline and body, all rewritten from it on every run, so editing the message and running this
  * again is how a changed message reaches `main`. The headline and body are set explicitly because
  * GitHub's own squash message appends ` (#N)` to the title and wraps the description at 72 columns,
  * which breaks the repository's one-bullet-per-line format. Auto-merge waits for the required Verify
- * check; it is turned on only once checks exist on the pushed head, so Verify is already pending when
- * GitHub reads it. Verify runs on every push, so a reused pull request is watched the same way as a
- * new one. A branch that already merged is refused before any push, because pushing it again would
+ * check; it is turned on once any check exists on the pushed head, while `pr-checks` keeps following
+ * the Verify workflow itself through its literal successful check run. Verify runs on every push,
+ * so a reused pull request is watched the same way as a new one. A branch that already merged is
+ * refused before any push, because pushing it again would
  * open a second, empty pull request that auto-merge also lands.
  * By default, it refuses an already enabled pull request before pushing, checks that auto-merge is
  * still off before following CI, and leaves landing to a later decision.
@@ -48,6 +56,8 @@ export type OpenPrDependencies = {
   followChecks: (options: PrChecksOptions) => Promise<{ exitCode: number }>
   readText: (path: string) => Promise<string>
   run: OpenPrRunner
+  /** Runs the local complement lane to its verdict; the lane posts its own status on the head. */
+  runComplement: (root: string) => Promise<{ exitCode: number }>
   sleep: (ms: number) => Promise<void>
   writeLine: (line: string) => void
 }
@@ -57,6 +67,10 @@ const defaultDependencies: OpenPrDependencies = {
   followChecks: options => PrChecksCommand.run(options),
   readText: FS.readText,
   run: CLI.run,
+  runComplement: async root => {
+    const result = await CLI.run('just', { args: ['verify-complement'], cwd: root, stdio: 'inherit' })
+    return { exitCode: result.error === undefined && result.signal === null ? result.exitCode ?? 1 : 1 }
+  },
   sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
   writeLine: HCI.writeLine,
 }
@@ -65,6 +79,8 @@ const defaultDependencies: OpenPrDependencies = {
 export type OpenPrOptions = {
   /** Enable auto-merge explicitly; by default, observe CI with auto-merge required to stay off. */
   autoMerge?: boolean
+  /** With auto-merge, run the local complement lane beside hosted Verify; false leaves it to a separate run. */
+  complement?: boolean
   /** How often to poll the checks while they run; `pr-checks` sizes the default to GitHub's rate limit. */
   pollIntervalMs?: number
   /** Override the current repository root, principally for tests. */
@@ -123,6 +139,9 @@ export const OpenPrCommand = {
     } else {
       await enableAutoMerge(dependencies, root, github, pr.number, message, report)
     }
+    const complement = options.autoMerge === true && options.complement !== false
+      ? startComplement(dependencies, root, github, pr.number, headSha, report)
+      : undefined
     report(`Following CI checks for #${pr.number}...`)
     const checks = await dependencies.followChecks({
       expectedHead: headSha,
@@ -135,8 +154,15 @@ export const OpenPrCommand = {
     if (options.autoMerge !== true) {
       await requireAutoMergeOff(github, pr.number)
     }
-    const exitCode = checks.exitCode === 0 ? 0 : 1
-    if (exitCode === 0) {
+    const complementPassed = complement === undefined ? true : await complement
+    const exitCode = checks.exitCode === 0 && complementPassed ? 0 : 1
+    if (!complementPassed) {
+      report(
+        isMerged(await github.view(pr.number))
+          ? `NEXT  GitHub merged #${pr.number} before the complement failed: commit the fix on this branch and run land-fix.`
+          : `NEXT  Fix the failed gate on this branch and push it with open-pr --auto-merge again.`,
+      )
+    } else if (exitCode === 0) {
       if (options.autoMerge !== true) {
         report(`PASS  CI succeeded on ${headSha.slice(0, 8)} for #${pr.number}; auto-merge is off.`)
         report(`NEXT  After authorization, run merge-pr to confirm Verify and merge #${pr.number}.`)
@@ -150,6 +176,48 @@ export const OpenPrCommand = {
     return { exitCode, lines }
   },
 } as const
+
+/**
+ * The complement runs beside the hosted checks, not after them: the one is minutes on this machine
+ * and the other minutes on GitHub's, and a landing waits for the slower. It settles to whether it
+ * passed, and a failure acts at once rather than when the checks return — the hosted run is
+ * cancelled and auto-merge turned off while the pull request is still open, because a head one gate
+ * already failed must not land on the strength of the other half. Once GitHub has merged, there is
+ * nothing to hold back, and the caller names `land-fix`.
+ */
+function startComplement(
+  dependencies: OpenPrDependencies,
+  root: string,
+  github: GitHub,
+  prNumber: number,
+  headSha: string,
+  report: (line: string) => void,
+): Promise<boolean> {
+  report(`Starting the local complement lane beside Verify for ${headSha.slice(0, 8)}...`)
+  return dependencies.runComplement(root).then(async ({ exitCode }) => {
+    if (exitCode === 0) {
+      report(`PASS  The complement lane passed on ${headSha.slice(0, 8)}.`)
+      return true
+    }
+    report(`FAIL  The complement lane failed on ${headSha.slice(0, 8)} (exit ${exitCode}).`)
+    if (!isMerged(await github.view(prNumber))) {
+      await cancelVerifyRuns(github, headSha, report)
+      const disabled = await dependencies.run('gh', {
+        args: ['pr', 'merge', String(prNumber), '--disable-auto'],
+        cwd: root,
+        stdio: 'pipe',
+      })
+      if (disabled.exitCode !== 0) {
+        await github.disableHostAutoMerge(prNumber)
+      }
+      report(`PASS  Auto-merge is off for #${prNumber}; this head will not land.`)
+    }
+    return false
+  }, error => {
+    report(`FAIL  The complement lane could not run: ${Errors.messageOf(error)}`)
+    return false
+  })
+}
 
 async function requireCleanWorktree(dependencies: OpenPrDependencies, root: string): Promise<void> {
   const status = (await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout
@@ -234,71 +302,6 @@ async function requireAutoMergeOff(github: GitHub, prNumber: number): Promise<vo
         + ' Resolve its auto-merge setting before running CI without landing.',
     )
   }
-}
-
-/**
- * Auto-merge squash-merges with the headline and body given here once the required Verify check
- * passes. One already on with this message is left alone; one carrying an older message is turned
- * off and on again with the current one, since GitHub keeps the message it was enabled with. A
- * stale one that cannot be turned off is this command's failure, since it would merge the wrong
- * message; one that cannot be turned on is not, since `merge-pr` merges with the right one.
- */
-async function enableAutoMerge(
-  dependencies: OpenPrDependencies,
-  root: string,
-  github: GitHub,
-  prNumber: number,
-  message: ReviewedMergeMessage,
-  report: (line: string) => void,
-): Promise<void> {
-  const current = (await github.view(prNumber)).auto_merge
-  if (carriesMessage(current, message)) {
-    report(`PASS  Auto-merge is already on for #${prNumber} with the merge message.`)
-    return
-  }
-  const run = (args: readonly string[]) => dependencies.run('gh', { args, cwd: root, stdio: 'pipe' })
-  if (current) {
-    const disabled = await run(['pr', 'merge', String(prNumber), '--disable-auto'])
-    if (!succeeded(disabled)) {
-      mustSucceed(await github.disableHostAutoMerge(prNumber), dependencies.writeLine)
-    }
-  }
-  const stayOff = (said: string): void =>
-    report(
-      `NOTE  Auto-merge stays off for #${prNumber}${said === '' ? '' : ` (${said})`};`
-        + ' merge-pr merges it with the merge message once Verify passes.',
-    )
-  const enabled = await run(
-    ['pr', 'merge', String(prNumber), '--auto', '--squash', '--subject', message.title, '--body', message.body],
-  )
-  if (!succeeded(enabled)) {
-    // `gh pr merge` speaks GraphQL, which a cloud agent host's proxy refuses; its own REST route is
-    // the fallback there, and is absent everywhere else.
-    const viaHost = await github.enableHostAutoMerge(prNumber, message)
-    if (!succeeded(viaHost)) {
-      stayOff(`gh said: ${firstLine(enabled)}; the host route said: ${firstLine(viaHost)}`)
-      return
-    }
-    // Read back what the host route stored, since a squash with any other message must not land.
-    if (!carriesMessage((await github.view(prNumber)).auto_merge, message)) {
-      mustSucceed(await github.disableHostAutoMerge(prNumber), dependencies.writeLine)
-      stayOff('the host route did not keep the merge message')
-      return
-    }
-  }
-  report(`PASS  Auto-merge is on: GitHub squash-merges #${prNumber} with the merge message once Verify passes.`)
-}
-
-function carriesMessage(autoMerge: PullRequest['auto_merge'], message: ReviewedMergeMessage): boolean {
-  return autoMerge !== null && autoMerge.commit_title === message.title && autoMerge.commit_message === message.body
-}
-
-function succeeded(result: CLI.CommandResult): boolean {
-  return result.exitCode === 0 && result.error === undefined && result.signal === null
-}
-
-function firstLine(result: CLI.CommandResult): string {
-  return (result.stderr || result.stdout).trim().split('\n')[0] ?? ''
 }
 
 /** A branch lands once; pushing a merged one again would open an empty duplicate. */

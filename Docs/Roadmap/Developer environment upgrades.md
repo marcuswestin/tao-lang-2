@@ -78,6 +78,7 @@ change that addressed it.
 - [DEVENV-A-HIDDEN-COMMAND-REAPPEARED-IN-ONE-BATCHED-WORDFLOWER-RUN — A hidden command reappeared in one batched WordFlower run](<Developer environment upgrades/DEVENV-A-HIDDEN-COMMAND-REAPPEARED-IN-ONE-BATCHED-WORDFLOWER-RUN.md>) — Incoming
 - [DEVENV-A-KILL-DEADLINE-NO-LONGER-CATCHES-A-SLOW-REGRESSION — A kill deadline no longer catches a slow regression](<Developer environment upgrades/DEVENV-A-KILL-DEADLINE-NO-LONGER-CATCHES-A-SLOW-REGRESSION.md>) — Candidate
 - [DEVENV-A-MERGE-OF-MAIN-LEAVES-THE-CODEX-CONFIG-MISSING-UNTIL-SETUP-RUNS — A merge of main leaves the Codex config missing until setup runs](<Developer environment upgrades/DEVENV-A-MERGE-OF-MAIN-LEAVES-THE-CODEX-CONFIG-MISSING-UNTIL-SETUP-RUNS.md>) — In progress
+- [DEVENV-A-WORKTREE-INSIDE-THE-PRIMARY-CHECKOUT-FAILS-DOCTOR-AND-CANNOT-MOVE — A worktree inside the primary checkout fails doctor and cannot be moved](<Developer environment upgrades/DEVENV-A-WORKTREE-INSIDE-THE-PRIMARY-CHECKOUT-FAILS-DOCTOR-AND-CANNOT-MOVE.md>) — Candidate
 - [DEVENV-ACTIVE-NETWORK-POLICY-KEEPS-OLD-DOMAINS — Active network policy keeps old domains](<Developer environment upgrades/DEVENV-ACTIVE-NETWORK-POLICY-KEEPS-OLD-DOMAINS.md>) — Blocked
 - [DEVENV-ADMITTED-SEAT-HELD-BY-REGISTRATION-NOT-DEMAND — An admitted seat is held by registration, not by demand](<Developer environment upgrades/DEVENV-ADMITTED-SEAT-HELD-BY-REGISTRATION-NOT-DEMAND.md>) — Candidate
 - [DEVENV-ANDROID-EMULATOR-LEASE-RELEASE-PRECEDES-EXIT — Android emulator lease release precedes confirmed exit](<Developer environment upgrades/DEVENV-ANDROID-EMULATOR-LEASE-RELEASE-PRECEDES-EXIT.md>) — Candidate
@@ -100,6 +101,7 @@ change that addressed it.
 - [DEVENV-HOOK-REVIEW-IGNORES-DESCRIPTIVE-NAMES — Hook review ignores descriptive names](<Developer environment upgrades/DEVENV-HOOK-REVIEW-IGNORES-DESCRIPTIVE-NAMES.md>) — Blocked
 - [DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS — iOS builds lack CocoaPods metadata access](<Developer environment upgrades/DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS.md>) — In progress
 - [DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED — A landing tests a Codex config it never regenerated](<Developer environment upgrades/DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED.md>) — Candidate
+- [DEVENV-LAZY-TEST-REGISTRATION-FAILS-CI-IMPORT — Lazy test registration fails CI import](<Developer environment upgrades/DEVENV-LAZY-TEST-REGISTRATION-FAILS-CI-IMPORT.md>) — In progress
 - [DEVENV-LOCAL-HOST-TESTS-FAIL-PORT-ZERO — Local host tests fail while binding port zero](<Developer environment upgrades/DEVENV-LOCAL-HOST-TESTS-FAIL-PORT-ZERO.md>) — Candidate
 - [DEVENV-MACOS-STARTUP-AFTER-CACHE-CLEANUP-NEEDS-VERIFICATION — macOS startup after cache cleanup needs verification](<Developer environment upgrades/DEVENV-MACOS-STARTUP-AFTER-CACHE-CLEANUP-NEEDS-VERIFICATION.md>) — Planned
 - [DEVENV-MANAGED-COMMIT-DENIES-WORKTREE-GIT-METADATA — Managed commit denies worktree Git metadata](<Developer environment upgrades/DEVENV-MANAGED-COMMIT-DENIES-WORKTREE-GIT-METADATA.md>) — Candidate
@@ -112,16 +114,23 @@ change that addressed it.
 - [DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME — Native session timestamps use monotonic time](<Developer environment upgrades/DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME.md>) — Candidate
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
 - [DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL — Output hook requires an unavailable read tool](<Developer environment upgrades/DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL.md>) — Candidate
+- [DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT — Following checks spends GitHub's anonymous API limit](<Developer environment upgrades/DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT.md>) — Candidate
 - [DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES — Profile lacks direnv while doctor passes](<Developer environment upgrades/DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES.md>) — Candidate
+- [DEVENV-PROJECT-TOOLING-REFRESH-AND-WATCH-TESTS-TIME-OUT-UNDER-BROAD-LANES — Project-tooling refresh and watch tests time out under broad lanes](<Developer environment upgrades/DEVENV-PROJECT-TOOLING-REFRESH-AND-WATCH-TESTS-TIME-OUT-UNDER-BROAD-LANES.md>) — Candidate
 - [DEVENV-QUEUED-NODE-FIRST-WAIT-CHARGED-TO-LANE-NOT-MACHINE — A queued node's first wait is charged to the lane, not the machine](<Developer environment upgrades/DEVENV-QUEUED-NODE-FIRST-WAIT-CHARGED-TO-LANE-NOT-MACHINE.md>) — Candidate
 - [DEVENV-QUIET-UI-HOST-ACCEPTANCE — Quiet UI host acceptance](<Developer environment upgrades/DEVENV-QUIET-UI-HOST-ACCEPTANCE.md>) — Candidate
 - [DEVENV-RELEASE-ACCEPTANCE-DIRECTORY-OPERATIONS-FAIL-IN-MANAGED-SHELL — Release acceptance directory operations fail in the managed shell](<Developer environment upgrades/DEVENV-RELEASE-ACCEPTANCE-DIRECTORY-OPERATIONS-FAIL-IN-MANAGED-SHELL.md>) — Candidate
+- [DEVENV-RESOURCES-REGISTER-DIRECTORY-PRINTS-THE-WHOLE-INVENTORY — Registering a directory prints the whole resource inventory](<Developer environment upgrades/DEVENV-RESOURCES-REGISTER-DIRECTORY-PRINTS-THE-WHOLE-INVENTORY.md>) — Candidate
 - [DEVENV-RUNTIME-JOURNEY-OBSERVATION-TEST-TIMES-OUT — Runtime journey observation test can time out in a broad lane](<Developer environment upgrades/DEVENV-RUNTIME-JOURNEY-OBSERVATION-TEST-TIMES-OUT.md>) — Candidate
 - [DEVENV-SANDBOXED-GIT-XCRUN-CACHE-WARNING-FAILS-STDERR-ASSERTIONS — Sandboxed git's xcrun cache warning fails stderr assertions](<Developer environment upgrades/DEVENV-SANDBOXED-GIT-XCRUN-CACHE-WARNING-FAILS-STDERR-ASSERTIONS.md>) — Candidate
+- [DEVENV-SANDBOXED-LANES-CANNOT-REMOVE-ENV-FIXTURES — Sandboxed lanes cannot remove `.env` fixtures](<Developer environment upgrades/DEVENV-SANDBOXED-LANES-CANNOT-REMOVE-ENV-FIXTURES.md>) — Candidate
+- [DEVENV-SANDBOXED-VERIFY-CHANGED-CANNOT-REMOVE-ENV-FIXTURES — Sandboxed verify-changed cannot remove `.env` fixtures](<Developer environment upgrades/DEVENV-SANDBOXED-VERIFY-CHANGED-CANNOT-REMOVE-ENV-FIXTURES.md>) — Candidate
 - [DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS — Sandboxed verification fails the dev-cli shell tests](<Developer environment upgrades/DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS.md>) — Candidate
 - [DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS — Secret materialization is missing from agent commands](<Developer environment upgrades/DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS.md>) — Candidate
 - [DEVENV-SETUP-SUCCEEDS-WHEN-RULESYNC-REJECTS-HOOKS — Setup succeeds when rulesync rejects the hooks file](<Developer environment upgrades/DEVENV-SETUP-SUCCEEDS-WHEN-RULESYNC-REJECTS-HOOKS.md>) — Candidate
+- [DEVENV-SIX-HOST-ONLY-GATES-HAVE-NO-UNSANDBOXED-SHAPE — Six host-only gates have no unsandboxed shape](<Developer environment upgrades/DEVENV-SIX-HOST-ONLY-GATES-HAVE-NO-UNSANDBOXED-SHAPE.md>) — Candidate
 - [DEVENV-STRANDED-DEVELOPMENT-RESOURCE-DISCOVERY — Stranded development resource discovery](<Developer environment upgrades/DEVENV-STRANDED-DEVELOPMENT-RESOURCE-DISCOVERY.md>) — In progress
+- [DEVENV-STUDIO-AGENT-BROWSER-GATE-TIMES-OUT-UNDER-THE-COMPLEMENT-LANE — Studio agent browser gate times out under the complement lane](<Developer environment upgrades/DEVENV-STUDIO-AGENT-BROWSER-GATE-TIMES-OUT-UNDER-THE-COMPLEMENT-LANE.md>) — Candidate
 - [DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT — Studio legacy-lock test is intermittent](<Developer environment upgrades/DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT.md>) — Candidate
 - [DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD — The Studio real-app proof fails intermittently under load](<Developer environment upgrades/DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD.md>) — In progress
 - [DEVENV-STUDIO-SMOKE-GENERATED-SOURCE-FRESHNESS-RACE — Studio smoke generated-source freshness race](<Developer environment upgrades/DEVENV-STUDIO-SMOKE-GENERATED-SOURCE-FRESHNESS-RACE.md>) — Candidate
@@ -135,4 +144,6 @@ change that addressed it.
 - [DEVENV-TEST-FILE-REFUSES-STANDALONE-APP-TESTS — Focused test-file refuses standalone app tests](<Developer environment upgrades/DEVENV-TEST-FILE-REFUSES-STANDALONE-APP-TESTS.md>) — Candidate
 - [DEVENV-TEST-FILE-TAKES-NO-TAO-FILE-OR-TEST-NAME — `test-file` takes no Tao test file or test name](<Developer environment upgrades/DEVENV-TEST-FILE-TAKES-NO-TAO-FILE-OR-TEST-NAME.md>) — Candidate
 - [DEVENV-TEST-FILE-WRAPPER-REMAINS-AFTER-FAILED-SUITE — Test-file wrapper remains after a failed suite reports](<Developer environment upgrades/DEVENV-TEST-FILE-WRAPPER-REMAINS-AFTER-FAILED-SUITE.md>) — Candidate
+- [DEVENV-TEST-RUNS-CANNOT-BE-CPU-PROFILED — Test runs cannot be CPU-profiled](<Developer environment upgrades/DEVENV-TEST-RUNS-CANNOT-BE-CPU-PROFILED.md>) — Candidate
 - [DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS — Visual review scenario readiness timeouts](<Developer environment upgrades/DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS.md>) — Candidate
+- [DEVENV-WATCHOS-SWIFT-PROBE-FAILS-UNDER-BROAD-LANES — watchOS Swift probe fails under broad lanes](<Developer environment upgrades/DEVENV-WATCHOS-SWIFT-PROBE-FAILS-UNDER-BROAD-LANES.md>) — Candidate

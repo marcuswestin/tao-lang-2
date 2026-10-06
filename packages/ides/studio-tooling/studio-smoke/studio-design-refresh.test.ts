@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Platform, ProjectIdentity, Repo, Time } from '@shared'
+import { Errors, FS, HCI, Platform, ProjectIdentity, Repo, Time, VerificationTimeouts } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
@@ -151,10 +151,14 @@ for (
         Expect(urls.length).toBe(configuration.focused ? 2 : 1)
         for (const [index, url] of urls.entries()) {
           if (!configuration.focused) {
-            await browser.waitForInFrame(url, 'document.body.textContent.includes("Next")', { timeoutMs: 60_000 })
+            await browser.waitForInFrame(url, 'document.body.textContent.includes("Next")', {
+              timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity,
+            })
             await clickText(browser, url, 'Next')
           }
-          await browser.waitForInFrame(url, 'document.body.textContent.includes("DesignProbe")', { timeoutMs: 60_000 })
+          await browser.waitForInFrame(url, 'document.body.textContent.includes("DesignProbe")', {
+            timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity,
+          })
           Expect(await browser.evaluateInFrame(url, styleExpression)).toEqual({
             color: 'rgb(34, 68, 102)',
             fontSize: '16px',
@@ -194,7 +198,7 @@ for (
                 url,
                 `window.__taoDesignProbe.samples[${JSON.stringify(expected.key)}]?.paintAt !== undefined`,
                 { world: 'page' },
-              ), { intervalMs: 50, timeoutMs: 30_000 })
+              ), { intervalMs: 50, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
             Expect(painted).toBe(true)
             samples.push(
               await browser.evaluateInFrame(url, `window.__taoDesignProbe.samples[${JSON.stringify(expected.key)}]`, {
@@ -251,7 +255,7 @@ for (
                 url,
                 'window.__taoDesignProbe.samples.coordinated?.paintAt !== undefined',
                 { world: 'page' },
-              ), { intervalMs: 50, timeoutMs: 30_000 }),
+              ), { intervalMs: 50, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity }),
           ).toBe(true)
           if (configuration.focused) {
             Expect(await browser.evaluateInFrame(url, `document.body.textContent.includes('Count: ${index + 1}')`))

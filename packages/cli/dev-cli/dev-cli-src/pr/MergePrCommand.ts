@@ -1,40 +1,33 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
 import { archiveStem } from '@verification/MergeWithMain'
+import { enableAutoMerge } from './AutoMerge'
 import { gitHubPulls, isMerged, mustSucceed, type PullRequest, requirePrBranch } from './GitHubPulls'
-import { PrChecksCommand, type PrChecksOptions } from './PrChecksCommand'
 import { reviewedMergeMessage } from './ReviewedMergeMessage'
 
 /*
- * `merge-pr` merges this branch's pull request on GitHub once hosted CI has proved it. It follows
- * every check on the pushed head to its conclusion, requires the `Verify` verdict among them, then
- * squash-merges with the reviewed merge message, pinned to the head it watched so a later push
- * cannot slip in unproved. `open-pr` leaves auto-merge off unless `--auto-merge` is requested, in
- * which case GitHub may merge first; a pull request already merged at the watched head is this
- * command's success too. Afterwards it archives the head at `merged/<name>`, exactly where `land`
- * archives a feature branch, and only then deletes the remote branch, so `landed` and `reclaim` read
- * a merged pull request the same way they read a landing. The Verify workflow marks a draft ready once
- * Verify passes; a draft still waiting when the checks end (the workflow lacked its token) is marked
- * ready here, since GitHub refuses to merge a draft. GitHub may already have deleted the branch on
- * merge, which leaves nothing to delete.
+ * `merge-pr` finishes this branch's landing on GitHub from wherever it stands, without waiting on
+ * anything. It confirms the pull request's head is this worktree's commit, then takes one of three
+ * paths. A pull request already merged at that head is archived at `merged/<name>`, exactly where
+ * `land` archives a feature branch, and its remote branch deleted, so `landed` and `reclaim` read a
+ * merged pull request the same way they read a landing; GitHub may already have deleted the branch
+ * on merge, which leaves nothing to delete. One whose `Verify` check is green and whose auto-merge
+ * is off is squash-merged now with the reviewed merge message, pinned to that head so a later push
+ * cannot slip in unproved, then archived the same way. Any other pull request has auto-merge turned
+ * on for that head, so GitHub squash-merges it the moment `Verify` is green; run `merge-pr` again
+ * after the merge to archive it. A draft is marked ready first, since GitHub refuses to merge one.
  *
- * It is the hosted alternative to `land`, which verifies on this machine under the landing lock;
- * neither runs the host-only lanes the other skips, so choosing between them is the
- * `verification-lanes` skill's call, not this command's. GitHub never merges on its own: nothing here
- * enables auto-merge; `open-pr` only does so when explicitly requested.
- *
- * Like `open-pr`, every `git` and `gh` call goes through the injected `run` seam so a test can script
- * every answer without a real remote, and every GitHub read and the merge itself go through REST
- * (`GitHubPulls`), so it works where a host's proxy refuses `gh pr`'s GraphQL.
+ * Every `git` and `gh` call goes through the injected `run` seam so a test can script every answer
+ * without a real remote, and every GitHub read and the merge itself go through REST (`GitHubPulls`),
+ * so it works where a host's proxy refuses `gh pr`'s GraphQL.
  */
 
 const REMOTE = 'origin'
 /** The workflow job whose success is the hosted verdict; the partitions report into it. */
 const VERDICT_CHECK = 'Verify'
 
-/** MergePrDependencies isolates process, filesystem, check-following, and output effects for testing. */
+/** MergePrDependencies isolates process, filesystem, and output effects for testing. */
 export type MergePrDependencies = {
   exists: (path: string) => Promise<boolean>
-  followChecks: (options: PrChecksOptions) => Promise<{ exitCode: number }>
   readText: (path: string) => Promise<string>
   run: (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
   writeLine: (line: string) => void
@@ -42,7 +35,6 @@ export type MergePrDependencies = {
 
 const defaultDependencies: MergePrDependencies = {
   exists: FS.exists,
-  followChecks: options => PrChecksCommand.run(options),
   readText: FS.readText,
   run: CLI.run,
   writeLine: HCI.writeLine,
@@ -50,8 +42,6 @@ const defaultDependencies: MergePrDependencies = {
 
 /** MergePrOptions is the flags-ready input accepted by the development CLI command. */
 export type MergePrOptions = {
-  /** How often to poll the checks while they run. */
-  intervalMs?: number
   repositoryRoot?: string
 }
 
@@ -91,32 +81,24 @@ export const MergePrCommand = {
       )
     }
 
-    // Already merged at this head means auto-merge got there first, behind the required Verify check.
     let after = before
-    if (before.state === 'open') {
-      const checks = await dependencies.followChecks({
-        intervalMs: options.intervalMs,
-        pr: before.number,
-        repositoryRoot: root,
-        wait: true,
-      })
-      if (checks.exitCode !== 0) {
-        report(`FAIL  #${before.number} is not merged: its checks did not all pass.`)
-        return { exitCode: 1, lines }
-      }
-      after = await github.view(before.number)
-      const verdict = after.head.sha === local ? await github.checkConclusion(local, VERDICT_CHECK) : undefined
-      if (after.head.sha !== local || verdict !== 'success') {
+    if (!isMerged(before)) {
+      const verdict = await github.checkConclusion(local, VERDICT_CHECK)
+      if (verdict !== 'success' || before.auto_merge !== null) {
         report(
-          after.head.sha !== local
-            ? `FAIL  #${after.number}'s head moved to ${after.head.sha.slice(0, 8)} while its checks ran; not merged.`
-            : `FAIL  #${after.number} has no successful ${VERDICT_CHECK} check on ${local.slice(0, 8)}; not merged.`,
+          verdict === 'success'
+            ? `WAIT  ${VERDICT_CHECK} is green on ${
+              local.slice(0, 8)
+            } and auto-merge is on; GitHub is merging #${before.number}.`
+            : `WAIT  ${VERDICT_CHECK} is ${verdict ?? 'still running'} on ${
+              local.slice(0, 8)
+            }; #${before.number} is not merged.`,
         )
-        return { exitCode: 1, lines }
+        await enableAutoMerge(dependencies, root, github, before.number, message, report, local)
+        report(`NEXT  Run merge-pr again once GitHub has merged #${before.number}, to archive it.`)
+        return { exitCode: 0, lines }
       }
-      if (!isMerged(after)) {
-        after = await mergeUnlessAutoMerged(dependencies, root, github, after, local, message)
-      }
+      after = await mergeUnlessAutoMerged(dependencies, root, github, before, local, message)
       if (!isMerged(after)) {
         report(`FAIL  #${after.number} is ${after.state} after the merge; not archived.`)
         return { exitCode: 1, lines }
@@ -139,10 +121,10 @@ export const MergePrCommand = {
 } as const
 
 /**
- * Auto-merge fires within seconds of Verify passing, so this merge can lose that race; GitHub then
- * refuses it as already merged, and the pull request's state, not the refusal, is the answer. A draft
- * is marked ready first, since GitHub refuses to merge one; REST has no endpoint for that, so it is
- * the one `gh pr` call here.
+ * Auto-merge turned on elsewhere fires within seconds of Verify passing, so this merge can lose
+ * that race; GitHub then refuses it as already merged, and the pull request's state, not the
+ * refusal, is the answer. A draft is marked ready first, since GitHub refuses to merge one; REST has
+ * no endpoint for that, so it is the one `gh pr` call here.
  */
 async function mergeUnlessAutoMerged(
   dependencies: MergePrDependencies,

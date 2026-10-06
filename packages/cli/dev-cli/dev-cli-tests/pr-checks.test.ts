@@ -14,6 +14,7 @@ const SHA = 'abcdef1234567890'
 const PR = { head: { ref: 'feat/example', sha: SHA }, html_url: 'https://github.com/owner/repo/pull/3', number: 3 }
 
 type Run = { conclusion: string | null; id: number; name: string; status: string }
+type WorkflowRun = { conclusion: string | null; head_sha: string; html_url: string; status: string }
 
 function run(name: string, status: string, conclusion: string | null = null, id = 1): Run {
   return { conclusion, id, name, status }
@@ -25,13 +26,16 @@ function fakeDependencies(script: {
   checkRuns: Run[][]
   env?: Readonly<Record<string, string | undefined>>
   mergeableState?: string
+  pullRequest?: Record<string, unknown>
   statuses?: { context: string; state: string }[]
+  workflowRuns?: WorkflowRun[][]
 }) {
   const lines: string[] = []
   const requested: string[] = []
   const requestHeaders: Record<string, string>[] = []
   const commandCalls: { command: string; spec: CLI.CommandSpec }[] = []
   let polls = 0
+  let workflowPolls = 0
   let clock = 0
   const respond = (body: unknown, status = 200): Response =>
     new Response(JSON.stringify(body), { headers: { etag: `"${polls}"` }, status })
@@ -45,12 +49,17 @@ function fakeDependencies(script: {
         return respond([PR])
       }
       if (path === `/repos/${SLUG}/pulls/3`) {
-        return respond({ ...PR, mergeable_state: script.mergeableState ?? 'clean' })
+        return respond({ ...PR, mergeable_state: script.mergeableState ?? 'clean', ...script.pullRequest })
       }
       if (path.startsWith(`/repos/${SLUG}/commits/${SHA}/check-runs`)) {
         const runs = script.checkRuns[Math.min(polls, script.checkRuns.length - 1)]!
         polls += 1
         return respond({ check_runs: runs.map(each => ({ ...each, html_url: `https://ci/${each.id}` })) })
+      }
+      if (path.startsWith(`/repos/${SLUG}/actions/workflows/verify.yml/runs`)) {
+        const runs = script.workflowRuns?.[Math.min(workflowPolls, (script.workflowRuns?.length ?? 1) - 1)] ?? []
+        workflowPolls += 1
+        return respond({ workflow_runs: runs })
       }
       if (path === `/repos/${SLUG}/commits/${SHA}/status`) {
         return respond({ statuses: (script.statuses ?? []).map(each => ({ ...each, target_url: null })) })
@@ -88,7 +97,15 @@ function fakeDependencies(script: {
     },
     writeLine: line => lines.push(line),
   }
-  return { commandCalls, dependencies, lines, requested, requestHeaders }
+  return {
+    commandCalls,
+    dependencies,
+    elapsedMs: () => clock,
+    lines,
+    pollCount: () => polls,
+    requested,
+    requestHeaders,
+  }
 }
 
 Describe('pr-checks', () => {
@@ -115,10 +132,30 @@ Describe('pr-checks', () => {
       'Bearer fixture-login-token',
       'Bearer fixture-login-token',
       'Bearer fixture-login-token',
+      'Bearer fixture-login-token',
+      'Bearer fixture-login-token',
     ])
     Expect(fake.dependencies.env).toBe(env)
     Expect(env).toEqual({})
     Expect(result.lines.some(line => line.includes('fixture-login-token'))).toBe(false)
+  })
+
+  Test('reports where the pull request stands on the landing route when GitHub says', async () => {
+    const line = async (pullRequest: Record<string, unknown>): Promise<string | undefined> => {
+      const fake = fakeDependencies({ checkRuns: [[run('Verify', 'completed', 'success')]], pullRequest })
+      await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT }, fake.dependencies)
+      return fake.lines[1]
+    }
+    Expect(await line({ auto_merge: null, merged_at: null })).toBe(
+      'NOTE  Auto-merge is off for #3; open-pr --auto-merge or merge-pr turns it on.',
+    )
+    Expect(await line({ auto_merge: { merge_method: 'squash' }, merged_at: null })).toBe(
+      'Auto-merge is on for #3: GitHub squash-merges the moment Verify is green on this head.',
+    )
+    Expect(await line({ auto_merge: null, merged_at: '2026-10-05T10:00:00Z' })).toBe(
+      'NOTE  GitHub merged #3 at 2026-10-05T10:00:00Z; the checks below are its record.',
+    )
+    Expect((await line({}))?.startsWith('NOTE  ') ?? false).toBe(false)
   })
 
   Test('prefers nonempty environment tokens without reading the CLI login', async () => {
@@ -136,8 +173,18 @@ Describe('pr-checks', () => {
       Expect(fake.commandCalls.some(call => call.command === 'gh')).toBe(false)
       Expect(fake.requestHeaders.map(headers => headers['Authorization'])).toEqual(
         env.GH_TOKEN === ''
-          ? ['Bearer fixture-github-token', 'Bearer fixture-github-token', 'Bearer fixture-github-token']
-          : ['Bearer fixture-gh-token', 'Bearer fixture-gh-token', 'Bearer fixture-gh-token'],
+          ? [
+            'Bearer fixture-github-token',
+            'Bearer fixture-github-token',
+            'Bearer fixture-github-token',
+            'Bearer fixture-github-token',
+          ]
+          : [
+            'Bearer fixture-gh-token',
+            'Bearer fixture-gh-token',
+            'Bearer fixture-gh-token',
+            'Bearer fixture-gh-token',
+          ],
       )
     }
   })
@@ -168,7 +215,12 @@ Describe('pr-checks', () => {
 
     Expect(result.exitCode).toBe(0)
     Expect(fake.commandCalls.some(call => call.command === 'gh')).toBe(false)
-    Expect(fake.requestHeaders.map(headers => headers['Authorization'])).toEqual([undefined, undefined, undefined])
+    Expect(fake.requestHeaders.map(headers => headers['Authorization'])).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ])
   })
 
   Test('redacts a credential subprocess rejection before making API requests', async () => {
@@ -198,8 +250,10 @@ Describe('pr-checks', () => {
     Expect(fake.requested).toEqual([
       '/repos/owner/repo/pulls/3',
       '/repos/owner/repo/commits/abcdef1234567890/check-runs?per_page=100',
+      '/repos/owner/repo/actions/workflows/verify.yml/runs?head_sha=abcdef1234567890&per_page=100',
       '/repos/owner/repo/commits/abcdef1234567890/status',
       '/repos/owner/repo/commits/abcdef1234567890/check-runs?per_page=100',
+      '/repos/owner/repo/actions/workflows/verify.yml/runs?head_sha=abcdef1234567890&per_page=100',
       '/repos/owner/repo/commits/abcdef1234567890/status',
     ])
     Expect(fake.lines.at(-1)).toBe('PASS  All 1 check(s) succeeded.')
@@ -223,9 +277,26 @@ Describe('pr-checks', () => {
   Test('follows running checks to a pass, announcing each as it concludes', async () => {
     const fake = fakeDependencies({
       checkRuns: [
-        [run('Partition 1/2', 'in_progress', null, 1), run('Partition 2/2', 'queued', null, 2)],
-        [run('Partition 1/2', 'completed', 'success', 1), run('Partition 2/2', 'in_progress', null, 2)],
-        [run('Partition 1/2', 'completed', 'success', 1), run('Partition 2/2', 'completed', 'success', 2)],
+        [
+          run('Verify', 'in_progress', null, 3),
+          run('Partition 1/2', 'in_progress', null, 1),
+          run('Partition 2/2', 'queued', null, 2),
+        ],
+        [
+          run('Verify', 'in_progress', null, 3),
+          run('Partition 1/2', 'completed', 'success', 1),
+          run('Partition 2/2', 'in_progress', null, 2),
+        ],
+        [
+          run('Verify', 'completed', 'success', 3),
+          run('Partition 1/2', 'completed', 'success', 1),
+          run('Partition 2/2', 'completed', 'success', 2),
+        ],
+      ],
+      workflowRuns: [
+        [{ conclusion: null, head_sha: SHA, html_url: 'https://ci/workflow/1', status: 'in_progress' }],
+        [{ conclusion: null, head_sha: SHA, html_url: 'https://ci/workflow/1', status: 'in_progress' }],
+        [{ conclusion: 'success', head_sha: SHA, html_url: 'https://ci/workflow/1', status: 'completed' }],
       ],
       statuses: [{ context: 'Contributor agreement', state: 'success' }],
     })
@@ -235,7 +306,7 @@ Describe('pr-checks', () => {
       'PASS  Partition 1/2',
       'PASS  Partition 2/2',
     ])
-    Expect(fake.lines.at(-1)).toBe('PASS  All 3 check(s) succeeded.')
+    Expect(fake.lines.at(-1)).toBe('PASS  All 4 check(s) succeeded.')
   })
 
   Test('reports a failure with its informative annotations only', async () => {
@@ -247,7 +318,11 @@ Describe('pr-checks', () => {
           { annotation_level: 'warning', message: 'Node.js 20 is deprecated' },
         ],
       },
-      checkRuns: [[run('Partition 1/2', 'completed', 'success', 1), run('Partition 2/2', 'completed', 'failure', 2)]],
+      checkRuns: [[
+        run('Verify', 'completed', 'success', 3),
+        run('Partition 1/2', 'completed', 'success', 1),
+        run('Partition 2/2', 'completed', 'failure', 2),
+      ]],
     })
     const result = await PrChecksCommand.run({ repositoryRoot: ROOT }, fake.dependencies)
     Expect(result.exitCode).toBe(1)
@@ -257,10 +332,127 @@ Describe('pr-checks', () => {
   })
 
   Test('without --wait, reports running checks once and exits 2', async () => {
-    const fake = fakeDependencies({ checkRuns: [[run('Partition 1/1', 'in_progress')]] })
+    const fake = fakeDependencies({ checkRuns: [[run('Verify', 'in_progress'), run('Partition 1/1', 'in_progress')]] })
     const result = await PrChecksCommand.run({ repositoryRoot: ROOT }, fake.dependencies)
     Expect(result.exitCode).toBe(2)
-    Expect(fake.lines.at(-1)).toBe('WAIT  1 check(s) still running: Partition 1/1')
+    Expect(fake.lines.at(-1)).toBe('WAIT  Verify has not completed successfully on this head yet.')
+  })
+
+  Test('does not treat a green contributor agreement as Verify while its workflow has no jobs', async () => {
+    const fake = fakeDependencies({
+      checkRuns: [[]],
+      statuses: [{ context: 'Contributor agreement', state: 'success' }],
+      workflowRuns: [[{ conclusion: null, head_sha: SHA, html_url: 'https://ci/workflow/queued', status: 'queued' }]],
+    })
+
+    const result = await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT }, fake.dependencies)
+
+    Expect(result.exitCode).toBe(2)
+    Expect(result.lines).toContain('PASS  Contributor agreement')
+    Expect(result.lines).toContain('WAIT  Verify workflow is queued: https://ci/workflow/queued')
+  })
+
+  Test('waits past the no-check window while the current-head Verify workflow is queued', async () => {
+    const queued = { conclusion: null, head_sha: SHA, html_url: 'https://ci/workflow/queued', status: 'queued' }
+    const running = { conclusion: null, head_sha: SHA, html_url: 'https://ci/workflow/running', status: 'in_progress' }
+    const fake = fakeDependencies({
+      checkRuns: [[], [], [], [], [run('Verify', 'in_progress')], [run('Verify', 'completed', 'success')]],
+      statuses: [{ context: 'Contributor agreement', state: 'success' }],
+      workflowRuns: [queued, queued, queued, queued, running, {
+        conclusion: 'success',
+        head_sha: SHA,
+        html_url: 'https://ci/workflow/done',
+        status: 'completed',
+      }].map(each => [each]),
+    })
+
+    const result = await PrChecksCommand.run(
+      { intervalMs: 60_000, pr: 3, repositoryRoot: ROOT, wait: true },
+      fake.dependencies,
+    )
+
+    Expect(result.exitCode).toBe(0)
+    Expect(fake.pollCount()).toBe(6)
+    Expect(fake.elapsedMs()).toBeGreaterThan(180_000)
+    Expect(fake.lines.some(line => line.includes('No checks on'))).toBe(false)
+    Expect(fake.lines.at(-1)).toBe('PASS  All 2 check(s) succeeded.')
+  })
+
+  Test('keeps a missing Verify verdict pending for a one-shot probe and rejects a status named Verify', async () => {
+    const fake = fakeDependencies({
+      checkRuns: [[]],
+      statuses: [{ context: 'Verify', state: 'success' }],
+    })
+
+    const result = await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT }, fake.dependencies)
+
+    Expect(result.exitCode).toBe(2)
+    Expect(result.lines.at(-1)).toBe('WAIT  Verify has not completed successfully on this head yet.')
+  })
+
+  Test('requires the Verify check run conclusion to be literal success', async () => {
+    for (const conclusion of ['skipped', 'neutral', 'cancelled']) {
+      const fake = fakeDependencies({ checkRuns: [[run('Verify', 'completed', conclusion)]] })
+      const result = await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT }, fake.dependencies)
+      Expect(result.exitCode).toBe(1)
+      Expect(result.lines).toContain('FAIL  Verify: https://ci/1')
+    }
+  })
+
+  Test('drains pending checks before reporting a failed Verify annotation', async () => {
+    const fake = fakeDependencies({
+      annotations: { 3: [{ annotation_level: 'failure', message: 'the aggregate gate failed', title: 'Verify' }] },
+      checkRuns: [
+        [run('Verify', 'completed', 'failure', 3), run('Partition 1/2', 'in_progress', null, 1)],
+        [run('Verify', 'completed', 'failure', 3), run('Partition 1/2', 'completed', 'success', 1)],
+      ],
+      workflowRuns: [
+        [{ conclusion: null, head_sha: SHA, html_url: 'https://ci/workflow/1', status: 'in_progress' }],
+        [{ conclusion: 'failure', head_sha: SHA, html_url: 'https://ci/workflow/1', status: 'completed' }],
+      ],
+    })
+
+    const result = await PrChecksCommand.run(
+      { intervalMs: 1, pr: 3, repositoryRoot: ROOT, wait: true },
+      fake.dependencies,
+    )
+
+    Expect(result.exitCode).toBe(1)
+    Expect(fake.pollCount()).toBe(2)
+    Expect(result.lines).toContain('      Verify: the aggregate gate failed')
+  })
+
+  Test('a one-shot probe reports observed Verify failures even while another check is pending', async () => {
+    const fake = fakeDependencies({
+      annotations: { 3: [{ annotation_level: 'failure', message: 'the aggregate gate failed', title: 'Verify' }] },
+      checkRuns: [[run('Verify', 'completed', 'failure', 3), run('Partition 1/2', 'in_progress', null, 1)]],
+      workflowRuns: [[{ conclusion: null, head_sha: SHA, html_url: 'https://ci/workflow/1', status: 'in_progress' }]],
+    })
+
+    const result = await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT }, fake.dependencies)
+
+    Expect(result.exitCode).toBe(1)
+    Expect(result.lines).toContain('      Verify: the aggregate gate failed')
+    Expect(result.lines.some(line => line.startsWith('WAIT'))).toBe(false)
+  })
+
+  Test('reports a completed failed workflow that never published the Verify check', async () => {
+    const fake = fakeDependencies({
+      checkRuns: [[]],
+      workflowRuns: [[{
+        conclusion: 'cancelled',
+        head_sha: SHA,
+        html_url: 'https://ci/workflow/cancelled',
+        status: 'completed',
+      }]],
+    })
+
+    const result = await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT }, fake.dependencies)
+
+    Expect(result.exitCode).toBe(1)
+    Expect(result.lines.at(-1)).toBe(
+      'FAIL  Verify workflow completed without a Verify check: https://ci/workflow/cancelled',
+    )
   })
 
   Test('names a merge conflict as the reason no checks ran', async () => {
@@ -288,6 +480,7 @@ Describe('pr-checks', () => {
     Expect(fake.requested).toEqual([
       '/repos/owner/repo/pulls/3',
       '/repos/owner/repo/commits/abcdef1234567890/check-runs?per_page=100',
+      '/repos/owner/repo/actions/workflows/verify.yml/runs?head_sha=abcdef1234567890&per_page=100',
       '/repos/owner/repo/commits/abcdef1234567890/status',
     ])
   })

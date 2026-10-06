@@ -7,7 +7,7 @@ import { type CLI, Errors } from '@shared'
  * is gh's own placeholder, filled from the checkout's `origin`. Turning auto-merge on or off and
  * marking a draft ready have no GitHub REST endpoint, so those two stay on `gh pr` in their callers;
  * for auto-merge, a cloud agent host's proxy offers REST routes of its own under `/ccr/`, which
- * `open-pr` falls back to where `gh pr` is refused and which GitHub itself does not serve.
+ * the callers fall back to where `gh pr` is refused and which GitHub itself does not serve.
  */
 
 /** PR_BRANCH_PREFIXES names the branches `open-pr` pushes and `merge-pr` merges. */
@@ -32,6 +32,8 @@ export type PullRequest = {
   html_url: string
   /** `dirty` when the pull request conflicts with its base. */
   mergeable_state?: string
+  /** The squash commit on the base once merged; GitHub omits it from list responses. */
+  merge_commit_sha?: string | null
   merged_at: string | null
   number: number
   state: 'closed' | 'open'
@@ -150,7 +152,54 @@ export function gitHubPulls(run: GhRunner, root: string, writeLine: (line: strin
         stdio: 'pipe',
       })
     },
+    /**
+     * Posts a commit status on `sha`. A status is how a run outside Actions reports beside the
+     * `Verify` check: `pr-checks` reads statuses with check runs, so a pending one keeps a follower
+     * waiting and a concluded one is part of its verdict.
+     */
+    async createStatus(sha: string, fields: CommitStatusFields): Promise<void> {
+      await api([
+        '--method',
+        'POST',
+        `${REPOSITORY}/statuses/${sha}`,
+        ...formFields({
+          context: fields.context,
+          description: fields.description,
+          state: fields.state,
+          ...(fields.target_url === undefined ? {} : { target_url: fields.target_url }),
+        }),
+        '--silent',
+      ])
+    },
+    /** The `Verify` workflow's runs for one commit, newest first. */
+    async verifyRuns(sha: string): Promise<WorkflowRun[]> {
+      const body = await api<{ workflow_runs: WorkflowRun[] }>([
+        `${REPOSITORY}/actions/workflows/verify.yml/runs?head_sha=${sha}&per_page=100`,
+      ])
+      return body.workflow_runs.filter(run => run.head_sha === sha)
+    },
+    /** Asks Actions to cancel one run; GitHub answers 202 and cancels asynchronously. */
+    async cancelRun(id: number): Promise<void> {
+      await api(['--method', 'POST', `${REPOSITORY}/actions/runs/${id}/cancel`, '--silent'])
+    },
   }
+}
+
+/** CommitStatusFields is what a status needs; `description` is capped by GitHub at 140 characters. */
+export type CommitStatusFields = {
+  context: string
+  description: string
+  state: 'error' | 'failure' | 'pending' | 'success'
+  target_url?: string
+}
+
+/** WorkflowRun is the slice of an Actions run these commands read. */
+export type WorkflowRun = {
+  conclusion: string | null
+  head_sha: string
+  html_url: string
+  id: number
+  status: string
 }
 
 /** `-f` sends each value as a raw string, so a body beginning with `@` or `-` is never read as a file or flag. */

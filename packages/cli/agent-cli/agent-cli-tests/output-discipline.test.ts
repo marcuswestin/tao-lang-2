@@ -207,7 +207,7 @@ Describe('output discipline', () => {
   })
 
   Test('leaves a `just` recipe `./agent` does not expose, and land-unlock, which keeps its own rule', () => {
-    Expect(isAllowed('just studio-smoke-native')).toEqual(true)
+    Expect(isAllowed('just studio-host-control-smoke')).toEqual(true)
     Expect(isAllowed('just dev Apps/HNReader')).toEqual(true)
     Expect(isAllowed('just land-unlock --force')).toEqual(true)
   })

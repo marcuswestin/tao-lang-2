@@ -1,4 +1,4 @@
-import { Assert, FS, Repo, Time } from '@shared'
+import { Assert, FS, Repo, Time, VerificationTimeouts } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
@@ -100,7 +100,7 @@ Test(
       const saved = await Time.pollUntil(async () => {
         const catalog = await readCatalog(catalogPath)
         return catalog.sketches[0]?.rects[0]?.content === 'Saved title' ? catalog : undefined
-      }, { intervalMs: 100, timeoutMs: 30_000 })
+      }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
       Assert.defined(saved, 'Enter persists inline Text content')
       Expect(saved.revision).toBe(initial.revision + 1)
       Expect(saved.sketches[0]?.rects).toEqual([

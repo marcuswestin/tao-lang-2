@@ -39,7 +39,7 @@ Describe('versioned run summary', () => {
       lane: 'verify-full',
       logRoot: '/repo/.artifacts/logs/verify-full/stamp',
       states: [
-        finishedState({ name: 'studio-smoke-native', needs: ['_compile'], resources: ['gui'] }),
+        finishedState({ name: 'studio-host-control-smoke', needs: ['_compile'], resources: ['gui'] }),
         finishedState({ name: 'studio-canary', resources: ['gui'] }),
       ],
     })

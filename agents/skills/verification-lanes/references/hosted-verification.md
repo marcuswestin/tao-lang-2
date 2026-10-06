@@ -1,9 +1,41 @@
 # Hosted verification and contention
 
-Choose where to verify before starting a costly local lane, and reassess before merging. Prefer
-GitHub CI when this computer has high contention and CI has little or none, provided the hosted
-gates prove the change. Keep focused local checks useful for iteration; do not run broad local
-verification or `finalize` merely to duplicate sufficient CI proof.
+## The landing route
+
+Once the Developer has authorized landing the slice and the merge message at
+`.artifacts/merge/<branch>.msg` is reviewed, every `feat/<name>` branch lands the same way, with no
+variations:
+
+1. Run `./agent unsandboxed open-pr --auto-merge`. Always pass `--auto-merge`; there is no
+   "open first, arm later" step. It pushes, opens or reuses the pull request, and starts hosted
+   `Verify`, which runs every gate CI can run. GitHub squash-merges the pull request the moment
+   `Verify` is green on that head; nothing reruns and nothing waits.
+2. The same command starts the local complement beside `Verify`: `verify-complement`, one locked
+   lane of exactly the gates CI cannot run, derived from the catalog's `requiresUnsandboxed` and
+   `requiresMacOS` gates minus whatever `CI_HOST_GATES` in `.github/workflows/verify.yml` admits
+   (about five minutes today). It posts the `Verify (host)` status on the head, which
+   `pr-checks` follows beside `Verify`, and leaves a receipt (`complement.json`) beside the lane's
+   `summary.json`. Never run the sandbox-capable gates locally as merge evidence: hosted `Verify`
+   owns them. `open-pr --auto-merge --no-complement` and a separate
+   `./agent unsandboxed verify-complement` are the two-command shape for a machine that must run
+   the lane at another time.
+3. If the complement fails while `Verify` is still running, `open-pr` cancels the run and turns
+   auto-merge off itself (`./agent unsandboxed cancel-verify` does the same for a failure found
+   by hand). Fix the failure, commit, and run `open-pr --auto-merge` again; the push restarts
+   `Verify` and the complement.
+4. If `Verify` merged the pull request first and the complement then fails, fix it on the branch,
+   commit, and run `./agent unsandboxed land-fix`: it fetches `origin/main`, merges the branch into
+   it with a merge commit, pushes `main`, moves the archive, and writes a receipt under
+   `.artifacts/logs/land-fix/`, without a full verification. Report the push to the Developer
+   with the fix.
+5. Follow `Verify` with `./agent pr-checks --wait`, diagnose failures from their annotations, fix,
+   and push through `open-pr --auto-merge` again. Never `gh pr merge` by hand, and never run
+   `./agent unsandboxed land` for a `feat/<name>` branch while GitHub is reachable.
+
+Use local checks for focused iteration, diagnosis, and the host-only complement above. When CI is
+unavailable, local `land` is the fallback; offline proof does not establish remote integration or
+landing, and local `land` still requires a successful fetch and push. A broad local lane is a
+diagnostic, never merge evidence; reassess machine contention before starting one.
 
 ## Compare current contention
 
@@ -19,86 +51,61 @@ verification or `finalize` merely to duplicate sufficient CI proof.
   check-detail links. Compare queued/waiting jobs and their age with jobs actually starting and
   finishing; workflow creation, job start times, and recent runs reveal scheduling delay. Little
   or no contention means jobs start promptly and there is no growing runner backlog. Count runner
-  demand across relevant runs, including the twelve partitions per verification run, rather than
-  assuming one pull request consumes one runner. Pending `Verify` alone can mean running tests;
+  demand across relevant runs, including every partition of each verification run (the count is
+  the `PARTITIONS` default in `.github/workflows/verify.yml`, or the repository variable
+  `VERIFY_PARTITIONS` when set), rather than assuming one pull request consumes one runner. Pending `Verify` alone can mean running tests;
   waiting for approval or a prerequisite is not runner contention.
 - `./agent pr-checks --pr <number>` gives the current PR's check state, not the repository-wide
   runner queue. If queue observations are unavailable, report CI contention as unknown; do not
   infer free capacity from missing data or invent a repository command. State the local evidence,
-  CI evidence, coverage, and chosen route briefly. Compare expected queue plus execution time,
-  rather than preferring CI after any slow local check.
+  CI evidence, coverage, and chosen route briefly.
 
-When local contention is high and CI contention is low, send the portable verification to CI
-instead of queueing another full local run. If both are busy, wait or continue focused work and
-reassess. If CI is unavailable, use the local route when capacity permits. A failed check still
-needs diagnosis; switching machines is not permission to ignore a failure.
+Hosted `Verify` is the final portable proof even when a local lane would finish sooner; contention
+decides only when to run a diagnostic lane, never which machine proves the merge. A failed check
+still needs diagnosis; switching machines is not permission to ignore a failure.
 
 ## Coverage and readiness
 
-`.github/workflows/verify.yml` runs `verify-full-sandbox` across twelve Linux runners
-(`--partition k/12`) on pull request pushes, merge-queue entries, and pushes to `main`; `Verify`
-is the aggregate verdict. It proves the portable gates only. Read the current workflow and lane
-membership when deciding whether they cover the slice; native, simulator, device, visible UI, and
-other host-only acceptance remain separate. Contention does not waive them. Run needed host proof
-when this machine has capacity, or report the slice as waiting for that proof.
+`.github/workflows/verify.yml` runs `verify-full-sandbox` across N Linux runners
+(`--partition k/N`) on pull request pushes, pushes to `main`, and `workflow_dispatch`; `Verify` is
+the aggregate verdict and the only required check on `main`. N is one workflow default
+(`PARTITIONS`, with its sizing reasoning beside it), overridden by the repository variable
+`VERIFY_PARTITIONS` and, for one run, by the dispatch input; the `plan` job resolves it and every
+partition and the aggregate read that resolved count. A cancelled or failed partition records no
+green tree. It proves the portable gates only; the local complement in the route above proves the
+rest. Read the current workflow and lane membership when deciding what
+the complement is; a gate the workflow admits leaves the local list.
 
-For CI-covered feature work, refresh affected documents, review and commit the exact task paths,
-and prepare the reviewed message at `.artifacts/merge/<branch>.msg` without paying for local broad
-verification first. A fully successful CI run covering the current PR head replaces the covered
-local per-commit and readiness gates. Until that result exists, describe the branch as awaiting
-CI, not verified. Do not require local `finalize` as a prerequisite for the hosted route.
+For feature work, refresh affected documents, review and commit the exact task paths, and prepare
+the reviewed message at `.artifacts/merge/<branch>.msg` without paying for local broad verification
+first. Until `Verify` is green on the current head, describe the branch as awaiting CI, not
+verified. Do not require local `finalize` as a prerequisite for the route.
 
-Authorization to publish or merge remains separate from route selection. When pushing for CI is
-authorized, use `./agent unsandboxed open-pr`: it pushes, opens or reuses the PR, follows CI, and
-leaves auto-merge off by default. It refuses a PR whose auto-merge is already enabled; do not change
-another task's setting to make it proceed. This also allows portable CI while required host
-acceptance is pending. Without push authorization, inspect an existing PR read-only or finish
-local preparation and report that starting hosted CI awaits it.
+Plain `./agent unsandboxed open-pr` without `--auto-merge` exists for one case only: pushing a
+branch for CI feedback before landing is authorized. It refuses a PR whose auto-merge is already
+enabled; do not change another task's setting to make it proceed. Test-only authorization does not
+permit `--auto-merge`.
 
-Only explicit `open-pr --auto-merge` enables automatic merging before checks finish. Use that
-option only after the Developer authorizes landing the slice and every required host acceptance
-check has passed; GitHub can merge independently of a later `merge-pr` call. A green existing PR
-may be proposed as ready without rerunning local verification; authorization to merge is still
-required. For ordinary CI-based landing, leave auto-merge off, wait for complete proof, and run
-`merge-pr` on that verified result.
+While `Verify` runs, start diagnosing and fixing failures as they appear; a run link is not
+completion. Retain logs and a run/commit-scoped failure list, address every issue, and follow
+replacement runs to a complete verdict or a concrete external blocker.
 
-Always poll ongoing CI through completion. Start diagnosing and fixing failures as they appear
-while polling the remaining jobs; a run link is not completion. Retain logs and a run/commit-scoped
-failure list, then address every issue after all jobs finish, including failures from superseded
-runs. Follow replacement runs to a complete verdict or a concrete external blocker. Test-only
-authorization does not permit auto-merge or landing.
+## After GitHub merged
 
-## Merge the already verified pull request
+`./agent unsandboxed merge-pr` on an already merged pull request confirms the merge and archives
+`merged/<name>`; on a pull request whose `Verify` is already green and whose auto-merge is off, it
+merges pinned to that head. Both `open-pr` modes use the reviewed message as the pull request's
+title and description; to update the message, edit it and run `open-pr --auto-merge` again. GitHub
+deletes the merged feature branch; the archive workflow also records `merged/<name>` for a PR
+merged another way. The commands use REST where a cloud proxy refuses GraphQL.
 
-At merge time, reuse a fully successful CI result when it covers the change and the PR's current
-head matches the reviewed local commit. Confirm every required check, including `Verify`, has
-successfully completed for that head, and required host acceptance is complete. An old green run,
-superseded run, skipped or cancelled required check, pending check, or failed check is insufficient.
-Commits added since the green run require new CI proof.
+Failed partitions upload `verify-partition-<k>` logs. If GitHub reports a conflict with `main`,
+bring `main` in with `./agent merge-main`, review what arrived, and run `open-pr --auto-merge`
+again; the changed head needs CI again.
 
-After landing is authorized, run `./agent unsandboxed merge-pr` directly for an existing fully
-verified PR. Do not reopen it or run local `land`, `verify`, `verify-full`, or `finalize` merely
-because it is time to merge. `merge-pr` confirms the clean branch and reviewed message, matches
-the local commit to the pushed head, checks the latest verdict, and pins the squash merge to that
-head. It archives `merged/<name>` and reports the merge, including when auto-merge already did it.
-Do not change the head simply to obtain a local readiness record.
-
-For new hosted verification, `./agent unsandboxed open-pr` pushes, opens or reuses the PR, uses the
-reviewed message as its title and description, and follows checks without enabling auto-merge.
-When the complete current-head verdict passes and landing is authorized, use `merge-pr` with the
-reviewed squash message. To update the message, edit it and run `open-pr` again; updating an
-intentionally armed PR requires the explicit `--auto-merge` option. GitHub deletes the merged
-feature branch; the archive workflow also records `merged/<name>` for a PR merged another way.
-The commands use REST where a cloud proxy refuses GraphQL.
-
-Use `./agent pr-checks --wait` to follow checks and read failures from their annotations; failed
-partitions upload `verify-partition-<k>` logs. Diagnose with focused local checks when practical,
-commit the fix, push through `open-pr`, and wait for fresh proof. If GitHub reports a conflict with
-`main`, integrate it using the repository merge workflow, review what arrived, and push again;
-the changed head needs CI again. Never bypass checks with `gh pr merge` or switch to local landing
-just to evade a CI or queued-merge failure.
-
-Use `./agent unsandboxed land` for the local route when needed proof is unavailable through CI;
-it integrates and verifies under the machine-wide landing lock. An already-green portable run
-does not claim the host-only lanes passed. Both routes retain the reviewed squash message and
-branch archive, and `git-workflow` owns the post-merge resource review.
+Personal `dev/<name>` branches remain on the supported local `land` lifecycle; `open-pr` and
+`merge-pr` do not support that branch shape. Use `./agent unsandboxed land` for that exception, or
+when the hosted route is unavailable; it integrates and verifies under the machine-wide landing
+lock and still requires a successful fetch and push. An already-green portable run does not claim
+the host-only lanes passed. Both routes retain the reviewed squash message and branch archive, and
+`git-workflow` owns the post-merge resource review.

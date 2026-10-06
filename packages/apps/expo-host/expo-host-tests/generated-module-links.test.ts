@@ -1,8 +1,65 @@
 import { managedDependencyModulesRoot } from '@project-tooling'
 import { FS, ProjectLocal } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, Test } from '@shared/test'
-import { withGeneratedModuleLinks } from '../expo-host-src/generated-module-links'
+import { Deferred, Describe, Expect, mkTestDir, Test, testOverrideSlot } from '@shared/test'
+import {
+  generatedModuleLinkFileOperations,
+  withGeneratedModuleLinks,
+} from '../expo-host-src/generated-module-links'
 import { RuntimeToolchainPaths } from '../expo-host-src/runtime-toolchain-paths'
+
+type FileOperationCalls = { removals: string[]; symlinks: string[]; writes: string[] }
+type MutableFileOperations = typeof generatedModuleLinkFileOperations
+
+const removeSlot = testOverrideSlot<typeof generatedModuleLinkFileOperations.remove>({
+  read: () => generatedModuleLinkFileOperations.remove,
+  write: value => {
+    ;(generatedModuleLinkFileOperations as MutableFileOperations).remove = value
+  },
+})
+const symlinkSlot = testOverrideSlot<typeof generatedModuleLinkFileOperations.symlink>({
+  read: () => generatedModuleLinkFileOperations.symlink,
+  write: value => {
+    ;(generatedModuleLinkFileOperations as MutableFileOperations).symlink = value
+  },
+})
+const writeJsonSlot = testOverrideSlot<typeof generatedModuleLinkFileOperations.writeJson>({
+  read: () => generatedModuleLinkFileOperations.writeJson,
+  write: value => {
+    ;(generatedModuleLinkFileOperations as MutableFileOperations).writeJson = value
+  },
+})
+
+async function withFileOperationCalls<T>(
+  run: (calls: FileOperationCalls) => Promise<T>,
+  failWriteJsonPath?: string,
+): Promise<T> {
+  const calls: FileOperationCalls = { removals: [], symlinks: [], writes: [] }
+  const baseRemove = generatedModuleLinkFileOperations.remove
+  const baseSymlink = generatedModuleLinkFileOperations.symlink
+  const baseWriteJson = generatedModuleLinkFileOperations.writeJson
+  const restoreRemove = removeSlot.install(async path => {
+    calls.removals.push(path)
+    return baseRemove(path)
+  })
+  const restoreSymlink = symlinkSlot.install(async (target, path) => {
+    calls.symlinks.push(path)
+    return baseSymlink(target, path)
+  })
+  const restoreWriteJson = writeJsonSlot.install(async (path, content, options) => {
+    calls.writes.push(path)
+    if (path === failWriteJsonPath) {
+      throw new TypeError('simulated manifest write failure')
+    }
+    return baseWriteJson(path, content, options)
+  })
+  try {
+    return await run(calls)
+  } finally {
+    restoreWriteJson()
+    restoreSymlink()
+    restoreRemove()
+  }
+}
 
 Describe('generated dependency modules', () => {
   Test('links host dependencies when no local npm environment is declared and repairs a removed link', async () => {
@@ -22,10 +79,25 @@ Describe('generated dependency modules', () => {
         links: [{ relativePath: 'node_modules', target: hostModules }],
       })
 
-      await withGeneratedModuleLinks(output, root, [], publish)
+      const generatedManifest = `${output}.tao-module-links.json`
+      const calls = await withFileOperationCalls(async observed => {
+        await withGeneratedModuleLinks(
+          output,
+          root,
+          [],
+          () => FS.writeText(FS.resolvePath('App.tsx', output), 'next app'),
+          root,
+          { preserveUnchangedLinks: true },
+        )
+        return observed
+      })
+      Expect(await FS.readText(FS.resolvePath('App.tsx', output))).toBe('next app')
+      Expect(calls.removals.filter(path => path === link)).toEqual([])
+      Expect(calls.symlinks.filter(path => path === link)).toEqual([])
+      Expect(calls.writes.filter(path => path === generatedManifest)).toEqual([])
       Expect((await FS.entryMetadata(link)).linkTarget).toBe(hostModules)
       await FS.remove(link)
-      await withGeneratedModuleLinks(output, root, [], publish)
+      await withGeneratedModuleLinks(output, root, [], publish, root, { preserveUnchangedLinks: true })
       Expect((await FS.entryMetadata(link)).linkTarget).toBe(hostModules)
     } finally {
       await FS.remove(root)
@@ -219,17 +291,22 @@ Describe('generated dependency modules', () => {
       Expect(await FS.readJson<{ version: string }>(FS.resolvePath('same/package.json', bLink)))
         .toEqual({ name: 'same', version: '2.0.0' })
 
-      const staging = FS.resolvePath('staging', root)
-      await FS.writeText(FS.resolvePath('App.tsx', staging), 'next app')
-      await withGeneratedModuleLinks(output, root, [b], async () => {
-        await FS.synchronizeDirectoryFileSets([{ fromPath: staging, toPath: output }], {
-          boundaryPath: FS.resolvePath('host', root),
-          sourceBoundaryPath: staging,
-        })
+      const operations = await withFileOperationCalls(async calls => {
+        await withGeneratedModuleLinks(
+          output,
+          root,
+          [b],
+          () => FS.writeText(FS.resolvePath('App.tsx', output), 'next app'),
+          root,
+          { preserveUnchangedLinks: true },
+        )
+        return calls
       })
       Expect(await FS.isSymbolicLink(aLink)).toBe(false)
       Expect((await FS.entryMetadata(directLink)).linkTarget).toBe(RuntimeToolchainPaths.dependencyRoot())
       Expect(await FS.isSymbolicLink(bLink)).toBe(true)
+      Expect(operations.removals).not.toContain(bLink)
+      Expect(operations.symlinks).not.toContain(bLink)
       Expect(await FS.isFile(FS.resolvePath('same/package.json', aModules))).toBe(true)
     } finally {
       await FS.remove(root)
@@ -257,9 +334,196 @@ Describe('generated dependency modules', () => {
       const foreign = FS.resolvePath('foreign', root)
       await FS.mkdir(foreign)
       await FS.replaceSymlink(foreign, link)
-      await Expect(withGeneratedModuleLinks(output, root, [], async () => {}))
+      await Expect(withGeneratedModuleLinks(output, root, [], async () => {}, root, { preserveUnchangedLinks: true }))
         .rejects.toThrow('was changed outside Tao')
       Expect((await FS.entryMetadata(link)).linkTarget).toBe(foreign)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('restores removed links after publication failure without touching retained links', async () => {
+    const root = await mkTestDir('tao-generated-dependencies-')
+    try {
+      const output = FS.resolvePath('host/_gen_tao-app', root)
+      const aModules = managedDependencyModulesRoot(root, 'origin-a')
+      const bModules = managedDependencyModulesRoot(root, 'origin-b')
+      await FS.writeJson(FS.resolvePath('alpha/package.json', aModules), { name: 'alpha', version: '1.0.0' })
+      await FS.writeJson(FS.resolvePath('beta/package.json', bModules), { name: 'beta', version: '1.0.0' })
+      const a = {
+        projectRoot: FS.resolvePath('A', root),
+        namespace: 'origin-a',
+        npm: [{ alias: 'alpha', packageName: 'alpha', versionRange: '^1' }],
+        publications: [],
+      }
+      const b = {
+        projectRoot: FS.resolvePath('B', root),
+        namespace: 'origin-b',
+        npm: [{ alias: 'beta', packageName: 'beta', versionRange: '^1' }],
+        publications: [],
+      }
+      await withGeneratedModuleLinks(output, root, [a, b], async () => {})
+
+      const aLink = FS.resolvePath('modules/dependencies/origin-a/node_modules', output)
+      const bLink = FS.resolvePath('modules/dependencies/origin-b/node_modules', output)
+      const aTarget = (await FS.entryMetadata(aLink)).linkTarget
+      const bTarget = (await FS.entryMetadata(bLink)).linkTarget
+      const operations = await withFileOperationCalls(async calls => {
+        await Expect(withGeneratedModuleLinks(
+          output,
+          root,
+          [b],
+          async () => {
+            throw new TypeError('publication failed')
+          },
+          root,
+          { preserveUnchangedLinks: true },
+        )).rejects.toThrow('publication failed')
+        return calls
+      })
+
+      Expect((await FS.entryMetadata(aLink)).linkTarget).toBe(aTarget)
+      Expect((await FS.entryMetadata(bLink)).linkTarget).toBe(bTarget)
+      Expect(operations.removals).toContain(aLink)
+      Expect(operations.symlinks).toContain(aLink)
+      Expect(operations.removals).not.toContain(bLink)
+      Expect(operations.symlinks).not.toContain(bLink)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('restores removed links and retained links after manifest write failure', async () => {
+    const root = await mkTestDir('tao-generated-dependencies-')
+    try {
+      const output = FS.resolvePath('host/_gen_tao-app', root)
+      const directModules = FS.resolvePath('node_modules', root)
+      const aModules = managedDependencyModulesRoot(root, 'origin-a')
+      const bModules = managedDependencyModulesRoot(root, 'origin-b')
+      const cModules = managedDependencyModulesRoot(root, 'origin-c')
+      await FS.writeJson(FS.resolvePath('local/package.json', directModules), { name: 'local', version: '1.0.0' })
+      await FS.writeJson(FS.resolvePath('alpha/package.json', aModules), { name: 'alpha', version: '1.0.0' })
+      await FS.writeJson(FS.resolvePath('beta/package.json', bModules), { name: 'beta', version: '1.0.0' })
+      await FS.writeJson(FS.resolvePath('gamma/package.json', cModules), { name: 'gamma', version: '1.0.0' })
+      const local = {
+        projectRoot: root,
+        namespace: 'root',
+        npm: [{ alias: 'local', packageName: 'local', versionRange: '^1' }],
+        publications: [],
+      }
+      const a = {
+        projectRoot: FS.resolvePath('A', root),
+        namespace: 'origin-a',
+        npm: [{ alias: 'alpha', packageName: 'alpha', versionRange: '^1' }],
+        publications: [],
+      }
+      const b = {
+        projectRoot: FS.resolvePath('B', root),
+        namespace: 'origin-b',
+        npm: [{ alias: 'beta', packageName: 'beta', versionRange: '^1' }],
+        publications: [],
+      }
+      const c = {
+        projectRoot: FS.resolvePath('C', root),
+        namespace: 'origin-c',
+        npm: [{ alias: 'gamma', packageName: 'gamma', versionRange: '^1' }],
+        publications: [],
+      }
+      await withGeneratedModuleLinks(output, root, [local, a, b], async () => {})
+
+      const manifest = `${output}.tao-module-links.json`
+      const directLink = FS.resolvePath('node_modules', output)
+      const aLink = FS.resolvePath('modules/dependencies/origin-a/node_modules', output)
+      const bLink = FS.resolvePath('modules/dependencies/origin-b/node_modules', output)
+      const cLink = FS.resolvePath('modules/dependencies/origin-c/node_modules', output)
+      const targets = {
+        direct: (await FS.entryMetadata(directLink)).linkTarget,
+        a: (await FS.entryMetadata(aLink)).linkTarget,
+        b: (await FS.entryMetadata(bLink)).linkTarget,
+      }
+      const operations = await withFileOperationCalls(async calls => {
+        await Expect(withGeneratedModuleLinks(
+          output,
+          root,
+          [local, b, c],
+          async () => {},
+          root,
+          { preserveUnchangedLinks: true },
+        )).rejects.toThrow('simulated manifest write failure')
+        return calls
+      }, manifest)
+
+      Expect((await FS.entryMetadata(directLink)).linkTarget).toBe(targets.direct)
+      Expect((await FS.entryMetadata(aLink)).linkTarget).toBe(targets.a)
+      Expect((await FS.entryMetadata(bLink)).linkTarget).toBe(targets.b)
+      Expect(await FS.isSymbolicLink(cLink)).toBe(false)
+      Expect(operations.writes).toContain(manifest)
+      Expect(operations.removals).toContain(cLink)
+      Expect(operations.symlinks).toContain(cLink)
+      Expect(operations.symlinks).toContain(aLink)
+      for (const retainedLink of [directLink, bLink]) {
+        Expect(operations.removals).not.toContain(retainedLink)
+        Expect(operations.symlinks).not.toContain(retainedLink)
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('restores removed owned links after install failure and leaves retained links untouched', async () => {
+    const root = await mkTestDir('tao-generated-dependencies-')
+    try {
+      const output = FS.resolvePath('host/_gen_tao-app', root)
+      const modules = FS.resolvePath('node_modules', root)
+      const dependency = (namespace: string, alias: string) => {
+        const dependencyModules = managedDependencyModulesRoot(root, namespace)
+        return {
+          environment: {
+            projectRoot: FS.resolvePath(namespace, root),
+            namespace,
+            npm: [{ alias, packageName: alias, versionRange: '^1' }],
+            publications: [],
+          },
+          dependencyModules,
+        }
+      }
+      const a = dependency('origin-a', 'alpha')
+      const b = dependency('origin-b', 'beta')
+      const c = dependency('origin-c', 'gamma')
+      await FS.writeJson(FS.resolvePath('alpha/package.json', a.dependencyModules), { name: 'alpha', version: '1.0.0' })
+      await FS.writeJson(FS.resolvePath('beta/package.json', b.dependencyModules), { name: 'beta', version: '1.0.0' })
+      await FS.writeJson(FS.resolvePath('gamma/package.json', c.dependencyModules), { name: 'gamma', version: '1.0.0' })
+      await FS.writeJson(FS.resolvePath('local/package.json', modules), { name: 'local', version: '1.0.0' })
+      const local = {
+        projectRoot: root,
+        namespace: 'root',
+        npm: [{ alias: 'local', packageName: 'local', versionRange: '^1' }],
+        publications: [],
+      }
+      await withGeneratedModuleLinks(output, root, [local, a.environment, b.environment], async () => {})
+
+      const aLink = FS.resolvePath('modules/dependencies/origin-a/node_modules', output)
+      const bLink = FS.resolvePath('modules/dependencies/origin-b/node_modules', output)
+      const cLink = FS.resolvePath('modules/dependencies/origin-c/node_modules', output)
+      const foreign = FS.resolvePath('foreign', root)
+      await FS.mkdir(foreign)
+      await FS.mkdir(FS.dirname(cLink))
+      await FS.symlink(foreign, cLink)
+      const previousATarget = (await FS.entryMetadata(aLink)).linkTarget
+      const previousBTarget = (await FS.entryMetadata(bLink)).linkTarget
+
+      await Expect(withGeneratedModuleLinks(
+        output,
+        root,
+        [local, b.environment, c.environment],
+        async () => {},
+        root,
+        { preserveUnchangedLinks: true },
+      ))
+        .rejects.toThrow('Generated module link path is occupied')
+      Expect((await FS.entryMetadata(aLink)).linkTarget).toBe(previousATarget)
+      Expect((await FS.entryMetadata(bLink)).linkTarget).toBe(previousBTarget)
+      Expect((await FS.entryMetadata(cLink)).linkTarget).toBe(foreign)
     } finally {
       await FS.remove(root)
     }

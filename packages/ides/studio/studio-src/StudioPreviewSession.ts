@@ -139,10 +139,18 @@ export async function openStudioPreviewSession(
           }),
         )
       }
-      if (generated.studioManifest !== undefined && generated.preview !== undefined) {
+      if (
+        generated.previewPublicationSkipped !== true
+        && generated.studioManifest !== undefined && generated.preview !== undefined
+      ) {
         session.setMatrixManifest(matrixManifest(session, generated, request.compileRevision))
       }
-      return { message: `Compiled ${request.appName} preview revision ${request.compileRevision}.` }
+      return {
+        message: `Compiled ${request.appName} preview revision ${request.compileRevision}.`,
+        ...(generated.previewPublicationSkipped === true && generated.preview !== undefined
+          ? { publishedRevision: generated.preview.revision }
+          : {}),
+      }
     },
   })
   let watchReady = false

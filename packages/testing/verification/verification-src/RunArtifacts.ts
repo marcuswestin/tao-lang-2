@@ -38,7 +38,7 @@ export type FinishRunOptions = {
   summary: unknown
 }
 
-/** LiveRunWriter publishes a completed node's log before its reporter announces the path. */
+/** LiveRunWriter streams node output and publishes its completed log before announcing the path. */
 export type LiveRunWriter = {
   finish: () => Promise<void>
   handle: (event: WorkEvent) => void
@@ -86,20 +86,64 @@ async function assignLogPaths(states: readonly WorkState[], location: RunLocatio
 }
 
 /**
- * liveWriter forwards progress immediately, except completion: that event is forwarded only after
- * the node's log exists. A quiet reporter can therefore print a path another process can open at
- * that moment, even while the rest of the lane is still running.
+ * liveWriter forwards progress immediately and streams output to each node's log. Completion is
+ * forwarded only after the final authoritative output has replaced the streamed log, so a quiet
+ * reporter can print a path another process can open at that moment.
  */
 function liveWriter(location: RunLocation, forward: (event: WorkEvent) => void): LiveRunWriter {
-  const writes: Promise<void>[] = []
+  const queues = new Map<WorkState, Promise<void>>()
+  const failures: unknown[] = []
+
+  function enqueue(state: WorkState, write: () => Promise<void>): Promise<void> {
+    const previous = queues.get(state) ?? Promise.resolve()
+    const pending = previous.then(write)
+    queues.set(
+      state,
+      pending.catch(error => {
+        failures.push(error)
+      }),
+    )
+    return pending
+  }
+
   return {
-    finish: async () => await Promise.all(writes).then(() => {}),
+    finish: async () => {
+      await Promise.all(queues.values())
+      if (failures.length > 0) {
+        throw failures[0]
+      }
+    },
     handle: event => {
+      if (event.kind === 'start') {
+        if (event.state.logPath !== undefined) {
+          void enqueue(event.state, async () => {
+            await FS.writeText(event.state.logPath!, '')
+          }).catch(() => {})
+        }
+        forward(event)
+        return
+      }
+      if (event.kind === 'output') {
+        if (event.state.logPath !== undefined) {
+          void enqueue(event.state, async () => {
+            const handle = await FS.openAppend(event.state.logPath!)
+            try {
+              await handle.writeFile(event.output)
+            } finally {
+              await handle.close()
+            }
+          }).catch(() => {})
+        }
+        forward(event)
+        return
+      }
       if (event.kind !== 'complete') {
         forward(event)
         return
       }
-      writes.push(writeCompletedLog(event.state, location).then(() => forward(event)))
+      void enqueue(event.state, () => writeCompletedLog(event.state, location))
+        .then(() => forward(event))
+        .catch(() => {})
     },
   }
 }

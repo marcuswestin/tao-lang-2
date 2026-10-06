@@ -177,11 +177,22 @@ function fakeDependencies(
     readText: async path =>
       path === messageFile(branch) ? `${SUBJECT}\n\n${BODY}\n` : Errors.throwUnexpected(`unexpected read: ${path}`),
     run: fakeRun(routes, calls),
+    runComplement: async () => {
+      calls.push('runComplement')
+      return { exitCode: 0 }
+    },
     sleep: async () => {},
     writeLine: () => {},
     ...overrides,
   }
   return { calls, dependencies, followed }
+}
+
+function verifyRunsKey(sha = HEAD_SHA): string {
+  return routeKey('gh', [
+    'api',
+    `repos/{owner}/{repo}/actions/workflows/verify.yml/runs?head_sha=${sha}&per_page=100`,
+  ], ROOT)
 }
 
 Describe('open-pr', () => {
@@ -332,10 +343,97 @@ Describe('open-pr', () => {
     Expect(sleeps).toEqual([5_000, 5_000])
     Expect(followed).toEqual([2])
     Expect(result.lines.at(-1)).toStartWith('NEXT  Run merge-pr')
-    // Auto-merge is requested once checks exist on the head, so Verify is pending when GitHub reads it.
+    // Any check can arm auto-merge; the required Verify check remains the merge gate.
     const autoMerge = calls.indexOf(enableAutoMergeKey(2))
     Expect(autoMerge).toBeGreaterThan(calls.lastIndexOf(checkCountKey()))
     Expect(autoMerge).toBeLessThan(calls.indexOf('followChecks'))
+  })
+
+  Test('runs the complement lane beside the checks with auto-merge, and not without it', async () => {
+    const withAutoMerge = fakeDependencies(openedPullRequestRoutes(2))
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, withAutoMerge.dependencies)
+    Expect(result.exitCode).toBe(0)
+    Expect(withAutoMerge.calls.indexOf('runComplement')).toBeGreaterThan(
+      withAutoMerge.calls.indexOf(enableAutoMergeKey(2)),
+    )
+    Expect(withAutoMerge.calls.indexOf('runComplement')).toBeLessThan(withAutoMerge.calls.indexOf('followChecks'))
+    Expect(result.lines).toContain('PASS  The complement lane passed on headsha1.')
+
+    const routes = openedPullRequestRoutes(2)
+    delete routes[enableAutoMergeKey(2)]
+    const without = fakeDependencies(routes)
+    Expect((await OpenPrCommand.run({ repositoryRoot: ROOT }, without.dependencies)).exitCode).toBe(0)
+    Expect(without.calls).not.toContain('runComplement')
+
+    const declined = fakeDependencies(openedPullRequestRoutes(2))
+    Expect(
+      (await OpenPrCommand.run({ autoMerge: true, complement: false, repositoryRoot: ROOT }, declined.dependencies))
+        .exitCode,
+    ).toBe(0)
+    Expect(declined.calls).not.toContain('runComplement')
+  })
+
+  Test('cancels Verify and turns auto-merge off when the complement fails before GitHub merged', async () => {
+    const routes = openedPullRequestRoutes(2)
+    routes[verifyRunsKey()] = {
+      stdout: JSON.stringify({
+        workflow_runs: [
+          {
+            conclusion: null,
+            head_sha: HEAD_SHA,
+            html_url: 'https://github.com/tao/tao/actions/runs/9',
+            id: 9,
+            status: 'in_progress',
+          },
+          {
+            conclusion: 'cancelled',
+            head_sha: HEAD_SHA,
+            html_url: 'https://github.com/tao/tao/actions/runs/8',
+            id: 8,
+            status: 'completed',
+          },
+        ],
+      }),
+    }
+    const cancelKey = routeKey('gh', [
+      'api',
+      '--method',
+      'POST',
+      'repos/{owner}/{repo}/actions/runs/9/cancel',
+      '--silent',
+    ], ROOT)
+    routes[cancelKey] = {}
+    const disableKey = routeKey('gh', ['pr', 'merge', '2', '--disable-auto'], ROOT)
+    routes[disableKey] = {}
+    const { calls, dependencies } = fakeDependencies(routes, {
+      followChecks: async () => ({ exitCode: 1 }),
+      runComplement: async () => ({ exitCode: 1 }),
+    })
+
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(1)
+    Expect(calls).toContain(cancelKey)
+    Expect(calls.some(call => call.includes('actions/runs/8/cancel'))).toBe(false)
+    Expect(calls).toContain(disableKey)
+    Expect(result.lines).toContain('PASS  Auto-merge is off for #2; this head will not land.')
+    Expect(result.lines.at(-1)).toBe(
+      'NEXT  Fix the failed gate on this branch and push it with open-pr --auto-merge again.',
+    )
+  })
+
+  Test('names land-fix when the complement fails after GitHub already merged', async () => {
+    const routes = openedPullRequestRoutes(2)
+    const { calls, dependencies } = fakeDependencies(routes, { runComplement: async () => ({ exitCode: 1 }) })
+    answerViewsInTurn(dependencies, 2, [pull(2), pull(2), pull(2, { merged_at: '2026-10-05T00:00:00Z' })])
+
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(1)
+    Expect(calls.some(call => call.includes('/cancel') || call.includes('--disable-auto'))).toBe(false)
+    Expect(result.lines.at(-1)).toBe(
+      'NEXT  GitHub merged #2 before the complement failed: commit the fix on this branch and run land-fix.',
+    )
   })
 
   Test('fails, without following, when no checks ever appear on the pushed commit', async () => {

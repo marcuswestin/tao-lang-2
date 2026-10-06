@@ -1,4 +1,15 @@
-import { Assert, Errors, FS, HCI, Platform, ProjectIdentity, ProjectLocal, Repo, Time } from '@shared'
+import {
+  Assert,
+  Errors,
+  FS,
+  HCI,
+  Platform,
+  ProjectIdentity,
+  ProjectLocal,
+  Repo,
+  Time,
+  VerificationTimeouts,
+} from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
@@ -248,13 +259,13 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
             cell.scrollIntoView({ block: 'nearest' })
             return cell.src.startsWith('http') ? cell.src : ''
           })()`) || undefined,
-      { intervalMs: 100, timeoutMs: 60_000 },
+      { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity },
     )
     Assert.defined(previewUrl, `the ${project.name} preview cell loads its Metro URL`)
     await browser.waitForInFrame(
       previewUrl,
       `document.body?.textContent?.includes(${JSON.stringify(project.initialText)}) === true`,
-      { timeoutMs: 60_000 },
+      { timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity },
     )
     if (project.expectedStyle !== undefined) {
       const initial = project.expectedStyle(0, 'initial')
@@ -263,7 +274,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         `[...document.querySelectorAll('[data-tao-studio]')].some(node =>
           node.textContent?.includes(${JSON.stringify(initial.text)}) &&
           getComputedStyle(node).paddingTop === ${JSON.stringify(initial.padding)})`,
-        { timeoutMs: 60_000 },
+        { timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity },
       )
     }
     const generatedRoot = await generatedRootFor(projectRoot)
@@ -289,7 +300,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     // an edit rather than that race.
     const settled = await Time.pollUntil(
       async () => await browser!.evaluate<boolean>('Date.now() - window.__taoCellLoadAt > 3000') || undefined,
-      { intervalMs: 250, timeoutMs: 60_000 },
+      { intervalMs: 250, timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity },
     )
     Assert.defined(settled, `the ${project.name} preview cells stop loading`)
     await browser.evaluate(`(() => {
@@ -343,7 +354,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
             `window.__taoLatencyProbe?.painted[${JSON.stringify(marker)}] !== undefined`,
             { world: 'page' },
           ),
-        { intervalMs: 50, timeoutMs: 30_000 },
+        { intervalMs: 50, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
       )
       if (painted !== true) {
         const state = await browser.evaluateInFrame(

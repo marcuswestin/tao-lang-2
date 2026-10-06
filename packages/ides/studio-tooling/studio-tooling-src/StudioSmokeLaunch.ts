@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Repo, Time } from '@shared'
+import { CLI, Errors, FS, Repo, Time, VerificationTimeouts } from '@shared'
 import { stopLaunches } from './StudioLifecycle'
 import type { StudioReadiness } from './StudioReadiness'
 
@@ -9,7 +9,7 @@ import type { StudioReadiness } from './StudioReadiness'
  */
 
 /** How long a smoke launch is given to reach readiness before it is treated as failed. */
-const READY_TIMEOUT_MS = 180_000
+const READY_TIMEOUT_MS = 300_000
 const READY_POLL_MS = 200
 
 export type StudioSmokeLaunchOptions = {
@@ -25,6 +25,7 @@ export type StudioSmokeLaunchOptions = {
     onOutput: (chunk: Buffer) => void,
   ) => CLI.StartedCommand
   timeoutMs?: number
+  timeoutPolicy?: VerificationTimeouts.Policy
 }
 
 export type StartedStudioSmokeLaunch = {
@@ -67,7 +68,11 @@ export async function startStudioSmokeLaunch(
 
   let readiness: StudioReadiness | undefined
   try {
-    readiness = await waitForReadiness(command, () => output, options.timeoutMs ?? READY_TIMEOUT_MS)
+    readiness = await waitForReadiness(
+      command,
+      () => output,
+      VerificationTimeouts.resolve(options.timeoutMs ?? READY_TIMEOUT_MS, options.timeoutPolicy) ?? Infinity,
+    )
   } catch (error) {
     await stop()
     throw error

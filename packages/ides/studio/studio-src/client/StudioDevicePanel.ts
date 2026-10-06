@@ -38,7 +38,7 @@ export type StudioDevicePanelController = {
   dispose(): void
   model(): StudioDevicePanelModel
   open(): void
-  setCompileState(state: Pick<StudioCompileState, 'compileRevision'>): void
+  setCompileState(state: Pick<StudioCompileState, 'compileRevision' | 'publishedRevision'>): void
   /** The gateway answered 501 or failed: the panel explains instead of rendering an empty snapshot. */
   setGatewayUnavailable(message: string): void
   setManifest(manifest: StudioPreviewManifestV2 | undefined): void
@@ -199,7 +199,7 @@ export function createStudioDevicePanel(options: StudioDevicePanelOptions): Stud
   let unavailable: string | undefined
   let launch: StudioDeviceLaunchInfo | undefined
   let launchUnavailable: string | undefined
-  let compileRevision = options.handshake.compile.compileRevision
+  let compileRevision = options.handshake.compile.publishedRevision ?? options.handshake.compile.compileRevision
   let manifest = options.handshake.previewManifest
   let busy = false
   let disposed = false
@@ -679,7 +679,7 @@ export function createStudioDevicePanel(options: StudioDevicePanelOptions): Stud
       refreshLaunch()
     },
     setCompileState(state) {
-      compileRevision = state.compileRevision
+      compileRevision = state.publishedRevision ?? state.compileRevision
       render()
     },
     setGatewayUnavailable(message) {

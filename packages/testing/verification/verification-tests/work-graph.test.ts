@@ -33,7 +33,7 @@ async function assertDescendantTimeout(
   const parentPath = FS.resolvePath('parent.pid', FS.dirname(descendantPath))
   const owned: TrackedProcess[] = []
   let completed = false
-  const finished = WorkGraph.run([state], { watchInterrupt: () => () => {} })
+  const finished = WorkGraph.run([state], { timeoutPolicy: 'bounded', watchInterrupt: () => () => {} })
   void finished.then(() => completed = true, () => completed = true)
   try {
     const parent = await until(() => publishedProcess(parentPath), {
@@ -141,6 +141,7 @@ function schedule(
   let interrupt = () => {}
 
   const finished = WorkGraph.run(states, {
+    timeoutPolicy: 'bounded',
     expectedMs: name => options.expectedMs?.[name],
     jobs: options.jobs ?? 4,
     runNode: async (state, context) => {
@@ -535,6 +536,7 @@ Describe('work graph scheduling', () => {
     })
 
     await WorkGraph.run([state], {
+      timeoutPolicy: 'bounded',
       runNode: async (_state, context) =>
         await new Promise(resolve => {
           context.onCancel(() => resolve({ exitCode: 0 }))
@@ -603,7 +605,7 @@ Describe('work graph scheduling', () => {
       run: { args: [], command: 'definitely-not-a-real-command-xyz' },
     })
 
-    await WorkGraph.run([state], { watchInterrupt: () => () => {} })
+    await WorkGraph.run([state], { timeoutPolicy: 'bounded', watchInterrupt: () => () => {} })
 
     Expect(state.status).toBe('failed')
     Expect(state.failure?.kind).toBe('process-error')
@@ -643,6 +645,7 @@ Describe('work graph scheduling', () => {
     let interrupt = () => {}
     let finish = () => {}
     const finished = WorkGraph.run([state], {
+      timeoutPolicy: 'bounded',
       jobs: 1,
       runNode: async (_state, context) =>
         await new Promise(resolve => {
@@ -672,6 +675,7 @@ Describe('work graph scheduling', () => {
     let released = false
     let starts = 0
     const finished = WorkGraph.run([state], {
+      timeoutPolicy: 'bounded',
       jobs: 1,
       runNode: async () => {
         starts += 1
@@ -709,6 +713,7 @@ Describe('work graph scheduling', () => {
     let releaseStarted = false
     let graphFinished = false
     const finished = WorkGraph.run([state], {
+      timeoutPolicy: 'bounded',
       jobs: 1,
       runNode: async () => ({ exitCode: 0 }),
       slotBroker: {
@@ -742,6 +747,7 @@ Describe('work graph scheduling', () => {
     let attempts = 0
 
     await WorkGraph.run([state], {
+      timeoutPolicy: 'bounded',
       jobs: 1,
       onEvent: event => events.push(event.kind),
       runNode: async () => ({ exitCode: 0 }),
@@ -776,6 +782,7 @@ Describe('work graph scheduling', () => {
     }
 
     await WorkGraph.run([state], {
+      timeoutPolicy: 'bounded',
       jobs: 1,
       onEvent: event => {
         if (event.kind === 'waiting') {
@@ -802,6 +809,7 @@ Describe('work graph scheduling', () => {
     let capacityAvailable = false
 
     const finished = WorkGraph.run(states, {
+      timeoutPolicy: 'bounded',
       jobs: 2,
       runNode: async state => {
         started.push(state.name)
@@ -838,6 +846,7 @@ Describe('work graph scheduling', () => {
     let cancellations = 0
 
     const finished = WorkGraph.run(states, {
+      timeoutPolicy: 'bounded',
       jobs: 2,
       runNode: async (_state, context) =>
         await new Promise(resolve => {
@@ -869,6 +878,7 @@ Describe('work graph scheduling', () => {
     const events: string[] = []
     const states = ['a', 'b'].map(name => WorkGraph.createState(workNode({ name })))
     await WorkGraph.run(states, {
+      timeoutPolicy: 'bounded',
       jobs: 1,
       onEvent: event => events.push(`${event.kind}${'state' in event ? ` ${event.state.name}` : ''}`),
       runNode: async () => ({ exitCode: 0 }),
@@ -879,5 +889,12 @@ Describe('work graph scheduling', () => {
     Expect(events.filter(event => event.startsWith('start'))).toEqual(['start a', 'start b'])
     Expect(events.filter(event => event.startsWith('complete'))).toEqual(['complete a', 'complete b'])
     Expect(events.at(-1)).toBe('done')
+  })
+
+  Test('an unrequested width takes the machine up to the cap, never below one slot', () => {
+    Expect(WorkGraph.defaultCapacity(4)).toBe(4)
+    Expect(WorkGraph.defaultCapacity(12)).toBe(12)
+    Expect(WorkGraph.defaultCapacity(18)).toBe(WorkGraph.DEFAULT_WIDTH_CAP)
+    Expect(WorkGraph.defaultCapacity(0)).toBe(1)
   })
 })

@@ -474,6 +474,9 @@ Test('Studio device panel drives pairing, launch, scenario, and revoke requests 
       dom.find(popover, 'studio-device-status')?.textContent === 'Requested Settings — Settings on the device.'
     )
 
+    panel.setCompileState({ compileRevision: 6, publishedRevision: 5 })
+    Expect(dom.find(popover, 'studio-device-revision')?.textContent).toBe('applied ✓ (5)')
+    Expect(button.textContent).toBe('Device · the Developer’s iPhone')
     panel.setCompileState({ compileRevision: 6 })
     Expect(dom.find(popover, 'studio-device-revision')?.textContent).toBe('behind — device 5, Studio 6')
     Expect(button.textContent).toBe('Device · behind')
