@@ -1,7 +1,8 @@
 # Verification speed plan
 
-Status: plan, 2026-10-06. Owner: the Developer. Evidence: `.artifacts/verification-speed/research-notes.md`
-in the `feat/verification-speed` worktree (sections cited as §n below), the 2026-10-05 sequential
+Status: plan, 2026-10-06. Owner: the Developer. Evidence: `Docs/Roadmap/Verification speed research.md`
+(sections cited as §n below; its replay and selection scripts live in `.artifacts/verification-speed/`
+of the `feat/verification-speed` worktree), the 2026-10-05 sequential
 diagnostic handoff from the Studio preview task, and DEVENV-094 / DEVENV-113.
 
 ## What the research established
