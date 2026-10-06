@@ -967,6 +967,7 @@ Focused proof passes 32 work-graph cases, 44 test-runner cases, nine failure-pol
 the owned peer and its descendant while an unrelated detached process stays alive. Targeted
 collect-all requests retain their artifact paths but register as narrow machine lanes; narrow
 lanes remain admissible during landing priority, and broad verification continues to yield.
+
 ## Identical-publication production slice, 2026-10-05
 
 Preview generation compares the exact non-marker path-to-code map and publication metadata with
@@ -1062,3 +1063,15 @@ timeout fixtures, per-attempt retry cadence and performance assertions remain un
 The corrected real Metro drag journey passes independently in22seconds. Retain the interrupted
 run and compare identical test/group membership across sequential and parallel artifacts; for
 example, the split receipt group passed33.9s sequentially and399.4s in that parallel run.
+
+## Metro hosted-landing integration, 2026-10-06
+
+The outstanding Metro slice integrated current main and its hosted verification route. Frozen
+setup reproduces the pinned patches. All six installed-module timer regressions pass; the real
+paired-file burst and follow-up save smoke passes in20.6seconds with no observed HMR errors or
+iframe reloads. These are focused integration checks, not portable merge proof.
+
+The standalone performance attempt was inconclusive at quiet admission: another host complement
+was active and load was34.6 on18 CPUs. Retain that result; no performance ceiling changed and no
+new save-to-paint gain is claimed. Hosted Verify and the local host-only complement own landing
+proof. Earlier sequential-versus-parallel research evidence remains in the verification handoff.
