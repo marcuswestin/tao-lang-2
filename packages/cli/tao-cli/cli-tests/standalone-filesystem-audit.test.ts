@@ -634,6 +634,93 @@ Describe('standalone filesystem audit', () => {
     }
   })
 
+  Test('allows only the exact added Xcode Chrome staging pair', async () => {
+    const fixture = await mkTestDir('tao-filesystem-chrome-staging-')
+    const before = FS.resolvePath('before.json', fixture)
+    const after = FS.resolvePath('after.json', fixture)
+    const diffPath = FS.resolvePath('diff.json', fixture)
+    const reportPath = FS.resolvePath('diff.txt', fixture)
+    const scopePath = FS.resolvePath('scope.json', fixture)
+    const root = '/guest/tmp/scoped_dirGsLsRE'
+    const marker = `${root}/.com.google.Chrome.FWBpoh`
+    const acceptanceArtifact = '/guest/acceptance/home/.tao'
+    const directory = { kind: 'directory', mode: 0o40700, size: 96, uid: 501, gid: 20, modifiedMs: 1 }
+    const emptyMarker = { kind: 'file', mode: 0o100600, size: 0, uid: 501, gid: 20, modifiedMs: 1 }
+    const snapshot = { issues: [], root: '/guest', skippedMounts: [] }
+    const pair = { [root]: directory, [marker]: emptyMarker }
+    const compare = () =>
+      CLI.run(Platform.runtimeProcess.execPath, {
+        args: ['run', AUDIT, 'compare', before, after, diffPath, reportPath, scopePath],
+      })
+    const rejected = async (entries: Record<string, unknown>, expected: string[]) => {
+      await FS.writeJson(before, { ...snapshot, entries: {} })
+      await FS.writeJson(after, { ...snapshot, entries: { [acceptanceArtifact]: { kind: 'directory' }, ...entries } })
+      Expect((await compare()).exitCode).not.toBe(0)
+      const { violations } = await FS.readJson<{ violations: string[] }>(diffPath)
+      for (const path of expected) {
+        Expect(violations).toContain(path)
+      }
+    }
+    try {
+      await FS.writeJson(scopePath, { guestHome: '/admin', guestTemp: '/tmp', root: '/acceptance', vmProfile: 'xcode' })
+      await FS.writeJson(before, { ...snapshot, entries: {} })
+      await FS.writeJson(after, { ...snapshot, entries: { [acceptanceArtifact]: { kind: 'directory' }, ...pair } })
+      const stagingResult = await compare()
+      Expect(stagingResult.exitCode).toBe(0)
+      Expect(await FS.readJson<{ violations: string[] }>(diffPath)).toMatchObject({ violations: [] })
+
+      const nonempty = { ...emptyMarker, size: 1 }
+      const wrongType = { ...emptyMarker, kind: 'directory', mode: 0o40700 }
+      const invalidCases = [
+        { entries: { [root]: directory }, expected: [root] },
+        { entries: { ...pair, [marker]: nonempty }, expected: [root, marker] },
+        { entries: { ...pair, [marker]: wrongType }, expected: [root, marker] },
+        { entries: { ...pair, [root]: { ...directory, mode: 0o40701 } }, expected: [root] },
+        { entries: { ...pair, [marker]: { ...emptyMarker, mode: 0o100640 } }, expected: [marker] },
+        { entries: { ...pair, [root]: { ...directory, uid: 502 } }, expected: [root] },
+        { entries: { ...pair, [marker]: { ...emptyMarker, gid: 21 } }, expected: [marker] },
+        { entries: { ...pair, [`${root}/unexpected`]: emptyMarker }, expected: [`${root}/unexpected`] },
+        {
+          entries: { ...pair, '/guest/tmp/scoped_dirGsLsRE-adjacent': directory },
+          expected: ['/guest/tmp/scoped_dirGsLsRE-adjacent'],
+        },
+        {
+          entries: {
+            ...pair,
+            '/guest/acceptance/home/tmp/scoped_dirGsLsRE': directory,
+            '/guest/acceptance/home/tmp/scoped_dirGsLsRE/.com.google.Chrome.FWBpoh': emptyMarker,
+          },
+          expected: [
+            '/guest/acceptance/home/tmp/scoped_dirGsLsRE',
+            '/guest/acceptance/home/tmp/scoped_dirGsLsRE/.com.google.Chrome.FWBpoh',
+          ],
+        },
+      ]
+      for (const testCase of invalidCases) {
+        await rejected(testCase.entries, testCase.expected)
+      }
+
+      // A pre-existing root with a newly added marker does not form an added pair.
+      await FS.writeJson(before, {
+        ...snapshot,
+        entries: { [acceptanceArtifact]: { kind: 'directory' }, [root]: directory },
+      })
+      await FS.writeJson(after, { ...snapshot, entries: { [acceptanceArtifact]: { kind: 'directory' }, ...pair } })
+      Expect((await compare()).exitCode).not.toBe(0)
+      Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain(marker)
+
+      await FS.writeJson(scopePath, {
+        guestHome: '/admin',
+        guestTemp: '/tmp',
+        root: '/acceptance',
+        vmProfile: 'vanilla',
+      })
+      await rejected(pair, [root, marker])
+    } finally {
+      await FS.remove(fixture)
+    }
+  })
+
   Test('bounds Xcode allowances by profile, artifact shape, and observed operation', async () => {
     const fixture = await mkTestDir('tao-filesystem-xcode-')
     const before = FS.resolvePath('before.json', fixture)

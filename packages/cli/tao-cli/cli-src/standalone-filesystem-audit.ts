@@ -554,6 +554,30 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
       && retainedChanges.has(FS.resolvePath('CRX_INSTALL', FS.dirname(path)))
     ).map(path => FS.dirname(path)),
   )
+  // Chromium corroborates scoped_dir and bundle-ID temp naming, not the writer here:
+  // https://chromium.googlesource.com/chromium/src/+/refs/tags/127.0.6527.0/base/files/scoped_temp_dir.cc
+  // https://chromium.googlesource.com/chromium/src/+/refs/tags/129.0.6668.39/base/files/file_util_posix.cc
+  // Treat this as an inferred writer only for the exact empty Xcode staging pair observed in the snapshot.
+  const xcodeChromeStagingPaths = new Set<string>()
+  if (scope.vmProfile === 'xcode') {
+    for (const root of diff.added.filter(path => /^scoped_dir[A-Za-z0-9]{6}$/.test(FS.relativePath(guestTemp, path)))) {
+      const marker = diff.added.find(path =>
+        FS.dirname(path) === root && /^\.com\.google\.Chrome\.[A-Za-z0-9]{6}$/.test(FS.basename(path))
+      )
+      const directory = afterEntries[root]
+      const file = marker === undefined ? undefined : afterEntries[marker]
+      if (
+        marker !== undefined
+        && directory?.kind === 'directory' && directory.mode === 0o40700 && directory.size === 96
+        && directory.uid === 501 && directory.gid === 20
+        && file?.kind === 'file' && file.mode === 0o100600 && file.size === 0
+        && file.uid === 501 && file.gid === 20
+      ) {
+        xcodeChromeStagingPaths.add(root)
+        xcodeChromeStagingPaths.add(marker)
+      }
+    }
+  }
   const cryptexRoot = onVolume('/private/var/run/com.apple.security.cryptexd')
   const xcodeCryptex = (path: string) => {
     if (scope.vmProfile !== 'xcode') {
@@ -594,6 +618,7 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     if (
       xcodeExact.includes(path) || systemExact.includes(path) || guestSystemExact.includes(path)
       || ppmPatArtifact(path) || googleUpdaterTempPath(path)
+      || xcodeChromeStagingPaths.has(path)
       || xcodeCryptex(path) || xcodeRemoved(path)
       || xcodeTemporaryDirectoryChanges.has(path)
       || (scope.vmProfile === 'xcode' && xcodeTimestampDirectories.includes(path) && timestampChanged.has(path))
