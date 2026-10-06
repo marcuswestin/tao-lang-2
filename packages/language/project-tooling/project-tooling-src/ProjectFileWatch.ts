@@ -51,10 +51,10 @@ export async function startProjectFileWatch(
       options.onStartupProgress?.(phase)
     }
   }
-  const awaitStartup = async <T>(action: Promise<T>): Promise<T> => {
+  const awaitStartup = <T>(action: Promise<T>): Promise<T> => {
     const signal = starting ? options.startupSignal : undefined
     if (signal === undefined) {
-      return await action
+      return action
     }
     let abort!: () => void
     const cancelled = new Promise<never>((_resolve, reject) => {
@@ -64,11 +64,9 @@ export async function startProjectFileWatch(
         abort()
       }
     })
-    try {
-      return await Promise.race([action, cancelled])
-    } finally {
+    return Promise.race([action, cancelled]).finally(() => {
       signal.removeEventListener('abort', abort)
-    }
+    })
   }
 
   const stopNativeScan = async (): Promise<void> => {
