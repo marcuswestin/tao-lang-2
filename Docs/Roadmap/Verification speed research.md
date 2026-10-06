@@ -470,3 +470,63 @@ Three runs of main's twelve-partition workflow, timed from each job's `started_a
   (§18), and the Companion hosts jobs no longer take Linux runners from the pool on pull requests
   (`main` moved them to a nightly schedule during the slice). The partition count itself came from
   slice A's sizing, not from D1.
+
+## 20. Browser gates in hosted `Verify`, and landing walls at the project's close (own measurement, 2026-10-06)
+
+- Shape: six of the nine host gates run as Linux partition nodes under `--hosted-linux` (the
+  catalog flag `runsOnHostedLinux`), each reserving its whole runner (`HOSTED_BROWSER_LANE_COST`,
+  four slots on `ubuntu-24.04`); `studio-proof-real-app`, `studio-agent-browser` and
+  `studio-canary` stay in the local complement. No package install: Chrome 154 is on the runner
+  image, Watchman comes from the Nix profile, and headless Chrome needs no display. The one
+  environment fix the port needed was Studio's preview Metro inheriting `CI=true` and running in
+  CI mode (no reloads), which failed 3 of 4 real-app tests deterministically.
+- Gate times on the runner, in seconds. "Solo" is one gate in a job of its own (run
+  37499414529); "packed" is the gate as an ordinary cost-1 node beside other nodes; "reserved" is
+  the gate alone on its partition.
+
+  | Gate                          | Solo | Packed                                    | Reserved | Where it runs now                       |
+  | ----------------------------- | ---: | ----------------------------------------- | -------: | --------------------------------------- |
+  | `studio-dialog-browser`       |   11 | 11.7                                      |      2.9 | hosted (PR 55, reservation PR 74)       |
+  | `studio-smoke`                |   15 | 64                                        |        — | hosted at cost 1, passes packed (PR 63) |
+  | `studio-agent-browser`        |   28 | failed twice (PR 67)                      |   failed | local complement                        |
+  | `studio-network-simulation`   |   44 | —                                         |       75 | hosted (PR 69)                          |
+  | `keyboard-navigation-smoke`   |   65 | —                                         |       74 | hosted (PR 70)                          |
+  | `studio-smoke-simulated-user` |  132 | —                                         |      137 | hosted (PR 71)                          |
+  | `studio-metro-refresh` (new)  |   80 | 142–190, one red `main` run (37535079423) |     83.7 | hosted (PR 64, reservation PR 74)       |
+  | `studio-proof-real-app`       |  333 | —                                         |        — | local complement                        |
+
+  `studio-agent-browser` failed on the approval box's settle wait (about 90 s) and once on Chrome's
+  `DevToolsActivePort` (38 s) with load near 10 on four vCPUs, then failed alone in 83 s (PR 72);
+  it stays local until diagnosed. `studio-proof-real-app` passes with `CI` unset but would be the
+  longest node of any partition; its three Metro-unique claims (a new module is discovered and
+  served, Fast Refresh applies a regenerated module without remounting, the cell re-bootstraps
+  after a Code save) moved to the new 80 s `studio-metro-refresh` gate instead.
+- `Verify` wall alone (run creation to the aggregate, 20 partitions), `main` runs after the ports:
+  444 s (37536039989), 440 s (37537674621), 419 s (37542236453), 493 s (37545773281), against
+  352 s at the end of D1 (§19). Five partitions now hold one reserved browser gate each, and the
+  slowest lane is partition 9 at about 510 s, whose longest node is `testing/verification`
+  (245 s), the next lever. Sharding `runtime-jest` three ways (one 251 s node → shards of
+  71–110 s) took the slowest lane from 576 s to 510 s; the `tao-cli` trims measured −52.7 s of
+  2,131 shard-seconds, noise against their estimate.
+- Landings, push to merged, through `open-pr --auto-merge` with the complement beside it:
+
+  | PR | Wall        | Shape                                                                       |
+  | -- | ----------- | --------------------------------------------------------------------------- |
+  | 51 | 12 min 38 s | alone; one complement flake and rerun                                       |
+  | 52 | 11 min 15 s | overlapping 51                                                              |
+  | 55 | 7 min 00 s  | alone from open to merge; 28 min 48 s from the push (22 min admission wait) |
+  | 56 | 9 min 25 s  | alone                                                                       |
+  | 60 | 12 min 27 s | three overlapping (two from another branch set)                             |
+  | 63 | 15 min 36 s | conflict with `main` after 64, then yield                                   |
+  | 64 | 8 min 10 s  | alone, after a 35 min yield behind four foreign runs                        |
+  | 65 | 12 min      | final push; 54 min over three pushes                                        |
+  | 66 | 11 min 39 s | overlapping                                                                 |
+  | 69 | 8 min 29 s  | alone                                                                       |
+  | 70 | 6 min 30 s  | alone                                                                       |
+  | 71 | 27 min 19 s | complement flake, cancelled run, rerun                                      |
+  | 74 | 9 min 57 s  | alone                                                                       |
+
+  The complement's wall is set by `studio-proof-real-app` (161–222 s locally) and did not move;
+  the six gates that left it took 1–32 s each of local machine time. `main` went red twice during
+  the project: once from the packed `studio-metro-refresh` (fixed by the reservation) and once from
+  a `land-fix` push that carried pre-squash commits and a type error without running a gate.
