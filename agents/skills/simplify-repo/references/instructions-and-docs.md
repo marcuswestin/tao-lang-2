@@ -20,7 +20,7 @@
 ## Placing
 
 `agent-instructions` owns where a rule goes. Workflows that share a verb become reference files of
-one skill (`git-workflow` holds committing in chunks and merging progress; `delegation` holds
+one skill (`landing` holds merging progress and personal-branch cycles; `delegation` holds
 parallel implementation and review fan-out); a thin skill merges into its nearest owner only when a
 trigger no other skill covers survives the merge.
 

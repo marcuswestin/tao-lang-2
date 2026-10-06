@@ -201,4 +201,44 @@ Describe('delegation profiles', () => {
       "agents/skills/delegation/SKILL.md declares name 'delegating'; it must match its directory 'delegation'.",
     ])
   })
+
+  Test('rejects a skill description that never says when to load the skill', () => {
+    const skill: AgentDocument = {
+      description: 'Notify the Developer when an agent needs attention.',
+      name: 'delegation',
+      path: 'agents/skills/delegation/SKILL.md',
+      sections: {},
+    }
+
+    Expect(delegationIssues({ profiles: [profile()], skills: [skill], skillSource })).toEqual([
+      'agents/skills/delegation/SKILL.md description must say when to load the skill with "Use when", "Use for", '
+      + 'or "Use before".',
+    ])
+  })
+
+  Test('accepts each spelling of when to load a skill, including the narrow "Use only when"', () => {
+    const skills = ['Use when asked.', 'Use for lookups.', 'Use before merging.', 'Use only when asked.'].map(
+      (description): AgentDocument => ({
+        description: `Do a thing. ${description}`,
+        name: 'delegation',
+        path: 'agents/skills/delegation/SKILL.md',
+        sections: {},
+      }),
+    )
+
+    Expect(delegationIssues({ profiles: [profile()], skills, skillSource })).toEqual([])
+  })
+
+  Test('rejects a skill description longer than the 1,024 characters the skill format allows', () => {
+    const skill: AgentDocument = {
+      description: `Use when asked. ${'x'.repeat(1_009)}`,
+      name: 'delegation',
+      path: 'agents/skills/delegation/SKILL.md',
+      sections: {},
+    }
+
+    Expect(delegationIssues({ profiles: [profile()], skills: [skill], skillSource })).toEqual([
+      'agents/skills/delegation/SKILL.md description is 1025 characters; keep it within 1024.',
+    ])
+  })
 })

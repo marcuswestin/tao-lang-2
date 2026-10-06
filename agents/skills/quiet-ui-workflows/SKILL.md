@@ -1,10 +1,11 @@
 ---
 name: quiet-ui-workflows
 description: >-
-  Preserve the Developer's focus during UI automation. Use before launching or controlling
-  browsers, Studio, native apps, simulators, visual tests, or any computer-control session; also
-  when choosing in-app, headless, hidden, background, or visible execution, or managing a
-  development loop's lifetime.
+  Preserve the Developer's focus during UI automation and choose the browser. Use before
+  launching or controlling browsers, Studio, native apps, simulators, visual tests, or any
+  computer-control session, and before interactive browsing or development review; also when
+  choosing which browser, in-app, headless, hidden, background, or visible execution, or
+  managing a development loop's lifetime.
 ---
 
 # Quiet UI Workflows
@@ -15,8 +16,8 @@ For driver selection, setup requirements, and the researched limits of each surf
 ## Choose the surface
 
 - Prefer the harness's in-app visual UI for interactive development review when it can perform the
-  needed actions; showing content there does not require a separate desktop window. `browser-use`
-  owns which browser. Use headless or hidden execution when it provides needed automation,
+  needed actions; showing content there does not require a separate desktop window. **Which
+  browser**, below, owns the browser choice. Use headless or hidden execution when it provides needed automation,
   isolation, or repeatability, or when the in-app UI cannot operate the target. Bring screenshots
   into the agent app for visual inspection when the tool supports it.
 - Starting a server or producing an app alone does not call for opening its UI. When visual review
@@ -40,6 +41,24 @@ For driver selection, setup requirements, and the researched limits of each surf
 - For native Mac apps, background launch, hidden application, minimized window, and headless
   execution are different. Background launch may still create a visible window. Computer-control
   tools may activate or restore it. Do not promise hidden testing without observing that behavior.
+
+## Which browser
+
+- Use the harness's in-app browser for interactive browsing and development review, as though the
+  Developer had picked it for this request: in Claude Code, the desktop app's built-in browser pane
+  (`mcp__Claude_Browser__*`), not Claude in Chrome (`mcp__claude-in-chrome__*`) or computer-use
+  driving a browser app; in Codex, the app's in-app browser, not a Chrome window; in any other
+  harness, its built-in browser.
+- Use Google Chrome (in Claude Code, Claude in Chrome) only when the Developer explicitly asks for
+  Chrome, the Chrome extension, or their own browser; the request covers its task, not later ones.
+  Use Safari or another browser only when the Developer names it.
+- A page needing the Developer's signed-in session, a site the in-app browser cannot load, or an
+  unavailable in-app browser is not permission to switch: say what blocked it and ask whether to
+  use Chrome. Never open a URL through the operating system's default browser (`open <url>`).
+- Repository headless runners keep their configured Chrome; that does not select Chrome for
+  interactive browsing. Their tab and the in-app browser are separate sessions: attach a
+  CDP-capable client to the printed DevTools URL to inspect the runner's own. Reuse the task's tab
+  where possible.
 
 ## Managed development loops
 
