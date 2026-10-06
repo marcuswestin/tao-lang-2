@@ -185,7 +185,7 @@ export function appiumAndroidJourneyAdapter(
           },
           enter: async next => await enterNativeInput(session, next.selector, next.target, next.value, next.selections),
           expect: async next =>
-            await assertText(session, next.text, next.missing, next.selections, next.source.filePath),
+            await assertText(session, next.text, next.missing, next.selections, next.source.filePath, next.selector),
           expectCheckboxState: unsupportedJourneyOperation,
           expectFocusRegion: unsupportedJourneyOperation,
           expectGroup: unsupportedJourneyOperation,
@@ -276,8 +276,14 @@ async function assertText(
   missing: boolean,
   selections: readonly HostJourneySelection[],
   sourcePath: string,
+  selector = 'text',
 ): Promise<void> {
-  const target = scopedTarget(selections, { kind: 'text', value: text })
+  const target = scopedTarget(
+    selections,
+    selector === 'label'
+      ? { kind: 'accessibility', name: text }
+      : { kind: 'text', value: text },
+  )
   if (!missing) {
     const found = await Time.pollUntil(async () => {
       const observation = await observeIfPresent(session, target)

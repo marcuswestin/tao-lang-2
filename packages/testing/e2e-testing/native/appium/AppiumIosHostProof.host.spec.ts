@@ -741,6 +741,42 @@ for (
     ).rejects.toThrow("expected input value 'Lost draft'")
   })
 
+  test(`${platform} label assertions preserve accessibility selection inside a row`, async () => {
+    const session = new RecordingSession()
+    const original = session.observe.bind(session)
+    session.observe = async request => {
+      const observation = await original(request)
+      const leaf = request.target.kind === 'scoped' ? request.target.target : request.target
+      if (leaf.kind !== 'accessibility') {
+        throw new AppiumNoSuchElementError('The label is not the rendered text')
+      }
+      return { ...observation, text: 'Export completed in 0.1 seconds.' }
+    }
+    const selections = [{ index: 1, source: source(), tag: 'book' }]
+    const adapter = createAdapter(session, { advance: async () => {} }, 'labels', [])
+    await adapter.execute({
+      kind: 'expect',
+      missing: false,
+      selector: 'label',
+      text: 'Export complete book-001',
+      selections,
+      source: source(),
+    })
+    expect(session.targets).toEqual([{
+      kind: 'scoped',
+      scope: { kind: 'tag', occurrence: 1, value: 'book' },
+      target: { kind: 'accessibility', name: 'Export complete book-001' },
+    }])
+    await expect(adapter.execute({
+      kind: 'expect',
+      missing: true,
+      selector: 'label',
+      text: 'Export complete book-001',
+      selections,
+      source: source(),
+    })).rejects.toThrow("expected hidden text 'Export complete book-001'")
+  })
+
   test(`${platform} input assertions wait through missing, hidden and stale values`, async () => {
     const session = new RecordingSession(undefined, { 'Note draft': 'Keep this draft' })
     const observe = session.observe.bind(session)
