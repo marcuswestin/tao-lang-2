@@ -185,6 +185,55 @@ Describe('Studio background validation scheduling', () => {
     Expect(released).toEqual([2])
   })
 
+  Test('a canceled maximum callback cannot erase a newer timer before close', () => {
+    const clock = new FakeClock()
+    const scheduler = createStudioBackgroundValidationScheduler({
+      cancelTimer: clock.cancel,
+      onRelease: () => {},
+      setTimer: clock.set,
+    })
+
+    scheduler.request(1)
+    const staleMaximum = clock.latestHandle
+    scheduler.complete()
+    scheduler.request(2)
+    const currentMaximum = clock.latestHandle
+    scheduler.painted(2)
+    const currentIdle = clock.latestHandle
+
+    clock.invokeCaptured(staleMaximum)
+    scheduler.close()
+
+    Expect(clock.isPending(currentMaximum)).toBe(false)
+    Expect(clock.isPending(currentIdle)).toBe(false)
+    Expect(clock.pendingCount).toBe(0)
+  })
+
+  Test('a canceled idle callback cannot erase a newer timer before close', () => {
+    const clock = new FakeClock()
+    const scheduler = createStudioBackgroundValidationScheduler({
+      cancelTimer: clock.cancel,
+      onRelease: () => {},
+      setTimer: clock.set,
+    })
+
+    scheduler.request(1)
+    scheduler.painted(1)
+    const staleIdle = clock.latestHandle
+    scheduler.complete()
+    scheduler.request(2)
+    const currentMaximum = clock.latestHandle
+    scheduler.painted(2)
+    const currentIdle = clock.latestHandle
+
+    clock.invokeCaptured(staleIdle)
+    scheduler.close()
+
+    Expect(clock.isPending(currentMaximum)).toBe(false)
+    Expect(clock.isPending(currentIdle)).toBe(false)
+    Expect(clock.pendingCount).toBe(0)
+  })
+
   Test('close cancels pending work and ignores future requests and paints', () => {
     const clock = new FakeClock()
     const released: number[] = []
@@ -211,12 +260,26 @@ Describe('Studio background validation scheduling', () => {
 class FakeClock {
   #now = 0
   #nextId = 0
+  #callbacks = new Map<number, () => void>()
   #timers = new Map<number, { callback: () => void; deadline: number }>()
 
   set = (callback: () => void, delayMs: number) => {
     const id = ++this.#nextId
+    this.#callbacks.set(id, callback)
     this.#timers.set(id, { callback, deadline: this.#now + delayMs })
     return id
+  }
+
+  get latestHandle(): number {
+    return this.#nextId
+  }
+
+  invokeCaptured(handle: number): void {
+    this.#callbacks.get(handle)?.()
+  }
+
+  isPending(handle: number): boolean {
+    return this.#timers.has(handle)
   }
 
   cancel = (handle: unknown) => {

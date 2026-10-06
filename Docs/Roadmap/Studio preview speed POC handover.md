@@ -91,18 +91,18 @@ Sequential cases, eight saves, first discarded for warm statistics; actual compu
 subsequent paint. Tracing/profiling are separate from normal timing. Host has 18 CPUs; contention varied.
 Retain individual samples/failures. Different loads do not establish exact additive causal savings.
 
-| Case | Warm p50 / p95 | Load average | Raw sample id |
-| --- | --- | --- | --- |
-| Immediate full control | 871 / 1586 ms | 7.22–7.61 | Handover chronology |
-| Held-full diagnostic control | 213 / 321 ms | 7.86–8.74 | Handover chronology |
-| Safe compiler/HMR, selected controls | 179 / 188 ms | 3.61–4.09 | 1791290516937 |
-| Padding width changes/revert | 43 / 50 ms | 9.52–10.00 | 1791288204893 |
-| Padding recovery/two-file burst | 38 / 52 ms | 3.66–3.69 | 1791290677997 |
-| Whole app, normal | 42 / 48 ms | 4.11 | 1791291139539 |
-| Two active cells, normal | 44 / 50 ms | 3.75–3.99 | 1791291229709 |
-| Whole app, traced child acknowledgement | 44 / 48 ms | 4.92–5.09 | 1791291889633 |
-| Fresh wrapping activation during overlay, traced | 47 / 50 ms | 18.37 | 1791288928479 |
-| Save during captured full work, traced | 523 / 1154 ms | 10.64–12.52 | 1791289044978 |
+| Case                                             | Warm p50 / p95 | Load average | Raw sample id       |
+| ------------------------------------------------ | -------------- | ------------ | ------------------- |
+| Immediate full control                           | 871 / 1586 ms  | 7.22–7.61    | Handover chronology |
+| Held-full diagnostic control                     | 213 / 321 ms   | 7.86–8.74    | Handover chronology |
+| Safe compiler/HMR, selected controls             | 179 / 188 ms   | 3.61–4.09    | 1791290516937       |
+| Padding width changes/revert                     | 43 / 50 ms     | 9.52–10.00   | 1791288204893       |
+| Padding recovery/two-file burst                  | 38 / 52 ms     | 3.66–3.69    | 1791290677997       |
+| Whole app, normal                                | 42 / 48 ms     | 4.11         | 1791291139539       |
+| Two active cells, normal                         | 44 / 50 ms     | 3.75–3.99    | 1791291229709       |
+| Whole app, traced child acknowledgement          | 44 / 48 ms     | 4.92–5.09    | 1791291889633       |
+| Fresh wrapping activation during overlay, traced | 47 / 50 ms     | 18.37        | 1791288928479       |
+| Save during captured full work, traced           | 523 / 1154 ms  | 10.64–12.52  | 1791289044978       |
 
 Whole-app traced run observed eight fast-paint-observed events and subsequent full-pass-released.
 Recovery's first edit, 983 ms, used normal compilation; it is not ordinary cold padding timing.
@@ -113,7 +113,7 @@ comparisons with load confounding. Source-read stage medians 179/152/130/131 ms 
 saving; additional validation profiles reused zero files, validating 23–24 documents.
 
 Host `NODE_ENV=production` does not prove a release browser bundle: observed dev=true and
-__DEV__=true. Landed stable links, identical-publication suppression/acknowledgements and narrow
+`__DEV__`=true. Landed stable links, identical-publication suppression/acknowledgements and narrow
 Metro timer patches remain. Historical approximately 270 ms timing used a different fixture.
 
 ### Selected POC launch

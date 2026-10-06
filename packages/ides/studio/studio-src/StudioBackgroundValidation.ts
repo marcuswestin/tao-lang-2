@@ -83,6 +83,9 @@ export function createStudioBackgroundValidationScheduler({
     pendingAttempt = attempt
     hasMaximumTimer = true
     maximumTimer = setTimer(() => {
+      if (pendingAttempt !== attempt) {
+        return
+      }
       maximumTimer = undefined
       hasMaximumTimer = false
       releaseAttempt(attempt)
@@ -105,11 +108,12 @@ export function createStudioBackgroundValidationScheduler({
     paintedRevision = revision
     hasIdleTimer = true
     idleTimer = setTimer(() => {
+      if (pendingAttempt !== attempt || pendingRevision !== revision) {
+        return
+      }
       idleTimer = undefined
       hasIdleTimer = false
-      if (pendingAttempt === attempt && pendingRevision === revision) {
-        releaseAttempt(attempt)
-      }
+      releaseAttempt(attempt)
     }, idleDelayMs)
   }
 

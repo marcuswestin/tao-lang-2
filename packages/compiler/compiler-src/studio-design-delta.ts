@@ -2,7 +2,7 @@ import { AST, Parser } from '@parser'
 import { Switch } from '@shared'
 
 /** StudioDesignSourceRange is a zero-based, half-open range in authored Tao source. */
-export type StudioDesignSourceRange = Readonly<{ from: number; to: number }>
+type StudioDesignSourceRange = Readonly<{ from: number; to: number }>
 
 /** StudioDesignPaddingDelta describes one source-preserving numeric pad edit in a design bundle. */
 export type StudioDesignPaddingDelta = Readonly<{

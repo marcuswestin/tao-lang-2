@@ -307,11 +307,11 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
             capturedAt: Date.now(),
             samples: [...samples],
           }),
-        ]).then(() => {}).catch(error =>
-          HCI.logProcessError('studio-latency', Errors.formatForLog(error))
-        ).finally(() => {
-          diagnosticWrite = undefined
-        })
+        ]).then(() => {}).catch(error => HCI.logProcessError('studio-latency', Errors.formatForLog(error))).finally(
+          () => {
+            diagnosticWrite = undefined
+          },
+        )
       }, 1_000)
     }
     const sourcePath = await project.setup(projectRoot)
@@ -321,7 +321,11 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       previewPublication: mode,
       projectRoot,
       ...(traceDiagnostics
-        ? { onOutput: (chunk: Buffer) => { diagnosticOutput += chunk.toString('utf8') } }
+        ? {
+          onOutput: (chunk: Buffer) => {
+            diagnosticOutput += chunk.toString('utf8')
+          },
+        }
         : {}),
     })
     const activeStudio = studio

@@ -1105,7 +1105,7 @@ and are restored out of production plumbing.
 
 Focused source evidence passes: real preview-session lifecycle and publication (nine cases),
 project/session identity (52), server boundaries (29), gateway lifecycle (31), compiler padding
-(seven), runtime padding (six), scheduler (ten), eligibility (seven), input classification (two),
+(seven), runtime padding (six), scheduler (twelve), eligibility (seven), input classification (two),
 receipt audit (one), bridge/protocol/coordinator, runtime publication guards and main native memo.
 Deliberate mutations fail their intended stale-source, first-deadline, timer cleanup, final-consumer,
 close-drain, fresh-realm, failed-registration and whole-app paint-identity witnesses. Typecheck and
@@ -1143,6 +1143,13 @@ qualification review also found that repeated delivery receipts could masquerade
 saves. Duplicate/reversed-revision fixtures fail the old evaluator and pass with a distinct,
 increasing warm-revision guard. All twelve qualification and six launch-helper cases pass.
 
+The subsequent review found that canceled scheduler callbacks could erase newer timer handles
+before close. Both deterministic late-callback witnesses fail the old scheduler and pass after
+checking attempt/revision identity before changing timer bookkeeping. The twelve scheduler cases
+pass without changing deadlines. The first changed-scope gate stopped on an unused exported
+compiler range type; it is now internal, with focused dead-export and type checks passing. The
+complete changed-scope gate must be repeated; its canceled checks are not coverage.
+
 All six canonical performance cases and their ceilings are preserved. A separate production-default
 padding qualification requires seven real warm delivery/paint receipts plus eventual authoritative
 source parity, rather than fabricated generated modification times. Quiet admission, paired
@@ -1150,6 +1157,8 @@ main/feature trials and the changed-scope gate remain outstanding. Main `2876d94
 integrated through the supported workflow as `1f1962f39`; frozen setup and current permission/route
 inspection completed. The control is pinned at that main SHA on `feat/studio-preview-speed-control`
 to prevent main-mirror sync from moving its unmeasured baseline. Standalone performance admission
-was inconclusive: other verification lanes were active and load was 65.45 on 18 CPUs. Retain that
-report and repeat stable source when the host is quiet; paired control measurements remain unrun.
+was inconclusive twice: other verification lanes were active and load was 65.45 and 12.585 on
+18 CPUs. Retain both reports and repeat stable source when the host is quiet; paired control
+measurements remain unrun. Equal persisted-state captures were empty in the whole-app trial, so
+that trial does not establish retention of a populated persisted value.
 No push, CI or landing is authorized.

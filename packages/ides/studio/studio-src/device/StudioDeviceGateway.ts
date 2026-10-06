@@ -39,20 +39,22 @@ import type {
 import type { StudioDeviceTrustStore } from './StudioDeviceTrustStore'
 
 /** The slice of a project session the gateway drives; a real `StudioProjectSession` satisfies it. */
-export type StudioDeviceGatewaySession = Pick<
-  StudioProjectSession,
-  | 'acknowledgePreview'
-  | 'appName'
-  | 'applySourceAction'
-  | 'reconfigureCell'
-  | 'compileSnapshot'
-  | 'previewCellInstance'
-  | 'previewManifest'
-  | 'projectRoot'
-  | 'registerCellPreview'
-  | 'subscribe'
-  | 'unregisterCellPreview'
-> & Partial<Pick<StudioProjectSession, 'retainNativePreviewConsumer' | 'ensurePublishedPreview'>>
+export type StudioDeviceGatewaySession =
+  & Pick<
+    StudioProjectSession,
+    | 'acknowledgePreview'
+    | 'appName'
+    | 'applySourceAction'
+    | 'reconfigureCell'
+    | 'compileSnapshot'
+    | 'previewCellInstance'
+    | 'previewManifest'
+    | 'projectRoot'
+    | 'registerCellPreview'
+    | 'subscribe'
+    | 'unregisterCellPreview'
+  >
+  & Partial<Pick<StudioProjectSession, 'retainNativePreviewConsumer' | 'ensurePublishedPreview'>>
 
 export type StudioDeviceGatewaySessionRef = {
   /** The project's Metro origin; a hello naming that port resolves to this session. */
