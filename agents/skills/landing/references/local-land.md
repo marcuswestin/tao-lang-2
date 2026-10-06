@@ -9,7 +9,7 @@ Remote inspection and push run directly on the host through `./agent unsandboxed
 repository code with the normal GitHub credential helper. The final push updates `main`, the
 archive, and feature-branch deletion atomically with ref leases. A plain `./agent land` stays
 sandboxed, and the `just` and `./dev` landing aliases are human and recovery entry points, not agent
-host-access exceptions. A session holds the permission rules it started with: a harness
+host-access exceptions. A session may hold the permission rules it started with: a harness
 that loads project-local rules at task startup needs a new task after a new wrapper prefix lands,
 and another harness may pick the rules up sooner; after
 changing their source, `./agent setup` refreshes the generated rules where writable, or

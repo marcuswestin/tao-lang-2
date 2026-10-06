@@ -612,7 +612,7 @@ await runWithCommands(commands => {
   commands
     .command('verify-complement')
     .description(
-      'Run the host-only gates hosted Verify does not admit, as one locked lane, and report them as the Verify (host) status on HEAD.',
+      'Run the host-only gates hosted Verify does not run, derived from the catalog and ci-macos.yml, as one locked lane, and report them as the Verify (host) status on HEAD.',
     )
     .argument('<gates...>', "The full lane's gate list; the host-only complement is derived from it and the workflow.")
     .option('--show-studio', 'Permit selected native Studio tests to open windows.')

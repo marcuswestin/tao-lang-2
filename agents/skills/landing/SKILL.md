@@ -31,7 +31,7 @@ What you ask for turns on whether the gates prove the change, not on its size.
 
 - The branch is a clean `feat/<name>` with the exact reviewed task paths committed, and the roadmap, ledger, and spec documents the work changed are refreshed: an edit after `Verify` starts changes the head it proves.
 - The merge message at `.artifacts/merge/<branch>.msg` is written and reviewed (below).
-- Maintained native bindings need no manual step: `open-pr --auto-merge` regenerates them before the push and refuses if that fails or changes tracked files.
+- Maintained native bindings need no manual step: `open-pr --auto-merge` regenerates them before the push and refuses if that fails or changes the worktree.
 - Run no broad local lane and no `finalize` first; the route is the proof. Until `Verify` is green on the current head, call the branch awaiting CI, not verified.
 
 ## The route
