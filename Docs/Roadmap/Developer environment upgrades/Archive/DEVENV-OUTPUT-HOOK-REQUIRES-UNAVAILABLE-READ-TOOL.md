@@ -1,6 +1,6 @@
 # DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL — Output hook requires an unavailable read tool
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Output-discipline hook and shell inspection guidance.
 - **Impact:** Bounded source and instruction reads are refused while the prescribed replacement
@@ -20,3 +20,9 @@
 - **Acceptance:** Bounded file reads have an available supported route; whitespace-only diff
   checks are admitted; whole-patch and generated-tree scans still receive actionable refusals.
 - **Source:** Shared dev/ro managed-loop autonomous continuation, 2026-10-04.
+- **Resolution:** The 2026-10-06 repository pass measured 3,311 `sed` and 75 `cat` overrides of
+  this rule in one week, nearly all citing an absent read tool. The hook now reads the harness from
+  its payload (`turn_id` or a `.codex/` transcript path) and admits bounded shell reads where no
+  file tool exists, while `sed -i`, patch dumps and the other rules still refuse; `git diff --check`
+  counts as bounded. `output-discipline.test.ts` covers both harnesses and the whitespace check.
+- **Archived:** 2026-10-06

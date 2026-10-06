@@ -104,6 +104,25 @@ Describe('Tao project secrets', () => {
     Expect(await grantProjectSecrets(colleague.recipient, root, owner.environment)).toBe(false)
   })
 
+  Test('a recipient written into the committed file by hand gains nothing from a later grant', async () => {
+    const root = await fixture()
+    const owner = await machine(root, 'owner')
+    const colleague = await machine(root, 'colleague')
+    const intruder = await machine(root, 'intruder')
+    const path = await initProjectSecrets(root, owner.environment)
+    await setProjectSecret('SERVICE_TOKEN', root, owner.environment)
+    const store = parseStore(await FS.readText(path))
+    await FS.writeText(path, formatStore({ ...store, recipients: [...store.recipients, intruder.recipient] }))
+
+    Expect(await grantProjectSecrets(colleague.recipient, root, owner.environment)).toBe(true)
+    Expect(await readProjectSecret('SERVICE_TOKEN', root, colleague.environment)).toBe('disposable-token')
+    await Expect(readProjectSecret('SERVICE_TOKEN', root, intruder.environment)).rejects.toThrow(
+      'This machine cannot unlock the project secrets.',
+    )
+    Expect(await grantProjectSecrets(intruder.recipient, root, owner.environment)).toBe(true)
+    Expect(await readProjectSecret('SERVICE_TOKEN', root, intruder.environment)).toBe('disposable-token')
+  })
+
   Test('independent concurrent additions preserve both names, and removal leaves no current value', async () => {
     const root = await fixture()
     const owner = await machine(root, 'owner')

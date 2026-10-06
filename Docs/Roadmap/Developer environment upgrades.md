@@ -18,6 +18,7 @@ change that addressed it.
 - [DEVENV-024 — Branch-local semantic cleanup](<Developer environment upgrades/DEVENV-024-branch-local-semantic-cleanup.md>) — Blocked
 - [DEVENV-ARCHIVE-WORKFLOW-CANNOT-ARCHIVE-A-WORKFLOW-CHANGE — the Archive workflow cannot archive a workflow change](<Developer environment upgrades/DEVENV-ARCHIVE-WORKFLOW-CANNOT-ARCHIVE-A-WORKFLOW-CHANGE.md>) — Candidate
 - [DEVENV-CLOUD-AGENT-EXECUTIONS-LACK-PORTABLE-BOOTSTRAP — Cloud agent executions lack a portable bootstrap](<Developer environment upgrades/DEVENV-CLOUD-AGENT-EXECUTIONS-LACK-PORTABLE-BOOTSTRAP.md>) — In progress
+- [DEVENV-DEV-SESSION-OWNERSHIP-TESTS-FAIL-IN-AGENT-SANDBOX — Dev-session ownership tests fail in the agent sandbox](<Developer environment upgrades/DEVENV-DEV-SESSION-OWNERSHIP-TESTS-FAIL-IN-AGENT-SANDBOX.md>) — Open
 - [DEVENV-FINALIZE-HIDES-PROGRESS-IN-A-SECOND-LOG — Finalize hides progress in a second log](<Developer environment upgrades/DEVENV-FINALIZE-HIDES-PROGRESS-IN-A-SECOND-LOG.md>) — Candidate
 - [DEVENV-IOS-BUILD-HIDES-POD-INSTALL-FAILURES — iOS build hides pod install failures](<Developer environment upgrades/DEVENV-IOS-BUILD-HIDES-POD-INSTALL-FAILURES.md>) — Candidate
 - [DEVENV-NATIVE-MODULE-CHECK-CANNOT-LIST-SWIFT-PACKAGE-PODS — native module check cannot list Swift package Pods](<Developer environment upgrades/DEVENV-NATIVE-MODULE-CHECK-CANNOT-LIST-SWIFT-PACKAGE-PODS.md>) — Candidate
@@ -115,7 +116,6 @@ change that addressed it.
 - [DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES — Native kit omits provider transitives](<Developer environment upgrades/DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES.md>) — In progress
 - [DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME — Native session timestamps use monotonic time](<Developer environment upgrades/DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME.md>) — Candidate
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
-- [DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL — Output hook requires an unavailable read tool](<Developer environment upgrades/DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL.md>) — Candidate
 - [DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT — Following checks spends GitHub's anonymous API limit](<Developer environment upgrades/DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT.md>) — Candidate
 - [DEVENV-PROCESS-GROUP-PROBE-REJECTS-PS-SNAPSHOT — Process group probe rejects the system process snapshot](<Developer environment upgrades/DEVENV-PROCESS-GROUP-PROBE-REJECTS-PS-SNAPSHOT.md>) — Candidate
 - [DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES — Profile lacks direnv while doctor passes](<Developer environment upgrades/DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES.md>) — Candidate

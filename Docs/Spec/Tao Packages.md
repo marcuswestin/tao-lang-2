@@ -64,7 +64,7 @@ compiler-known names are involved.
   to ask, no lane is used unless `--yes` or `--ai` chooses one.
 - `Apps/Starters/` holds the exact output for the reference plans; `Apps/Starters/README.md` owns
   that contract.
-- For example, `tao create "A notebook for short notes I can pin" --ai none --yes` creates
+- For example, `tao create "A notebook for short notes I can pin" --provider local --ai none --yes` creates
   `./a-notebook-for/` with `id "a-notebook-for"`, and `--id notebook` names it `./notebook/`.
 
 ### Creating a Tao app

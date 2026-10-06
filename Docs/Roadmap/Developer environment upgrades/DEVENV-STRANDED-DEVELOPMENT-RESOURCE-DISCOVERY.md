@@ -111,3 +111,16 @@ registry's existing symlink guard. Retained task-local directory notes preserve
 ownership and cleanup conditions, but they do not constitute a successful registry
 write. A future decision can add a narrowly scoped registration route or a writable
 registration location; do not expand the current host report permission implicitly.
+
+## Natural-exit records — October 6, 2026
+
+The October 6 repository pass found 263 of 308 records in `~/.cache/tao/resource-inventory`
+marked uncertain, about 200 of them `hutch` test launches and the rest `/bin/sh` and `bunx`. A
+root that exited without a stop never captured its group, so `retireRegistration` marked it
+uncertain and `retireProcess` then refused it forever; every Tao command printed the
+needs-inspection banner. `StudioProcessTree` now captures the surviving group on a natural exit:
+an empty group retires the record, survivors keep it until they are gone. A descendant that left
+the group (`setsid`) and outlives a naturally exited root is no longer visible; before, it showed
+only as one more uncertain record among hundreds. The existing uncertain records stay: no command
+retires them, and a prune rule (for example, root and every recorded identity gone, group empty,
+older than a week) is a cleanup-authority decision for the Developer, not adopted here.
