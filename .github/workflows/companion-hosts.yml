@@ -6,6 +6,14 @@ name: Companion hosts
 # and the Android job took a runner from Verify's pool for the whole build. The native-kit parity
 # test it also ran lives in the verification tests, which `Verify` runs on every pull request.
 # Release publication stays separate until the repository and its compatible hosts are public.
+#
+# Both jobs run under devenv rather than Verify's portable bootstrap, because the Android SDK and
+# CocoaPods come from `devenv.nix` and the portable profile has neither. They still share Verify's
+# installed-tree cache (same key, per runner OS), and cache what the native builds spend most of
+# their time on that survives a clean prebuild: the Nix store, Gradle's home, and CocoaPods' spec
+# repository and pod downloads. Expo SDK 57 regenerates `ios/` and `android/` on every prebuild, so
+# the generated projects, `Pods/` and derived data cannot be reused across runs without
+# `--no-clean`; see the Companion hosts entry in the verification speed research.
 on:
   schedule:
     - cron: '0 9 * * *'
@@ -13,6 +21,16 @@ on:
 
 permissions:
   contents: read
+
+env:
+  # The same paths and key as Verify's installed tree, so a tree one workflow installed serves both.
+  NODE_MODULES_PATHS: |
+    node_modules
+    packages/*/node_modules
+    packages/*/*/node_modules
+    packages/apps/providers/*/node_modules
+    Apps/Hosted CRUD/node_modules
+  COMPANION: packages/ides/studio-companion-app
 
 jobs:
   build:
@@ -29,15 +47,82 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+
       - uses: cachix/install-nix-action@v31
+
+      # The Nix store, keyed on the devenv lock and the expressions that decide the profile. The
+      # action merges the restored store into the installer's fresh one, which plain `actions/cache`
+      # on `/nix` cannot do on macOS; a prefix match restores the newest store when the key moved.
+      - name: Cache the Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: tao-devenv-nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml', 'packages/cli/dev-cli/dev-cli-src/environment/toolchain-packages.nix', '.config/nix/hutch.nix') }}
+          restore-prefixes-first-match: tao-devenv-nix-${{ runner.os }}-${{ runner.arch }}-
+          gc-max-store-size-linux: 6G
+          gc-max-store-size-macos: 6G
+
       - uses: cachix/cachix-action@v16
         with:
           name: devenv
       - name: Install devenv
         run: nix profile add nixpkgs#devenv
+
+      - name: Restore the installed node_modules
+        id: node-modules
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.NODE_MODULES_PATHS }}
+          key: tao-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'devenv.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'packages/apps/providers/*/package.json', 'Apps/Hosted CRUD/package.json') }}
+
       - name: Set up Tao
         run: devenv shell -- ./agent setup
+
+      - name: Save the installed node_modules
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.NODE_MODULES_PATHS }}
+          key: ${{ steps.node-modules.outputs.cache-primary-key }}
+
       - name: Check native-kit parity
         run: devenv shell -- ./agent test-file packages/testing/verification/verification-tests/companion-native-parity.test.ts
+
+      # Gradle's home (wrapper distribution, dependency and build caches) for the Android host. The
+      # build runs through the repository command, which calls `./gradlew` itself; the action only
+      # needs to run first in the same job. Not read-only: this workflow never runs on `main`, so a
+      # pull-request run is the only writer the cache will ever have.
+      - name: Set up Gradle caching
+        if: matrix.platform == 'android'
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+
+      # CocoaPods' spec repository and downloaded pod sources. `pod install` runs against a freshly
+      # generated `ios/`, so this is what it can reuse: the CDN index and the fetched podspecs and
+      # sources, keyed on the inputs that generate `Podfile.lock` (the lockfile, the companion's
+      # manifest and config plugins), with the newest earlier cache as a fallback.
+      - name: Restore CocoaPods caches
+        if: matrix.platform == 'ios-simulator'
+        id: pods-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cocoapods
+            ~/Library/Caches/CocoaPods
+          key: tao-companion-pods-${{ hashFiles('bun.lock', 'packages/ides/studio-companion-app/package.json', 'packages/ides/studio-companion-app/app.json', 'packages/ides/studio-companion-app/plugins/**', 'packages/ides/studio-companion-app/modules/**') }}
+          restore-keys: |
+            tao-companion-pods-
+
       - name: Build ${{ matrix.platform }} host
         run: devenv shell -- ./agent unsandboxed companion-host-build --platform ${{ matrix.platform }}
+
+      - name: Save CocoaPods caches
+        if: matrix.platform == 'ios-simulator' && steps.pods-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cocoapods
+            ~/Library/Caches/CocoaPods
+          key: ${{ steps.pods-cache.outputs.cache-primary-key }}

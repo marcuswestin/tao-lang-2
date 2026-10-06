@@ -21,10 +21,21 @@ const NO_HISTORY = { ledger: { tests: {}, version: 1 } as const, timings: { node
 const NATIVE_PROJECT_TEST_FILES = [
   'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingInventory.test.ts',
   'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingModules.test.ts',
-  'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts',
   'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsWatch.integration.test.ts',
-  'packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts',
-  'packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts',
+] as const
+/** The partitions split off the native cohort and the larger receipt and watch files, in catalog order. */
+const SPLIT_PROJECT_PARTITIONS = [
+  'native-service',
+  'native-bodies',
+  'native-receipt',
+  'native-receipt-signatures',
+  'native-typescript',
+  'native-typescript-consumers',
+  'receipt-repairs',
+  'receipt-ownership',
+  'watch-sidecar',
+  'watch-sidecar-root',
+  'watch-dependencies',
 ] as const
 const PROJECT_RECEIPT_FILES = {
   receipts: 'packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceipt.test.ts',
@@ -123,6 +134,7 @@ Describe('test runner suite registry', () => {
         'language/project-tooling:watch-topology',
         'language/project-tooling:watch-refresh',
         'language/project-tooling:service',
+        ...SPLIT_PROJECT_PARTITIONS.map(name => `language/project-tooling:${name}`),
         'language/project-tooling#1',
       ])
       Expect(states[0]?.selectedTestFiles).toEqual(NATIVE_PROJECT_TEST_FILES)
@@ -147,6 +159,7 @@ Describe('test runner suite registry', () => {
         '/tmp/test-reports/language_project-tooling_watch-topology.xml',
         '/tmp/test-reports/language_project-tooling_watch-refresh.xml',
         '/tmp/test-reports/language_project-tooling_service.xml',
+        ...SPLIT_PROJECT_PARTITIONS.map(name => `/tmp/test-reports/language_project-tooling_${name}.xml`),
         '/tmp/test-reports/language_project-tooling_1.xml',
       ])
     },

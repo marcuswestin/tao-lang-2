@@ -111,6 +111,7 @@ Examples:
   ./agent verify-full-sandbox
   ./agent unsandboxed open-pr --auto-merge
   ./agent unsandboxed verify-complement
+  ./agent unsandboxed verify-full-ci --ci-host-gates studio-canary
   ./agent unsandboxed cancel-verify
   ./agent unsandboxed land-fix
   ./agent unsandboxed merge-pr
@@ -230,7 +231,9 @@ lanes passed. A lane whose tree is already recorded green prints that run's
 evidence and stops; --no-cache runs it anyway. When new CI is starting for an authorized, ready
 landing, run open-pr --auto-merge: it also runs verify-complement, the host-only gates hosted
 Verify does not admit, beside the hosted run, and cancels that run if the complement fails first
-(cancel-verify does the same by hand). merge-pr finishes from wherever the pull request stands:
+(cancel-verify does the same by hand). verify-full-ci is the CI macOS workflow's lane: the host
+gates its CI_HOST_GATES admits plus the prepare nodes they read, the rest reported
+pending; it records no green tree. merge-pr finishes from wherever the pull request stands:
 it archives one GitHub already merged, squash-merges one that is green with auto-merge off, and
 otherwise turns auto-merge on for this head. land-fix pushes a fix committed after GitHub merged
 straight to main, with a receipt and no full verification. Plain open-pr keeps auto-merge off for

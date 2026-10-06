@@ -63,9 +63,11 @@ export const CiDurationsImport = {
       ? await newestGreenMainRun(github, slug)
       : await github.json<WorkflowRun>(`/repos/${slug}/actions/runs/${options.run}`)
 
-    const artifacts = (await github.json<{ artifacts: Artifact[] }>(
-      `/repos/${slug}/actions/runs/${run.id}/artifacts?per_page=100`,
-    )).artifacts.filter(artifact => PARTITION_ARTIFACT.test(artifact.name))
+    const artifacts = newestPerPartition(
+      (await github.json<{ artifacts: Artifact[] }>(
+        `/repos/${slug}/actions/runs/${run.id}/artifacts?per_page=100`,
+      )).artifacts,
+    )
     if (artifacts.length === 0) {
       return Errors.throwUserInput(
         `Run ${run.id} has no verify-partition-* artifacts; a partition uploads its summary only when it passed.`,
@@ -99,6 +101,21 @@ export const CiDurationsImport = {
     return { exitCode: 0, lines }
   },
 } as const
+
+/**
+ * A re-run attempt uploads a second `verify-partition-<k>` beside the first attempt's; keep the
+ * newest per partition (artifact ids only grow) so every partition is measured once.
+ */
+function newestPerPartition(artifacts: readonly Artifact[]): Artifact[] {
+  const newest = new Map<string, Artifact>()
+  for (const artifact of artifacts) {
+    const kept = newest.get(artifact.name)
+    if (PARTITION_ARTIFACT.test(artifact.name) && (kept === undefined || artifact.id > kept.id)) {
+      newest.set(artifact.name, artifact)
+    }
+  }
+  return [...newest.values()]
+}
 
 /** The artifact endpoints need a token on a public repository too; reuse the environment's or `gh`'s. */
 async function authToken(dependencies: PrChecksDependencies, root: string): Promise<string> {

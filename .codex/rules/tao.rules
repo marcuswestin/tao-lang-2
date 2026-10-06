@@ -16,6 +16,7 @@ prefix_rule(pattern=["./agent","unsandboxed","fix-agent-config"], decision="allo
 prefix_rule(pattern=["./agent","unsandboxed","verify-full"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","diagnose-verification"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","verify-complement"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
+prefix_rule(pattern=["./agent","unsandboxed","verify-full-ci"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","cancel-verify"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","land-fix"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","pr-checks"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")

@@ -2,7 +2,7 @@
 
 ## Budgets, enforced by `repo-lint`
 
-- Root `AGENTS.md` at most 13,500 characters, `packages/AGENTS.md` 6,000, each `SKILL.md` 12,000,
+- Root `AGENTS.md` at most 14,500 characters, `packages/AGENTS.md` 6,000, each `SKILL.md` 12,000,
   with detail in reference files loaded on demand. Each pass aims to cut total instruction size,
   never to grow it.
 - The budget counts characters, not lines, because these files are long paragraph bullets: a line

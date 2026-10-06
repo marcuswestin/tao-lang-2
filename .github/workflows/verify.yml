@@ -9,6 +9,8 @@ name: Verify
 # What this does not prove: the host-only lanes (Studio smokes, browser, native shell, canary),
 # which need a window server and an unsandboxed host. The landing route runs those locally while
 # this workflow runs (`agents/skills/verification-lanes/references/hosted-verification.md`).
+# The `CI macOS` workflow (`ci-macos.yml`) is where they move, one gate at a time; it is a workflow
+# of its own so a run here ends when the Linux partitions do.
 #
 # The contributor-agreement check is a job here rather than a workflow of its own, so a push to a
 # pull request shows as one run in the Actions list instead of two. It runs on the same token as
@@ -66,17 +68,25 @@ env:
   # Per-gate green records travel between runs of the same tree through the Actions cache, which
   # accepts only an absolute path with no `..` in it.
   TAO_GREEN_STORE: /home/runner/tao-green
-  # Bun's and npm's download caches, restored before the bootstrap installs from them.
+  # Bun's download cache, restored before the bootstrap installs from it. npm's is not cached: the
+  # Tao projects' pins install without their peers, a few hundred kilobytes downloaded in a second.
   BUN_INSTALL_CACHE_DIR: /home/runner/tao-cache/bun
-  npm_config_cache: /home/runner/tao-cache/npm
   # Every directory Bun's isolated linker writes: the root store and each workspace's own links,
   # which point into it by relative paths, so the tree restores intact at the same checkout path.
+  # Left out: the Android, iOS, and other-platform binaries of Jazz's native packages, about 1 GB of
+  # the 3.7 GB tree that only Gradle, Xcode, or another OS ever loads. The excluded paths are part of
+  # the cache's version, so a tree saved with them is never restored as one without them.
   NODE_MODULES_PATHS: |
     node_modules
     packages/*/node_modules
     packages/*/*/node_modules
     packages/apps/providers/*/node_modules
     Apps/Hosted CRUD/node_modules
+    !node_modules/.bun/jazz-rn-android@*/node_modules/jazz-rn-android/android
+    !node_modules/.bun/jazz-rn-ios@*/node_modules/jazz-rn-ios/*.xcframework
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.darwin-*.node
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.win32-*.node
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.linux-arm64-*.node
 
 jobs:
   # Holds a pull request until its author has accepted CLA.md by posting the agreement sentence on a
@@ -276,16 +286,6 @@ jobs:
           restore-keys: |
             tao-bun-${{ runner.os }}-${{ runner.arch }}-
 
-      # npm's, for the packages the Tao lock pins for Native Bridge, which setup installs every run.
-      - name: Restore npm's download cache
-        id: npm-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/tao-cache/npm
-          key: tao-npm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Apps/Test Apps/Native Bridge/.tao/store/lock.jsonc') }}
-          restore-keys: |
-            tao-npm-${{ runner.os }}-${{ runner.arch }}-
-
       # The Nix installation and the built locked profile, keyed on everything that decides them: the
       # pinned Nix release, the devenv lock, and the profile's expressions. On a hit the installer
       # finds Nix present and the bootstrap reuses the profile generation, so it neither downloads nor
@@ -305,10 +305,31 @@ jobs:
             ${{ github.workspace }}/.devenv/portable-generations
           key: tao-nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'packages/cli/dev-cli/dev-cli-src/environment/nix-bootstrap.sh', 'packages/cli/dev-cli/dev-cli-src/environment/portable-profile.nix', 'packages/cli/dev-cli/dev-cli-src/environment/toolchain-packages.nix') }}
 
-      # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then runs
-      # `./agent setup`; the same path the native Linux contributor acceptance proves.
+      # The maintained native bindings, a generated tree setup would otherwise write in 6–10 s. The
+      # generator checks every input and output identity first and rewrites only a stale tree, so a
+      # restore from another key, or none, costs a regeneration and never a stale binding.
+      - name: Restore the generated native bindings
+        id: native-bindings
+        uses: actions/cache/restore@v4
+        with:
+          path: packages/apps/stdlib/.tao-ts/native-bindings
+          key: tao-native-bindings-${{ runner.os }}-${{ hashFiles('bun.lock', 'packages/apps/native-bindings/native-bindings-src/**', 'packages/apps/stdlib/@tao/device/**') }}
+          restore-keys: |
+            tao-native-bindings-${{ runner.os }}-
+
+      # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then prepares
+      # only what the lane reads (`--verify-setup`): the full `./agent setup` also writes agent
+      # configuration, Git hooks, and shell completion, which no gate reads.
       - name: Bootstrap Nix, the pinned toolchain, and Tao setup
-        run: ./.config/bootstrap-tao-dev-env --install-nix
+        run: ./.config/bootstrap-tao-dev-env --install-nix --verify-setup
+
+      - name: Save the generated native bindings
+        if: steps.native-bindings.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: packages/apps/stdlib/.tao-ts/native-bindings
+          key: ${{ steps.native-bindings.outputs.cache-primary-key }}
 
       # Saved straight after the bootstrap, so a partition that later fails still warms the caches,
       # and before verification writes any tool cache under node_modules. All partitions share one
@@ -330,14 +351,6 @@ jobs:
         with:
           path: /home/runner/tao-cache/bun
           key: ${{ steps.bun-cache.outputs.cache-primary-key }}
-
-      - name: Save npm's download cache
-        if: steps.npm-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/tao-cache/npm
-          key: ${{ steps.npm-cache.outputs.cache-primary-key }}
 
       # Collecting garbage first drops what only the build needed, chiefly the two unpacked nixpkgs
       # sources, so the cache holds Nix and the profile's closure. Both are rooted explicitly rather

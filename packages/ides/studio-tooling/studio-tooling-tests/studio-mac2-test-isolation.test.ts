@@ -1679,16 +1679,12 @@ Describe('Mac2 invocation isolation', () => {
         const desktop = await state.run.desktopLeases.acquire()
         Expect(await state.run.registrationOnlyReplayComplete()).toBe(false)
         Expect(await FS.exists(FS.resolvePath('run/appium-mac2/wda.log', test.root))).toBe(false)
-        const completed = until(() => state.run.registrationOnlyReplayComplete(), {
-          description: 'captured owned runner replay marker',
-          // budget-ok: This genuine factory fixture emits the split marker synchronously after ACK; a missing marker must fail promptly.
-          timeoutMs: 500,
-          intervalMs: 1,
-        })
+        // The runner's output callback records the split marker synchronously, so completion is
+        // checked directly after each chunk rather than polled against a wall-clock budget.
         state.emitOutput('WDA registration-only replay ')
         Expect(await state.run.registrationOnlyReplayComplete()).toBe(false)
         state.emitOutput('refused\n')
-        Expect(await completed).toBe(true)
+        Expect(await state.run.registrationOnlyReplayComplete()).toBe(true)
         Expect(state.signals).toEqual([])
         Expect(state.http).toEqual([])
         Expect(await FS.readJson(FS.resolvePath('run/appium-mac2/isolation.json', test.root))).toMatchObject({
@@ -1860,7 +1856,11 @@ Describe('Mac2 invocation isolation', () => {
     try {
       const desktop = await state.run.desktopLeases.acquire()
       await Promise.all([desktop.release(), desktop.release()])
+      // The shutdown proof keeps its bind, so a stranger cannot take the port before cleanup re-proves it.
+      Expect(() => Bun.serve({ hostname: '127.0.0.1', port: state.run.systemPort, fetch: () => new Response() }))
+        .toThrow()
       await Promise.all([state.run.cleanup(true), state.run.cleanup(true)])
+      Bun.serve({ hostname: '127.0.0.1', port: state.run.systemPort, fetch: () => new Response() }).stop(true)
       Expect(state.signals).toEqual(['SIGTERM'])
       Expect(state.lifecycle).toEqual(['registration-disabled', 'registration-closed'])
       Expect(await MachineResources.listOwners({ registryRoot: test.registryRoot })).toEqual([])

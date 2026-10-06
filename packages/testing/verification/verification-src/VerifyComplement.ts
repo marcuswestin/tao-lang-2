@@ -5,7 +5,7 @@ import { RunArtifacts } from './RunArtifacts'
 /*
  * The complement lane is the half of a landing's proof that hosted `Verify` cannot give: the gates
  * that need an unsandboxed macOS host with a window server. Its membership is not a second list to
- * keep in step with the Justfile and the workflow; it is derived from both. Every gate of the full
+ * keep in step with the Justfile and the `CI macOS` workflow; it is derived from both. Every gate of the full
  * lane that the catalog marks host-only is a candidate, and the workflow's `CI_HOST_GATES` names
  * the ones a hosted runner already admits, so what remains is exactly what nobody else runs. A
  * workflow with no such key admits none, and the complement is then every host gate.
@@ -15,10 +15,10 @@ import { RunArtifacts } from './RunArtifacts'
  * `_parser-gen` would start the smoke against a missing generated parser.
  */
 
-/** CI_HOST_GATES_KEY is the workflow `env` key naming the host gates hosted Verify admits. */
+/** CI_HOST_GATES_KEY is the workflow `env` key naming the host gates `CI macOS` admits. */
 export const CI_HOST_GATES_KEY = 'CI_HOST_GATES'
 /** WORKFLOW_PATH is where the admission is read from, relative to the repository root. */
-export const WORKFLOW_PATH = '.github/workflows/verify.yml'
+export const WORKFLOW_PATH = '.github/workflows/ci-macos.yml'
 /** STATUS_CONTEXT is the commit status the lane reports under, beside the `Verify` check. */
 export const STATUS_CONTEXT = 'Verify (host)'
 /** RECEIPT_FILE sits beside `summary.json` and says what the run was asked to prove. */
@@ -47,7 +47,7 @@ export type ComplementReceipt = ComplementPlan & {
   summaryPath: string
 }
 
-/** admittedHostGates reads the gates hosted Verify runs itself from the workflow text. */
+/** admittedHostGates reads the host gates `CI macOS` runs itself from the workflow text. */
 export function admittedHostGates(workflowText: string): { admitted: string[]; present: boolean } {
   const match = ADMISSION_LINE.exec(workflowText)
   if (match === null) {
