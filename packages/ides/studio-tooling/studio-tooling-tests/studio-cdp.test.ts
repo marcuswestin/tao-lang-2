@@ -741,6 +741,37 @@ Describe('Studio browser CDP harness', () => {
     Expect(productFailure.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
   })
 
+  Test('retains structured wait probes across context replacement and keeps predicate failures', async () => {
+    const transport = new FakeCdpTransport()
+    transport.evaluateResults.push(
+      new Errors.HostEnvironmentError('Execution context was destroyed.'),
+      { ready: false, message: 'working' },
+      { ready: true, message: 'complete' },
+    )
+    const probes: unknown[] = []
+    await StudioCdp.testing.create(transport).waitFor('window.state', {
+      predicate(value) {
+        probes.push(value)
+        return (value as { ready: boolean }).ready
+      },
+    })
+    Expect(probes).toEqual([
+      { ready: false, message: 'working' },
+      { ready: true, message: 'complete' },
+    ])
+    const failed = new FakeCdpTransport()
+    failed.evaluateResults.push({ ready: false })
+    const failure = new Errors.HostEnvironmentError('Execution context was destroyed: fixture product failure')
+    await Expect(
+      StudioCdp.testing.create(failed).waitFor('window.state', {
+        predicate: () => {
+          throw failure
+        },
+      }),
+    ).rejects.toBe(failure)
+    Expect(failed.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
+  })
+
   Test('retries frame replacement only before dispatching the page action', async () => {
     const transport = new FakeCdpTransport()
     transport.frameTree = {

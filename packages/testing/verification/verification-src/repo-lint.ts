@@ -486,7 +486,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:689',
   'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:721',
   'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:889',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:1056',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:1060',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobun.ts:102',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:208',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:211',

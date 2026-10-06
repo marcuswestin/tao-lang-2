@@ -64,6 +64,13 @@ runner output stops an unresponsive runner. Cleanup waits for owned descendants 
 the command returns.
 If process inspection or signalling fails, the command retains and reports that cleanup failure;
 an unreadable identity is not evidence that its process stopped.
+Ownership polls avoid rewalking attached subtrees; cancellation and escalation still refresh
+retained owners to discover late forks. On macOS, `ESRCH` can establish immediate absence,
+and two matching observations of full kernel identities distinguish a zombie-only process group
+from live children. An empty native
+group list after a successful signal probe establishes absence only when a second probe reports
+`ESRCH`; a still-signalable or unreadable group fails cleanup with inspection diagnostics. A second
+enumeration discovers children forked before their listed parent exited.
 
 `tao test --watch` composes with paths, `--name`, `--output`, and `--pass-with-no-tests`: it runs the
 selected set once, then reruns the whole selected set on any change under the selected paths or the

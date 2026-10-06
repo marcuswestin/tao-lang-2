@@ -26,7 +26,14 @@ const clearTimeoutSlot = testOverrideSlot<ClearTimeoutCall>({
 const mutableProcessTree = ProcessTree as unknown as {
   groupMembers: typeof ProcessTree.groupMembers
   signalGroup: typeof ProcessTree.signalGroup
+  refreshDescendants: typeof ProcessTree.refreshDescendants
 }
+const refreshDescendantsSlot = testOverrideSlot<typeof ProcessTree.refreshDescendants>({
+  read: () => ProcessTree.refreshDescendants,
+  write: value => {
+    mutableProcessTree.refreshDescendants = value
+  },
+})
 const groupMembersSlot = testOverrideSlot<typeof ProcessTree.groupMembers>({
   read: () => ProcessTree.groupMembers,
   write: value => {
@@ -160,6 +167,34 @@ async function waitForGone(tracked: TrackedProcess, description: string): Promis
 }
 
 Describe('CLI process policy', () => {
+  Test('cancellation rewalks retained owners while the direct child is still live', async () => {
+    const started = await startTree({ processPolicy: 'test' })
+    const refresh = ProcessTree.refreshDescendants
+    let refreshedLiveOwners = false
+    const restore = refreshDescendantsSlot.install((rootPid, retained, seams) => {
+      if (
+        rootPid === undefined && isAlive(started.child)
+        && retained.some(owner =>
+          owner.pid === started.grandchild.pid && ProcessTree.sameProcess(owner, started.grandchild)
+        )
+      ) {
+        refreshedLiveOwners = true
+      }
+      return refresh(rootPid, retained, seams)
+    })
+    try {
+      started.command.kill('SIGTERM')
+      await started.command.waitForClose()
+      Expect(refreshedLiveOwners).toBe(true)
+      Expect(isAlive(started.child)).toBe(false)
+      Expect(isAlive(started.grandchild)).toBe(false)
+    } finally {
+      restore()
+      started.command.kill('SIGKILL')
+      await started.command.waitForClose()
+    }
+  })
+
   for (const verdict of [0, 7]) {
     Test(`reports failed cleanup inspection while retaining child verdict ${verdict}`, async () => {
       let output = ''

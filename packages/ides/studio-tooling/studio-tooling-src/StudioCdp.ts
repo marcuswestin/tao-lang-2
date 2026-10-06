@@ -985,12 +985,14 @@ export class StudioCdp {
     return await this.evaluateInContext(expression, contextId)
   }
 
-  async waitFor(expression: string, options: { timeoutMs?: number } = {}): Promise<void> {
+  async waitFor(
+    expression: string,
+    options: { timeoutMs?: number; predicate?: (value: unknown) => boolean } = {},
+  ): Promise<void> {
     let last: unknown
     const satisfied = await Time.pollUntil(async () => {
       try {
         last = await this.evaluate(expression)
-        return !!last
       } catch (error) {
         if (!isTransientExecutionContextFailure(error)) {
           throw error
@@ -998,6 +1000,8 @@ export class StudioCdp {
         last = Errors.messageOf(error)
         return false
       }
+      // Predicates can report product failures; only evaluate's context replacement is retried.
+      return options.predicate === undefined ? !!last : options.predicate(last)
     }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(options.timeoutMs ?? 15_000) ?? Infinity })
     if (satisfied) {
       return

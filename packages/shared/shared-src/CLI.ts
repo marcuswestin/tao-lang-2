@@ -268,23 +268,16 @@ function startCommand(
       return true
     }
     return inspectOwnership(() => {
-      const current = child.exitCode === null && child.signalCode === null ? ProcessTree.descendants(pid) : []
-      const remembered = new Map((trackedDescendants ?? []).map(entry => [`${entry.pid}:${entry.startedAt}`, entry]))
-      const identities = ProcessTree.identities((trackedDescendants ?? []).map(entry => entry.pid))
-      for (const owner of trackedDescendants ?? []) {
-        if (ProcessTree.sameProcess(identities.get(owner.pid), owner)) {
-          current.push(...ProcessTree.descendants(owner.pid))
-        }
-      }
+      const current = ProcessTree.refreshDescendants(
+        child.exitCode === null && child.signalCode === null ? pid : undefined,
+        trackedDescendants ?? [],
+      )
       // Live children can change groups while starting. Inspect groups only after their owner exits.
       if (spec.detached && (child.exitCode !== null || child.signalCode !== null)) {
         lastGroupMembers = ProcessTree.groupMembers(pid)
         current.push(...lastGroupMembers)
       }
-      for (const entry of current) {
-        remembered.set(`${entry.pid}:${entry.startedAt}`, entry)
-      }
-      trackedDescendants = [...remembered.values()]
+      trackedDescendants = current
     })
   }
   // Keep ownership before exit reparents children. Output also snapshots immediately at readiness.
@@ -335,14 +328,13 @@ function startCommand(
     }
     // Retain earlier identities: after signalling, a new walk alone would miss reparented children.
     inspectOwnership(() => {
-      const current = child.exitCode === null && child.signalCode === null ? ProcessTree.descendants(pid) : []
-      // A retained child can start another child after our last poll and before its parent exits.
-      // Rewalk live owned identities before signalling, even when the direct child is already gone.
-      const identities = ProcessTree.identities((trackedDescendants ?? []).map(entry => entry.pid))
-      const laterDescendants = (trackedDescendants ?? [])
-        .filter(entry => ProcessTree.sameProcess(identities.get(entry.pid), entry))
-        .flatMap(entry => ProcessTree.descendants(entry.pid))
-      trackedDescendants = [...laterDescendants, ...current, ...(trackedDescendants ?? [])]
+      trackedDescendants = ProcessTree.refreshDescendants(
+        child.exitCode === null && child.signalCode === null ? pid : undefined,
+        trackedDescendants ?? [],
+      )
+      // Cancellation takes a second walk of live retained owners: a child can fork after its
+      // place in the root walk was visited. Keep that extra work off the regular poll path.
+      trackedDescendants = ProcessTree.refreshDescendants(undefined, trackedDescendants)
     })
     const descendants = trackedDescendants ?? []
     inspectOwnership(() => ProcessTree.signalTracked(descendants, signal))
@@ -355,6 +347,9 @@ function startCommand(
       escalationDone = new Promise(resolve => {
         escalation = setTimeout(() => {
           rememberDescendants()
+          inspectOwnership(() => {
+            trackedDescendants = ProcessTree.refreshDescendants(undefined, trackedDescendants ?? descendants)
+          })
           inspectOwnership(() => ProcessTree.signalTracked(trackedDescendants ?? descendants, 'SIGKILL'))
           inspectOwnership(() => ProcessTree.signalGroup(pid, 'SIGKILL'))
           child.kill('SIGKILL')

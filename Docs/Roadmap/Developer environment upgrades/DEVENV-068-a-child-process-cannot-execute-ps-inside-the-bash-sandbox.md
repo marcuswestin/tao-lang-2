@@ -122,4 +122,20 @@
   longer triggers a live parent-change error; exact identities remain recorded and live mismatches
   still fail. The focused native suite passes 42 cases; mutation tests reject removal of the zombie
   exception and PID-reuse guard. The native transient-read failures still need host acceptance.
+- **Polling and group-join follow-up (2026-10-06):** Repeated ownership polls were synchronously
+  retrying already exited retained PIDs and recursively rewalking attached subtrees. A direct
+  incomplete read now returns immediately only when `ESRCH` proves absence; live and denied
+  observations retain the fixed retries and failure envelope. Ordinary polls walk attached trees
+  once, while cancellation and escalation still rewalk live retained owners for late forks.
+  Darwin group joins also inspect full kernel records after a successful signal probe, so an
+  unreaped zombie-only group does not keep a wrapper pending. Unreadable live members still fail.
+  Deterministic work-count, escaped-child, cancellation, zombie-only group and denied-read fixtures
+  cover these paths, with mutations rejecting removal of the early-absence and final-owner checks.
+  Complete final host verification remains required.
+- **Final review follow-up (2026-10-06):** An empty native group enumeration after a successful
+  signal probe is rechecked. Only `ESRCH` establishes absence; a still-signalable group or denied
+  probe reports the group, native routine, returned bytes and probe status. The fully identified
+  zombie-only case requires two matching observations of exact identities. A second enumeration
+  also discovers children forked after their listed parent exited. Deterministic live, denied,
+  absent, late-fork and changed-zombie fixtures cover those races.
 - **Source:** 2026-09-17 process-teardown implementation.
