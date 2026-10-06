@@ -26,6 +26,8 @@ function fixture(options: {
   unreadable?: boolean
   zombie?: boolean
   returnedPid?: number
+  returnedParentPid?: number
+  unreadableReads?: number
   group?: number
   probe?: 'live' | 'EPERM' | 'EIO' | 'ESRCH' | 'uncoded' | 'undefined'
   probeErrno?: number
@@ -39,6 +41,7 @@ function fixture(options: {
   )
   let closes = 0
   let expectedArg = 0
+  let identityReads = 0
   const symbols = {
     proc_listpids: (_kind: number, group: number, pids: Int32Array) => {
       Expect(group).toBe(700)
@@ -59,14 +62,19 @@ function fixture(options: {
       return 1
     },
     proc_pidinfo: (pid: number, kind: number, arg: number, bytes: Uint8Array) => {
+      identityReads++
       Expect(pid).toBe(701)
       Expect(kind).toBe(3)
       Expect(arg).toBe(expectedArg)
-      if (options.unreadable === true || options.zombie === true && arg === 0) {
+      if (
+        options.unreadable === true || identityReads <= (options.unreadableReads ?? 0)
+        || options.zombie === true && arg === 0
+      ) {
         return 0
       }
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
       view.setUint32(12, options.returnedPid ?? pid, true)
+      view.setUint32(16, options.returnedParentPid ?? 700, true)
       view.setUint32(100, options.group ?? 700, true)
       view.setBigUint64(120, 123n, true)
       view.setBigUint64(128, 456n, true)
@@ -102,6 +110,7 @@ function fixture(options: {
     probes,
     failure,
     closes: () => closes,
+    identityReads: () => identityReads,
   }
 }
 
@@ -128,6 +137,15 @@ for (const kind of ['group', 'descendants'] as const) {
     Expect(host.inspect(kind)).toEqual([])
     Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
     Expect(host.closes()).toBe(1)
+    Expect(host.identityReads()).toBe(3)
+  })
+
+  Test(`Darwin ${kind} resolves a temporarily unreadable identity within its fixed retry budget`, () => {
+    const host = fixture({ unreadableReads: 2, probe: 'live' })
+    Expect(host.inspect(kind)).toEqual([{ pid: 701, group: 700, startedAt: '123:456', command: '' }])
+    Expect(host.identityReads()).toBe(3)
+    Expect(host.probes).toEqual([])
+    Expect(host.closes()).toBe(1)
   })
 
   for (const probe of ['live', 'EPERM', 'EIO', 'uncoded', 'undefined'] as const) {
@@ -146,6 +164,7 @@ for (const kind of ['group', 'descendants'] as const) {
       }
       Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
       Expect(host.closes()).toBe(1)
+      Expect(host.identityReads()).toBe(3)
     })
   }
 
@@ -160,6 +179,14 @@ for (const kind of ['group', 'descendants'] as const) {
 Test('Darwin group inspection refuses a member that moved to another group during inspection', () => {
   const host = fixture({ group: 800 })
   Expect(() => host.inspect('group')).toThrow('changed process group during inspection')
+  Expect(host.probes).toEqual([])
+  Expect(host.closes()).toBe(1)
+})
+
+Test('Darwin descendant inspection refuses a changed parent after resolving a transient read failure', () => {
+  const host = fixture({ unreadableReads: 1, returnedParentPid: 800 })
+  Expect(() => host.inspect('descendants')).toThrow('changed parent during inspection')
+  Expect(host.identityReads()).toBe(2)
   Expect(host.probes).toEqual([])
   Expect(host.closes()).toBe(1)
 })
@@ -204,6 +231,20 @@ for (
       kind: 'group',
       options: { groupFailure: true },
       expected: { failureKind: 'group-enumeration', routine: 'proc_listpids', pid: 700, returnedBytes: -1 },
+    },
+    {
+      name: 'changed descendant parent',
+      kind: 'descendants',
+      options: { unreadableReads: 1, returnedParentPid: 800 },
+      expected: {
+        failureKind: 'parent-changed',
+        routine: 'proc_pidinfo',
+        pid: 701,
+        returnedBytes: 136,
+        expectedBytes: 136,
+        expectedParentPid: 700,
+        actualParentPid: 800,
+      },
     },
     {
       name: 'live unreadable descendant',

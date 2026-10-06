@@ -78,6 +78,17 @@
   `Platform.signalProcess(pid, 'SIGTERM')` returned `kill() failed: EPERM: Operation not permitted`.
   Its test children were independently absent; stopping that wrapper required the Developer's
   terminal. Do not interpret failed signalling as completed cleanup.
+- **Host inspection follow-up (2026-10-06):** A passing Studio launch smoke test in
+  `.artifacts/logs/verify-complement/2026-10-06T19-25-40-697Z-77059-d294c94c/studio-smoke.log`
+  failed its outer cleanup inspection. The native descendant query returned zero bytes for an
+  enumerated PID while its liveness probe succeeded. Bounded error details now preserve the
+  inspection kind, requested owner, failing PID, returned size, backend and probe status.
+  The wrapper returned failure promptly and stopped its known children; this does not establish
+  the native failure's cause. The inspector now rechecks an incomplete enumerated identity up to
+  three times and validates its parent relationship before accepting a descendant. Persistent
+  unreadability, denied liveness probes and changed ownership still fail inspection. Focused
+  fixtures cover transient reads, permanent failures, exact identities and the shared helper
+  failure envelope; current host acceptance remains required.
 - **Acceptance:** Either a sandboxed lane's `processTable()` returns the real table, or the code and its
   tests state that the non-Darwin branch is out of scope on this host and nothing in a lane relies on it.
 - **Source:** 2026-09-17 process-teardown implementation.

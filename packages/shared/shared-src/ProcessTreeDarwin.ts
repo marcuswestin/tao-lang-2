@@ -48,17 +48,29 @@ try {
       details: { ...details, probeStatus: 'live' },
     });
   };
-  const identity = (pid, unreadable) => {
+  const identity = (pid, unreadable, parentPid) => {
     const bytes = new Uint8Array(136);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     // Enumerations include zombies; direct queries retain their process-exit semantics.
-    const returnedBytes = library.symbols.proc_pidinfo(pid, 3, unreadable ? 1 : 0, ptr(bytes), bytes.byteLength);
+    // Enumeration and identity queries are separate observations. Recheck an incomplete record
+    // before declaring a live PID unreadable; persistent uncertainty still fails inspection.
+    let returnedBytes;
+    for (let attempt = 0; attempt < (unreadable ? 3 : 1); attempt++) {
+      returnedBytes = library.symbols.proc_pidinfo(pid, 3, unreadable ? 1 : 0, ptr(bytes), bytes.byteLength);
+      if (returnedBytes >= bytes.byteLength && view.getUint32(12, true) === pid) break;
+    }
     const details = { routine: 'proc_pidinfo', pid, returnedBytes, expectedBytes: bytes.byteLength };
     if (returnedBytes < bytes.byteLength) {
       return unreadable && unreadable(pid, { ...details, failureKind: 'identity-unreadable' });
     }
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     if (view.getUint32(12, true) !== pid) {
       return unreadable && unreadable(pid, { ...details, failureKind: 'identity-pid-mismatch' });
+    }
+    if (parentPid !== undefined && view.getUint32(16, true) !== parentPid) {
+      failInspection('macOS process ' + pid + ' changed parent during inspection.', {
+        details: { ...details, failureKind: 'parent-changed', expectedParentPid: parentPid,
+          actualParentPid: view.getUint32(16, true) },
+      });
     }
     const decode = (offset, length) => new TextDecoder()
       .decode(bytes.subarray(offset, offset + length)).replace(/\0.*$/, '');
@@ -69,7 +81,7 @@ try {
       startedAt: String(view.getBigUint64(120, true)) + ':' + String(view.getBigUint64(128, true)),
     };
   };
-  const enumeratedIdentity = pid => identity(pid, unreadableIdentity);
+  const enumeratedIdentity = (pid, parentPid) => identity(pid, unreadableIdentity, parentPid);
   if (request.kind === 'identities') {
     return request.pids.map(pid => identity(pid)).filter(value => value !== undefined);
   }
@@ -111,7 +123,7 @@ try {
     for (const childPid of children.subarray(0, count)) {
       if (!Number.isSafeInteger(childPid) || childPid <= 1 || visited.has(childPid)) continue;
       visited.add(childPid);
-      const child = enumeratedIdentity(childPid);
+      const child = enumeratedIdentity(childPid, pid);
       if (child === undefined) continue;
       visit(childPid, depth + 1);
       descendants.push({ process: child, depth });
@@ -143,6 +155,7 @@ function inspectionFailureFields(value: unknown): Errors.ErrorDetails {
       'group-enumeration',
       'child-enumeration',
       'group-changed',
+      'parent-changed',
       'helper-exit',
       'helper-spawn',
     ].includes(String(fields['failureKind']))
@@ -152,7 +165,18 @@ function inspectionFailureFields(value: unknown): Errors.ErrorDetails {
   if (['proc_pidinfo', 'proc_listpids', 'proc_listchildpids'].includes(String(fields['routine']))) {
     result['routine'] = fields['routine']
   }
-  for (const key of ['pid', 'returnedCount', 'returnedBytes', 'expectedBytes', 'probeErrno', 'helperStatus']) {
+  for (
+    const key of [
+      'pid',
+      'returnedCount',
+      'returnedBytes',
+      'expectedBytes',
+      'probeErrno',
+      'helperStatus',
+      'expectedParentPid',
+      'actualParentPid',
+    ]
+  ) {
     const entry = fields[key]
     if (typeof entry === 'number' && Number.isSafeInteger(entry) && Math.abs(entry) <= 2_147_483_647) {
       result[key] = entry
