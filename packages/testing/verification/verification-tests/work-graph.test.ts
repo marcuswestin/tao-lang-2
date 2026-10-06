@@ -937,11 +937,11 @@ Describe('work graph scheduling', () => {
           })
           writeFileSync(${JSON.stringify(childPath)}, String(child.pid))
           child.unref()
-          process.stdout.write('inspection ready\\n')
+          process['stdout'].write('inspection ready\\n')
           const poll = setInterval(() => {
             if (existsSync(${JSON.stringify(releasePath)})) {
               clearInterval(poll)
-              process.exit(${childExitCode})
+              process['exit'](${childExitCode})
             }
           }, 10)
         `
