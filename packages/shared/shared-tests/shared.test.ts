@@ -1259,6 +1259,20 @@ Describe('Repo', () => {
     Expect(Repo.tryResolvePath('.devenv/profile/bin/node', outsideRepo)).toBeUndefined()
   })
 
+  Test('remembers a negative answer for a directory tree until a repository marker appears in it', async () => {
+    const outsideRepo = await tmpDir()
+    const nested = FS.resolvePath('nested/deeper', outsideRepo)
+    await FS.mkdir(nested)
+
+    Expect(Repo.tryGetRoot(outsideRepo)).toBeUndefined()
+    Expect(() => Repo.getRoot(nested)).toThrow(Errors.CommandExecutionError)
+    Expect(Repo.tryGetRoot(nested)).toBeUndefined()
+
+    await FS.mkdir(FS.resolvePath('nested/.git', outsideRepo))
+    Expect(Repo.getRoot(nested)).toBe(FS.resolvePath('nested', outsideRepo))
+    Expect(Repo.tryGetRoot(outsideRepo)).toBeUndefined()
+  })
+
   Test('resolves repository-relative paths inside a git worktree', async () => {
     const root = Repo.getRoot()
 
