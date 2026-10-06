@@ -861,6 +861,13 @@ Test('simulated user exercises the browser editor', async () => {
     Expect(consoleErrors.map(entry => entry.text)).toEqual([])
   } catch (error) {
     primaryFailure = error
+    if (browser !== undefined) {
+      const consoleErrors = browser.consoleErrors()
+      // Diagnostics are best effort: preserve the original failure if capture or writing fails.
+      await lensDiagnostic(browser).then(editor =>
+        FS.writeJson(FS.resolvePath('logs/lens-failure.json', artifactRoot), { consoleErrors, editor })
+      ).catch(() => {})
+    }
     throw error
   } finally {
     await runCleanups(primaryFailure, [
@@ -1702,6 +1709,27 @@ async function dividerSize(browser: StudioCdp, pane: string): Promise<number> {
   return await browser.evaluate<number>(
     `Number(document.querySelector('[data-divider="${pane}"]')?.getAttribute('aria-valuenow'))`,
   )
+}
+
+async function lensDiagnostic(browser: StudioCdp): Promise<unknown> {
+  return await browser.evaluate(`(() => {
+          const content = document.querySelector('.cm-content')
+          const view = content?.cmView?.view
+          return {
+            preset: document.querySelector('.studio-lens-bar')?.dataset.preset,
+            outlinePressed: document.querySelector('[data-testid="studio-lens-preset-outline"]')?.getAttribute('aria-pressed'),
+            lines: [...document.querySelectorAll('.cm-line')].slice(0, 30).map(node => node.textContent),
+            glyphs: document.querySelectorAll('.cm-lens-glyph').length,
+            cmKeys: Object.keys(content?.cmView ?? {}),
+            document: view?.state.doc.toString().slice(0, 4000),
+            lens: view?.state.values?.filter(value => value?.config && value?.nodes).map(value => ({
+              active: value.config.active,
+              nodes: value.nodes.slice(0, 30).map(node => ({ kind: node.kind, from: node.from, body: node.body })),
+              peeks: value.peeks.slice(0, 30),
+              spans: value.spans.slice(0, 30).map(span => ({ from: span.from, to: span.to, glyph: span.glyph })),
+            })),
+          }
+        })()`)
 }
 
 /** foldedRegions counts the syntax regions the lens currently collapses behind a glyph. */
