@@ -90,7 +90,12 @@ Describe('verify-complement', () => {
   })
 
   Test('leaves a gate hosted Verify runs on Linux to Verify', () => {
-    const hostedLinux = ['studio-dialog-browser', 'studio-smoke', 'studio-network-simulation']
+    const hostedLinux = [
+      'studio-dialog-browser',
+      'studio-smoke',
+      'studio-network-simulation',
+      'keyboard-navigation-smoke',
+    ]
     for (const name of hostedLinux) {
       Expect(VerifyComplement.isHostGate(name)).toBe(false)
     }
