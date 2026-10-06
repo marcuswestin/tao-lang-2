@@ -146,6 +146,8 @@ function editKey(prNumber: number): string {
   )
 }
 
+const MERGED_AT = '2026-10-06T05:15:04Z'
+
 /** openedPullRequestRoutes is `cleanFeatureBranchRoutes` for a branch with no open pull request,
  * which the REST create opens as `prNumber`, titled and described by the reviewed merge message,
  * with checks on its head and auto-merge off until open-pr turns it on. */
@@ -158,6 +160,24 @@ function openedPullRequestRoutes(prNumber: number, branch = BRANCH): Record<stri
     [checkCountKey()]: { stdout: '{"total_count":2}' },
     [enableAutoMergeKey(prNumber)]: {},
   }
+}
+
+/** mergesAfterChecks answers the pull request as merged once the checks have been followed, the way
+ * GitHub does seconds after a green Verify with auto-merge on. */
+function mergesAfterChecks(dependencies: OpenPrDependencies, prNumber: number): void {
+  const run = dependencies.run
+  let followed = false
+  const follow = dependencies.followChecks
+  dependencies.followChecks = async options => {
+    followed = true
+    return await follow(options)
+  }
+  dependencies.run = (async (command, spec = {}) => {
+    const result = await run(command, spec)
+    return followed && routeKey(command, spec.args ?? [], spec.cwd) === viewKey(prNumber)
+      ? { ...result, stdout: JSON.stringify(pull(prNumber, { merged_at: MERGED_AT })) }
+      : result
+  }) as OpenPrRunner
 }
 
 function fakeDependencies(
@@ -335,6 +355,7 @@ Describe('open-pr', () => {
       }
       return await run(command, spec)
     }) as OpenPrRunner
+    mergesAfterChecks(dependencies, 2)
 
     const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
@@ -342,15 +363,64 @@ Describe('open-pr', () => {
     Expect(counts).toEqual([])
     Expect(sleeps).toEqual([5_000, 5_000])
     Expect(followed).toEqual([2])
-    Expect(result.lines.at(-1)).toStartWith('NEXT  Run merge-pr')
+    Expect(result.lines).toContain(`PASS  GitHub merged #2 at ${MERGED_AT}.`)
+    Expect(result.lines.at(-1)).toStartWith('NEXT  The archive workflow records merged/<name>')
     // Any check can arm auto-merge; the required Verify check remains the merge gate.
     const autoMerge = calls.indexOf(enableAutoMergeKey(2))
     Expect(autoMerge).toBeGreaterThan(calls.lastIndexOf(checkCountKey()))
     Expect(autoMerge).toBeLessThan(calls.indexOf('followChecks'))
   })
 
+  Test('waits for GitHub’s merge after a green verdict, polling it rather than the archive workflow', async () => {
+    // GitHub merged 45 s after Verify concluded on 2026-10-06's landings; the merge is the landing,
+    // so the command reports it, and returns without waiting for the archive workflow that follows.
+    const { dependencies } = fakeDependencies(openedPullRequestRoutes(2))
+    const sleeps: number[] = []
+    dependencies.sleep = async ms => {
+      sleeps.push(ms)
+    }
+    const run = dependencies.run
+    let views = 0
+    dependencies.run = (async (command, spec = {}) => {
+      const result = await run(command, spec)
+      if (routeKey(command, spec.args ?? [], spec.cwd) !== viewKey(2)) {
+        return result
+      }
+      views += 1
+      // Opened, armed, then still unmerged at the first two reads after the verdict.
+      return views >= 5
+        ? { ...result, stdout: JSON.stringify(pull(2, { merged_at: MERGED_AT })) }
+        : result
+    }) as OpenPrRunner
+
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(sleeps).toEqual([5_000, 5_000])
+    Expect(result.lines).toContain('Waiting for GitHub to merge #2...')
+    Expect(result.lines).toContain(`PASS  GitHub merged #2 at ${MERGED_AT}.`)
+    Expect(result.lines.some(line => line.includes('archive') && line.startsWith('WAIT'))).toBe(false)
+  })
+
+  Test('names merge-pr when GitHub has not merged within the window after a green verdict', async () => {
+    const { dependencies } = fakeDependencies(openedPullRequestRoutes(2))
+    const sleeps: number[] = []
+    dependencies.sleep = async ms => {
+      sleeps.push(ms)
+    }
+
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    // 36 reads of the pull request five seconds apart span the 180 s window.
+    Expect(sleeps.filter(ms => ms === 5_000)).toHaveLength(35)
+    Expect(result.lines.some(line => line.startsWith('NOTE  GitHub has not merged #2 within 180s'))).toBe(true)
+    Expect(result.lines.at(-1)).toStartWith('NEXT  Run merge-pr')
+  })
+
   Test('runs the complement lane beside the checks with auto-merge, and not without it', async () => {
     const withAutoMerge = fakeDependencies(openedPullRequestRoutes(2))
+    mergesAfterChecks(withAutoMerge.dependencies, 2)
     const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, withAutoMerge.dependencies)
     Expect(result.exitCode).toBe(0)
     Expect(withAutoMerge.calls.indexOf('runComplement')).toBeGreaterThan(
@@ -366,6 +436,7 @@ Describe('open-pr', () => {
     Expect(without.calls).not.toContain('runComplement')
 
     const declined = fakeDependencies(openedPullRequestRoutes(2))
+    mergesAfterChecks(declined.dependencies, 2)
     Expect(
       (await OpenPrCommand.run({ autoMerge: true, complement: false, repositoryRoot: ROOT }, declined.dependencies))
         .exitCode,
@@ -488,6 +559,7 @@ Describe('open-pr', () => {
   Test('opens a pull request for the branch a cloud agent session was assigned', async () => {
     const branch = 'claude/example-x1'
     const { calls, dependencies } = fakeDependencies(openedPullRequestRoutes(5, branch), {}, branch)
+    mergesAfterChecks(dependencies, 5)
 
     const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
@@ -544,6 +616,7 @@ Describe('open-pr', () => {
     routes[viewKey(7)] = { stdout: JSON.stringify(reused) }
     routes[checkCountKey()] = { stdout: '{"total_count":1}' }
     const { calls, dependencies, followed } = fakeDependencies(routes)
+    mergesAfterChecks(dependencies, 7)
 
     const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
@@ -554,7 +627,7 @@ Describe('open-pr', () => {
     Expect(calls.some(call => call.includes('--method POST') || call.startsWith('gh pr merge'))).toBe(false)
     Expect(result.lines).toContain('PASS  Auto-merge is already on for #7 with the merge message.')
     Expect(followed).toEqual([7])
-    Expect(result.lines.at(-1)).toStartWith('NEXT  Run merge-pr')
+    Expect(result.lines).toContain(`PASS  GitHub merged #7 at ${MERGED_AT}.`)
   })
 
   Test('re-enables auto-merge that carries an older merge message', async () => {

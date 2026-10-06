@@ -45,6 +45,14 @@ const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
 const CHECKS_APPEAR_POLL_MS = 5_000
 const CHECKS_APPEAR_WITHIN_MS = 90_000
+/**
+ * GitHub merges an armed pull request some seconds after its last required check concludes
+ * (45 s on 2026-10-06's landings). The merge is the landing, so with auto-merge on the command
+ * waits for it this long after a green verdict, at this interval, and otherwise names `merge-pr`.
+ * It never waits for the archive workflow, which starts after the merge and `landed` reads later.
+ */
+const MERGE_POLL_MS = 5_000
+const MERGE_APPEARS_WITHIN_MS = 180_000
 const GH_AUTH_REMEDY = 'Run `gh auth login`.'
 
 /** OpenPrRunner is the injectable process seam every `git` and `gh` call goes through. */
@@ -166,6 +174,10 @@ export const OpenPrCommand = {
       if (options.autoMerge !== true) {
         report(`PASS  CI succeeded on ${headSha.slice(0, 8)} for #${pr.number}; auto-merge is off.`)
         report(`NEXT  After authorization, run merge-pr to confirm Verify and merge #${pr.number}.`)
+      } else if (await awaitMerge(dependencies, github, pr.number, report)) {
+        report(
+          `NEXT  The archive workflow records merged/<name>; \`landed\` reads it. Put further work on a new branch.`,
+        )
       } else {
         report(
           `NEXT  Run merge-pr: it confirms Verify on this head, merges #${pr.number} unless auto-merge did, and archives it.`,
@@ -355,6 +367,38 @@ async function awaitChecksOnHead(
       report(`PASS  Waiting for GitHub to start checks on ${headSha.slice(0, 8)}.`)
     }
     await dependencies.sleep(CHECKS_APPEAR_POLL_MS)
+  }
+}
+
+/** awaitMerge reports GitHub's merge of the pull request once it happens, or that it has not within the window. */
+async function awaitMerge(
+  dependencies: OpenPrDependencies,
+  github: GitHub,
+  prNumber: number,
+  report: (line: string) => void,
+): Promise<boolean> {
+  const attempts = Math.ceil(MERGE_APPEARS_WITHIN_MS / MERGE_POLL_MS)
+  for (let attempt = 1;; attempt += 1) {
+    const pr = await github.view(prNumber)
+    if (pr.merged_at !== null) {
+      report(
+        `PASS  GitHub merged #${prNumber} at ${pr.merged_at}${
+          typeof pr.merge_commit_sha === 'string' ? ` as ${pr.merge_commit_sha.slice(0, 8)}` : ''
+        }.`,
+      )
+      return true
+    }
+    if (attempt >= attempts) {
+      report(
+        `NOTE  GitHub has not merged #${prNumber} within ${MERGE_APPEARS_WITHIN_MS / 1000}s of Verify passing;`
+          + ' a required check may be missing or auto-merge may be off.',
+      )
+      return false
+    }
+    if (attempt === 1) {
+      report(`Waiting for GitHub to merge #${prNumber}...`)
+    }
+    await dependencies.sleep(MERGE_POLL_MS)
   }
 }
 
