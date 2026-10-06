@@ -89,6 +89,16 @@
   unreadability, denied liveness probes and changed ownership still fail inspection. Focused
   fixtures cover transient reads, permanent failures, exact identities and the shared helper
   failure envelope; current host acceptance remains required.
+- **Related observation (2026-10-06):** On `feat/tutorial-first-hour` at `eb1c7f95a`, sandboxed
+  `verify-changed` stopped at five `project-dev-session.test.ts` assertions: `markParentReused`
+  expected owner record version 2 but received 1. The unchanged focused test reproduced all five
+  failures. At that head, `ProjectDevSession.acquire` obtained its parent through `ProcessTree.processTable()`;
+  that Darwin path invoked `ps` and threw on unsuccessful inspection, which `acquire`
+  catches before safely falling back to a v1 record. The denied-table cause is inferred from this
+  path and the existing finding; these runs did not retain the swallowed inspection error. Logs:
+  `.artifacts/logs/verify-changed/2026-10-06T17-20-10-490Z-11437-d3570906/shared_4.log` and
+  `.artifacts/logs/dev-test/2026-10-06T17-21-07-315Z-26657-543be1e4/shared.log`.
+  The broad lane skipped 555 checks after this failure. No permissions or ownership policy changed.
 - **Acceptance:** Either a sandboxed lane's `processTable()` returns the real table, or the code and its
   tests state that the non-Darwin branch is out of scope on this host and nothing in a lane relies on it.
 - **Source:** 2026-09-17 process-teardown implementation.

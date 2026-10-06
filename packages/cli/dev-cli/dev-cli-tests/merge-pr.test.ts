@@ -103,6 +103,9 @@ function fakeDependencies(script: Script = {}) {
       }
       return result(spec, '')
     },
+    syncLocalMain: async () => {
+      calls.push('syncLocalMain')
+    },
     writeLine: line => lines.push(line),
   }
   return { calls, dependencies, lines }
@@ -122,6 +125,7 @@ Describe('merge-pr', () => {
     Expect(merge).toBeGreaterThan(-1)
     Expect(archive).toBeGreaterThan(merge)
     Expect(deletion).toBeGreaterThan(archive)
+    Expect(fake.calls.indexOf('syncLocalMain')).toBeGreaterThan(deletion)
     Expect(fake.calls.some(call => call.startsWith('gh pr merge'))).toBe(false)
   })
 
@@ -166,6 +170,7 @@ Describe('merge-pr', () => {
       Expect(fake.calls).toContain(ENABLE_CALL)
       Expect(fake.calls.some(call => call.startsWith(`gh ${MERGE_CALL}`))).toBe(false)
       Expect(fake.calls.some(call => call.includes('refs/heads/merged/'))).toBe(false)
+      Expect(fake.calls).not.toContain('syncLocalMain')
       Expect(fake.lines.some(line => line.startsWith('WAIT  Verify is'))).toBe(true)
       Expect(fake.lines.at(-1)).toBe('NEXT  Run merge-pr again once GitHub has merged #3, to archive it.')
     }

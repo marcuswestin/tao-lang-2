@@ -103,6 +103,18 @@ export type GateMetadata =
     /** True when the node needs host capabilities the managed agent sandbox deliberately denies. */
     requiresUnsandboxed?: boolean
     /**
+     * True when hosted `Verify`'s Linux partitions run this unsandboxed node: a runner there has no
+     * agent sandbox, Chrome is on its image, and the node was proved there. A lane run with
+     * `hostedLinux` keeps it, the local complement leaves it to `Verify`, and a local sandboxed lane
+     * still skips it, because the sandbox it runs in is what `requiresUnsandboxed` describes.
+     *
+     * Any unsandboxed gate that has passed on the hosted `ubuntu-24.04` runner adopts this with one
+     * line in its catalog entry; nothing else moves it. Seed its duration in
+     * `.github/verify/durations.json` from the hosted measurement so the partition plan weighs it.
+     * A `requiresMacOS` gate never qualifies.
+     */
+    runsOnHostedLinux?: boolean
+    /**
      * True when the node drives the macOS window server or native launcher. A lane on any other host
      * reports it skipped rather than running it, so it proves nothing there and is never green.
      */
@@ -370,9 +382,6 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
       name: 'native-receipt',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts'],
     }, {
-      name: 'native-receipt-signatures',
-      files: ['packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceiptSignatures.test.ts'],
-    }, {
       name: 'native-typescript',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts'],
     }, {
@@ -613,7 +622,23 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ],
     [
       'studio-dialog-browser',
-      studioSmoke('studio-dialog-browser', 'packages/ides/studio-tooling/studio-smoke/studio-dialog-browser.test.ts'),
+      {
+        ...studioSmoke(
+          'studio-dialog-browser',
+          'packages/ides/studio-tooling/studio-smoke/studio-dialog-browser.test.ts',
+        ),
+        runsOnHostedLinux: true,
+      },
+    ],
+    [
+      'studio-metro-refresh',
+      {
+        ...studioSmoke(
+          'studio-metro-refresh',
+          'packages/ides/studio-tooling/studio-smoke/studio-metro-refresh.test.ts',
+        ),
+        runsOnHostedLinux: true,
+      },
     ],
     [
       'studio-agent-browser',
@@ -659,6 +684,16 @@ function metadata(name: string): GateMetadata {
 /** isPrepare reports whether a node rewrites anything, which is what puts it in the prepare phase. */
 function isPrepare(name: string): boolean {
   return (metadata(name).writes ?? []).length > 0
+}
+
+/**
+ * skippedUnsandboxed reports whether a lane that skips unsandboxed gates leaves this one out. On a
+ * hosted Linux partition (`hostedLinux`) the nodes proved there stay in; everywhere else every
+ * unsandboxed node is skipped.
+ */
+function skippedUnsandboxed(name: string, options: { hostedLinux?: boolean } = {}): boolean {
+  const gate = metadata(name)
+  return gate.requiresUnsandboxed === true && !(options.hostedLinux === true && gate.runsOnHostedLinux === true)
 }
 
 /**
@@ -745,6 +780,7 @@ function node(name: string, repositoryRoot: string): WorkNode {
     reads: _reads,
     requiresMacOS: _requiresMacOS,
     requiresUnsandboxed: _requiresUnsandboxed,
+    runsOnHostedLinux: _runsOnHostedLinux,
     run,
     usesWatchman: _usesWatchman,
     writes: _writes,
@@ -832,6 +868,7 @@ export const GateCatalog = {
   metadata,
   node,
   reportsAttributableDurations,
+  skippedUnsandboxed,
   suiteReads,
   suiteTuning,
   testDependencies,

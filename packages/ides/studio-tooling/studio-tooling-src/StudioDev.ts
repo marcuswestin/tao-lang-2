@@ -834,6 +834,10 @@ async function studioWatchmanEnvironment(
     WATCHMAN_SOCK: socketName,
     TAO_STUDIO_FAST_HMR: childEnvironment['TAO_STUDIO_FAST_HMR'] ?? 'true',
     TAO_STUDIO_FAST_FILE_MAP: childEnvironment['TAO_STUDIO_FAST_FILE_MAP'] ?? 'true',
+    // Expo CLI turns Metro's watcher and reloads off when `CI` is truthy, and hosted runners set
+    // `CI=true` for every step. A Studio preview exists to reload edits, so its Metro never runs in
+    // CI mode; `false` rather than unset also keeps CI detectors that read GITHUB_ACTIONS quiet.
+    CI: 'false',
   }
 }
 

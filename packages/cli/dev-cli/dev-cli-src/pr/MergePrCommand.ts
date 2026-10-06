@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
 import { archiveStem } from '@verification/MergeWithMain'
+import { syncAfterLanding, SyncLocalMainCommand } from '../git/SyncLocalMain'
 import { enableAutoMerge } from './AutoMerge'
 import { gitHubPulls, isMerged, mustSucceed, type PullRequest, requirePrBranch } from './GitHubPulls'
 import { reviewedMergeMessage } from './ReviewedMergeMessage'
@@ -15,6 +16,7 @@ import { reviewedMergeMessage } from './ReviewedMergeMessage'
  * cannot slip in unproved, then archived the same way. Any other pull request has auto-merge turned
  * on for that head, so GitHub squash-merges it the moment `Verify` is green; run `merge-pr` again
  * after the merge to archive it. A draft is marked ready first, since GitHub refuses to merge one.
+ * Once archived, local `main` is fast-forwarded to the merge (`sync-main`).
  *
  * Every `git` and `gh` call goes through the injected `run` seam so a test can script every answer
  * without a real remote, and every GitHub read and the merge itself go through REST (`GitHubPulls`),
@@ -30,6 +32,8 @@ export type MergePrDependencies = {
   exists: (path: string) => Promise<boolean>
   readText: (path: string) => Promise<string>
   run: (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
+  /** Fast-forwards local `main` to the `origin/main` the merge moved. */
+  syncLocalMain: (root: string) => Promise<unknown>
   writeLine: (line: string) => void
 }
 
@@ -37,6 +41,7 @@ const defaultDependencies: MergePrDependencies = {
   exists: FS.exists,
   readText: FS.readText,
   run: CLI.run,
+  syncLocalMain: root => SyncLocalMainCommand.run({ repositoryRoot: root }),
   writeLine: HCI.writeLine,
 }
 
@@ -116,6 +121,7 @@ export const MergePrCommand = {
       await git(dependencies, root, ['push', REMOTE, '--delete', branch])
       report(`PASS  Deleted ${branch} from ${REMOTE}; this worktree's branch and files are untouched.`)
     }
+    await syncAfterLanding(() => dependencies.syncLocalMain(root), report)
     return { exitCode: 0, lines }
   },
 } as const

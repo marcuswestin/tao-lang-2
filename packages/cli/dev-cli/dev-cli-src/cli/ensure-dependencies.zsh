@@ -56,6 +56,14 @@ function tao_dependency_state() {
     reply=stale
     return
   fi
+  # Bun applies `patches/` at install time, so an edited patch leaves the installed copy stale.
+  local patch
+  for patch in "$TAO_DEPENDENCY_ROOT"/patches/*.patch(N); do
+    if [[ "$patch" -nt "$TAO_DEPENDENCY_STAMP" ]]; then
+      reply=stale
+      return
+    fi
+  done
   reply=current
 }
 

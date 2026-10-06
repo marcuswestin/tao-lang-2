@@ -199,7 +199,11 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
     if (remaining.length > 0 || (partitionedFiles.size === 0 && suite.shardUnits !== undefined)) {
       const plan = TestShards.planShards({
         coldShardCount: tuning.coldShardCount,
-        fileCostMs: costs,
+        // A recursive execution root can own several inventory units. Pack by their combined
+        // share while keeping the detailed inventory for partial selections and node estimates.
+        fileCostMs: usesUnitCosts
+          ? new Map(remaining.map(root => [root, TestShards.weightShare([root], inventory, costs)]))
+          : costs,
         files: remaining,
         fixedMs,
         measuredMs: suiteMs === undefined

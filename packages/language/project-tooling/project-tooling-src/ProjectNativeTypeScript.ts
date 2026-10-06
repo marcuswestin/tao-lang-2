@@ -1,5 +1,5 @@
 import type { BridgeModule } from '@compiler/bridge-metadata'
-import { Assert, FS } from '@shared'
+import { Assert, FS, Platform } from '@shared'
 import type { inspectMaintainedNativeBindings } from 'tao-native-bindings'
 import type * as TS from 'typescript'
 import { hostModulePaths, nativeBindingModuleRoots, resolveRuntimeRoot } from './ProjectHostModules'
@@ -7,6 +7,8 @@ import type { ProjectToolingOptions, ProjectToolingSourceMapping } from './Proje
 import { createProjectTypeScriptProgram, type ProjectTypeScriptDeclarationViews } from './ProjectTypeScriptProgram'
 
 type Inspection = Awaited<ReturnType<typeof inspectMaintainedNativeBindings>>
+
+const loadedEngines = new Map<string, typeof TS>()
 
 /** Check real native bodies and Tao signatures together, then expose declarations to the host program. */
 export async function checkProjectNativeTypeScript(
@@ -67,7 +69,9 @@ export async function checkProjectNativeTypeScript(
   )
   const enginePath = inspected.inputPaths.find(path => path.endsWith('/typescript/lib/typescript.js'))
   Assert.defined(enginePath, 'Expected: a fresh native binding inspection identifies its executable TypeScript engine.')
-  const ts = require(enginePath) as typeof TS
+  // Evaluated rather than required, so Bun does not cache the engine under the user's home.
+  const ts = loadedEngines.get(enginePath) ?? Platform.evaluateCommonJsFile(enginePath) as typeof TS
+  loadedEngines.set(enginePath, ts)
   Assert(ts.ScriptTarget?.ESNext !== undefined, 'Expected: the pinned native TypeScript engine supports ESNext.')
   const moduleRoots = await nativeBindingModuleRoots(options)
   const nativePaths = await hostModulePaths(FS.resolvePath('__native_contract_program__', root), {

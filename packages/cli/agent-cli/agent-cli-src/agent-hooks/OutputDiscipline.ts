@@ -32,6 +32,7 @@ const BOUNDED_GIT_FLAGS = new Set([
   '--compact-summary',
   '--oneline',
   '--no-patch',
+  '--check',
   '-s',
   '-q',
   '--quiet',
@@ -104,8 +105,8 @@ const BUN_INSTALL_REFUSAL =
   + 'Ask the Developer before adding or updating packages, then edit the manifest and run `./agent setup --refresh-lockfile`.'
 
 const GH_PR_MERGE_REFUSAL = "Agents never run `gh pr merge` (AGENTS.md): through the Developer's login it can "
-  + 'bypass the required Verify check. `./agent unsandboxed open-pr` leaves auto-merge off by default; '
-  + 'pass `--auto-merge` only when explicitly intended. '
+  + 'bypass the required Verify check. Land an authorized branch with '
+  + '`./agent unsandboxed open-pr --auto-merge`, which also runs the local host-only gates; '
   + '`./agent unsandboxed merge-pr` merges only once Verify passed on the pushed head.'
 
 const GIT_ADD_WIDE_REFUSAL =
@@ -289,12 +290,12 @@ export function hookOverrideReason(command: string): string | undefined {
  * shellReadDenial catches the shell standing in for a file tool. `sed -i` is included because it is
  * the same substitution in the other direction: an edit the harness cannot show the Developer in a diff.
  */
-function shellReadDenial(stage: Stage): string | undefined {
+function shellReadDenial(stage: Stage, options: RefusalOptions): string | undefined {
   const [command, ...rest] = stage.words
   if (command === 'sed' && rest.some(word => word.startsWith('-') && word.includes('i'))) {
     return SED_EDIT_REFUSAL
   }
-  if (stage.heredoc || !stage.reachesContext || operandsOf(stage).length === 0) {
+  if (!options.readTool || stage.heredoc || !stage.reachesContext || operandsOf(stage).length === 0) {
     return undefined
   }
   if (command === 'cat' || (command === 'sed' && rest.includes('-n'))) {
@@ -523,21 +524,36 @@ function gitDumpDenial(stage: Stage): string | undefined {
  * reason is returned rather than every applicable one: an agent fixes the command it was stopped on,
  * and a list invites it to argue with the rule instead.
  */
-export function outputDisciplineRefusal(command: string): string | undefined {
+export function outputDisciplineRefusal(
+  command: string,
+  options: RefusalOptions = { readTool: true },
+): string | undefined {
   const forbidden = splitStages(command).map(ghPrMergeDenial).find(denial => denial !== undefined)
-  return forbidden ?? (hookOverrideReason(command) === undefined ? refusalIgnoringOverride(command) : undefined)
+  return forbidden
+    ?? (hookOverrideReason(command) === undefined ? refusalIgnoringOverride(command, options) : undefined)
 }
+
+/**
+ * RefusalOptions describes the calling harness. `readTool` is false where the harness offers no file
+ * tool — Codex runs everything through one shell tool — so a bounded `sed -n` or `cat` there is the
+ * only read available, and refusing it only taught agents to append `# hook-ok:` (3,311 overrides
+ * in the week to 2026-10-06).
+ */
+export type RefusalOptions = { readTool: boolean }
 
 /**
  * refusalIgnoringOverride is the rules alone, without the escape hatch. The entry needs both
  * answers to tell an override apart from a command no rule covers: only the first is worth logging.
  */
-export function refusalIgnoringOverride(command: string): string | undefined {
+export function refusalIgnoringOverride(
+  command: string,
+  options: RefusalOptions = { readTool: true },
+): string | undefined {
   const stages = splitStages(command)
   const statusIsRead = STATUS_IS_READ.test(command)
   for (const [index, stage] of stages.entries()) {
     const piped = statusIsRead ? undefined : gatePipeDenial(stage, stages[index + 1])
-    const denial = shellReadDenial(stage) ?? searchDenial(stage) ?? piped ?? justRecipeDenial(stage)
+    const denial = shellReadDenial(stage, options) ?? searchDenial(stage) ?? piped ?? justRecipeDenial(stage)
       ?? bunDenial(stage) ?? gitIndexDenial(stage) ?? treeWriteDenial(stage) ?? gitDumpDenial(stage)
     if (denial !== undefined) {
       return denial

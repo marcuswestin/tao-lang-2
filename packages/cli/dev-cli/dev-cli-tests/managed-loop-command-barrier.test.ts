@@ -388,7 +388,7 @@ Test(
       Expect(
         await Time.pollUntil(
           () =>
-            ProcessTree.identities([escaped!.pid]).has(escaped!.pid) || Platform.processIsAlive(escaped!.pid)
+            escapedStillRuns(escaped!.pid)
               ? undefined
               : true,
           { intervalMs: 25, timeoutMs: 30_000 },
@@ -396,12 +396,12 @@ Test(
       ).toBe(true)
       Expect((await f.finish()).exitCode).toBe(0)
     } finally {
-      if (escaped && Platform.processIsAlive(escaped.pid)) {
+      if (escaped && escapedStillRuns(escaped.pid)) {
         ProcessTree.signalTracked([escaped], 'SIGTERM')
         Expect(
           await Time.pollUntil(
             () =>
-              ProcessTree.identities([escaped!.pid]).has(escaped!.pid) || Platform.processIsAlive(escaped!.pid)
+              escapedStillRuns(escaped!.pid)
                 ? undefined
                 : true,
             { intervalMs: 25, timeoutMs: 30_000 },
@@ -412,3 +412,12 @@ Test(
     }
   },
 )
+
+/**
+ * A killed orphan stays an unreaped zombie in a container whose first process does not reap, and
+ * kill(0) still succeeds on a zombie. Linux's proc table already leaves zombies out of identities,
+ * so only Darwin, where launchd reaps promptly, also asks kill(0).
+ */
+function escapedStillRuns(pid: number): boolean {
+  return ProcessTree.identities([pid]).has(pid) || (Platform.hostPlatform !== 'linux' && Platform.processIsAlive(pid))
+}

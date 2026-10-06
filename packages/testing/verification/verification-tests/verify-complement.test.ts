@@ -23,6 +23,9 @@ const FULL_LANE = [
   'studio-canary',
 ]
 
+const PULL_REQUEST_ON = 'on:\n  pull_request:\n  push:\n    branches: [main]\n\n'
+const PUSH_ON = 'on:\n  push:\n    branches: [main]\n  workflow_dispatch:\n\n'
+
 async function justVariable(name: string): Promise<string[]> {
   const text = await FS.readText(FS.resolvePath('Justfile', Repo.getRoot()))
   const match = new RegExp(`^${name} := "([^"]*)"`, 'mu').exec(text)
@@ -53,11 +56,41 @@ Describe('verify-complement', () => {
   })
 
   Test('leaves out what CI macOS admits', () => {
-    const plan = VerifyComplement.plan(FULL_LANE, "env:\n  CI_HOST_GATES: 'studio-smoke'\n")
+    const plan = VerifyComplement.plan(FULL_LANE, `${PULL_REQUEST_ON}env:\n  CI_HOST_GATES: 'studio-smoke'\n`)
     Expect(plan.admitted).toEqual(['studio-smoke'])
     Expect(plan.host).toEqual(['studio-canary'])
     Expect(plan.gates).not.toContain('studio-smoke')
-    Expect(VerifyComplement.plan(FULL_LANE, "  CI_HOST_GATES: 'studio-smoke,studio-canary'\n").host).toEqual([])
+    Expect(VerifyComplement.plan(FULL_LANE, `${PULL_REQUEST_ON}  CI_HOST_GATES: 'studio-smoke,studio-canary'\n`).host)
+      .toEqual([])
+  })
+
+  Test('counts an admission only when the workflow runs on pull requests', () => {
+    const admission = "env:\n  CI_HOST_GATES: 'studio-smoke'\n"
+    // Pushes to main and dispatch prove nothing before a merge, so the gate stays in the complement.
+    const unproved = VerifyComplement.plan(FULL_LANE, `${PUSH_ON}${admission}`)
+    Expect(unproved.admitted).toEqual([])
+    Expect(unproved.host).toEqual(['studio-smoke', 'studio-canary'])
+    Expect(unproved.workflowAdmits).toBe(true)
+    // A comment that mentions the trigger does not declare it.
+    Expect(VerifyComplement.plan(FULL_LANE, `# add pull_request here\n${PUSH_ON}${admission}`).host)
+      .toEqual(['studio-smoke', 'studio-canary'])
+    Expect(VerifyComplement.plan(FULL_LANE, `${PULL_REQUEST_ON}${admission}`).host).toEqual(['studio-canary'])
+  })
+
+  Test('reads a pull_request trigger in the block, flow, and scalar spellings of on', () => {
+    Expect(VerifyComplement.runsOnPullRequests(`${PULL_REQUEST_ON}jobs:\n`)).toBe(true)
+    Expect(VerifyComplement.runsOnPullRequests('on: [push, pull_request]\n')).toBe(true)
+    Expect(VerifyComplement.runsOnPullRequests('on: pull_request\n')).toBe(true)
+    Expect(VerifyComplement.runsOnPullRequests(`${PUSH_ON}jobs:\n  pull_request:\n`)).toBe(false)
+    Expect(VerifyComplement.runsOnPullRequests('on:\n  pull_request_target:\n')).toBe(false)
+    Expect(VerifyComplement.runsOnPullRequests('')).toBe(false)
+  })
+
+  Test('leaves a gate hosted Verify runs on Linux to Verify', () => {
+    Expect(VerifyComplement.isHostGate('studio-dialog-browser')).toBe(false)
+    const plan = VerifyComplement.plan([...FULL_LANE, 'studio-dialog-browser'], '')
+    Expect(plan.host).toEqual(['studio-smoke', 'studio-canary'])
+    Expect(plan.gates).not.toContain('studio-dialog-browser')
   })
 
   Test('the real full lane and workflow leave a non-empty complement of host gates only', async () => {

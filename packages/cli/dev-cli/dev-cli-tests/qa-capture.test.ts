@@ -32,7 +32,9 @@ Describe('isolated QA capture', () => {
       await FS.writeText(FS.resolvePath('App.tao.ts', original), 'import type TR from "../../runtime/TR"\n')
       const capture = new QaCapture(root, async (staged, options) => {
         Expect(staged).not.toBe(original)
-        Expect(await FS.exists(FS.resolvePath('.tao', staged))).toBe(false)
+        Expect(await FS.isDirectory(FS.resolvePath('.tao', staged))).toBe(true)
+        Expect(await FS.listDir(FS.resolvePath('.tao', staged))).toEqual([])
+        Expect(await FS.exists(FS.resolvePath('.tao/sessions/existing.json', staged))).toBe(false)
         Expect(await FS.exists(FS.resolvePath('node_modules', staged))).toBe(false)
         Expect(await FS.exists(FS.resolvePath('secrets', staged))).toBe(false)
         Expect(await FS.exists(FS.resolvePath('credentials', staged))).toBe(false)
@@ -43,6 +45,7 @@ Describe('isolated QA capture', () => {
       await capture.run('app', { app: 'App', output: '.artifacts/capture' })
       Expect(await FS.readText(FS.resolvePath('App.tao', original))).toBe('use Text from @tao/ui\n')
       Expect(await FS.listDir(FS.resolvePath('.tao/sessions', original))).toEqual(['existing.json'])
+      Expect(await FS.exists(FS.resolvePath('.tao/.gitkeep', original))).toBe(false)
       const receipt = await FS.readJson<
         { originalProject: string; status: string; files: { path: string; sha256: string }[] }
       >(FS.resolvePath('.artifacts/capture/source-snapshot.json', root))

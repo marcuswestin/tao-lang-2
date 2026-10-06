@@ -1,0 +1,90 @@
+
+Running 3 tests using 1 worker
+
+  ✘  1 [browser] › packages/testing/e2e-testing/browser/reading-list.host.spec.ts:16:3 › First-hour tutorial in the browser › edits a book, preserves it across reload, finishes it, switches destinations, and removes it (30.6s)
+  ✘  2 [browser] › packages/testing/e2e-testing/browser/reading-list.host.spec.ts:57:3 › First-hour tutorial in the browser › reports unavailable local storage and recovers the saved book through Retry (30.6s)
+  ✓  3 [browser] › packages/testing/e2e-testing/browser/reading-list.host.spec.ts:83:3 › First-hour tutorial in the browser › keeps short phone sections together and adapts to desktop and dark scheme (1.2s)
+
+
+  1) [browser] › packages/testing/e2e-testing/browser/reading-list.host.spec.ts:16:3 › First-hour tutorial in the browser › edits a book, preserves it across reload, finishes it, switches destinations, and removes it 
+
+    Error: expect(received).toContain(expected) // indexOf
+
+    Expected substring: "The Left Hand of Darkness"
+    Received string:    ""
+
+    Call Log:
+    - Timeout 30000ms exceeded while waiting on the predicate
+
+      34 |     await page.getByRole('button', { name: 'Back', exact: true }).click()
+      35 |     await expect(page.getByText('Ursula K. Le Guin', { exact: true })).toBeVisible()
+    > 36 |     await expect.poll(() => savedBooks(page)).toContain('The Left Hand of Darkness')
+         |                                               ^
+      37 |     await page.reload()
+      38 |     await expect(page.getByText('The Left Hand of Darkness', { exact: true })).toBeVisible()
+      39 |     await expect(page.getByText('Ursula K. Le Guin', { exact: true })).toBeVisible()
+        at /Users/ro/.codex/worktrees/5894/tao-lang-2/packages/testing/e2e-testing/browser/reading-list.host.spec.ts:36:47
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .artifacts/host-testing/fb196a74-ae6e-4611-aa7b-b2e709de74a0/results/browser-reading-list.host--1b06d-destinations-and-removes-it-browser/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .artifacts/host-testing/fb196a74-ae6e-4611-aa7b-b2e709de74a0/results/browser-reading-list.host--1b06d-destinations-and-removes-it-browser/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .artifacts/host-testing/fb196a74-ae6e-4611-aa7b-b2e709de74a0/results/browser-reading-list.host--1b06d-destinations-and-removes-it-browser/trace.zip
+    Usage:
+
+        npx playwright show-trace .artifacts/host-testing/fb196a74-ae6e-4611-aa7b-b2e709de74a0/results/browser-reading-list.host--1b06d-destinations-and-removes-it-browser/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [browser] › packages/testing/e2e-testing/browser/reading-list.host.spec.ts:57:3 › First-hour tutorial in the browser › reports unavailable local storage and recovers the saved book through Retry 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  getByText('Couldn\'t load app data', { exact: true })
+    Expected: 0
+    Received: 1
+    Timeout:  30000ms
+
+    Call log:
+      - Expect "toHaveCount" getByText('Couldn\'t load app data', { exact: true }) with timeout 30000ms
+      - waiting for getByText('Couldn\'t load app data', { exact: true })
+        64 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      74 |     await page.evaluate(() => sessionStorage.setItem('tutorial-storage-restored', 'yes'))
+      75 |     await page.getByRole('button', { name: 'Try loading data again', exact: true }).click()
+    > 76 |     await expect(page.getByText("Couldn't load app data", { exact: true })).toHaveCount(0)
+         |                                                                             ^
+      77 |     await expect(page.getByText('A saved book', { exact: true })).toBeVisible()
+      78 |     await page.reload()
+      79 |     await expect(page.getByText('A saved book', { exact: true })).toBeVisible()
+        at /Users/ro/.codex/worktrees/5894/tao-lang-2/packages/testing/e2e-testing/browser/reading-list.host.spec.ts:76:77
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .artifacts/host-testing/fb196a74-ae6e-4611-aa7b-b2e709de74a0/results/browser-reading-list.host--f488a-he-saved-book-through-Retry-browser/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .artifacts/host-testing/fb196a74-ae6e-4611-aa7b-b2e709de74a0/results/browser-reading-list.host--f488a-he-saved-book-through-Retry-browser/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .artifacts/host-testing/fb196a74-ae6e-4611-aa7b-b2e709de74a0/results/browser-reading-list.host--f488a-he-saved-book-through-Retry-browser/trace.zip
+    Usage:
+
+        npx playwright show-trace .artifacts/host-testing/fb196a74-ae6e-4611-aa7b-b2e709de74a0/results/browser-reading-list.host--f488a-he-saved-book-through-Retry-browser/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [browser] › packages/testing/e2e-testing/browser/reading-list.host.spec.ts:16:3 › First-hour tutorial in the browser › edits a book, preserves it across reload, finishes it, switches destinations, and removes it 
+    [browser] › packages/testing/e2e-testing/browser/reading-list.host.spec.ts:57:3 › First-hour tutorial in the browser › reports unavailable local storage and recovers the saved book through Retry 
+  1 passed (1.1m)
+(node:52407) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:60290) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:67997) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)

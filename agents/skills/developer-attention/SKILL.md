@@ -1,8 +1,8 @@
 ---
 name: developer-attention
 description: >-
-  Notify the Developer when an agent in goal mode has a question or needs attention,
-  and stop the alert when the Developer acknowledges, cancels, or says "stop notification" in any task.
+  Notify the Developer and stop the alert. Use when an agent in goal mode has a question or needs
+  attention, and when the Developer acknowledges, cancels, or says "stop notification" in any task.
 ---
 
 # Developer attention

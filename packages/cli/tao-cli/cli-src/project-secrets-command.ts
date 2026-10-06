@@ -171,12 +171,15 @@ export async function grantProjectSecrets(
   }
   const { root, path } = await storeLocation(target)
   const original = await readStore(path)
-  if (original.recipients.includes(recipient)) {
+  if (original.storeKey?.wrappedFor.includes(recipient) === true) {
     return false
   }
   const secretKey = await unlockStoreKey(original, environment.cipher)
-  const recipients = [...original.recipients, recipient]
-  const wrapped = await environment.cipher.encrypt(secretKey, recipients)
+  // Wrap only to machines already granted plus this one. `recipients` is unauthenticated text in a
+  // committed file, so a name added there by hand must not ride along on someone else's grant.
+  const wrappedFor = [...original.storeKey!.wrappedFor, recipient]
+  const recipients = original.recipients.includes(recipient) ? original.recipients : [...original.recipients, recipient]
+  const wrapped = await environment.cipher.encrypt(secretKey, wrappedFor)
   await mutateStore(root, path, async () => {
     const current = await readStore(path)
     if (
@@ -185,7 +188,7 @@ export async function grantProjectSecrets(
     ) {
       Errors.throwUserInput('Project recipients changed while granting access. Retry the command.')
     }
-    const storeKey: StoreKey = { ...current.storeKey!, wrappedFor: recipients, wrappedKey: armorLines(wrapped) }
+    const storeKey: StoreKey = { ...current.storeKey!, wrappedFor, wrappedKey: armorLines(wrapped) }
     await writeStore(root, path, { ...current, recipients, storeKey })
   })
   return true

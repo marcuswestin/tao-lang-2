@@ -1,0 +1,50 @@
+{
+  "id": "20261006172452998-cf5164a4-9e5a-4a79-a707-27d33ba1b2e0",
+  "runId": "20261006172029242-fcf23ba4-0d52-4ac6-83e3-33f655ba4f25",
+  "createdAt": "2026-10-06T17:24:52.977Z",
+  "recordedAt": "2026-10-06T17:24:52.977Z",
+  "commit": "eb1c7f95a8994c29679dc0951b770d6b523c5f29",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/tutorial-first-hour/browser/browser.json",
+      "Docs/QA/evidence/tutorial-first-hour/browser/browser.log",
+      "Docs/QA/evidence/tutorial-first-hour/browser/run.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/5df8e906c74775b5694ed9e24983efb6f427933e408fa0b187b59f4085bf95ab.json"
+  },
+  "surfaceId": "source:tutorial-replay",
+  "dimension": "functional",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "browser-preview",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/browser/browser.json",
+      "sha256": "da33fcbf9da74061ed0a340041783bb7059b1c08bd99b5ebf7ae12e6dbb0e447"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/browser/browser.log",
+      "sha256": "ada00aada8dc7904eee761d88aaa18d9511f86a7c1b9c0d0c3ee0647116538b2"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/browser/run.json",
+      "sha256": "49319fc584efc4506c7cba413f3a1afd8cb6338861a815b98384b0697a60c05c"
+    }
+  ],
+  "notes": "Fresh export from the tutorial final code block: three journeys pass after restoring deliberately broken storage write and retry injections. Exercises title/author editing, reload persistence, finish/remove, both destinations, storage-load failure and Retry, phone/desktop/dark and long-list layout. Inspected all seven screenshots. Source development proof only; human and distributed CLI release acceptance remain separate.",
+  "sourceHash": "8e1ec47260f52fd0dfc639eab8117d19c2afc7310680c49499adfab299c41888",
+  "rendererHash": "4217a3c5c18598a0587d27d0c833d7a6e68a60fa40b8ae8b7899efe1f0be3a10",
+  "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
+}

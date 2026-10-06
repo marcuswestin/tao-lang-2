@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
 import { archiveStem } from '@verification/MergeWithMain'
+import { syncAfterLanding, SyncLocalMainCommand } from '../git/SyncLocalMain'
 import { gitHubPulls, isMerged, mustSucceed, type PullRequest, requirePrBranch } from './GitHubPulls'
 
 /*
@@ -13,9 +14,9 @@ import { gitHubPulls, isMerged, mustSucceed, type PullRequest, requirePrBranch }
  *
  * The merge is built without touching any checkout: `git merge-tree --write-tree` produces the
  * merged tree from the two commits, `git commit-tree` makes the commit, and the push moves `main`
- * on the remote only. A conflict refuses the whole command before anything is written; `main` is
- * then merged into the branch by hand and the command run again. Local `main` is never moved, since
- * another worktree may have it checked out.
+ * on the remote. A conflict refuses the whole command before anything is written; `main` is then
+ * merged into the branch by hand and the command run again. Local `main` follows afterwards through
+ * `sync-main`, which only fast-forwards and leaves a dirty checkout of `main` alone.
  */
 
 const REMOTE = 'origin'
@@ -26,6 +27,8 @@ const RECEIPT_DIR = '.artifacts/logs/land-fix'
 export type LandFixDependencies = {
   now: () => Date
   run: (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
+  /** Fast-forwards local `main` to the `origin/main` the push just moved. */
+  syncLocalMain: (root: string) => Promise<unknown>
   writeJson: (path: string, content: unknown) => Promise<void>
   writeLine: (line: string) => void
 }
@@ -33,6 +36,7 @@ export type LandFixDependencies = {
 const defaultDependencies: LandFixDependencies = {
   now: () => new Date(),
   run: CLI.run,
+  syncLocalMain: root => SyncLocalMainCommand.run({ repositoryRoot: root }),
   writeJson: (path, content) => FS.writeJson(path, content),
   writeLine: HCI.writeLine,
 }
@@ -152,6 +156,7 @@ export const LandFixCommand = {
     const archive = archiveStem(branch)
     await git(dependencies, root, ['push', REMOTE, `${fixHead}:refs/heads/${archive}`])
     report(`PASS  Archive ${archive} now ends at ${fixHead.slice(0, 8)}.`)
+    await syncAfterLanding(() => dependencies.syncLocalMain(root), report)
 
     const receipt: LandFixReceipt = {
       at: dependencies.now().toISOString(),

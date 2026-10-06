@@ -6,6 +6,24 @@ import { parseHostTestingRequest } from '../HostTestingRequest'
 const base = { app: 'clockwork', seed: '12345' }
 const developerDir = '/Applications/Xcode-beta.app/Contents/Developer'
 
+test('tutorial replay selects browser preparation and rejects native or unrelated fault work', () => {
+  for (const mode of ['prepare', 'export', 'browser']) {
+    expect(parseHostTestingRequest(mode, { ...base, app: 'reading-list' })).toMatchObject({
+      kind: 'browser',
+      mode,
+      subject: 'reading-list',
+    })
+  }
+  for (const mode of ['ios', 'android', 'device', 'catalyst', 'driver', 'check']) {
+    expect(() => parseHostTestingRequest(mode, { ...base, app: 'reading-list', device: 'target' })).toThrow(
+      'reading-list supports prepare, export, or browser',
+    )
+  }
+  expect(() => parseHostTestingRequest('browser', { ...base, app: 'reading-list', fault: true })).toThrow(
+    'without --fault',
+  )
+})
+
 test('host runners select the current checkout stdlib and preserve explicit payload overrides', async () => {
   const request = parseHostTestingRequest('check', base)
   const inherited = { TAO_RESOURCES: '/another/checkout/resources' }
