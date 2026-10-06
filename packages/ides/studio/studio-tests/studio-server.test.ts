@@ -194,7 +194,7 @@ Describe('Studio server request boundary', () => {
     }])
   })
 
-  Test('disables Bun idle timeout only for the long-running beta ship request', () => {
+  Test('keeps quiet builds and streamed turns alive without changing ordinary request timeouts', () => {
     const calls: Array<{ request: Request; seconds: number }> = []
     const server = {
       timeout(request: Request, seconds: number) {
@@ -202,12 +202,26 @@ Describe('Studio server request boundary', () => {
       },
     }
     const ship = new Request('http://127.0.0.1:5678/api/ship/beta', { method: 'POST' })
-    const files = new Request('http://127.0.0.1:5678/api/files')
+    const stream = new Request('http://127.0.0.1:5678/api/agent-chat/stream/respond', { method: 'POST' })
+    const bundle = new Request('http://127.0.0.1:5678/studio.js')
 
-    StudioServerTesting.configureRequestLifetime(ship, server as never, '/api/ship/beta')
-    StudioServerTesting.configureRequestLifetime(files, server as never, '/api/files')
+    for (const request of [ship, stream, bundle]) {
+      StudioServerTesting.configureRequestLifetime(request, server as never, new URL(request.url).pathname)
+    }
+    for (
+      const [pathname, method] of [
+        ['/api/files', 'GET'],
+        ['/api/agent-chat/respond', 'POST'],
+        ['/api/agent-chat/stream/respond', 'GET'],
+        ['/api/ship/beta', 'GET'],
+        ['/studio.js', 'POST'],
+      ]
+    ) {
+      const request = new Request(`http://127.0.0.1:5678${pathname}`, { method })
+      StudioServerTesting.configureRequestLifetime(request, server as never, pathname)
+    }
 
-    Expect(calls).toEqual([{ request: ship, seconds: 0 }])
+    Expect(calls).toEqual([ship, stream, bundle].map(request => ({ request, seconds: 0 })))
   })
 
   Test('the default beta ship requests the active app with the dirty-tree override', () => {
