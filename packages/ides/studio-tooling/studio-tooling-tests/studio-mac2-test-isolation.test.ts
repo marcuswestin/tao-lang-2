@@ -1860,7 +1860,11 @@ Describe('Mac2 invocation isolation', () => {
     try {
       const desktop = await state.run.desktopLeases.acquire()
       await Promise.all([desktop.release(), desktop.release()])
+      // The shutdown proof keeps its bind, so a stranger cannot take the port before cleanup re-proves it.
+      Expect(() => Bun.serve({ hostname: '127.0.0.1', port: state.run.systemPort, fetch: () => new Response() }))
+        .toThrow()
       await Promise.all([state.run.cleanup(true), state.run.cleanup(true)])
+      Bun.serve({ hostname: '127.0.0.1', port: state.run.systemPort, fetch: () => new Response() }).stop(true)
       Expect(state.signals).toEqual(['SIGTERM'])
       Expect(state.lifecycle).toEqual(['registration-disabled', 'registration-closed'])
       Expect(await MachineResources.listOwners({ registryRoot: test.registryRoot })).toEqual([])
