@@ -8,7 +8,7 @@
   "publisher": "devtao",
   "repository": {
     "type": "git",
-    "url": "https://github.com/marcuswestin/tao-lang-2.git",
+    "url": "https://github.com/tao-dev-org/tao-lang.git",
     "directory": "packages/ides/ide-extension"
   },
   "categories": [
