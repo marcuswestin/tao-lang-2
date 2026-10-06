@@ -93,11 +93,35 @@ covering 40/80/83 acquired counts, grouping transitions, revision acknowledgment
 Mounted feature proof verifies that empty bare text values emit no node;
 a quoted empty string and explicit Text("") still retain their Text nodes.
 
+### Retained example coverage
+
+The future files remain undiscovered audit fixtures. Their numbered cases map to the active
+modules and proof owners below; remaining gaps are not implied complete by this mapping.
+
+| Future case                                                     | Active implementation                           | Proof owner                                                                                                          |
+| --------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Main 1: app boundary                                            | Main app guard and BookStore                    | Library propagated-failure journey                                                                                   |
+| Main 2: slots and forwarding                                    | Shelves, Shelf and GroupedShelf                 | Mounted Shelf and compiler shelf-source tests                                                                        |
+| Main 3: signature roles, named state, generic display and Score | Main and library/Library                        | Library rendering journey; nominal/generic compiler and validator tests                                              |
+| Main 3.1: signed quantities and units                           | Main and core quantity contracts                | Library quantity assertions; numeric-units compiler/runtime tests                                                    |
+| Main 4: bounded acquisition                                     | Feed, BookIO and BookStore provider             | Library 40/80/83 journey; BookStore and BookIO tests                                                                 |
+| Main 5: typed input and recovery                                | Add and local/app guards                        | Library invalid-input, reset and propagated-failure journeys                                                         |
+| Main 6: empty results and grouped content                       | Main, GroupedRows and BookViews                 | Empty CLI/mounted-app journeys; grouped live-handle and mounted Shelf tests                                          |
+| Main 7: rejected invocations                                    | Explicit roles and concrete quantities          | Negative nominal-admission, generic and numeric-unit tests; exact example reconciliation remains required            |
+| Library future journey                                          | Active app with isolated empty provider seed    | syntax2-empty-journey and syntax2-empty-query-journey                                                                |
+| GroupedRows future algorithm                                    | Authored GroupedRows builder and implementation | Grouped rows and builder tests; first-appearance ordering and duplicate-input policy remain to be checked explicitly |
+
+Fresh acceptance on 2026-10-06 also replays the compiled Export, native comparison, grouped
+builder and BookIO checks. These exercise the authored boundaries with controlled host inputs;
+they do not prove installed native clocks, suspend/resume or operating-system file services.
+
 ### Remaining acceptance
 
 1. The actual Library journeys with Shelf and GroupedShelf active pass for 40/80/83 acquired
-   counts, grouping changes, seen revisions and writes. Retain the focused virtualization and
-   author/key proofs; finish reconciliation of the retained empty-collection fixture.
+   counts, grouping changes, seen revisions and writes. Rechecked on 2026-10-06: all four active
+   journeys pass, as do the empty-result CLI and mounted-app journeys. The latter verifies both
+   grouping modes, creation of the first live row and zero app-error-guard invocations. Retain the
+   focused virtualization and author/key proofs; reconcile future fixtures against these checks.
 2. Prove the applicable native timing/export/cancellation/cleanup boundaries. iOS build evidence
    exists; installed-device, suspend/resume and Android acceptance are not claimed.
 3. Reconcile retained future Main/test/algorithm fixtures, documentation and coverage records.

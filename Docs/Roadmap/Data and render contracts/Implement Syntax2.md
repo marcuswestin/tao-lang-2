@@ -83,6 +83,31 @@ feature families.
 
 ## Scope and boundaries
 
+### Acceptance execution plan
+
+The acceptance branch starts from landed baseline `a024a29a`. Complete the following
+slices without reopening deferred language decisions. Each slice records the exact checks and
+their proof boundaries before its coherent changes land through hosted Verify and the host-only
+complement. A source test is not installed-platform evidence.
+
+| Slice            | Required result                                                                                                                                                                                                            | Evidence owner                                                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Library          | Empty results remain available; first creation removes the empty message. Paging preserves acquired rows and live handles across refresh, errors and cancellation. Grouping preserves book identity across author changes. | Active Library journeys; empty CLI and mounted-app journeys; BookStore provider, grouped rows and mounted Shelf tests.                      |
+| Native           | Checked durations, export and deferred cleanup work on installed iOS and Android; cancellation and suspend/resume preserve the selected lifecycle contract.                                                                | Existing compiled export tests plus managed installed-platform acceptance receipts, identifying simulator versus physical-device execution. |
+| Future fixtures  | Every distinct retained example has executable coverage or an explicit deferred owner before retirement.                                                                                                                   | A case-by-case mapping of Main, Library journey and grouped projection future fixtures to active source and named checks.                   |
+| Written contract | Specifications and app guidance describe the actual implemented behavior and remaining platform limits.                                                                                                                    | Updated app README, relevant specs and the numbered audit below, tied to recorded checks.                                                   |
+| Integration      | All required cases and applicable platform checks pass on the final integrated head; meaningful slices are landed.                                                                                                         | Focused local repair evidence, hosted Verify, host complement and confirmed merged pull requests.                                           |
+
+Baseline recheck on 2026-10-06: all four active Library journeys and all eight BookStore
+provider tests pass. Existing empty-result CLI and mounted-app tests must be rerun before
+closing that obligation; retained future text alone does not prove it. Native capability queries
+find available iOS simulators and an Android device state, but neither establishes installed app
+acceptance. Final reporting must preserve these distinctions.
+
+If CI fails, cancel the remaining run, inspect which relevant suites never completed, reproduce
+those suites locally and batch repairs before the next push. Local diagnostic runs do not replace
+hosted merge proof.
+
 Use [Decisions](../Tao%20Revolution/Decisions.md) and the app README. S66's unit table, supplied-ancestor
 inference and explicit conversions, and S67's five integration choices are selected. The final
 forcing-source audit is complete; maintain its coverage obligations during implementation.

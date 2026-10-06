@@ -2,12 +2,13 @@ use Duration from @tao/core
 use Wait from @tao/time
 use Button, Col, Row from @tao/ui
 use Export from ./BookActions
-use MarkSeen, NotifyExport, ObservedRevision from ./BookIO
+use ExportNotice, MarkSeen, NotifyExport, ObservedRevision from ./BookIO
 use Book, Person from ./Library
 
 package
 view BookRow(Book) {
    let Revision = ObservedRevision(Book)
+   let Notice = ExportNotice(Book)
 
    #book
    render Col {
@@ -17,6 +18,7 @@ view BookRow(Book) {
          "Available"
       }
       Book.Note
+      Notice
       Row {
          if (Revision.Unseen) {
             "●"
