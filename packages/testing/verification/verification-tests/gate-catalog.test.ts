@@ -413,9 +413,15 @@ Describe('gate catalog metadata', () => {
   Test('pins only the two claims measurement cannot make: the prepare chain and the gui floor', () => {
     // A Studio lane spends its wall time waiting on Metro, a browser, or a simulator, so one
     // accounting slot lets those host waits overlap the CPU-heavy package nodes.
+    // A browser smoke ported to hosted Linux after studio-agent-browser starved there packed beside
+    // other gates instead reserves the whole 4-vCPU runner, so its partition runs it alone.
+    const reservedHosted = ['studio-network-simulation']
     for (const name of HOST_ONLY_GATES) {
-      Expect(nodeOf(name).cost).toBe(GateCatalog.STUDIO_LANE_COST)
+      Expect(nodeOf(name).cost).toBe(
+        reservedHosted.includes(name) ? GateCatalog.HOSTED_BROWSER_LANE_COST : GateCatalog.STUDIO_LANE_COST,
+      )
     }
+    Expect(GateCatalog.HOSTED_BROWSER_LANE_COST).toBe(4)
     for (const name of STUDIO_BROWSER_SMOKES) {
       Expect(nodeOf(name).priority).toBeUndefined()
     }
@@ -448,7 +454,12 @@ Describe('gate catalog metadata', () => {
 
   Test('only browser gates proved on hosted Linux stay in a hosted Linux lane that skips unsandboxed gates', () => {
     const hostedLinux = HOST_ONLY_GATES.filter(name => GateCatalog.metadata(name).runsOnHostedLinux === true)
-    Expect(hostedLinux.toSorted()).toEqual(['studio-dialog-browser', 'studio-metro-refresh', 'studio-smoke'])
+    Expect(hostedLinux.toSorted()).toEqual([
+      'studio-dialog-browser',
+      'studio-metro-refresh',
+      'studio-network-simulation',
+      'studio-smoke',
+    ])
     for (const name of HOST_ONLY_GATES) {
       // A local sandboxed lane skips every one of them, hosted-Linux or not.
       Expect(GateCatalog.skippedUnsandboxed(name)).toBe(true)
