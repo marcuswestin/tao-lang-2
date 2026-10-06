@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, ProjectLocal, Repo, Time } from '@shared'
+import { Errors, FS, HCI, ProjectLocal, Repo, Time, VerificationTimeouts } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
@@ -42,7 +42,9 @@ Test(
       await browser.setViewport(1_440, 900)
       await browser.goto(studio.readiness.sessionUrl)
       await activateSmokePreviews(browser)
-      await browser.waitFor(`document.querySelectorAll('.studio-preview-cell').length === 2`, { timeoutMs: 30_000 })
+      await browser.waitFor(`document.querySelectorAll('.studio-preview-cell').length === 2`, {
+        timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity,
+      })
       await browser.click('[data-preset="design"]')
       await browser.waitFor(
         `document.querySelector('[data-studio-section="Environment"] input[aria-label="Latency ms"]')?.checkVisibility() === true`,
@@ -60,7 +62,7 @@ Test(
         baselineSrcA,
         text => text.includes('Alpha item') && text.includes('Beta item'),
         {
-          timeoutMs: 150_000,
+          timeoutMs: VerificationTimeouts.resolve(150_000) ?? Infinity,
         },
       )
       await waitForPreviewText(
@@ -68,7 +70,7 @@ Test(
         baselineSrcB,
         text => text.includes('Alpha item') && text.includes('Beta item'),
         {
-          timeoutMs: 150_000,
+          timeoutMs: VerificationTimeouts.resolve(150_000) ?? Infinity,
         },
       )
       await waitForEnvironmentPanel(browser, 0)
@@ -271,7 +273,7 @@ async function waitForEnvironmentPanel(browser: StudioCdp, expectedLatencyMs: nu
     `document.querySelector('[data-studio-section="Environment"] input[aria-label="Latency ms"]')?.value === ${
       JSON.stringify(String(expectedLatencyMs))
     }`,
-    { timeoutMs: 15_000 },
+    { timeoutMs: VerificationTimeouts.resolve(15_000) ?? Infinity },
   )
 }
 
@@ -318,7 +320,7 @@ async function applyCellNetwork(browser: StudioCdp, label: string, network: Cell
       const iframe = frame?.querySelector('.studio-preview-cell-viewport iframe')
       return iframe instanceof HTMLIFrameElement && iframe.src !== ${JSON.stringify(previousSrc)}
     })()`,
-    { timeoutMs: 15_000 },
+    { timeoutMs: VerificationTimeouts.resolve(15_000) ?? Infinity },
   )
 }
 
@@ -332,7 +334,7 @@ async function waitForPreviewText(
   const satisfied = await Time.pollUntil(async () => {
     last = await browser.evaluateInFrame<string>(src, `document.body?.textContent ?? ''`)
     return predicate(last)
-  }, { intervalMs: 100, timeoutMs: options.timeoutMs ?? 20_000 })
+  }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(options.timeoutMs ?? 20_000) ?? Infinity })
   if (!satisfied) {
     Errors.throwHostEnvironment(`Timed out waiting for Studio preview text at ${src}; last=${JSON.stringify(last)}`)
   }

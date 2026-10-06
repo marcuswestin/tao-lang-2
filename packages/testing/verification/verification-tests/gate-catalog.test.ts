@@ -292,6 +292,18 @@ Describe('gate catalog metadata', () => {
     Expect(GateCatalog.BUN_SUITE_FIXED_MS).toBe(600)
   })
 
+  Test('keeps compiler test durations attributable to individual work', () => {
+    // Compiler sessions serialize their work, so Bun's --concurrent would overlap timeout windows
+    // without making compilation faster and would turn per-test timings into cumulative durations.
+    Expect(GateCatalog.suiteTuning('compiler').args).toBeUndefined()
+    Expect(GateCatalog.reportsAttributableDurations('compiler')).toBe(true)
+  })
+
+  Test('keeps validator batches from overlapping their shared publication lock', () => {
+    Expect(GateCatalog.suiteTuning('language/validator').args).toBeUndefined()
+    Expect(GateCatalog.reportsAttributableDurations('language/validator')).toBe(true)
+  })
+
   Test('derives each audited suite dependency from only the source classes it consumes', () => {
     for (
       const suite of [

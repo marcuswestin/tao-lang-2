@@ -1,6 +1,7 @@
 import { Switch as CoreSwitch } from '@shared/core'
 import {
   AfterEach,
+  Deferred,
   Describe,
   Expect,
   fakeTerminal,
@@ -694,6 +695,43 @@ Describe('FS', () => {
     })
 
     Expect(inspectedOwner).toBe(true)
+  })
+
+  Test('waits for a live mutation owner without publishing competing claim files', async () => {
+    const root = await tmpDir()
+    const target = FS.resolvePath('target', root)
+    await FS.mkdir(target)
+    const lock = `${await FS.realPath(target)}.tao-file-mutation.lock`
+    await FS.writeJson(lock, { pid: Platform.runtimeProcess.pid, token: 'live-owner' })
+    const observed = Deferred()
+    let inspections = 0
+    let claims = 0
+    let released = false
+    const waiting = FS.withFileMutationLock(target, root, async () => 'acquired', {
+      inspectProcessIdentity: async () => {
+        if (++inspections === 2) {
+          observed.resolve()
+        }
+        return { evidence: 'alive', startedAt: 'current process start' }
+      },
+      beforeClaimPublish: async () => {
+        claims++
+        if (!released) {
+          observed.resolve()
+        }
+        Expect(released).toBe(true)
+      },
+    })
+    try {
+      await observed.promise
+      Expect(claims).toBe(0)
+    } finally {
+      released = true
+      await FS.remove(lock)
+      await waiting
+    }
+    Expect(claims).toBe(1)
+    Expect(await FS.exists(lock)).toBe(false)
   })
 
   Test('reclaims a live PID lock when its process-start identity proves PID reuse', async () => {

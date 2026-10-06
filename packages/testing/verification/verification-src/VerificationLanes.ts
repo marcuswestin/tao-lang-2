@@ -21,6 +21,7 @@ export const VERIFY = 'verify'
 export const VERIFY_CHANGED = 'verify-changed'
 export const VERIFY_FULL = 'verify-full'
 export const VERIFY_FULL_SANDBOX = 'verify-full-sandbox'
+export const DIAGNOSE_VERIFICATION = 'diagnose-verification'
 
 /**
  * Lanes whose gate membership is a superset of `verify`, so a green record from any of them also
@@ -36,7 +37,7 @@ export const VERIFY_OR_WIDER: readonly string[] = [VERIFY, VERIFY_FULL_SANDBOX, 
  * nothing requires the two policies to keep agreeing, and an alias would make a future disagreement
  * silent instead of a one-line diff.
  */
-export const BROAD: readonly string[] = [TEST_ALL, VERIFY, VERIFY_FULL, VERIFY_FULL_SANDBOX]
+export const BROAD: readonly string[] = [TEST_ALL, VERIFY, VERIFY_FULL, VERIFY_FULL_SANDBOX, DIAGNOSE_VERIFICATION]
 
 /**
  * The lanes that may not run without the landing lock. Membership is by breadth (see `BROAD`), not by
@@ -55,6 +56,7 @@ export const LOCKED: readonly string[] = [...BROAD]
 
 /** Every lane name this module defines, for the test that pins them against the `Justfile`. */
 export const ALL: readonly string[] = [
+  DIAGNOSE_VERIFICATION,
   CHECK,
   TEST_ALL,
   TEST_CHANGED,
@@ -65,6 +67,7 @@ export const ALL: readonly string[] = [
 ]
 
 export const VerificationLanes = {
+  DIAGNOSE_VERIFICATION,
   ALL,
   BROAD,
   CHECK,

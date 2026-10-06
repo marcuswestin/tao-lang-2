@@ -33,6 +33,7 @@ Describe('Studio readiness', () => {
       sleep: async ms => {
         clock += ms
       },
+      timeoutPolicy: 'bounded',
       timeoutMs: 100, // budget-ok: Injected clock; no host wait.
     })
 
@@ -52,6 +53,7 @@ Describe('Studio readiness', () => {
       sleep: async ms => {
         clock += ms
       },
+      timeoutPolicy: 'bounded',
       timeoutMs: 5, // budget-ok: Injected clock; no host wait.
     })
 

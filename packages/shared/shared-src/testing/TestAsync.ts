@@ -1,5 +1,6 @@
 import { throwUnexpected } from '../core/Errors'
 import * as Time from '../core/Time'
+import * as VerificationTimeouts from '../VerificationTimeouts'
 
 const DEFAULT_POLL_INTERVAL_MS = 10
 
@@ -33,6 +34,8 @@ export type UntilOptions = {
   intervalMs?: number
   /** Wall-clock budget before the wait fails. Defaults to 30000ms. */
   timeoutMs?: number
+  /** Keep deliberate timeout-contract fixtures bounded during diagnostic verification. */
+  timeoutPolicy?: VerificationTimeouts.Policy
 }
 
 /** Deferred creates a promise a test settles by hand, so the code under test can be observed while it is still pending. */
@@ -75,9 +78,17 @@ export async function until<T>(
     intervalMs = DEFAULT_POLL_INTERVAL_MS,
     timeoutMs = DEFAULT_TIMEOUT_MS,
   } = options
-  const deadline = Time.nowMs() + timeoutMs
+  // Preserve exhausted or malformed budgets' existing immediate failure in diagnostic mode too.
+  const executionTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? VerificationTimeouts.resolve(timeoutMs, options.timeoutPolicy)
+    : timeoutMs
+  const deadline = executionTimeoutMs === undefined ? undefined : Time.nowMs() + executionTimeoutMs
 
-  for (let remainingMs = timeoutMs; remainingMs > 0; remainingMs = deadline - Time.nowMs()) {
+  for (
+    let remainingMs = executionTimeoutMs;
+    remainingMs === undefined || remainingMs > 0;
+    remainingMs = deadline === undefined ? undefined : deadline - Time.nowMs()
+  ) {
     const value = await readWithin(condition, remainingMs)
 
     if (value === exhausted) {
@@ -86,7 +97,7 @@ export async function until<T>(
     if (value !== false && value !== undefined && value !== null) {
       return value as Exclude<Awaited<T>, false | null | undefined>
     }
-    await Time.sleep(Math.min(intervalMs, Math.max(0, deadline - Time.nowMs())))
+    await Time.sleep(deadline === undefined ? intervalMs : Math.min(intervalMs, Math.max(0, deadline - Time.nowMs())))
   }
   throwUnexpected(`Timed out after ${timeoutMs}ms waiting for ${description}.`)
 }
@@ -99,8 +110,11 @@ export async function until<T>(
  */
 async function readWithin<T>(
   condition: () => T | Promise<T>,
-  remainingMs: number,
+  remainingMs: number | undefined,
 ): Promise<Awaited<T> | typeof exhausted> {
+  if (remainingMs === undefined) {
+    return await condition()
+  }
   let budget: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([

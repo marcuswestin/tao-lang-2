@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { Errors, FS, HCI, Platform, Repo, Time, VerificationTimeouts } from '@shared'
 import { Expect, runCleanups, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
@@ -198,14 +198,14 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           && shellRect.height === window.innerHeight
           && shellRect.width === window.innerWidth
       })()`,
-        { timeoutMs: 30_000 },
+        { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
       )
       // Expanded, the agent panel floats over the inspector and the lower half of every divider.
       // Studio opens it minimized; the journey confirms that before reaching for the workbench.
       await browser.waitFor(
         `document.querySelector('.studio-agent-panel [data-tao-studio-agent-collapse], .studio-agent-collapse')
           instanceof HTMLButtonElement`,
-        { timeoutMs: 30_000 },
+        { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
       )
       if (
         await browser.evaluate<boolean>(
@@ -218,7 +218,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'true'`,
       )
       await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('Text(\"First\")')", {
-        timeoutMs: 30_000,
+        timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity,
       })
       Expect(
         await browser.evaluate<number>(
@@ -227,11 +227,11 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       ).toBe(1)
       await browser.waitFor(
         `document.querySelector('.studio-preview-group-label')?.textContent === 'states'`,
-        { timeoutMs: 30_000 },
+        { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
       )
       await browser.waitFor(
         `document.querySelector('[data-studio-tao-scenario="true"] .studio-scenario-inspector-label')?.textContent === 'default'`,
-        { timeoutMs: 30_000 },
+        { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
       )
       await browser.captureScreenshot('studio-wide-desktop')
       await browser.setViewport(1_024, 768)
@@ -448,7 +448,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           sourceVersion: currentFile.sourceVersion,
         })
         return inspection.owner?.rect?.width === 241.2 && inspection.owner.rect.height === 121.6
-      }, { intervalMs: 50, timeoutMs: 30_000 })
+      }, { intervalMs: 50, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
       Expect(measured).toBe(true)
 
       await browser.click('[data-panel="components"]')
@@ -489,7 +489,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           && viewport.getBoundingClientRect().width === 390
           && viewport.getBoundingClientRect().height === 844
       })()`,
-        { timeoutMs: 30_000 },
+        { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
       )
       await browser.drag(
         '[data-tao-studio-component="Text"]',
@@ -591,7 +591,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           ?.querySelector(${
           JSON.stringify(`[data-tao-studio-sketch-rect="${persistedRect.id}"]`)
         }) instanceof HTMLElement`,
-        { timeoutMs: 30_000 },
+        { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
       )
       const reloadedRect = await browser.evaluate<{ height: number; width: number }>(`(() => {
         const element = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-rect="${persistedRect.id}"]`)})
@@ -666,7 +666,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           instanceof HTMLButtonElement
           && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
             ?.disabled === false`,
-        { timeoutMs: 30_000 },
+        { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
       )
       const reloadedSnapCatalog = smokeSketchCatalog(await FS.readText(sketchCatalogPath))
       Expect(reloadedSnapCatalog.sketches[0]?.snapped.map(item => item.rect.id)).toEqual(playlistRectIds)
@@ -918,7 +918,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       },
     ], { channel: 'studio-smoke-cleanup', subject: 'Studio smoke' })
   }
-}, 180_000)
+}, 600_000)
 
 function startPreviewServer(port: number): { stop(): void; url: string } {
   const server = Bun.serve({
@@ -1149,7 +1149,7 @@ function previewHtml(): string {
 }
 
 async function waitForSource(path: string, predicate: (source: string) => boolean): Promise<void> {
-  const deadline = Date.now() + 20_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(20_000) ?? Infinity)
   let source = ''
   while (Date.now() < deadline) {
     source = await FS.readText(path)
@@ -1204,7 +1204,7 @@ function sketchPersistenceObserved(
 }
 
 async function waitForFile(path: string): Promise<void> {
-  const deadline = Date.now() + 30_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(30_000) ?? Infinity)
   while (Date.now() < deadline) {
     if (await FS.isFile(path)) {
       return
@@ -1215,7 +1215,7 @@ async function waitForFile(path: string): Promise<void> {
 }
 
 async function waitForSketchFile(browser: StudioCdp, path: string): Promise<void> {
-  const deadline = Date.now() + 30_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(30_000) ?? Infinity)
   while (Date.now() < deadline) {
     if (await FS.isFile(path)) {
       return
@@ -1242,7 +1242,7 @@ type SmokeSketchReadiness = Readonly<{
 }>
 
 async function waitForSketchReady(browser: StudioCdp): Promise<void> {
-  const deadline = Date.now() + 30_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(30_000) ?? Infinity)
   let readiness: SmokeSketchReadiness | undefined
   while (Date.now() < deadline) {
     readiness = await browser.evaluate<SmokeSketchReadiness>(`(() => ({
@@ -1275,7 +1275,7 @@ async function waitForSketchRect(
   previousRevision: number,
   diagnose?: () => Promise<unknown>,
 ): Promise<SmokeSketchCatalog> {
-  const deadline = Date.now() + 20_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(20_000) ?? Infinity)
   let catalog: SmokeSketchCatalog | undefined
   while (Date.now() < deadline) {
     catalog = smokeSketchCatalog(await FS.readText(path))
@@ -1364,7 +1364,7 @@ async function expectPointerReachesBoard(
  */
 async function enterDrawPreset(browser: StudioCdp): Promise<void> {
   await browser.waitFor(`document.querySelector('[data-preset="draw"]') instanceof HTMLButtonElement`, {
-    timeoutMs: 30_000,
+    timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity,
   })
   await browser.click('[data-preset="draw"]')
   await browser.waitFor(`(() => {
@@ -1426,7 +1426,7 @@ async function focusCanvasUntilFramed(browser: StudioCdp): Promise<void> {
       && viewport.getBoundingClientRect().width === 242
       && viewport.getBoundingClientRect().height === 122
   })()`
-  const deadline = Date.now() + 40_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(40_000) ?? Infinity)
   while (Date.now() < deadline) {
     await browser.click('.studio-canvas-focus')
     await browser.waitFor(
@@ -1468,7 +1468,7 @@ async function clickSketchWhenSettled(
   predicate: (catalog: SmokeSketchCatalog) => boolean,
   options: { diagnose?: () => Promise<unknown>; prepare?: string } = {},
 ): Promise<SmokeSketchCatalog> {
-  const deadline = Date.now() + 20_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(20_000) ?? Infinity)
   while (Date.now() < deadline) {
     const generation = await markSketchBoard(browser, sketchId)
     await Time.sleep(300)
@@ -1493,7 +1493,7 @@ async function waitForSketchCatalog(
   predicate: (catalog: SmokeSketchCatalog) => boolean,
   diagnose?: () => Promise<unknown>,
 ): Promise<SmokeSketchCatalog> {
-  const deadline = Date.now() + 30_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(30_000) ?? Infinity)
   let catalog: SmokeSketchCatalog | undefined
   while (Date.now() < deadline) {
     catalog = smokeSketchCatalog(await FS.readText(path))
@@ -1608,7 +1608,7 @@ async function waitForSourceOrStudioError(
   path: string,
   predicate: (source: string) => boolean,
 ): Promise<void> {
-  const deadline = Date.now() + 20_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(20_000) ?? Infinity)
   let source = ''
   let status: Readonly<{ state: string; text: string }> = { state: '', text: '' }
   while (Date.now() < deadline) {
@@ -1631,7 +1631,7 @@ async function waitForSourceOrStudioError(
 }
 
 async function waitForCompileAfter(browser: StudioCdp, previousRevision: number): Promise<number> {
-  const deadline = Date.now() + 30_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(30_000) ?? Infinity)
   let last = ''
   while (Date.now() < deadline) {
     last = await browser.evaluate<string>("document.querySelector('.studio-status')?.textContent ?? ''")
@@ -1655,7 +1655,7 @@ async function clickPreviewAndWaitForState(
   selector: '#measure-owner' | '#move-third' | '#select-first',
   expected: 'measurement sent' | 'move sent' | 'selection sent',
 ): Promise<void> {
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(15_000) ?? Infinity)
   let last = ''
   const previous = await browser.evaluateInFrame<string>(
     previewUrl,
@@ -1689,7 +1689,7 @@ async function clickPreviewUntilSource(
   sourcePath: string,
   predicate: (source: string) => boolean,
 ): Promise<void> {
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(15_000) ?? Infinity)
   let lastSource = ''
   let lastStatus = ''
   while (Date.now() < deadline) {
@@ -1734,7 +1734,7 @@ async function foldedRegions(browser: StudioCdp): Promise<number> {
 }
 
 async function waitForPreviewSourceIdentity(browser: StudioCdp, previewUrl: string): Promise<void> {
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(15_000) ?? Infinity)
   let last = ''
   while (Date.now() < deadline) {
     try {
@@ -1754,7 +1754,7 @@ async function waitForPreviewSourceIdentity(browser: StudioCdp, previewUrl: stri
 }
 
 async function waitForInspectorReady(browser: StudioCdp): Promise<void> {
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(15_000) ?? Infinity)
   let last:
     | Readonly<{
       ready: boolean

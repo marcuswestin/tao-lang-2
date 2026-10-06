@@ -908,3 +908,99 @@ inconclusive: first another verification lane was active at load 12.6 on 18 CPUs
 save-to-paint medians (4856ms checks on, 9040ms off) are not speed qualification or a comparison
 with the earlier experimental pipeline. A quiet periodic run remains required to establish
 current numerical budget compliance. No ceiling was changed.
+
+## Identical-publication production slice, 2026-10-05
+
+Preview generation compares the exact non-marker path-to-code map and publication metadata with
+its last successful output. The metadata includes source versions, the full Studio manifest,
+dependency environments, app/project identity, and publication-check mode. A successful identical
+compile retains the published revision while its compile-attempt revision still advances.
+Generated-file repair and dependency-link audits still run; equality is not permission to skip
+checking or repairing the output tree. Reset, session close/reopen, and non-preview generation
+clear reuse state. Managed mobile publications retain their per-attempt nonce behavior.
+
+Studio activation, phone save acknowledgements, and device freshness use the published revision
+when a compile retains it. Diagnostics and compile completion still report the attempt. Focused
+lifecycle regressions pass, including 30 runtime cases after integrating stable links, 12 session
+cases, and 28 device-gateway cases. The integrated HNReader padding smoke completed sixteen saves
+without iframe reloads. Save-to-paint p50 was 2690/2750ms (publication checks on/off), with
+source-to-publication p50 2553/2579ms at load 5.5–7.6 on 18 CPUs. These results do not meet
+the existing speed ceilings or establish a gain against the earlier experimental pipeline.
+Full portable verification remains required; no ceiling was changed.
+
+Landing-gate diagnosis corrected the HNReader feed smoke to compare the applied publication
+revision with the published revision exposed on the status element, rather than with the latest
+compile attempt. All four real HNReader journeys pass. The simulated-user journey passes 102
+assertions. The Developer subsequently approved increasing all timing-out execution budgets:
+Studio smoke tests now allow ten minutes, server readiness five minutes, and activation waits two
+minutes. Runtime journeys have a two-minute base and five-minute cap; Bun tests have a four-minute
+base and ten-minute cap. Suite processes allow twenty to thirty minutes, and source-mutation lock
+waits five minutes. Assertions and performance ceilings remain unchanged. Scoped reruns pass all
+982 validator cases, 370 Expo-host cases, and 273 runtime
+cases after the initial full run timed out under contention.
+
+Targeted checks had registered as broad test lanes and were also blocked by the landing-priority
+window. Collect-all requests now use narrow admission while retaining their artifact paths;
+narrow developer lanes can proceed during landing priority. Broad verification still yields,
+and resource leases are unchanged. The deterministic machine-lane regression covers both sides.
+
+A subsequent changed-scope gate still failed despite the larger execution budgets: validator
+cases waited five minutes on the shared maintained-source mutation lock, while Studio and skills
+processes reached twenty minutes. The failed run also reported a process-identity inspection
+error during timeout cleanup. It was stopped after failure and is not verification evidence.
+Mutation waiters now inspect an existing owner before creating another fsynced claim file and
+poll at 50ms; atomic acquisition and identity-safe stale reclamation remain unchanged. Compiler
+and validator batches no longer use Bun's blanket concurrency flag, while independent suites
+retain scheduler parallelism. The focused shared scope passes 108 cases, the gate catalog passes
+27 cases, and all 982 validator cases pass in 96 seconds at load up to 13.8 on 18 CPUs.
+The receipt repair scope passes three cases in 55 seconds, the skills scope thirteen in 49
+seconds, and Studio edit-to-preview seven in 87 seconds. These recoveries do not replace the
+required broad landing gate.
+
+The Developer requested controlled diagnostics before the next landing attempt. The opt-in
+`TAO_VERIFY_NO_TIMEOUTS=true` removes execution watchdogs; cleanup grace periods, explicit timeout
+behavior fixtures, and performance assertions retain their contracts. `TAO_VERIFY_JOBS=1` is a
+separate diagnostic concurrency ceiling. `just diagnose-verification` runs the full automated
+membership sequentially, prints each part's included files or command and result with elapsed
+time, streams node logs while processes are running, and records no green-tree verification proof.
+Jest prints test and hook progress in this mode. Explicitly reviewed completed node names can be
+retained with `TAO_VERIFY_DIAGNOSTIC_COMPLETED`; it affects only that diagnostic lane. A fix must
+rerun affected earlier parts. Ordinary full verification ignores the diagnostic resume list.
+
+Record the sequential node and file durations, investigate any part that stops making progress,
+and commit the resulting shard and scheduling adjustments before the next full run. Final
+verification and authorized landing use normal parallel scheduling with execution watchdogs
+disabled and live-log monitoring; sequential diagnostics are not landing evidence.
+
+The controlled sweep exercised every quiet automated part across resumable runs. Original failures
+remain in the run artifacts: two fixtures could stall without contention (an obsolete cache claim
+expectation and equal admission timestamps), and deliberate-timeout/capacity fixtures needed
+explicit diagnostic-independent inputs. Corrected focused reruns pass. The diagnostic runner also
+treated its intentionally absent green snapshot as generated drift; generated-proof comparison
+now applies only when that proof configuration is present. Normal verification retains drift
+rejection and ignores diagnostic resume.
+
+Serial costs identify scheduling work rather than a measured commit-by-commit regression:
+Tao CLI 624.7s, project tooling 461.2s, compiler 210.3s, development CLI 188.6s, Studio 186.0s,
+and runtime Jest 139.3s. The CLI total includes a subsequently repaired 30s timeout fixture.
+Bun blanket concurrency now matches the scheduler's granted slots, replacing an implicit allowance
+of twenty simultaneous tests inside a two-slot reservation. Compiler emission-cache, workspace,
+preview and app-output work, project watch/service work, and Studio session/edit work have named
+cohorts for cold checkouts. The 101.6s watch file is split into saved-input/dependency, topology,
+and refresh groups; the 85.9s preview-session file is split into receipt, source, scenario and
+watch groups. These moves preserve test bodies and assertions. Measured history continues to
+balance the remainder; no fixed machine-specific shard count was added.
+
+Diagnostic Tao preparation logs identify each submitted, completed or failed file with elapsed
+time including queueing; they do not claim actual worker start times. The next full parallel gate
+must establish correctness and actual scheduling results for the committed rebalance. Sequential
+batch measurements are not a qualified speed gain, and existing performance ceilings remain.
+
+The first committed parallel diagnostic-policy landing attempt was interrupted after13minutes
+after the real Metro drag smoke's local30-second compile polling budget expired. This was a
+missed watchdog override, not a captured rendering/state failure. Browser smoke polling and
+manual overall wait deadlines now honor the diagnostic policy; ordinary budgets, deliberate
+timeout fixtures, per-attempt retry cadence and performance assertions remain unchanged.
+The corrected real Metro drag journey passes independently in22seconds. Retain the interrupted
+run and compare identical test/group membership across sequential and parallel artifacts; for
+example, the split receipt group passed33.9s sequentially and399.4s in that parallel run.
