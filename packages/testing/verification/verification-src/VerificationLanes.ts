@@ -21,6 +21,11 @@ export const VERIFY = 'verify'
 export const VERIFY_CHANGED = 'verify-changed'
 export const VERIFY_FULL = 'verify-full'
 export const VERIFY_FULL_SANDBOX = 'verify-full-sandbox'
+/**
+ * The host-only gates hosted `Verify` does not admit, run locally beside it as the other half of a
+ * landing's proof. Its membership is derived from the workflow (`VerifyComplement`), not listed.
+ */
+export const VERIFY_COMPLEMENT = 'verify-complement'
 export const DIAGNOSE_VERIFICATION = 'diagnose-verification'
 
 /**
@@ -37,7 +42,14 @@ export const VERIFY_OR_WIDER: readonly string[] = [VERIFY, VERIFY_FULL_SANDBOX, 
  * nothing requires the two policies to keep agreeing, and an alias would make a future disagreement
  * silent instead of a one-line diff.
  */
-export const BROAD: readonly string[] = [TEST_ALL, VERIFY, VERIFY_FULL, VERIFY_FULL_SANDBOX, DIAGNOSE_VERIFICATION]
+export const BROAD: readonly string[] = [
+  TEST_ALL,
+  VERIFY,
+  VERIFY_FULL,
+  VERIFY_FULL_SANDBOX,
+  VERIFY_COMPLEMENT,
+  DIAGNOSE_VERIFICATION,
+]
 
 /**
  * The lanes that may not run without the landing lock. Membership is by breadth (see `BROAD`), not by
@@ -64,6 +76,7 @@ export const ALL: readonly string[] = [
   VERIFY_CHANGED,
   VERIFY_FULL,
   VERIFY_FULL_SANDBOX,
+  VERIFY_COMPLEMENT,
 ]
 
 export const VerificationLanes = {
@@ -78,5 +91,6 @@ export const VerificationLanes = {
   VERIFY_CHANGED,
   VERIFY_FULL,
   VERIFY_FULL_SANDBOX,
+  VERIFY_COMPLEMENT,
   VERIFY_OR_WIDER,
 } as const

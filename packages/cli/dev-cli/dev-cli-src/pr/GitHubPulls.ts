@@ -5,10 +5,9 @@ import { type CLI, Errors } from '@shared'
  * `gh api`, not through `gh pr`: the `gh pr` subcommands speak GraphQL, which a cloud agent host's
  * GitHub proxy may refuse, while REST answers the same wherever `gh` is logged in. `{owner}/{repo}`
  * is gh's own placeholder, filled from the checkout's `origin`. Turning auto-merge on or off and
- * marking a draft ready have no GitHub REST endpoint, so those two stay on `gh pr` in their callers,
- * and a pull request's place in the merge queue is read through GraphQL, which REST does not expose;
+ * marking a draft ready have no GitHub REST endpoint, so those two stay on `gh pr` in their callers;
  * for auto-merge, a cloud agent host's proxy offers REST routes of its own under `/ccr/`, which
- * `open-pr` falls back to where `gh pr` is refused and which GitHub itself does not serve.
+ * the callers fall back to where `gh pr` is refused and which GitHub itself does not serve.
  */
 
 /** PR_BRANCH_PREFIXES names the branches `open-pr` pushes and `merge-pr` merges. */
@@ -20,11 +19,6 @@ const PR_BRANCH_PREFIXES = [
 ] as const
 
 const REPOSITORY = 'repos/{owner}/{repo}'
-const QUEUE_STATE_QUERY = 'query($owner: String!, $name: String!, $number: Int!) {'
-  + ' repository(owner: $owner, name: $name) { pullRequest(number: $number) {'
-  + ' mergeQueueEntry { state } autoMergeRequest { enabledAt } } } }'
-
-type QueueFields = { autoMergeRequest: object | null; mergeQueueEntry: object | null }
 
 /** GhRunner is the injectable process seam every `git` and `gh` call goes through. */
 export type GhRunner = (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
@@ -38,6 +32,8 @@ export type PullRequest = {
   html_url: string
   /** `dirty` when the pull request conflicts with its base. */
   mergeable_state?: string
+  /** The squash commit on the base once merged; GitHub omits it from list responses. */
+  merge_commit_sha?: string | null
   merged_at: string | null
   number: number
   state: 'closed' | 'open'
@@ -104,30 +100,6 @@ export function gitHubPulls(run: GhRunner, root: string, writeLine: (line: strin
       ])
       return runs.check_runs[0]?.conclusion ?? undefined
     },
-    /** Whether `branch`'s active rules require a merge queue, which refuses a direct merge. */
-    async mergeQueueRequired(branch: string): Promise<boolean> {
-      const rules = await api<{ type: string }[]>([`${REPOSITORY}/rules/branches/${encodeURIComponent(branch)}`])
-      return rules.some(rule => rule.type === 'merge_queue')
-    },
-    /**
-     * Where the pull request stands with the merge queue: in it, waiting to enter it once its checks
-     * pass (auto-merge), or neither. REST does not expose queue entries, so this is GraphQL.
-     */
-    async queueState(number: number): Promise<'none' | 'queued' | 'waiting'> {
-      const data = await api<{ data: { repository: { pullRequest: QueueFields } } }>([
-        'graphql',
-        '-f',
-        `query=${QUEUE_STATE_QUERY}`,
-        '-F',
-        'owner={owner}',
-        '-F',
-        'name={repo}',
-        '-F',
-        `number=${number}`,
-      ])
-      const pr = data.data.repository.pullRequest
-      return pr.mergeQueueEntry !== null ? 'queued' : pr.autoMergeRequest !== null ? 'waiting' : 'none'
-    },
     /**
      * Squash-merges with the message verbatim, pinned to `sha` so a later push cannot slip in.
      * The raw result is returned, because a refusal may only mean auto-merge merged it first.
@@ -180,7 +152,54 @@ export function gitHubPulls(run: GhRunner, root: string, writeLine: (line: strin
         stdio: 'pipe',
       })
     },
+    /**
+     * Posts a commit status on `sha`. A status is how a run outside Actions reports beside the
+     * `Verify` check: `pr-checks` reads statuses with check runs, so a pending one keeps a follower
+     * waiting and a concluded one is part of its verdict.
+     */
+    async createStatus(sha: string, fields: CommitStatusFields): Promise<void> {
+      await api([
+        '--method',
+        'POST',
+        `${REPOSITORY}/statuses/${sha}`,
+        ...formFields({
+          context: fields.context,
+          description: fields.description,
+          state: fields.state,
+          ...(fields.target_url === undefined ? {} : { target_url: fields.target_url }),
+        }),
+        '--silent',
+      ])
+    },
+    /** The `Verify` workflow's runs for one commit, newest first. */
+    async verifyRuns(sha: string): Promise<WorkflowRun[]> {
+      const body = await api<{ workflow_runs: WorkflowRun[] }>([
+        `${REPOSITORY}/actions/workflows/verify.yml/runs?head_sha=${sha}&per_page=100`,
+      ])
+      return body.workflow_runs.filter(run => run.head_sha === sha)
+    },
+    /** Asks Actions to cancel one run; GitHub answers 202 and cancels asynchronously. */
+    async cancelRun(id: number): Promise<void> {
+      await api(['--method', 'POST', `${REPOSITORY}/actions/runs/${id}/cancel`, '--silent'])
+    },
   }
+}
+
+/** CommitStatusFields is what a status needs; `description` is capped by GitHub at 140 characters. */
+export type CommitStatusFields = {
+  context: string
+  description: string
+  state: 'error' | 'failure' | 'pending' | 'success'
+  target_url?: string
+}
+
+/** WorkflowRun is the slice of an Actions run these commands read. */
+export type WorkflowRun = {
+  conclusion: string | null
+  head_sha: string
+  html_url: string
+  id: number
+  status: string
 }
 
 /** `-f` sends each value as a raw string, so a body beginning with `@` or `-` is never read as a file or flag. */

@@ -77,7 +77,7 @@ Describe('serial floor of a finished run', () => {
         // No edge connects these three, so a critical path through the graph's edges sees 300ms of
         // work. One window server means they ran one after another: 900ms nothing can shorten.
         { elapsedMs: 300, name: 'studio-canary', resources: ['gui'] },
-        { elapsedMs: 300, name: 'studio-smoke-native', resources: ['gui'] },
+        { elapsedMs: 300, name: 'studio-host-control-smoke', resources: ['gui'] },
         { elapsedMs: 300, name: 'keyboard-navigation-smoke', resources: ['gui'] },
         { elapsedMs: 200, name: 'tao-check' },
         { elapsedMs: 200, name: 'typecheck', needs: ['tao-check'] },
@@ -87,7 +87,7 @@ Describe('serial floor of a finished run', () => {
     Expect(schedule.serialFloorMs).toBe(900)
     Expect(schedule.serialFloorPath).toEqual([
       'studio-canary',
-      'studio-smoke-native',
+      'studio-host-control-smoke',
       'keyboard-navigation-smoke',
     ])
   })
@@ -164,14 +164,14 @@ Describe('what a run waited on', () => {
           name: 'typecheck',
           waits: [{ detail: 'fix-dprint', kind: 'dependency', ms: 900 }, { kind: 'capacity', ms: 200 }],
         },
-        { elapsedMs: 100, name: 'studio-smoke-native', waits: [{ detail: 'gui', kind: 'resource', ms: 400 }] },
+        { elapsedMs: 100, name: 'studio-host-control-smoke', waits: [{ detail: 'gui', kind: 'resource', ms: 400 }] },
         // Below the published 250ms noise floor: a scan slice, not a finding.
         { elapsedMs: 100, name: 'repo-lint', waits: [{ kind: 'machine', ms: 200 }] },
         { elapsedMs: 100, name: 'fix-dprint' },
       ],
     }))
 
-    Expect(schedule.waits.map(entry => entry.name)).toEqual(['typecheck', 'studio-smoke-native'])
+    Expect(schedule.waits.map(entry => entry.name)).toEqual(['typecheck', 'studio-host-control-smoke'])
     Expect(schedule.waits[0]?.waits).toEqual([{ detail: 'fix-dprint', kind: 'dependency', ms: 900 }])
     Expect(schedule.waits[1]?.waits).toEqual([{ detail: 'gui', kind: 'resource', ms: 400 }])
   })

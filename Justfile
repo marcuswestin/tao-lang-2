@@ -15,7 +15,7 @@ IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extensio
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/packages/services/tao-cloud/tao-cloud-src/local"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
-VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-network-simulation studio-smoke-native studio-canary"
+VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-network-simulation studio-canary"
 VERIFY_FULL_SKIPPED := ""
 
 # Print available recipes
@@ -199,12 +199,6 @@ agents-demo: _parser-gen
 [group('Host proofs')]
 studio-smoke test_file="packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts" run_id="local" native='false' show_studio='false':
     ./dev studio-smoke {{ if native == "true" { "--native" } else { "" } }} {{ if show_studio == "true" { "--show-studio" } else { "" } }} --run-id "{{ run_id }}" "{{ test_file }}"
-
-# Run an explicit slow Studio shell smoke through Electrobun
-[arg('show_studio', long='show-studio', value='true')]
-[group('Host proofs')]
-studio-smoke-native test_file="packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts" run_id="local" show_studio='false':
-    ./dev studio-smoke --native {{ if show_studio == "true" { "--show-studio" } else { "" } }} --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Prove semantic host control against the owned native Studio shell
 [arg('show_studio', long='show-studio', value='true')]
@@ -608,10 +602,20 @@ worktree-status:
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
 
-# Land an already verified PR through main's merge queue and archive it, or confirm and archive after auto-merge completes
+# Finish a landing from wherever the PR stands: archive one GitHub merged, squash-merge one green with auto-merge off, or turn auto-merge on for this head
 [group('Dev')]
 merge-pr *ARGS:
     ./dev merge-pr {{ ARGS }}
+
+# Cancel the Verify runs still in flight for HEAD, once a local gate has decided the landing
+[group('Dev')]
+cancel-verify *ARGS:
+    ./dev cancel-verify {{ ARGS }}
+
+# Land a fix committed after GitHub merged this branch: merge it into fetched origin/main and push, with a receipt and no verification
+[group('Dev')]
+land-fix *ARGS:
+    ./dev land-fix {{ ARGS }}
 
 # Report a pull request's checks and why failed ones failed; --wait follows them to the end
 [group('Dev')]
@@ -755,6 +759,13 @@ diagnose-verification: _deps
 [group('Dev')]
 verify-full-sandbox no_cache='false' partition='':
     ./dev gates {{ VERIFY_FULL_GATES }} --skip-unsandboxed --lane verify-full-sandbox {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }} {{ if partition == "" { "" } else { "--partition " + partition } }}
+
+# The local half of a landing: the host-only gates hosted Verify does not admit, derived from the workflow, run under the lock and GUI lease, reported as the Verify (host) status on HEAD
+[arg('status', long='no-status', value='false')]
+[arg('show_studio', long='show-studio', value='true')]
+[group('Dev')]
+verify-complement show_studio='false' status='true': _deps
+    ./dev verify-complement {{ VERIFY_FULL_GATES }} {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if status == "false" { "--no-status" } else { "" } }}
 
 # `verify-repo` is the end of the widening order, past where a scope can go: it is the only entry
 # that gives up every shortcut the others keep. `clean` removes the build outputs and the generated

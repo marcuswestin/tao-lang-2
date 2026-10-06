@@ -66,7 +66,7 @@ matter when selecting a workflow:
 | Run a development server           | Avoid target-opening options and interactive open shortcuts.                                                  |
 | Start web Studio                   | Use its `--no-browser` option, then the in-app browser for interactive review.                                |
 | Start native Studio                | Electrobun opens the Welcome window; `--no-browser` does not hide it. Treat development launches as visible.  |
-| Run quiet native probes            | Native canary and simulated-user probes keep windows hidden; run without a visibility flag.                   |
+| Run quiet native probes            | The native canary keeps windows hidden; run it without a visibility flag.                                     |
 | Run visible native checks          | Host-control, Mac2, and manual checks require authorized `--show-studio`; otherwise defer before launch.      |
 | Boot an iOS simulator              | Use `simulators boot`; `simulators run` and `simulators open` present an inactive viewer only when requested. |
 | Verify browser behavior            | Existing headless verification lanes; `test-host` does not expose a `--headless` flag.                        |

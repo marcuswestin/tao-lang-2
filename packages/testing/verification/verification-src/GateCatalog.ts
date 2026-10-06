@@ -414,8 +414,8 @@ const GUI_PRIORITY = 6
  * The window-server / native-host resource name. The graph serializes its own `gui` nodes against
  * each other under it, the same as any other declared `resources` entry; `GateRunner` additionally
  * takes a machine-wide lease under this exact name for as long as either is in flight, so two
- * worktrees' `gui` nodes — or a standalone recipe running `studio-smoke-native` or `studio-canary`'s
- * work outside `./dev gates` entirely — cannot overlap either. One name, two guarantees: the graph
+ * worktrees' `gui` nodes — or a standalone `studio-canary` or `studio-smoke --native` run outside
+ * `./dev gates` entirely — cannot overlap either. One name, two guarantees: the graph
  * edge is free and in-process; the lease is what reaches outside this one lane.
  */
 const GUI_RESOURCE = 'gui'
@@ -545,8 +545,8 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ],
 
     // Browser smokes have separate ports, artifacts and disposable launch projects. The native
-    // shell and canary contend on the window server, which is what `gui` names. Each smoke gate
-    // is named for its public recipe.
+    // canary contends on the window server, which is what `gui` names. Each smoke gate is named for
+    // its public recipe.
     [
       'studio-smoke',
       studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts'),
@@ -584,26 +584,10 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
         'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts',
       ),
     ],
-    // The two `gui` nodes cannot overlap each other, so together they are a ~21s serial floor of
-    // their own. They start at t=0 for that reason, ahead of work that can be packed later. `gui` is
-    // also the resource name `GateRunner` takes a machine-wide lease under for as long as either is
-    // in flight, so a peer worktree's `gui` node — or a standalone `studio-smoke-native` /
-    // `studio-canary` recipe run outside `./dev gates` — cannot overlap these either.
-    [
-      'studio-smoke-native',
-      {
-        ...studioSmoke(
-          'studio-smoke-native',
-          'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts',
-          {
-            native: true,
-            resources: [GUI_RESOURCE],
-          },
-        ),
-        priority: GUI_PRIORITY,
-        requiresMacOS: true,
-      },
-    ],
+    // The canary is the one `gui` node `verify-full` runs, and a serial floor of its own, so it starts
+    // at t=0, ahead of work that can be packed later. `gui` is also the resource name `GateRunner` takes a machine-wide lease under for
+    // as long as it is in flight, so a peer worktree's `gui` node — or a standalone `studio-canary`
+    // or `studio-smoke --native` run outside `./dev gates` — cannot overlap it either.
     // The canary once hung after printing its verdict on a launch-owned process that survived
     // shutdown; `completeNativeProbe` now stops Hutch when the probe resolves, and a healthy run
     // takes ~10s. The bound stays so a regression fails the node instead of holding the lane open.

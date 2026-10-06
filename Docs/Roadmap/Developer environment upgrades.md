@@ -122,12 +122,13 @@ change that addressed it.
 - [DEVENV-RUNTIME-JOURNEY-OBSERVATION-TEST-TIMES-OUT — Runtime journey observation test can time out in a broad lane](<Developer environment upgrades/DEVENV-RUNTIME-JOURNEY-OBSERVATION-TEST-TIMES-OUT.md>) — Candidate
 - [DEVENV-SANDBOXED-GIT-XCRUN-CACHE-WARNING-FAILS-STDERR-ASSERTIONS — Sandboxed git's xcrun cache warning fails stderr assertions](<Developer environment upgrades/DEVENV-SANDBOXED-GIT-XCRUN-CACHE-WARNING-FAILS-STDERR-ASSERTIONS.md>) — Candidate
 - [DEVENV-SANDBOXED-LANES-CANNOT-REMOVE-ENV-FIXTURES — Sandboxed lanes cannot remove `.env` fixtures](<Developer environment upgrades/DEVENV-SANDBOXED-LANES-CANNOT-REMOVE-ENV-FIXTURES.md>) — Candidate
-- [DEVENV-SANDBOXED-VERIFY-CHANGED-FAILS-THE-WDA-REGISTRATION-TESTS — Sandboxed verify-changed fails the WDA registration tests](<Developer environment upgrades/DEVENV-SANDBOXED-VERIFY-CHANGED-FAILS-THE-WDA-REGISTRATION-TESTS.md>) — Candidate
+- [DEVENV-SANDBOXED-VERIFY-CHANGED-CANNOT-REMOVE-ENV-FIXTURES — Sandboxed verify-changed cannot remove `.env` fixtures](<Developer environment upgrades/DEVENV-SANDBOXED-VERIFY-CHANGED-CANNOT-REMOVE-ENV-FIXTURES.md>) — Candidate
 - [DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS — Sandboxed verification fails the dev-cli shell tests](<Developer environment upgrades/DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS.md>) — Candidate
 - [DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS — Secret materialization is missing from agent commands](<Developer environment upgrades/DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS.md>) — Candidate
 - [DEVENV-SETUP-SUCCEEDS-WHEN-RULESYNC-REJECTS-HOOKS — Setup succeeds when rulesync rejects the hooks file](<Developer environment upgrades/DEVENV-SETUP-SUCCEEDS-WHEN-RULESYNC-REJECTS-HOOKS.md>) — Candidate
 - [DEVENV-SIX-HOST-ONLY-GATES-HAVE-NO-UNSANDBOXED-SHAPE — Six host-only gates have no unsandboxed shape](<Developer environment upgrades/DEVENV-SIX-HOST-ONLY-GATES-HAVE-NO-UNSANDBOXED-SHAPE.md>) — Candidate
 - [DEVENV-STRANDED-DEVELOPMENT-RESOURCE-DISCOVERY — Stranded development resource discovery](<Developer environment upgrades/DEVENV-STRANDED-DEVELOPMENT-RESOURCE-DISCOVERY.md>) — In progress
+- [DEVENV-STUDIO-AGENT-BROWSER-GATE-TIMES-OUT-UNDER-THE-COMPLEMENT-LANE — Studio agent browser gate times out under the complement lane](<Developer environment upgrades/DEVENV-STUDIO-AGENT-BROWSER-GATE-TIMES-OUT-UNDER-THE-COMPLEMENT-LANE.md>) — Candidate
 - [DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT — Studio legacy-lock test is intermittent](<Developer environment upgrades/DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT.md>) — Candidate
 - [DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD — The Studio real-app proof fails intermittently under load](<Developer environment upgrades/DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD.md>) — In progress
 - [DEVENV-STUDIO-SMOKE-GENERATED-SOURCE-FRESHNESS-RACE — Studio smoke generated-source freshness race](<Developer environment upgrades/DEVENV-STUDIO-SMOKE-GENERATED-SOURCE-FRESHNESS-RACE.md>) — Candidate
@@ -143,3 +144,4 @@ change that addressed it.
 - [DEVENV-TEST-FILE-WRAPPER-REMAINS-AFTER-FAILED-SUITE — Test-file wrapper remains after a failed suite reports](<Developer environment upgrades/DEVENV-TEST-FILE-WRAPPER-REMAINS-AFTER-FAILED-SUITE.md>) — Candidate
 - [DEVENV-TEST-RUNS-CANNOT-BE-CPU-PROFILED — Test runs cannot be CPU-profiled](<Developer environment upgrades/DEVENV-TEST-RUNS-CANNOT-BE-CPU-PROFILED.md>) — Candidate
 - [DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS — Visual review scenario readiness timeouts](<Developer environment upgrades/DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS.md>) — Candidate
+- [DEVENV-WATCHOS-SWIFT-PROBE-FAILS-UNDER-BROAD-LANES — watchOS Swift probe fails under broad lanes](<Developer environment upgrades/DEVENV-WATCHOS-SWIFT-PROBE-FAILS-UNDER-BROAD-LANES.md>) — Candidate

@@ -489,7 +489,6 @@ Describe('repository gate runner', () => {
       'studio-dialog-browser',
       'studio-agent-browser',
       'studio-network-simulation',
-      'studio-smoke-native',
       'studio-canary',
     ]
     const { started, summary } = await run(['_repo-lint', ...hostOnly], {}, { skipUnsandboxed: true })
@@ -522,7 +521,7 @@ Describe('repository gate runner', () => {
   })
 
   Test('skips the macOS-only gates off macOS and runs them on it', async () => {
-    const macOnly = ['studio-smoke-native', 'studio-canary']
+    const macOnly = ['studio-canary']
     const linux = await run(['_repo-lint', ...macOnly], {}, { hostPlatform: 'linux' })
     const darwin = await run(['_repo-lint', ...macOnly], {}, { hostPlatform: 'darwin' })
 
@@ -618,7 +617,7 @@ Describe('repository gate runner', () => {
     const started: string[] = []
     const pending = runGates({
       showStudio: true,
-      gates: ['studio-smoke-native', '_fix-just-fmt'],
+      gates: ['studio-canary', '_fix-just-fmt'],
       jobs: 2,
       registryRoot,
       repositoryRoot: root,
@@ -644,7 +643,7 @@ Describe('repository gate runner', () => {
       await prepare?.release()
       await priority?.release()
       Expect((await pending).status).toBe('passed')
-      Expect(started.toSorted()).toEqual(['_fix-just-fmt', 'studio-smoke-native'])
+      Expect(started.toSorted()).toEqual(['_fix-just-fmt', 'studio-canary'])
     } finally {
       await priority?.release()
       await pending.catch(() => undefined)
