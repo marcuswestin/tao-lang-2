@@ -80,7 +80,7 @@ on its size.
 - GitHub CI is the default for final portable verification and hosted landing; local checks remain
   useful for iteration, diagnosis, faster appropriate proof, and host-only acceptance. Read
   [hosted verification](references/hosted-verification.md) for route selection, offline limits,
-  auto-merge readiness, and direct merging of a fully verified PR. Reuse current green PR evidence;
+  auto-merge readiness, and the merge-queue landing route. Reuse current green PR evidence;
   do not repeat covered verification through local `land`.
 - Never background a gate and then poll for its output in a sleep loop: run it in the foreground with
   a timeout, since the gate is no faster for being backgrounded. **Reporting while a lane runs**,

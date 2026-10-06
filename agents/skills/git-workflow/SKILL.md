@@ -97,7 +97,7 @@ Require a clean feature branch with its merge message reviewed; `verification-la
 landing command's mechanics, evidence, message format, and CI-default route. After the Developer
 authorizes landing this slice, use that skill's route; merge an existing fully verified pull request
 directly with `merge-pr`. Personal `dev/<name>` branches keep their supported local `land` lifecycle.
-For the local route, run
+For the local route, available only during the transition through the ruleset's admin bypass, run
 `./agent unsandboxed land`: it fetches and integrates current `main`, verifies, and pushes while holding
 one lock. Every integration must attempt to fetch `origin/main` first and use the fetched tip when
 available, never prefer stale local `main`. If preparation falls back to local `main` because fetching
@@ -107,10 +107,11 @@ Do not fetch and merge `main` beforehand merely to satisfy a stale precondition.
 landing reports a conflict, resolve it outside the lock; after any merge of `main` into a branch,
 skim what arrived: `references/after-merging-main.md`.
 
-For a new hosted verification, use plain `open-pr` while host acceptance is pending or the slice is
-not ready to land; once landing is authorized and host acceptance is complete, prefer
-`./agent unsandboxed open-pr --auto-merge` and follow all checks through completion. An existing
-fully verified pull request goes directly through `merge-pr`, without reopening or rearming it
+The default route is `main`'s merge queue: open the pull request with plain `open-pr` once
+`verify-changed` is green, run the host gates CI does not cover while `Verify` runs, then land with
+`merge-pr` if `Verify` already passed (it enqueues the pull request pinned to its head and waits for
+the merge) or `./agent unsandboxed open-pr --auto-merge` if it is still running. An existing fully
+verified pull request goes directly through `merge-pr`, without reopening or rearming it
 (`verification-lanes` owns route details). GitHub refuses a pull
 request that conflicts with `main`, so bring `main` in with `./agent merge-main` and run `open-pr` again;
 the checks run on that push. After it merges, the remote `feat/<name>` is gone and `merged/<name>`

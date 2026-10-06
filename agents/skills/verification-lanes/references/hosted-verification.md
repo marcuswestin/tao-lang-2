@@ -6,6 +6,24 @@ host-only acceptance. When CI is unavailable, local verification is a fallback; 
 not establish remote integration or landing, and local `land` still requires a successful fetch and
 push. Reassess machine and CI contention before choosing an optional broad local lane.
 
+## Default landing route: the merge queue
+
+`main`'s ruleset requires a pull request, the `Verify` check, and its merge queue, so an authorized
+slice lands in three steps:
+
+1. Once `verify-changed` is green, open the pull request with plain `./agent unsandboxed open-pr`,
+   so hosted `Verify` starts at once.
+2. While it runs, run the host gates CI does not cover (the browser Studio smokes,
+   `studio-smoke-native`, and `studio-canary`); until a lane runs exactly that complement,
+   `./agent unsandboxed verify-full` covers it.
+3. When they pass: if `Verify` already passed on the head, run `./agent unsandboxed merge-pr`, which
+   enqueues the pull request pinned to that head, waits for the merge group's own `Verify` run, and
+   archives the branch; if `Verify` is still running, run `./agent unsandboxed open-pr --auto-merge`
+   so the queue takes it on green, then `merge-pr` to confirm and archive.
+
+`./agent unsandboxed land` remains available only during the transition: its push to `main` passes
+the ruleset through the repository admin bypass, not through the queue.
+
 ## Compare current contention
 
 - Read `./agent board` for running lanes, landing phase, leases, load, and CPU count. High
@@ -57,10 +75,10 @@ change another task's setting to make it proceed. Without push authorization, in
 PR read-only or finish local preparation and report that starting hosted CI awaits it.
 
 When the slice is ready to land, meaning the Developer explicitly authorized landing and every
-required host acceptance check has passed, prefer `./agent unsandboxed open-pr --auto-merge` for
-new hosted verification. GitHub waits for required checks and may merge independently of a later
+required host acceptance check has passed, follow the merge-queue route above. With auto-merge on,
+GitHub enqueues the pull request once `Verify` passes and may merge independently of a later
 `merge-pr` call; continue following CI to completion, diagnose every failure, and use `merge-pr`
-after GitHub has merged to confirm and archive it. Do not enable or rearm auto-merge before that
+to wait for the queue and archive it. Do not enable or rearm auto-merge before that
 ready-to-land point. A green existing PR may be proposed as ready without rerunning local
 verification; merge authorization is still required.
 
@@ -81,8 +99,9 @@ Commits added since the green run require new CI proof.
 After landing is authorized, run `./agent unsandboxed merge-pr` directly for an existing fully
 verified PR. Do not reopen it, rearm auto-merge, or run local `land`, `verify`, `verify-full`, or
 `finalize` merely because it is time to merge. `merge-pr` confirms the clean branch and reviewed message, matches
-the local commit to the pushed head, checks the latest verdict, and pins the squash merge to that
-head. It archives `merged/<name>` and reports the merge, including when auto-merge already did it.
+the local commit to the pushed head, checks the latest verdict, and enqueues the pull request in
+`main`'s merge queue pinned to that head (a squash merge pinned to it where no queue is required),
+then waits for the queue to merge it and fails if the queue drops it. It archives `merged/<name>` and reports the merge, including when auto-merge already did it.
 Do not change the head simply to obtain a local readiness record.
 
 Both `open-pr` modes push, open or reuse the PR, use the reviewed message as its title and
@@ -101,7 +120,7 @@ just to evade a CI or queued-merge failure.
 
 Personal `dev/<name>` branches remain on the supported local `land` lifecycle; `open-pr` and
 `merge-pr` do not support that branch shape. Use `./agent unsandboxed land` for that exception, or
-when the hosted route is unavailable; it integrates and verifies under the machine-wide landing
+when the hosted route is unavailable, during the transition only; it integrates and verifies under the machine-wide landing
 lock and still requires a successful fetch and push. An already-green portable run does not claim
 the host-only lanes passed. Both routes retain the reviewed squash message and branch archive, and
 `git-workflow` owns the post-merge resource review.
