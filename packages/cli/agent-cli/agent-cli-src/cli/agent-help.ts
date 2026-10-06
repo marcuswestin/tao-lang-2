@@ -217,8 +217,9 @@ lanes, two of which take a machine-wide lease on the window server for as long a
 verify-full-sandbox runs that same membership in a managed shell without claiming its host-only
 lanes passed. A lane whose tree is already recorded green prints that run's
 evidence and stops; --no-cache runs it anyway. When new CI is starting for an authorized, ready
-landing, prefer open-pr --auto-merge; an already green PR uses merge-pr directly. Plain open-pr
-keeps auto-merge off for verification before landing readiness. Offline local proof does not push or land.
+landing, prefer open-pr --auto-merge; an already green PR uses merge-pr, which enqueues it in
+main's merge queue and waits for the merge. Plain open-pr keeps auto-merge off for verification
+before landing readiness. Offline local proof does not push or land.
 
 Repository workflow commands capture the child's output rather than inheriting the terminal, write
 the full capture to .artifacts/logs/agent/<command>/, and print a

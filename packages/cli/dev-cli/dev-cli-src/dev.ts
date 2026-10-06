@@ -870,7 +870,7 @@ await runWithCommands(commands => {
   commands
     .command('merge-pr')
     .description(
-      "Wait for every check on this branch's pushed head, Verify among them; squash-merge unless auto-merge already did, then archive it at merged/<name>.",
+      "Wait for every check on this branch's pushed head, Verify among them; enqueue it pinned to that head where main requires a merge queue and wait for the merge (squash-merge directly otherwise) unless auto-merge already did, then archive it at merged/<name>.",
     )
     .option('--interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
     .action(async (options: { intervalMs?: string } = {}) => {
