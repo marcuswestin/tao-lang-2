@@ -5,7 +5,7 @@ import type { StudioCdp } from './StudioCdp'
 export async function activateSmokePreviews(browser: StudioCdp, requestedCellIds?: readonly string[]): Promise<void> {
   // The first toggle waits on Studio's first page load and render, which a full lane's CPU
   // contention stretches well past the default bound.
-  await browser.waitFor("document.querySelector('.studio-preview-activation-toggle') !== null", { timeoutMs: 45_000 })
+  await browser.waitFor("document.querySelector('.studio-preview-activation-toggle') !== null", { timeoutMs: 120_000 })
   const availableCellIds = await browser.evaluate<string[]>(
     "[...document.querySelectorAll('.studio-preview-cell')].filter(cell => cell.querySelector('.studio-preview-activation-toggle')).map(cell => cell.dataset.taoStudioCell ?? cell.dataset.cellId)",
   )
@@ -24,7 +24,7 @@ export async function activateSmokePreviews(browser: StudioCdp, requestedCellIds
     })()`)
     try {
       // Activation may spend 30 seconds on readiness before registration and the session write.
-      await browser.waitFor(`(${toggle})?.getAttribute('aria-pressed') === 'true'`, { timeoutMs: 45_000 })
+      await browser.waitFor(`(${toggle})?.getAttribute('aria-pressed') === 'true'`, { timeoutMs: 120_000 })
     } catch (error) {
       const state = await browser.evaluate(`(() => {
         const toggle = ${toggle}

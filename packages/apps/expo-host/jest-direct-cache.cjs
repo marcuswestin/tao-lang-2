@@ -69,7 +69,8 @@ async function locked(parent, work, options = {}) {
   const token = crypto.randomUUID()
   const ownerPath = `${lock}.owner-${token}`
   fs.writeFileSync(ownerPath, JSON.stringify({ pid: process.pid, token }))
-  const deadline = Date.now() + 30_000
+  // Loader-only mirror of shared VerificationTimeouts: exact opt-in removes execution limits.
+  const deadline = process.env.TAO_VERIFY_NO_TIMEOUTS === 'true' ? undefined : Date.now() + 30_000
   let acquired = false
   try {
     while (!acquired) {
@@ -81,7 +82,7 @@ async function locked(parent, work, options = {}) {
         if (error.code !== 'EEXIST') {
           throw error
         }
-        if (Date.now() >= deadline) {
+        if (deadline !== undefined && Date.now() >= deadline) {
           throw new TypeError(`Timed out waiting for ${lock}.`)
         }
         reclaimStaleLock(lock, options.claimGraceMs ?? 2_000)

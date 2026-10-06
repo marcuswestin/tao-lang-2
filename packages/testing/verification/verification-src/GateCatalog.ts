@@ -130,7 +130,7 @@ const DEFAULT_METADATA: GateMetadata = { cost: 1, reads: ['gen-app', 'gen-ide', 
 /** SuiteTuning is what one test suite needs beyond the defaults every suite gets. */
 export type SuiteTuning = {
   /** Stable file cohorts run separately without adding an ordering barrier or widening selection. */
-  filePartitions?: readonly { cost?: number; name: string; files: readonly string[] }[]
+  filePartitions?: readonly { name: string; files: readonly string[] }[]
   /** Repository-relative, measured small core files; execute once before dependent app suites. */
   preflightFiles?: readonly string[]
   /** Wait for the core files present in this request; absent core selections add no dependency. */
@@ -178,7 +178,41 @@ const BUDGET_KEY_TAO_TEST = WorkGraph.BUDGET_ENV_KEYS.taoTest
  * measurements have a fallback width for a new worktree without local timing history.
  */
 const SUITE_TUNING = new Map<string, SuiteTuning>([
-  ['compiler', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['compiler', {
+    // A controlled serial run took 210s. Keep independent expensive workloads visible even on
+    // a cold checkout; measured history still balances the remaining language features.
+    reads: ['gen-parser', 'tao', 'ts'],
+    filePartitions: [{
+      name: 'emission-cache',
+      files: ['packages/compiler/compiler-tests/emitted-module-cache.test.ts'],
+    }, {
+      name: 'workspace',
+      files: [
+        'packages/compiler/compiler-tests/workspace/workspace-batch.test.ts',
+        'packages/compiler/compiler-tests/workspace/workspace-incremental.test.ts',
+        'packages/compiler/compiler-tests/workspace/workspace-native-cache.test.ts',
+        'packages/compiler/compiler-tests/workspace/workspace-overlays.test.ts',
+        'packages/compiler/compiler-tests/workspace/workspace-scopes.test.ts',
+        'packages/compiler/compiler-tests/workspace/workspace.test.ts',
+      ],
+    }, {
+      name: 'preview',
+      files: [
+        'packages/compiler/compiler-tests/publication-compile.test.ts',
+        'packages/compiler/compiler-tests/studio-fixture-values.test.ts',
+        'packages/compiler/compiler-tests/studio-render-occurrences.test.ts',
+        'packages/compiler/compiler-tests/studio-synthetic-app-metadata.test.ts',
+      ],
+    }, {
+      name: 'app-output',
+      files: [
+        'packages/compiler/compiler-tests/compiler.test.ts',
+        'packages/compiler/compiler-tests/design.test.ts',
+        'packages/compiler/compiler-tests/files.test.ts',
+        'packages/compiler/compiler-tests/watchos.test.ts',
+      ],
+    }],
+  }],
   // Developer and verification tests deliberately run concurrently and many of them spawn child
   // processes. During full verification, a healthy child can wait behind the other CPU-heavy
   // suites long enough to exceed Bun's generic five-second test timeout even though it completes
@@ -187,7 +221,8 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // Sharding the suite multiplies that, and its own tests are then the ones starved — a trivial
   // child `bun test` ran past a fifteen-second bound with three shards of this suite in flight.
   // Like Jest, each already saturates what it is given, so it takes one reservation and stays
-  // whole. Its per-test bound is a hang guard, which it no longer has to spell out: `--concurrent`
+  // whole. TestRunner caps blanket test concurrency to the granted slots. Its per-test bound is
+  // a hang guard, which it no longer has to spell out: `--concurrent`
   // reports each test's duration as the time from the file's shared start, so every concurrent
   // suite is bounded that way and the hand-written `--timeout=60000` that used to sit here said
   // only what the flag already implies.
@@ -212,9 +247,10 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // Fresh history needs enough units to balance the expensive bridge and CLI integration files.
   // Eight initial shards still grouped a 24s tail after splitting those files; twelve lets the
   // scheduler spread the work within its existing CPU budget until measured costs take over.
-  ['cli/tao-cli', { coldShardCount: 12, cost: 2, serial: false, shardCost: 2 }],
+  ['cli/tao-cli', { coldShardCount: 12 }],
   ['language/validator', {
-    args: ['--concurrent'],
+    // Validation shares the maintained-source publication lock. Keep test work sequential
+    // within each batch rather than starting every lock waiter and timeout window together.
     preflightFiles: ['packages/language/validator/validator-tests/phrases.test.ts'],
     reads: ['gen-parser', 'tao', 'ts'],
   }],
@@ -282,46 +318,63 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
     reads: ['gen-parser', 'tao', 'ts'],
   }],
   ['language/project-tooling', {
-    cost: 2,
     filePartitions: [{
-      cost: 2,
-      name: 'native-bindings',
+      name: 'native',
       files: [
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingInventory.test.ts',
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingModules.test.ts',
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts',
-      ],
-    }, {
-      cost: 2,
-      name: 'native-lifecycle',
-      files: [
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsWatch.integration.test.ts',
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts',
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts',
       ],
     }, {
-      cost: 2,
       name: 'receipts',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceipt.test.ts'],
     }, {
-      cost: 2,
       name: 'receipt-inputs',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptInputs.test.ts'],
     }, {
-      cost: 2,
       name: 'receipt-resolution',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptResolution.test.ts'],
     }, {
-      cost: 2,
       name: 'receipt-host',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptHost.test.ts'],
     }, {
-      cost: 2,
       name: 'receipt-races',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRaces.test.ts'],
+    }, {
+      name: 'watch-files',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectFileWatch.integration.test.ts'],
+    }, {
+      name: 'watch-topology',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectFileWatchTopology.integration.test.ts'],
+    }, {
+      name: 'watch-refresh',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectFileWatchRefresh.integration.test.ts'],
+    }, {
+      name: 'service',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectToolingService.test.ts'],
     }],
-    serial: false,
-    shardCost: 2,
+  }],
+  ['ides/studio', {
+    // The preview-session and edit-to-preview files accounted for 133s of the 186s serial suite.
+    filePartitions: [{
+      name: 'session-receipts',
+      files: ['packages/ides/studio/studio-tests/studio-preview-session.test.ts'],
+    }, {
+      name: 'session-sources',
+      files: ['packages/ides/studio/studio-tests/studio-preview-session-sources.test.ts'],
+    }, {
+      name: 'session-scenarios',
+      files: ['packages/ides/studio/studio-tests/studio-preview-session-scenarios.test.ts'],
+    }, {
+      name: 'session-watch',
+      files: ['packages/ides/studio/studio-tests/studio-preview-session-watch.test.ts'],
+    }, {
+      name: 'edit-to-preview',
+      files: ['packages/ides/studio/studio-tests/studio-edit-to-preview.test.ts'],
+    }],
   }],
   ['language/source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],
 ])
@@ -361,8 +414,8 @@ const GUI_PRIORITY = 6
  * The window-server / native-host resource name. The graph serializes its own `gui` nodes against
  * each other under it, the same as any other declared `resources` entry; `GateRunner` additionally
  * takes a machine-wide lease under this exact name for as long as either is in flight, so two
- * worktrees' `gui` nodes — or a standalone recipe running `studio-smoke-native` or `studio-canary`'s
- * work outside `./dev gates` entirely — cannot overlap either. One name, two guarantees: the graph
+ * worktrees' `gui` nodes — or a standalone `studio-canary` or `studio-smoke --native` run outside
+ * `./dev gates` entirely — cannot overlap either. One name, two guarantees: the graph
  * edge is free and in-process; the lease is what reaches outside this one lane.
  */
 const GUI_RESOURCE = 'gui'
@@ -492,8 +545,8 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ],
 
     // Browser smokes have separate ports, artifacts and disposable launch projects. The native
-    // shell and canary contend on the window server, which is what `gui` names. Each smoke gate
-    // is named for its public recipe.
+    // canary contends on the window server, which is what `gui` names. Each smoke gate is named for
+    // its public recipe.
     [
       'studio-smoke',
       studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts'),
@@ -531,26 +584,10 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
         'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts',
       ),
     ],
-    // The two `gui` nodes cannot overlap each other, so together they are a ~21s serial floor of
-    // their own. They start at t=0 for that reason, ahead of work that can be packed later. `gui` is
-    // also the resource name `GateRunner` takes a machine-wide lease under for as long as either is
-    // in flight, so a peer worktree's `gui` node — or a standalone `studio-smoke-native` /
-    // `studio-canary` recipe run outside `./dev gates` — cannot overlap these either.
-    [
-      'studio-smoke-native',
-      {
-        ...studioSmoke(
-          'studio-smoke-native',
-          'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts',
-          {
-            native: true,
-            resources: [GUI_RESOURCE],
-          },
-        ),
-        priority: GUI_PRIORITY,
-        requiresMacOS: true,
-      },
-    ],
+    // The canary is the one `gui` node `verify-full` runs, and a serial floor of its own, so it starts
+    // at t=0, ahead of work that can be packed later. `gui` is also the resource name `GateRunner` takes a machine-wide lease under for
+    // as long as it is in flight, so a peer worktree's `gui` node — or a standalone `studio-canary`
+    // or `studio-smoke --native` run outside `./dev gates` — cannot overlap it either.
     // The canary once hung after printing its verdict on a launch-owned process that survived
     // shutdown; `completeNativeProbe` now stops Hutch when the probe resolves, and a healthy run
     // takes ~10s. The bound stays so a regression fails the node instead of holding the lane open.

@@ -26,6 +26,7 @@ export type NativeModuleCommand = {
   phase: string
   quiet?: boolean
   timeoutMs: number
+  timeoutPolicy?: CLI.CommandSpec['timeoutPolicy']
 }
 
 export type NativeModuleCommandResult = {
@@ -336,6 +337,7 @@ async function runCommand(command: NativeModuleCommand): Promise<NativeModuleCom
     processPolicy: 'test',
     stdio: command.quiet === true ? 'pipe' : 'stream',
     timeoutMs: command.timeoutMs,
+    timeoutPolicy: command.timeoutPolicy,
   })
   return {
     error: result.error,

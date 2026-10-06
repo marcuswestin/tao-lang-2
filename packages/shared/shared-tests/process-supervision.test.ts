@@ -201,7 +201,7 @@ Describe('CLI process policy', () => {
   Test('a wall-clock bound stops the tree and names the bound it hit', async () => {
     // This is the timeoutMs under test — it names the bound the tree gets stopped for hitting.
     // budget-ok: not a speed budget on the test itself.
-    const bounded = await startTree({ processPolicy: 'test', timeoutMs: 600 })
+    const bounded = await startTree({ processPolicy: 'test', timeoutMs: 600, timeoutPolicy: 'bounded' })
 
     const close = await bounded.command.waitForClose()
 
@@ -211,7 +211,7 @@ Describe('CLI process policy', () => {
   })
 
   Test('an idle-output bound stops a child that printed and then went quiet', async () => {
-    const bounded = await startTree({ idleOutputMs: 500, processPolicy: 'test' })
+    const bounded = await startTree({ idleOutputMs: 500, processPolicy: 'test', timeoutPolicy: 'bounded' })
 
     const close = await bounded.command.waitForClose()
 
@@ -237,6 +237,7 @@ Describe('CLI process policy', () => {
         },
         processPolicy: 'test',
         stdio: ['pipe', 'pipe', 'pipe'],
+        timeoutPolicy: 'bounded',
       })
 
       timers.advanceTo(idleOutputMs - 1)
@@ -284,6 +285,7 @@ Describe('CLI process policy', () => {
       processPolicy: 'test',
       stdio: 'pipe',
       timeoutMs: 400, // budget-ok: the timeout value under test.
+      timeoutPolicy: 'bounded',
     })
 
     Expect(result.signal).toBe('SIGTERM')
@@ -301,6 +303,7 @@ Describe('CLI process policy', () => {
         processPolicy: 'test',
         stdio: 'inherit',
         timeoutMs: 300, // budget-ok: the timeout value under test.
+        timeoutPolicy: 'bounded',
       })
       return await command.waitForClose()
     })

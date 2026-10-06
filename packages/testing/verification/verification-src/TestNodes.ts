@@ -42,10 +42,10 @@ export type SelectedSuite = {
    * (Jest's `--maxWorkers`) is held to what was actually reserved.
    */
   buildProcess: (nodeName: string, units: readonly string[], slots: number) => TestProcess
+  /** Complete suite inventory against which a partial selection is estimated. */
+  estimationUnits?: readonly string[]
   files: readonly string[]
   name: string
-  /** Complete runner membership before this request filters files or extracts named cohorts. */
-  estimationUnits?: readonly string[]
   /**
    * What one process of this suite can be asked to run, when that is not its files. The Tao behavior
    * tests are the case: the ledger keys them as one synthetic `Apps` unit, because a per-file
@@ -65,12 +65,39 @@ export type SelectedSuite = {
 
 /** TestNodeState is a work-graph state that remembers which suite and files it stands for. */
 export type TestNodeState = WorkState & {
-  /** Duration estimate from this node's current file membership and its suite's current weights. */
+  /**
+   * What the planner expects this node to take, from the evidence it had: the node's own history
+   * where that history describes these files, otherwise the suite's recorded duration divided by the
+   * ledger cost of the files this node holds. Undefined only when neither the suite nor its files
+   * have ever been measured. `estimateNodeMs` says how it is derived; the scheduler, the partition
+   * plan and the summary all read this rather than looking the node's name up again, so a shard, a
+   * file partition and a whole suite are weighed the same way.
+   */
   expectedMs?: number
   selectedTestFiles?: readonly string[]
   /** The suite this node reports under; equal to `name` for an unsharded suite. */
   suite: string
   testReport?: NativeTestReport
+}
+
+/** SuiteEvidence is everything one suite's nodes are weighed with, gathered once per suite. */
+type SuiteEvidence = {
+  /** Per-unit relative cost: ledger milliseconds, or the Tao apps' source-size proxy. */
+  costs: ReadonlyMap<string, number>
+  /** True when `costs` are milliseconds a process really spent, so they can stand alone as an estimate. */
+  costsAreMs: boolean
+  fixedMs: number
+  /** Mean cost of a measured unit; what an unmeasured unit is charged. */
+  meanCostMs: number
+  /** How many nodes this run split the suite into, across partitions and shards. */
+  nodeCount: number
+  /** The suite's recorded one-process duration, or undefined on a cold checkout. */
+  suiteMs: number | undefined
+  /** Sum of `costs` over the complete suite inventory, unmeasured units at the mean. */
+  totalCostMs: number
+  units: readonly string[]
+  /** True when the selection contains the complete suite inventory. */
+  completeSelection: boolean
 }
 
 export type BuildTestNodesOptions = {
@@ -130,17 +157,30 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
   const warnings: string[] = []
   for (const suite of options.selected) {
     const tuning = GateCatalog.suiteTuning(suite.name)
+    const fixedMs = tuning.fixedMs ?? GateCatalog.BUN_SUITE_FIXED_MS
+    // A suite whose runner cannot attribute time to a single test has nothing trustworthy to say
+    // about relative per-file cost either, so shards fall back to the mean-cost packing
+    // `TestShards.packFiles` already gives an unmeasured file. `GateCatalog` owns which suites those
+    // are and why; the ledger declines to record their durations for the same reason.
+    const ledgerCosts = GateCatalog.reportsAttributableDurations(suite.name)
+      ? TestShards.fileCostsFromLedger(options.ledger, suite.name)
+      : new Map<string, number>()
+    // A suite's own units win when the ledger cannot speak about them at all.
+    const usesUnitCosts = suite.unitCostMs !== undefined
+    const costs = usesUnitCosts ? suite.unitCostMs! : ledgerCosts
+    const suiteMs = RunTimings.expectedMs(options.timings, suite.name)
+    const inventory = suite.estimationUnits ?? suite.shardUnits ?? suite.files
+    const selectedUnits = suite.shardUnits ?? suite.files
+    const completeSelection = inventory.every(unit =>
+      selectedUnits.some(root => unit === root || unit.startsWith(root + '/'))
+    )
+    /** Every node this suite becomes here, before any is weighed: the count is part of the weight. */
+    const planned: { files: readonly string[]; name: string; preflight?: boolean; shardCount: number }[] = []
     const preflightFiles = options.preflight === true && suite.shardUnits === undefined
       ? suite.files.filter(file => tuning.preflightFiles?.includes(file) === true)
       : []
     if (preflightFiles.length > 0) {
-      const name = `${suite.name}:core`
-      if (options.proved?.has(name) !== true) {
-        states.push(
-          nodeState(suite, name, preflightFiles, 1, undefined, estimationContext(suite, options)),
-        )
-        preflightNames.push(name)
-      }
+      planned.push({ files: preflightFiles, name: `${suite.name}:core`, preflight: true, shardCount: 1 })
     }
     const partitionedFiles = new Set(preflightFiles)
     for (const partition of tuning.filePartitions ?? []) {
@@ -153,54 +193,55 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
       for (const file of files) {
         partitionedFiles.add(file)
       }
-      const name = `${suite.name}:${partition.name}`
-      if (options.proved?.has(name) !== true) {
-        states.push(
-          nodeState(suite, name, files, 1, partition.cost, estimationContext(suite, options)),
-        )
-      }
+      planned.push({ files, name: `${suite.name}:${partition.name}`, shardCount: 1 })
     }
     const remaining = (suite.shardUnits ?? suite.files).filter(file => !partitionedFiles.has(file))
-    if (remaining.length === 0 && (partitionedFiles.size > 0 || suite.shardUnits === undefined)) {
-      continue
-    }
-    // A suite whose runner cannot attribute time to a single test has nothing trustworthy to say
-    // about relative per-file cost either, so shards fall back to the mean-cost packing
-    // `TestShards.packFiles` already gives an unmeasured file. `GateCatalog` owns which suites those
-    // are and why; the ledger declines to record their durations for the same reason.
-    const estimate = estimationContext(suite, options)
-    const remainderMs = estimate.suiteMs === undefined
-      ? undefined
-      : estimate.fixedMs + Math.max(0, estimate.suiteMs - estimate.fixedMs)
-          * TestShards.weightShare(remaining, estimate.units, estimate.costs)
-    const plan = TestShards.planShards({
-      coldShardCount: tuning.coldShardCount,
-      // A suite's own units win when the ledger cannot speak about them at all.
-      fileCostMs: estimate.costs,
-      files: remaining,
-      fixedMs: estimate.fixedMs,
-      measuredMs: remainderMs,
-      shardable: tuning.shardable,
-      suite: suite.name,
-    })
-    plans.push(plan)
-    const units = remaining.length
-    if (plan.unshardedCause === 'no-recorded-duration' && units >= UNSHARDED_WARNING_UNITS) {
-      warnings.push(
-        `${suite.name} ran whole across ${units} units: no recorded duration under that name, so it could not be sharded. `
-          + `Expected for a new suite; for an existing one it means its recorded history is under a different name, as a rename leaves it.`,
-      )
-    }
-    const count = plan.shards.length
-    plan.shards.forEach((files, index) => {
-      // The ordinary remainder is a shard even when it needs only one process: keeping
-      // the bare suite name would make reporting count both the rollup and the remainder.
-      const name = TestShards.shardName(suite.name, index, partitionedFiles.size > 0 ? Math.max(2, count) : count)
-      if (options.proved?.has(name) === true) {
-        return
+    if (remaining.length > 0 || (partitionedFiles.size === 0 && suite.shardUnits !== undefined)) {
+      const plan = TestShards.planShards({
+        coldShardCount: tuning.coldShardCount,
+        fileCostMs: costs,
+        files: remaining,
+        fixedMs,
+        measuredMs: suiteMs === undefined
+          ? undefined
+          : fixedMs + Math.max(0, suiteMs - fixedMs) * TestShards.weightShare(remaining, inventory, costs),
+        shardable: tuning.shardable,
+        suite: suite.name,
+      })
+      plans.push(plan)
+      const units = remaining.length
+      if (plan.unshardedCause === 'no-recorded-duration' && units >= UNSHARDED_WARNING_UNITS) {
+        warnings.push(
+          `${suite.name} ran whole across ${units} units: no recorded duration under that name, so it could not be sharded. `
+            + `Expected for a new suite; for an existing one it means its recorded history is under a different name, as a rename leaves it.`,
+        )
       }
-      states.push(nodeState(suite, name, files, count, undefined, estimate))
+      const count = plan.shards.length
+      plan.shards.forEach((files, index) => {
+        // The ordinary remainder is a shard even when it needs only one process: keeping
+        // the bare suite name would make reporting count both the rollup and the remainder.
+        const name = TestShards.shardName(suite.name, index, partitionedFiles.size > 0 ? Math.max(2, count) : count)
+        planned.push({ files, name, shardCount: count })
+      })
+    }
+    const evidence = suiteEvidence({
+      completeSelection,
+      costs,
+      costsAreMs: !usesUnitCosts,
+      fixedMs,
+      nodeCount: planned.length,
+      suiteMs,
+      units: inventory,
     })
+    for (const node of planned) {
+      if (options.proved?.has(node.name) === true) {
+        continue
+      }
+      states.push(nodeState(suite, node.name, node.files, node.shardCount, options.timings, evidence))
+      if (node.preflight === true) {
+        preflightNames.push(node.name)
+      }
+    }
   }
   for (const state of states) {
     if (GateCatalog.suiteTuning(state.suite).afterPreflight === true) {
@@ -212,21 +253,101 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
   return { plans, states, warnings }
 }
 
+/** suiteEvidence gathers what every node of one suite is weighed against. */
+function suiteEvidence(options: {
+  completeSelection: boolean
+  costs: ReadonlyMap<string, number>
+  costsAreMs: boolean
+  fixedMs: number
+  nodeCount: number
+  suiteMs: number | undefined
+  units: readonly string[]
+}): SuiteEvidence {
+  const known = options.units.map(unit => options.costs.get(unit)).filter((cost): cost is number => cost !== undefined)
+  const meanCostMs = known.length === 0 ? 0 : known.reduce((total, cost) => total + cost, 0) / known.length
+  const totalCostMs = options.units.reduce((total, unit) => total + (options.costs.get(unit) ?? meanCostMs), 0)
+  return {
+    completeSelection: options.completeSelection,
+    costs: options.costs,
+    costsAreMs: options.costsAreMs,
+    fixedMs: options.fixedMs,
+    meanCostMs,
+    nodeCount: Math.max(1, options.nodeCount),
+    suiteMs: options.suiteMs,
+    totalCostMs,
+    units: options.units,
+  }
+}
+
+/**
+ * estimateNodeMs is what one test node is expected to take, from the best evidence available, in
+ * this order:
+ *
+ * 1. The node's own recorded duration, when its name stands for a fixed set of files — a whole
+ *    suite, a `:core` or file-partition node. A `#k` shard's history does not qualify: the shard is
+ *    re-packed from per-file costs on every run, so `cli/tao-cli#4` last time may share no file with
+ *    `cli/tao-cli#4` today, and ranking today's files by yesterday's neighbours is what put a 228s
+ *    shard at the end of a 1,122s run.
+ * 2. The suite's recorded duration, divided by the ledger cost of the files this node holds against
+ *    the cost of every file in the complete suite inventory, with each node charged its own process startup. The
+ *    ledger's numbers are relative — they were recorded under whatever load that run had — so they
+ *    only apportion the suite's measured total, never replace it. A file the ledger has not seen is
+ *    charged the mean of the ones it has, as `TestShards.packFiles` does.
+ * 3. The suite's recorded duration divided evenly across the nodes it became here, when the ledger
+ *    has nothing on any of its files. A file partition used to be charged the whole suite's duration
+ *    in this case, as if each of six partitions were the suite — that phantom weight is what put six
+ *    `language/project-tooling:*` nodes on six different CI machines while real 100s shards doubled up.
+ * 4. The ledger costs alone, plus startup, when the suite itself has never been timed but its files
+ *    have: those are real milliseconds, and a rough number beats the scheduler's `cost × 1s` guess.
+ * 5. The shard's own history, as the last word on a `#k` node nothing else can speak for.
+ *
+ * Undefined when nothing has ever measured the suite or its files; the caller's cold-start default
+ * takes over there.
+ */
+function estimateNodeMs(
+  name: string,
+  files: readonly string[],
+  timings: TimingsStore,
+  evidence: SuiteEvidence,
+): number | undefined {
+  const own = RunTimings.expectedMs(timings, name)
+  const isShard = TestShards.suiteOf(name) !== name && !name.includes(':')
+  if (own !== undefined && !isShard && evidence.completeSelection) {
+    return own
+  }
+  const nodeCostMs = files.reduce((total, file) => total + (evidence.costs.get(file) ?? evidence.meanCostMs), 0)
+  if (evidence.suiteMs !== undefined) {
+    if (evidence.totalCostMs > 0) {
+      const variableMs = Math.max(0, evidence.suiteMs - evidence.fixedMs)
+      return Math.round(evidence.fixedMs + variableMs * TestShards.weightShare(files, evidence.units, evidence.costs))
+    }
+    if (!evidence.completeSelection) {
+      return Math.round(evidence.fixedMs + Math.max(0, evidence.suiteMs - evidence.fixedMs)
+        * TestShards.weightShare(files, evidence.units, evidence.costs))
+    }
+    return Math.round(evidence.suiteMs / evidence.nodeCount)
+  }
+  if (evidence.costsAreMs && nodeCostMs > 0) {
+    return Math.round(evidence.fixedMs + nodeCostMs)
+  }
+  return own
+}
+
 function nodeState(
   suite: SelectedSuite,
   name: string,
   files: readonly string[],
   shardCount: number,
-  costOverride: number | undefined,
-  estimate: SuiteEstimation,
+  timings: TimingsStore,
+  evidence: SuiteEvidence,
 ): TestNodeState {
   const tuning = GateCatalog.suiteTuning(suite.name)
   // A shard's parallelism is usually the graph's, not its own, so it reserves one slot; a suite
   // whose shard genuinely spawns more says so, because under-reserving is how a lane oversubscribes
   // the machine and makes every node in it slower.
-  const cost = costOverride ?? (shardCount > 1 ? tuning.shardCost : tuning.cost)
+  const cost = shardCount > 1 ? tuning.shardCost : tuning.cost
   const process = suite.buildProcess(name, files, cost ?? 1)
-  const expectedMs = expectedDuration(files, estimate)
+  const expectedMs = estimateNodeMs(name, files, timings, evidence)
   const node: WorkNode = {
     budgetEnvKeys: tuning.budgetEnvKeys,
     cost,
@@ -249,41 +370,11 @@ function nodeState(
   }
   const state = WorkGraph.createState(node) as TestNodeState
   state.dashboardGroup = shardCount > 1 ? suite.name : undefined
+  state.expectedMs = expectedMs
   state.selectedTestFiles = process.files
   state.suite = suite.name
-  state.expectedMs = expectedMs
   state.testReport = process.testReport
   return state
-}
-
-type SuiteEstimation = {
-  costs: ReadonlyMap<string, number>
-  fixedMs: number
-  suiteMs?: number
-  units: readonly string[]
-}
-
-/** estimationContext measures file shares against full suite membership, including extracted nodes. */
-function estimationContext(suite: SelectedSuite, options: BuildTestNodesOptions): SuiteEstimation {
-  const units = suite.estimationUnits ?? suite.shardUnits ?? suite.files
-  const ledgerCosts = GateCatalog.reportsAttributableDurations(suite.name)
-    ? TestShards.fileCostsFromLedger(options.ledger, suite.name)
-    : new Map<string, number>()
-  return {
-    costs: suite.unitCostMs ?? ledgerCosts,
-    fixedMs: GateCatalog.suiteTuning(suite.name).fixedMs ?? GateCatalog.BUN_SUITE_FIXED_MS,
-    suiteMs: RunTimings.expectedMs(options.timings, suite.name),
-    units,
-  }
-}
-
-/** expectedDuration charges one process startup plus this membership's share of suite work. */
-function expectedDuration(files: readonly string[], estimate: SuiteEstimation): number | undefined {
-  if (estimate.suiteMs === undefined) {
-    return undefined
-  }
-  const share = TestShards.weightShare(files, estimate.units, estimate.costs)
-  return estimate.fixedMs + Math.max(0, estimate.suiteMs - estimate.fixedMs) * share
 }
 
 /** wallTimeoutMs bounds a node at several times its measured duration, never below the floor. */
@@ -354,12 +445,26 @@ function describePlans(plans: readonly ShardPlan[]): readonly string[] {
     .map(plan => `- sharded ${plan.suite}: ${plan.reason}`)
 }
 
+/**
+ * expectedMsFor answers the scheduler's, the partition plan's and the summary's one question — how
+ * long will this node take — with the planner's estimate for a test node and the recorded duration
+ * for everything else. One function, so the three never disagree about a node's weight.
+ */
+function expectedMsFor(
+  states: readonly TestNodeState[],
+  timings: TimingsStore,
+): (name: string) => number | undefined {
+  const estimates = new Map(states.map(state => [state.name, state.expectedMs]))
+  return name => estimates.get(name) ?? RunTimings.expectedMs(timings, name)
+}
+
 /** TestNodes owns turning a run's selected suites into scheduled, bounded, shardable nodes. */
 export const TestNodes = {
   IDLE_TIMEOUT_FLOOR_MS,
   WALL_TIMEOUT_FLOOR_MS,
   build,
   describePlans,
+  expectedMsFor,
   suiteDurations,
   idleTimeoutMs,
   wallTimeoutMs,

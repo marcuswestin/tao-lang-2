@@ -1,6 +1,6 @@
 import { createAppiumMac2HostController, createAppiumWebDriverClient } from '@appium-driver'
 import { HostControlError, MachineResources } from '@host-control'
-import { CLI, Errors, FS, Platform, ProcessTree, Repo, type TrackedProcess } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProcessTree, Repo, type TrackedProcess } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test, until, withCapturedOutput } from '@shared/test'
 import {
   captureMac2FixtureInput,
@@ -959,6 +959,39 @@ Test('makes the TestAction environment effective and explicitly forwards every s
 
 const nativeBarrierTest = Platform.hostPlatform === 'darwin' ? Test : Test['skip']
 
+/**
+ * wdaChannelDenial names why an agent sandbox cannot run `StudioWdaRegistration.prepare`. Its socket directory
+ * must sit under `/private/tmp`, the only place the runner entitlement admits it, and a sandboxed shell refuses
+ * to create a directory there. Only a sandboxed shell is probed, so a host that cannot write `/private/tmp`
+ * still fails.
+ */
+async function wdaChannelDenial(): Promise<string | undefined> {
+  if (Platform.hostPlatform !== 'darwin' || !CLI.inAgentSandbox()) {
+    return undefined
+  }
+  const probe = FS.resolvePath(`tao-wda-probe-${Platform.randomUUID()}`, '/private/tmp')
+  try {
+    await FS.mkdir(probe)
+    await FS.remove(probe)
+    return undefined
+  } catch (error) {
+    if (!CLI.isSandboxDenial({ stderr: '', stdout: '', error })) {
+      throw error
+    }
+    return 'the agent sandbox denies mkdir under /private/tmp, where the WDA registration socket must live; '
+      + 'run this file unsandboxed to exercise them'
+  }
+}
+
+const wdaChannelSkipReason = await wdaChannelDenial()
+const wdaChannelTest = wdaChannelSkipReason === undefined ? nativeBarrierTest : Test['skip']
+if (wdaChannelSkipReason !== undefined) {
+  HCI.logProcessWarn(
+    'studio-mac2-test-isolation',
+    `Skipping the WDA registration health cases: ${wdaChannelSkipReason}.`,
+  )
+}
+
 nativeBarrierTest(
   'copied source-probe XPath counters preserve the actual pinned resolver array and report only counts',
   async () => {
@@ -1431,7 +1464,7 @@ for (
     ['error', 'WDA registration helper failed before acknowledgement (process error)'],
   ]
 ) {
-  nativeBarrierTest(`checks actual registration controller health after helper ${terminal}`, async () => {
+  wdaChannelTest(`checks actual registration controller health after helper ${terminal}`, async () => {
     const root = await mkTestDir('tao-wda-helper-health-')
     const bootstrapRoot = FS.resolvePath('copied', root)
     const originalXPath = await FS.readText(Repo.resolvePath(

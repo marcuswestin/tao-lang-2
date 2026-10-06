@@ -1,39 +1,73 @@
 name: Verify
 
-# Runs verify-full's portable membership (`./agent verify-full-sandbox`) split across free Linux
+# Runs verify-full's portable membership (`./agent verify-full-sandbox`) split across Linux
 # runners, so an agent on a small machine can open a pull request and read one verdict instead of
 # running the full lane itself. Each partition runs the whole prepare phase and its own share of the
 # readers; the final `Verify` job is the one verdict, and it refuses a set of partitions that did not
 # compute the same plan, because a disagreement there means some node ran nowhere.
 #
-# What this does not prove: the host-only lanes (Studio smokes, browser, native shell, simulator,
-# canary), which need macOS and a window server. `./agent unsandboxed verify-full` still owns those.
+# What this does not prove: the host-only lanes (Studio smokes, browser, native shell, canary),
+# which need a window server and an unsandboxed host. The landing route runs those locally while
+# this workflow runs (`agents/skills/verification-lanes/references/hosted-verification.md`).
 #
-# PARTITIONS and the matrix list below must change together. Never cache `.artifacts`: the plan
-# reads recorded timings, and partitions that restored different ones would place nodes differently.
-# Each partition instead seeds them from `.github/verify/durations.json` and `ledger.json`.
+# The contributor-agreement check is a job here rather than a workflow of its own, so a push to a
+# pull request shows as one run in the Actions list instead of two. It runs on the same token as
+# the partitions, which a fork's pull request receives read-only; the job then still decides, and
+# only its explanatory comment is lost (`CONTRIBUTING.md` says the same thing).
+#
+# The partition count is one number, `PARTITIONS` below, read by the `plan` job; nothing else in
+# this file states it. Never cache `.artifacts`: the plan reads recorded timings, and partitions
+# that restored different ones would place nodes differently. Each partition instead seeds them
+# from `.github/verify/durations.json` and `ledger.json`.
 
 on:
   pull_request:
     # Not `ready_for_review`: every push already ran Verify, and marking a draft ready changes no code.
     types: [opened, synchronize, reopened]
     branches: [main]
-  merge_group:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      partitions:
+        description: Partition count for this run only; blank uses the repository variable or the default below.
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: verify-${{ github.event.pull_request.number || github.ref }}
+  # A dispatched run is an experiment and gets its own group, so it never queues behind main's
+  # push runs (a dispatch on 2026-10-06 waited 862 s for one) and never delays them.
+  group: verify-${{ github.event.pull_request.number || (github.event_name == 'workflow_dispatch' && github.run_id) || github.ref }}
   # PR updates replace obsolete proof; main keeps up to 100 pending runs instead of dropping one.
   queue: ${{ github.event_name == 'pull_request' && 'single' || 'max' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  PARTITIONS: 12
+  # How many Linux runners split the readers. The number comes from measurements, not a guess:
+  # `Docs/Roadmap/Verification speed research.md` §16 and `.github/verify/durations.json`.
+  #
+  # The lane's portable work is about 2,900 s of suite and gate time, and every partition first
+  # pays about 115 s on its own: checkout and cache restores (about 25 s), a warm bootstrap
+  # (about 35 s), and the prepare phase (about 50 s). A run's wall time is therefore about
+  # ceil(N / concurrency) waves of (115 + 2,900 / N) seconds, times the imbalance of the plan (the
+  # slowest partition ran 2.2x the median on 2026-10-06), bounded below by the longest
+  # unsplittable node (runtime-jest, about 110 s) plus the fixed cost:
+  #
+  #   concurrency 11 (measured on 2026-10-06: 11 jobs start together, the twelfth queues):
+  #     N = 10  one wave, about 405 s, one slot left for the small jobs that share the limit
+  #             (the aggregate, the contributor agreement, Archive merged branch)
+  #     N = 11  one wave only while nothing else runs; any other job adds a second wave
+  #     N = 12  two waves, about 760 s (the second wave is one partition the others wait for)
+  #   concurrency 20 or more (the Team plan documents 60 total jobs):
+  #     N = 18  about 275 s;  N = 24  about 235 s, then the fixed cost dominates.
+  #
+  # Set the repository Actions variable VERIFY_PARTITIONS (Settings → Secrets and variables →
+  # Actions) to 18 once a run shows 19 or more jobs starting together, and leave this default as
+  # the documented fallback. A `workflow_dispatch` run takes a one-run override.
+  PARTITIONS: 10
   # Per-gate green records travel between runs of the same tree through the Actions cache, which
   # accepts only an absolute path with no `..` in it.
   TAO_GREEN_STORE: /home/runner/tao-green
@@ -50,15 +84,131 @@ env:
     Apps/Hosted CRUD/node_modules
 
 jobs:
+  # Holds a pull request until its author has accepted CLA.md by posting the agreement sentence on a
+  # pull request in this repository. The comment is the signature: GitHub authenticates who posted
+  # it, timestamps it, and keeps its edit history. It is this job's result, not a commit status, so a
+  # ruleset can require "Contributor agreement" on `main` by that name once the repository is
+  # public. A sentence posted after this ran counts on the next push, or when a maintainer re-runs
+  # the failed jobs of this run. Not on `edited`: a title change is not new code, and this workflow's
+  # other jobs would fan out with it.
+  cla:
+    name: Contributor agreement
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: write
+    env:
+      CLA_SENTENCE: I have read the Tao Contributor License Agreement, version 1.0, and I agree to it.
+      MARKER: '<!-- tao-cla -->'
+    steps:
+      - name: Check the author has accepted the agreement
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          # The repository belongs to an organization, so the maintainer is named rather than read
+          # from the owner, which is now the organization's login.
+          MAINTAINER: marcuswestin
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Each check reads a whole value first: grep -q in a pipeline would end it early and fail it.
+          signed() { grep -qiF -- "$CLA_SENTENCE" <<<"$1"; }
+          comments_by() {
+            gh api --paginate "repos/$REPO/issues/$1/comments" --jq ".[] | select(.user.login == \"$AUTHOR\") | .body"
+          }
+          # The maintainer holds the rights already.
+          accepted=false
+          if [ "$AUTHOR" = "$MAINTAINER" ]; then
+            accepted=true
+          # This pull request's description, or a comment on it, by its author.
+          elif signed "$(gh api "repos/$REPO/pulls/$NUMBER" --jq '.body // ""')" || signed "$(comments_by "$NUMBER")"; then
+            accepted=true
+          else
+            # An earlier pull request where the author accepted it.
+            for other in $(gh api -X GET search/issues \
+                -f q="repo:$REPO is:pr involves:$AUTHOR \"$CLA_SENTENCE\"" --jq '.items[].number'); do
+              body=$(gh api "repos/$REPO/pulls/$other" --jq "select(.user.login == \"$AUTHOR\") | .body")
+              if signed "$body" || signed "$(comments_by "$other")"; then
+                accepted=true
+                break
+              fi
+            done
+          fi
+
+          if [ "$accepted" = true ]; then
+            echo "@$AUTHOR has accepted the agreement."
+            exit 0
+          fi
+
+          echo "::error::@$AUTHOR has not accepted CLA.md. Post the agreement sentence as a comment on this pull request, then push or re-run this job."
+          # Explain once on the pull request; a fork's read-only token cannot, and this log says it then.
+          existing=$(gh api --paginate "repos/$REPO/issues/$NUMBER/comments" --jq '.[].body')
+          if ! grep -qF -- "$MARKER" <<<"$existing"; then
+            gh pr comment "$NUMBER" --repo "$REPO" --body "$MARKER
+          Thank you for the pull request, @$AUTHOR. Before it can be merged, please read the
+          [Tao Contributor License Agreement](https://github.com/$REPO/blob/main/CLA.md) and, if you agree,
+          post this sentence as a comment, exactly as written:
+
+          > $CLA_SENTENCE
+
+          Then push again or ask a maintainer to re-run the \"Contributor agreement\" check. It covers this
+          and every later contribution. You keep the copyright in your work; the agreement lets the
+          maintainer license Tao, your contribution included, under any terms." \
+              || echo "::warning::Could not post the explanation on the pull request; the token is read-only."
+          fi
+          exit 1
+
+  # Turns the one partition count into the matrix the partitions fan out over. A matrix cannot read
+  # `env`, so this job is the only place the count is resolved; it also records the override that
+  # applied, so a run's summary says how it was split.
+  plan:
+    name: Plan the partitions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      count: ${{ steps.plan.outputs.count }}
+      partitions: ${{ steps.plan.outputs.partitions }}
+    steps:
+      - name: Resolve the partition count
+        id: plan
+        env:
+          RUN_OVERRIDE: ${{ inputs.partitions }}
+          REPOSITORY_OVERRIDE: ${{ vars.VERIFY_PARTITIONS }}
+        run: |
+          if [ -n "$RUN_OVERRIDE" ]; then
+            count=$RUN_OVERRIDE; source="this run's dispatch input"
+          elif [ -n "$REPOSITORY_OVERRIDE" ]; then
+            count=$REPOSITORY_OVERRIDE; source="the repository variable VERIFY_PARTITIONS"
+          else
+            count=$PARTITIONS; source="the workflow default"
+          fi
+          case "$count" in
+            ''|*[!0-9]*|0) echo "::error::Partition count must be a positive integer, got '$count' from $source."; exit 1 ;;
+          esac
+          if [ "$count" -gt 40 ]; then
+            echo "::error::Partition count $count from $source exceeds 40; fixed cost dominates long before that."
+            exit 1
+          fi
+          echo "Splitting the readers across $count partitions ($source)."
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "partitions=$(seq 1 "$count" | jq -cs .)" >> "$GITHUB_OUTPUT"
+
   partition:
-    name: Partition ${{ matrix.partition }}/12
+    name: Partition ${{ matrix.partition }}/${{ needs.plan.outputs.count }}
+    needs: plan
     # x86-64, not ARM: the Hermes compiler `ship-bundle-proof` runs ships no Linux ARM binary.
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      PARTITION: ${{ matrix.partition }}/${{ needs.plan.outputs.count }}
     strategy:
       fail-fast: false
       matrix:
-        partition: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        partition: ${{ fromJSON(needs.plan.outputs.partitions) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -70,7 +220,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.TAO_GREEN_STORE }}
-          key: tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-${{ matrix.partition }}-of-${{ env.PARTITIONS }}
+          key: tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-${{ matrix.partition }}-of-${{ needs.plan.outputs.count }}
           restore-keys: |
             tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-
 
@@ -78,6 +228,7 @@ jobs:
       # workspace manifest, and the devenv lock that pins Bun and Node. Setup finds a tree with no
       # completion stamp, runs its health probe, and adopts the tree without installing. Never given
       # restore-keys: a tree restored from another lockfile would pass that probe just the same.
+      # `Companion hosts` restores the same key, so the two workflows share one installed tree.
       - name: Restore the installed node_modules
         id: node-modules
         uses: actions/cache/restore@v4
@@ -195,8 +346,8 @@ jobs:
           cp .github/verify/durations.json .artifacts/timings/durations.json
           cp .github/verify/ledger.json .artifacts/testing/ledger.json
 
-      - name: Verify partition ${{ matrix.partition }}/${{ env.PARTITIONS }}
-        run: ./agent verify-full-sandbox --partition ${{ matrix.partition }}/${{ env.PARTITIONS }}
+      - name: Verify partition ${{ env.PARTITION }}
+        run: ./agent verify-full-sandbox --partition "$PARTITION"
 
       # Locally the prepare phase fixes formatting and regenerates indexes in place; here a rewrite
       # means the pull request carries unformatted or stale files, which is a failure.
@@ -209,9 +360,9 @@ jobs:
             exit 1
           fi
 
-      # The Verify job reads every partition's summary; the gate logs matter only when one failed, so a
-      # green partition uploads its summary alone.
-      - name: Collect the run's summary, and its logs when it failed
+      # Keep both attempts when a retry recovered a failed gate, even if the partition passed.
+      # Failed partitions retain every gate log; clean passes need only their summary.
+      - name: Collect the run's summary and failure or retry logs
         if: always()
         env:
           JOB_STATUS: ${{ job.status }}
@@ -220,6 +371,11 @@ jobs:
           latest=.artifacts/logs/verify-full-sandbox/latest
           if [ "$JOB_STATUS" = success ] && [ -e "$latest/summary.json" ]; then
             cp -L "$latest/summary.json" "$RUNNER_TEMP/verify-logs/"
+            for log in "$latest"/*.initial.log "$latest"/*.retry.log; do
+              if [ -f "$log" ]; then
+                cp -L "$log" "$RUNNER_TEMP/verify-logs/"
+              fi
+            done
           elif [ -e "$latest" ]; then
             cp -RL "$latest/." "$RUNNER_TEMP/verify-logs/"
           fi
@@ -233,20 +389,27 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      # Only a partition that passed has anything new to save: the lane writes its green records in
+      # one batch after every node passed, never as nodes finish, so a failed or cancelled partition
+      # holds nothing but what it restored. The landing route cancels runs whose local complement
+      # failed, and `always()` would have run this step then too, inside GitHub's cancellation
+      # grace period; `success()` keeps a cancelled run from saving anything at all.
       - name: Save green records for this tree
-        if: always()
+        if: success()
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: ${{ env.TAO_GREEN_STORE }}
-          key: tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-${{ matrix.partition }}-of-${{ env.PARTITIONS }}
+          key: tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-${{ matrix.partition }}-of-${{ needs.plan.outputs.count }}
 
   verify:
     name: Verify
-    needs: partition
+    needs: [plan, partition]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    env:
+      PARTITIONS: ${{ needs.plan.outputs.count }}
     steps:
       - name: Download every partition's summary
         uses: actions/download-artifact@v4
@@ -257,6 +420,7 @@ jobs:
       - name: Require every partition green and every plan identical
         env:
           PARTITION_RESULT: ${{ needs.partition.result }}
+          PLAN_RESULT: ${{ needs.plan.result }}
         run: |
           # One annotation per extracted failure, and one for each failed gate whose log matched no
           # recognized format, escaped as workflow commands require.
@@ -270,6 +434,10 @@ jobs:
               | "::error title=Partition \($k): \($gate)::Failed with no recognized test failure; the partition's log artifact holds its output.")
           JQ
           status=0
+          if [ "$PLAN_RESULT" != success ]; then
+            echo "The plan job did not succeed ($PLAN_RESULT), so no partition ran."
+            exit 1
+          fi
           summaries=$(find partitions -name summary.json | sort)
           count=$(printf '%s\n' "$summaries" | grep -c . || true)
           if [ "$count" != "$PARTITIONS" ]; then

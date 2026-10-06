@@ -23,6 +23,57 @@ import { WorkGraph } from '../verification-src/WorkGraph'
 
 type GateScript = Record<string, { exitCode: number; output: string }>
 
+Describe('diagnostic resume', () => {
+  Test('a diagnostic generator run reports its result without claiming uncaptured green evidence', async () => {
+    const root = await mkTestDir('tao-diagnostic-generator-')
+    try {
+      const summary = await runGates({
+        gates: ['_parser-gen', '_repo-lint'],
+        jobs: 1,
+        lane: 'diagnose-verification',
+        logRoot: FS.resolvePath('logs', root),
+        machineLoadAverage: IDLE_MACHINE,
+        registryRoot: FS.resolvePath('registry', root),
+        repositoryRoot: root,
+        runGate: async () => ({ exitCode: 0, output: '' }),
+      })
+      Expect(summary.status).toBe('passed')
+      Expect(summary.warnings.some(warning => warning.includes('generated output changed'))).toBe(false)
+      Expect(await FS.isFile(FS.resolvePath('.artifacts/verify/green-tree.json', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('retains explicitly completed diagnostic parts without skipping verification work', async () => {
+    const root = await mkTestDir('tao-diagnostic-resume-')
+    try {
+      for (const lane of ['diagnose-verification', 'verify-changed']) {
+        const ran: string[] = []
+        const summary = await runGates({
+          diagnosticCompleted: ['first'],
+          gates: ['first', 'second'],
+          jobs: 1,
+          lane,
+          logRoot: FS.resolvePath(lane, root),
+          machineLoadAverage: IDLE_MACHINE,
+          registryRoot: FS.resolvePath('registry', root),
+          repositoryRoot: root,
+          runGate: async name => {
+            ran.push(name)
+            return { exitCode: 0, output: `${name} passed\n` }
+          },
+        })
+        Expect(summary.status).toBe('passed')
+        Expect(ran).toEqual(lane === 'diagnose-verification' ? ['second'] : ['first', 'second'])
+        Expect(await FS.isFile(FS.resolvePath('.artifacts/verify/green-tree.json', root))).toBe(false)
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+})
+
 const resourceAcquisition = testOverrideSlot<typeof MachineLanes.acquireResource>({
   read: () => MachineLanes.acquireResource,
   write: value => Object.defineProperty(MachineLanes, 'acquireResource', { value }),
@@ -34,6 +85,58 @@ const testPlanSlot = testOverrideSlot<typeof TestRunner.testNodesFor>({
 })
 
 Describe('gate test evidence', () => {
+  Test('retains a reviewed completed diagnostic suite after its shard plan changes', async () => {
+    const root = await mkTestDir('tao-diagnostic-reshard-')
+    const original = TestRunner.testNodesFor
+    const files = ['one', 'two', 'three'].map(name => `packages/shared/shared-tests/${name}.test.ts`)
+    const buildPlan = () =>
+      TestNodes.build({
+        ledger: { version: 1, tests: {} },
+        timings: { version: 1, nodes: {} },
+        selected: files.map((file, index) => ({
+          name: `fixture-${index}`,
+          files: [file],
+          buildProcess: (_name, selected) => ({ command: 'fixture-runner', args: [], files: selected }),
+        })),
+      })
+    try {
+      for (const lane of ['diagnose-verification', 'verify-changed']) {
+        const ran: string[] = []
+        const plan = buildPlan()
+        // Simulate learned timing turning the same reviewed suite into fresh shard names.
+        for (const [index, state] of plan.states.entries()) {
+          state.suite = 'completed-suite'
+          state.name = `completed-suite#${index + 1}`
+        }
+        const replacePlan = testPlanSlot.install(async options =>
+          options.repositoryRoot === root ? { ...plan, states: [...plan.states] } : original(options)
+        )
+        try {
+          const summary = await runGates({
+            diagnosticCompleted: ['completed-suite'],
+            gates: ['_test'],
+            jobs: 1,
+            lane,
+            logRoot: FS.resolvePath(lane, root),
+            machineLoadAverage: IDLE_MACHINE,
+            registryRoot: FS.resolvePath('registry', root),
+            repositoryRoot: root,
+            runGate: async name => {
+              ran.push(name)
+              return { exitCode: 0, output: '' }
+            },
+          })
+          Expect(summary.status).toBe('passed')
+          Expect(ran).toEqual(lane === 'diagnose-verification' ? [] : plan.states.map(state => state.name))
+        } finally {
+          replacePlan()
+        }
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('records full-run wall time and preserves it when fail-fast leaves tests unrun', async () => {
     const root = await mkTestDir('tao-gate-test-evidence-')
     let wallTime = Date.UTC(2026, 9, 1, 12)
@@ -236,7 +339,8 @@ async function busyRegistryRoot(laneCount = 1): Promise<string> {
       repositoryRoot: `/another-worktree-${index}`,
       maxSlots: 64,
       slots: 0,
-      startedAt: new Date().toISOString(),
+      // These simulated neighbours precede this lane even when registration shares a millisecond.
+      startedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString(),
     })
   }
   return registryRoot
@@ -385,7 +489,6 @@ Describe('repository gate runner', () => {
       'studio-dialog-browser',
       'studio-agent-browser',
       'studio-network-simulation',
-      'studio-smoke-native',
       'studio-canary',
     ]
     const { started, summary } = await run(['_repo-lint', ...hostOnly], {}, { skipUnsandboxed: true })
@@ -521,7 +624,7 @@ Describe('repository gate runner', () => {
   })
 
   Test('skips the macOS-only gates off macOS and runs them on it', async () => {
-    const macOnly = ['studio-smoke-native', 'studio-canary']
+    const macOnly = ['studio-canary']
     const linux = await run(['_repo-lint', ...macOnly], {}, { hostPlatform: 'linux' })
     const darwin = await run(['_repo-lint', ...macOnly], {}, { hostPlatform: 'darwin' })
 
@@ -617,7 +720,7 @@ Describe('repository gate runner', () => {
     const started: string[] = []
     const pending = runGates({
       showStudio: true,
-      gates: ['studio-smoke-native', '_fix-just-fmt'],
+      gates: ['studio-canary', '_fix-just-fmt'],
       jobs: 2,
       registryRoot,
       repositoryRoot: root,
@@ -643,7 +746,7 @@ Describe('repository gate runner', () => {
       await prepare?.release()
       await priority?.release()
       Expect((await pending).status).toBe('passed')
-      Expect(started.toSorted()).toEqual(['_fix-just-fmt', 'studio-smoke-native'])
+      Expect(started.toSorted()).toEqual(['_fix-just-fmt', 'studio-canary'])
     } finally {
       await priority?.release()
       await pending.catch(() => undefined)
@@ -734,6 +837,48 @@ Describe('repository gate runner', () => {
     }
   })
 
+  Test('streams node output while it is running, then publishes the final output', async () => {
+    const root = await mkTestDir('tao-gate-runner-live-output-')
+    const release = Deferred()
+    const location = RunArtifacts.locate({ lane: 'verify', logRoot: 'logs', repositoryRoot: root })
+    const state = WorkGraph.createState({ name: 'held', run: { args: [], command: 'true' } })
+    let running: Promise<Awaited<ReturnType<typeof WorkGraph.run>>> | undefined
+    try {
+      await RunArtifacts.assignLogPaths([state], location)
+      const writer = RunArtifacts.liveWriter(location, () => {})
+      running = WorkGraph.run([state], {
+        jobs: 1,
+        onEvent: writer.handle,
+        runNode: async (_state, context) => {
+          context.onOutput('visible while running\n')
+          await release.promise
+          return { exitCode: 0, output: 'written at completion\n' }
+        },
+        watchInterrupt: () => () => {},
+      })
+
+      const logPath = state.logPath!
+      await until(async () =>
+        state.status === 'running' && await FS.isFile(logPath)
+        && await FS.readText(logPath) === 'visible while running\n', {
+        description: 'live output to appear while its node is running',
+      })
+      Expect(state.status).toBe('running')
+      Expect(await FS.readText(logPath)).toBe('visible while running\n')
+
+      release.resolve()
+      Expect((await running).states[0]?.status).toBe('passed')
+      await writer.finish()
+      Expect(await FS.readText(logPath)).toBe('visible while running\nwritten at completion\n')
+    } finally {
+      release.resolve()
+      if (running !== undefined) {
+        await running
+      }
+      await FS.remove(root)
+    }
+  })
+
   Test('forwards completion only after the announced log path is readable', async () => {
     const root = await mkTestDir('tao-gate-runner-log-order-')
     try {
@@ -754,6 +899,24 @@ Describe('repository gate runner', () => {
 
       Expect(readableWhenForwarded).toBe(true)
       Expect(await FS.readText(state.logPath!)).toBe('finished\n')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('surfaces live log write failures when the writer finishes', async () => {
+    const root = await mkTestDir('tao-gate-runner-live-log-failure-')
+    try {
+      const location = RunArtifacts.locate({ lane: 'verify', logRoot: 'logs', repositoryRoot: root })
+      const state = WorkGraph.createState({ name: 'gate', run: { args: [], command: 'true' } })
+      await RunArtifacts.assignLogPaths([state], location)
+      await FS.mkdir(state.logPath!)
+      const writer = RunArtifacts.liveWriter(location, () => {})
+
+      writer.handle({ kind: 'start', state })
+      writer.handle({ kind: 'output', output: 'unwritable output\n', state })
+
+      await Expect(writer.finish()).rejects.toThrow()
     } finally {
       await FS.remove(root)
     }

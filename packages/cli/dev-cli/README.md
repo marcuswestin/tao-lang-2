@@ -173,7 +173,7 @@ of their own name. The Studio smokes are the exception: their catalog entries ca
 `./dev studio-smoke` command, and the graph numbers them from the `studio-smoke` worker pool as it
 admits them, so `StudioSmoke.resources()` hands each its own ports and artifact root without any
 recipe pinning a worker index. Those gates are named for the public recipes that run the same files by
-hand — `studio-smoke`, `studio-proof-real-app`, `keyboard-navigation-smoke`, `studio-smoke-native`,
+hand — `studio-smoke`, `studio-proof-real-app`, `keyboard-navigation-smoke`,
 `studio-canary` — and log under those names.
 
 `./agent doctor` reads this registry without pruning or otherwise mutating it, and reports the load

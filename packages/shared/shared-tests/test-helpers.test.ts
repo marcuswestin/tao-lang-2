@@ -5,6 +5,7 @@ import {
   Expect,
   type FakeTerminal,
   fakeTerminal,
+  mkTestDir,
   MockModule,
   reactNativeStubs,
   setClockForTest,
@@ -17,7 +18,25 @@ import {
   type UntilOptions,
   withCapturedOutput,
 } from '@shared/test'
-import { Errors, HCI, Platform, Time } from '../shared-src/shared'
+import { CLI, Errors, FS, HCI, Platform, Time } from '../shared-src/shared'
+
+const diagnosticMode = testOverrideSlot<string | undefined>({
+  read: () => Platform.runtimeProcess.env['TAO_VERIFY_NO_TIMEOUTS'],
+  write: value => {
+    if (value === undefined) {
+      delete Platform.runtimeProcess.env['TAO_VERIFY_NO_TIMEOUTS']
+    } else {
+      Platform.runtimeProcess.env['TAO_VERIFY_NO_TIMEOUTS'] = value
+    }
+  },
+})
+type SetTimeoutCall = (...args: Parameters<typeof globalThis.setTimeout>) => ReturnType<typeof globalThis.setTimeout>
+const timeoutSlot = testOverrideSlot<SetTimeoutCall>({
+  read: () => globalThis.setTimeout,
+  write: value => {
+    globalThis.setTimeout = value as typeof globalThis.setTimeout
+  },
+})
 
 Describe('Shared test async helpers', () => {
   Test('Deferred stays pending until the test settles it', async () => {
@@ -41,7 +60,7 @@ Describe('Shared test async helpers', () => {
     await gate.promise
 
     const failing = Deferred()
-    failing.reject(new Error('gate failed'))
+    failing.reject(new Errors.UnexpectedBehaviorError('gate failed'))
 
     await Expect(failing.promise).rejects.toThrow('gate failed')
   })
@@ -74,12 +93,12 @@ Describe('Shared test async helpers', () => {
     // These tiny budgets are what the test is about — proving `until` times out by its own description
     // rather than proving the wait is fast.
     // budget-ok: the timeout value under test.
-    const options: UntilOptions = { description: 'the gate to open', timeoutMs: 20 }
+    const options: UntilOptions = { description: 'the gate to open', timeoutMs: 20, timeoutPolicy: 'bounded' }
     await Expect(until(() => false, options))
       .rejects
       .toThrow('Timed out after 20ms waiting for the gate to open.')
     // budget-ok: same as above, the timeout value is the subject of this assertion.
-    await Expect(until(() => undefined, { timeoutMs: 20 }))
+    await Expect(until(() => undefined, { timeoutMs: 20, timeoutPolicy: 'bounded' }))
       .rejects
       .toThrow('Timed out after 20ms waiting for a test condition.')
   })
@@ -92,11 +111,68 @@ Describe('Shared test async helpers', () => {
     // The 40ms budget is what the test is about — proving `until` abandons a read that never settles
     // instead of hanging on it.
     // budget-ok: the timeout value under test.
-    await Expect(until(() => stuck.promise, { description: 'a read that never settles', timeoutMs: 40 }))
+    await Expect(until(() => stuck.promise, {
+      description: 'a read that never settles',
+      timeoutMs: 40, // budget-ok: deliberate timeout-contract fixture.
+      timeoutPolicy: 'bounded',
+    }))
       .rejects
       .toThrow('Timed out after 40ms waiting for a read that never settles.')
 
     stuck.resolve(true)
+  })
+
+  Test('diagnostic until polls and awaits an asynchronous read without scheduling a deadline', async () => {
+    const restoreMode = diagnosticMode.install('true')
+    const originalSetTimeout = globalThis.setTimeout
+    const delays: Array<number | undefined> = []
+    const restoreTimer = timeoutSlot.install((...args) => {
+      delays.push(args[1])
+      return originalSetTimeout(...args)
+    })
+    const entered = Deferred()
+    const release = Deferred<string>()
+    let reads = 0
+    const waiting = until<false | string>(() => {
+      if (++reads === 1) {
+        return false
+      }
+      entered.resolve()
+      return release.promise
+    }, {
+      intervalMs: 0,
+      timeoutMs: 8_123, // budget-ok: verifies the absence of the execution watchdog.
+    })
+    try {
+      await entered.promise
+      Expect(delays).toEqual([0])
+      release.resolve('released')
+      Expect(await waiting).toBe('released')
+      Expect(reads).toBe(2)
+    } finally {
+      release.resolve('cleanup')
+      await waiting.catch(() => {})
+      restoreTimer()
+      restoreMode()
+    }
+  })
+
+  Test('diagnostic until preserves immediate failure for an exhausted or malformed budget', async () => {
+    const restoreMode = diagnosticMode.install('true')
+    let reads = 0
+    try {
+      for (const timeoutMs of [0, -1, NaN]) {
+        await Expect(until(() => {
+          reads++
+          return true
+        }, {
+          timeoutMs, // budget-ok: verifies the existing exhausted-budget contract.
+        })).rejects.toThrow(`Timed out after ${timeoutMs}ms waiting for a test condition.`)
+      }
+      Expect(reads).toBe(0)
+    } finally {
+      restoreMode()
+    }
   })
 
   Test('until still surfaces a read that rejects instead of swallowing it into a timeout', async () => {
@@ -164,6 +240,62 @@ Describe('Shared test terminal helpers', () => {
 })
 
 Describe('Shared test runner helpers', () => {
+  Test(
+    'diagnostic runner wrappers omit explicit test and hook deadlines while bounded fixtures retain them',
+    async () => {
+      const directory = await mkTestDir('runner-explicit-timeouts')
+      const file = FS.resolvePath('execution.test.ts', directory)
+      const testApi = FS.resolvePath('../shared-src/testing/Test-Bun.ts', import.meta.dir)
+      await FS.writeText(
+        file,
+        [
+          `import { AfterAll, AfterEach, Expect, Test } from ${JSON.stringify(testApi)}`,
+          `const bounded = process.env.PROBE_BOUNDED === 'true'`,
+          `const register = process.env.PROBE_ONLY === 'true' ? Test.only : Test`,
+          `const wait = async () => await new Promise(resolve => setTimeout(resolve, 20))`,
+          `AfterAll(async () => { await wait(); console.log('AFTER_ALL_FINISHED') }, 1, ...(bounded ? ['bounded'] : []))`,
+          `AfterEach(async () => { await wait(); console.log('AFTER_EACH_FINISHED') }, 1, ...(bounded ? ['bounded'] : []))`,
+          `register('explicit short deadline', async () => { await wait(); Expect(true).toBe(true); console.log('TEST_FINISHED') }, 1, ...(bounded ? ['bounded'] : []))`,
+          `Test.each(['table row'])('explicit table deadline %s', async () => { await wait(); console.log('EACH_FINISHED') }, 1, ...(bounded ? ['bounded'] : []))`,
+          `Test.concurrent('explicit concurrent deadline', async () => { await wait(); console.log('CONCURRENT_FINISHED') }, 1, ...(bounded ? ['bounded'] : []))`,
+          `Test.skip('skipped diagnostic case', async () => { Expect('SKIP_RAN').toBe('SKIPPED') }, 1)`,
+        ].join('\n'),
+      )
+      async function probe(diagnostic: boolean, bounded = false, only = false, ci = true) {
+        return await CLI.run(Platform.runtimeProcess.execPath, {
+          args: ['test', file, '--timeout=0', ...(only ? ['--only'] : [])],
+          env: {
+            CI: String(ci),
+            PROBE_BOUNDED: String(bounded),
+            PROBE_ONLY: String(only),
+            TAO_VERIFY_NO_TIMEOUTS: String(diagnostic),
+          },
+          processPolicy: 'test',
+          timeoutMs: 30_000,
+        })
+      }
+      const ordinary = await probe(false, false, false, true)
+      Expect(ordinary.exitCode).not.toBe(0)
+      Expect(ordinary.stderr).toContain('timed out')
+      const diagnostic = await probe(true, false, false, true)
+      Expect(diagnostic.exitCode).toBe(0)
+      Expect(diagnostic.stdout).toContain('TEST_FINISHED')
+      Expect(diagnostic.stdout).toContain('AFTER_EACH_FINISHED')
+      Expect(diagnostic.stdout).toContain('AFTER_ALL_FINISHED')
+      Expect(diagnostic.stdout).toContain('EACH_FINISHED')
+      Expect(diagnostic.stdout).toContain('CONCURRENT_FINISHED')
+      Expect(diagnostic.stderr).not.toContain('SKIP_RAN')
+      const exclusive = await probe(true, false, true, false)
+      Expect(exclusive.exitCode).toBe(0)
+      Expect(exclusive.stdout).toContain('TEST_FINISHED')
+      const ciExclusive = await probe(true, false, true, true)
+      Expect(ciExclusive.exitCode).not.toBe(0)
+      Expect(ciExclusive.stderr).toMatch(/only.*CI|CI.*only/i)
+      const bounded = await probe(true, true)
+      Expect(bounded.exitCode).not.toBe(0)
+      Expect(bounded.stderr).toContain('timed out')
+    },
+  )
   Test('setClockForTest pins a fixed reading and restores the real clock', () => {
     const realNow = Date.now()
     const restore = setClockForTest(1_000)

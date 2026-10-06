@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { Errors, FS, HCI, Platform, Repo, Time, VerificationTimeouts } from '@shared'
 import { Expect, runCleanups, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
@@ -10,7 +10,6 @@ import {
   studioSourceActionVersion,
 } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
-import { type StartedStudioNative, StudioNative } from '../studio-tooling-src/StudioNative'
 import { StudioNativeTestRun } from '../studio-tooling-src/StudioNativeTestRun'
 import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 import { exerciseStudioFeed } from './studio-feed-journey'
@@ -69,14 +68,13 @@ Test('sketch persistence evidence requires catalog-only rectangle mutation', () 
   Expect(sketchPersistenceObserved(before, after, 'generated source', 'rewritten source')).toBe(false)
 })
 
-// The browser branch is the full editor/preview journey in the `verify-full` graph. The native branch
-// validates the unattended Electrobun capability probe; it does not repeat the browser journey.
-Test('simulated user exercises the browser editor or the native Electrobun shell', async () => {
+// The full editor/preview journey in the `verify-full` graph. The unattended native capability probe
+// belongs to `studio-canary`, which launches real native Studio and also proves its shutdown.
+Test('simulated user exercises the browser editor', async () => {
   const artifactParent = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
     ?? Repo.resolvePath('.artifacts/studio-smoke')
   const { root: artifactRoot } = await StudioNativeTestRun.create(artifactParent)
   let browser: StudioCdp | undefined
-  let native: StartedStudioNative | undefined
   let preview: ReturnType<typeof startPreviewServer> | undefined
   let previewRuntimeRoot: string | undefined
   let previewSession: Awaited<ReturnType<typeof openStudioPreviewSession>> | undefined
@@ -166,719 +164,701 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       port: smokePort('TAO_STUDIO_SMOKE_SERVER_PORT', 42_000),
     })
     const projectUrl = `${studio.url}/sessions/${encodeURIComponent(current.sessionId)}`
-    if (Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_NATIVE'] === 'true') {
-      pendingShutdown.add('native Studio')
-      native = await StudioNative.start({
-        ...await StudioNativeTestRun.nativeOptions(artifactRoot),
-        nativeHostCommand: 'studio-smoke-native',
-        previewUrl: preview.url,
-        projectUrl,
-        probe: true,
-        showWindow: false,
-        studioUrl: studio.url,
-      })
-      const result = await native.waitForProbe()
-      Expect(result.passed).toBe(true)
-      Expect(Object.values(result.capabilities).every(capability => capability.passed)).toBe(true)
-    } else {
-      pendingShutdown.add('browser')
-      browser = await StudioCdp.launchChrome({ artifactRoot })
-      await browser.setViewport(1_440, 900)
-      await browser.goto(projectUrl)
-      await activateSmokePreviews(browser)
-      await browser.waitFor(
-        `(() => {
-        const shell = document.querySelector('.studio-shell')
-        const viewport = document.querySelector('#tao-studio-viewport')
-        if (!(shell instanceof HTMLElement) || !(viewport instanceof HTMLElement)) return false
-        const shellRect = shell.getBoundingClientRect()
-        const viewportRect = viewport.getBoundingClientRect()
-        return shellRect.top === 0
-          && shellRect.height === viewportRect.height
-          && shellRect.height === window.innerHeight
-          && shellRect.width === window.innerWidth
-      })()`,
-        { timeoutMs: 30_000 },
+    pendingShutdown.add('browser')
+    browser = await StudioCdp.launchChrome({ artifactRoot })
+    await browser.setViewport(1_440, 900)
+    await browser.goto(projectUrl)
+    await activateSmokePreviews(browser)
+    await browser.waitFor(
+      `(() => {
+      const shell = document.querySelector('.studio-shell')
+      const viewport = document.querySelector('#tao-studio-viewport')
+      if (!(shell instanceof HTMLElement) || !(viewport instanceof HTMLElement)) return false
+      const shellRect = shell.getBoundingClientRect()
+      const viewportRect = viewport.getBoundingClientRect()
+      return shellRect.top === 0
+        && shellRect.height === viewportRect.height
+        && shellRect.height === window.innerHeight
+        && shellRect.width === window.innerWidth
+    })()`,
+      { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
+    )
+    // Expanded, the agent panel floats over the inspector and the lower half of every divider.
+    // Studio opens it minimized; the journey confirms that before reaching for the workbench.
+    await browser.waitFor(
+      `document.querySelector('.studio-agent-panel [data-tao-studio-agent-collapse], .studio-agent-collapse')
+        instanceof HTMLButtonElement`,
+      { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
+    )
+    if (
+      await browser.evaluate<boolean>(
+        `document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') !== 'true'`,
       )
-      // Expanded, the agent panel floats over the inspector and the lower half of every divider.
-      // Studio opens it minimized; the journey confirms that before reaching for the workbench.
-      await browser.waitFor(
-        `document.querySelector('.studio-agent-panel [data-tao-studio-agent-collapse], .studio-agent-collapse')
-          instanceof HTMLButtonElement`,
-        { timeoutMs: 30_000 },
-      )
-      if (
-        await browser.evaluate<boolean>(
-          `document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') !== 'true'`,
-        )
-      ) {
-        await browser.click('.studio-agent-collapse')
-      }
-      await browser.waitFor(
-        `document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'true'`,
-      )
-      await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('Text(\"First\")')", {
-        timeoutMs: 30_000,
-      })
-      Expect(
-        await browser.evaluate<number>(
-          "document.querySelectorAll('.studio-editor .cm-editor').length",
-        ),
-      ).toBe(1)
-      await browser.waitFor(
-        `document.querySelector('.studio-preview-group-label')?.textContent === 'states'`,
-        { timeoutMs: 30_000 },
-      )
-      await browser.waitFor(
-        `document.querySelector('[data-studio-tao-scenario="true"] .studio-scenario-inspector-label')?.textContent === 'default'`,
-        { timeoutMs: 30_000 },
-      )
-      await browser.captureScreenshot('studio-wide-desktop')
-      await browser.setViewport(1_024, 768)
-      await browser.waitFor(
-        "document.querySelector('.studio-shell')?.getBoundingClientRect().width === window.innerWidth",
-      )
-      await browser.captureScreenshot('studio-narrow-desktop')
-      await browser.setViewport(1_440, 900)
+    ) {
+      await browser.click('.studio-agent-collapse')
+    }
+    await browser.waitFor(
+      `document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'true'`,
+    )
+    await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('Text(\"First\")')", {
+      timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity,
+    })
+    Expect(
+      await browser.evaluate<number>(
+        "document.querySelectorAll('.studio-editor .cm-editor').length",
+      ),
+    ).toBe(1)
+    await browser.waitFor(
+      `document.querySelector('.studio-preview-group-label')?.textContent === 'states'`,
+      { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
+    )
+    await browser.waitFor(
+      `document.querySelector('[data-studio-tao-scenario="true"] .studio-scenario-inspector-label')?.textContent === 'default'`,
+      { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
+    )
+    await browser.captureScreenshot('studio-wide-desktop')
+    await browser.setViewport(1_024, 768)
+    await browser.waitFor(
+      "document.querySelector('.studio-shell')?.getBoundingClientRect().width === window.innerWidth",
+    )
+    await browser.captureScreenshot('studio-narrow-desktop')
+    await browser.setViewport(1_440, 900)
 
-      await browser.click('[data-preset="design"]')
-      await browser.waitFor(`document.querySelector('.studio-pane-left')?.hasAttribute('hidden') === true`)
-      await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-zoom]')?.textContent === '100%'`)
-      await browser.waitForInFrame(
-        preview.url,
-        `document.documentElement.dataset.studioCanvasGestures === 'owned'`,
-      )
-      await browser.wheel('.studio-preview-cell iframe', { x: 0, y: -180 }, { primary: true })
-      await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-zoom]')?.textContent !== '100%'`)
-      Expect(
-        await browser.evaluate<string>(
-          "document.querySelector('.studio-preview > .studio-preview-grid')?.style.transform ?? ''",
-        ),
-      ).not.toBe('')
-      const transformedFrame = await browser.evaluate<{ height: number; width: number }>(`(() => {
-        const frame = document.querySelector('.studio-preview-cell iframe')
-        if (!(frame instanceof HTMLIFrameElement)) throw new Error('Missing transformed preview frame')
-        const rect = frame.getBoundingClientRect()
-        return { height: rect.height, width: rect.width }
-      })()`)
-      await browser.clickAtOffset('.studio-preview-cell .studio-preview-focus-shield', {
-        x: transformedFrame.width * 0.72,
-        y: transformedFrame.height * 0.62,
-      })
-      await browser.waitFor(`document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`)
-      await browser.clickAtOffset('.studio-preview-cell iframe', {
-        x: transformedFrame.width * 0.72,
-        y: transformedFrame.height * 0.62,
-      })
-      await browser.waitForInFrame(
-        preview.url,
-        `document.querySelector('#state')?.textContent === 'zoom hit 1 / background 0'`,
-      )
-      await browser.click('[data-tao-studio-canvas-zoom]')
-      await browser.click('[data-tao-studio-canvas-zoom-action="1"]')
-      await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-zoom]')?.textContent === '100%'`)
+    await browser.click('[data-preset="design"]')
+    await browser.waitFor(`document.querySelector('.studio-pane-left')?.hasAttribute('hidden') === true`)
+    await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-zoom]')?.textContent === '100%'`)
+    await browser.waitForInFrame(
+      preview.url,
+      `document.documentElement.dataset.studioCanvasGestures === 'owned'`,
+    )
+    await browser.wheel('.studio-preview-cell iframe', { x: 0, y: -180 }, { primary: true })
+    await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-zoom]')?.textContent !== '100%'`)
+    Expect(
+      await browser.evaluate<string>(
+        "document.querySelector('.studio-preview > .studio-preview-grid')?.style.transform ?? ''",
+      ),
+    ).not.toBe('')
+    const transformedFrame = await browser.evaluate<{ height: number; width: number }>(`(() => {
+      const frame = document.querySelector('.studio-preview-cell iframe')
+      if (!(frame instanceof HTMLIFrameElement)) throw new Error('Missing transformed preview frame')
+      const rect = frame.getBoundingClientRect()
+      return { height: rect.height, width: rect.width }
+    })()`)
+    await browser.clickAtOffset('.studio-preview-cell .studio-preview-focus-shield', {
+      x: transformedFrame.width * 0.72,
+      y: transformedFrame.height * 0.62,
+    })
+    await browser.waitFor(`document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`)
+    await browser.clickAtOffset('.studio-preview-cell iframe', {
+      x: transformedFrame.width * 0.72,
+      y: transformedFrame.height * 0.62,
+    })
+    await browser.waitForInFrame(
+      preview.url,
+      `document.querySelector('#state')?.textContent === 'zoom hit 1 / background 0'`,
+    )
+    await browser.click('[data-tao-studio-canvas-zoom]')
+    await browser.click('[data-tao-studio-canvas-zoom-action="1"]')
+    await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-zoom]')?.textContent === '100%'`)
 
-      await browser.click('.studio-rail-button[data-panel="files"]')
-      await browser.waitFor(`document.querySelector('.studio-pane-left')?.hasAttribute('hidden') === false`)
-      await browser.waitFor(`document.querySelector('[data-studio-panel="files"]')?.hasAttribute('hidden') === false`)
-      const designPreviewWide = await browser.evaluate<number>(
+    await browser.click('.studio-rail-button[data-panel="files"]')
+    await browser.waitFor(`document.querySelector('.studio-pane-left')?.hasAttribute('hidden') === false`)
+    await browser.waitFor(`document.querySelector('[data-studio-panel="files"]')?.hasAttribute('hidden') === false`)
+    const designPreviewWide = await browser.evaluate<number>(
+      "Number(document.querySelector('[data-divider=\"preview\"]')?.getAttribute('aria-valuenow'))",
+    )
+    Expect(Number.isFinite(designPreviewWide)).toBe(true)
+    await browser.setViewport(1_024, 768)
+    await browser.waitFor(
+      `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) !== ${designPreviewWide}`,
+    )
+    const designPreviewNarrow = await browser.evaluate<number>(
+      "Number(document.querySelector('[data-divider=\"preview\"]')?.getAttribute('aria-valuenow'))",
+    )
+    Expect(Number.isFinite(designPreviewNarrow)).toBe(true)
+    await browser.setViewport(1_440, 900)
+    await browser.waitFor(
+      `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) !== ${designPreviewNarrow}`,
+    )
+    Expect(
+      await browser.evaluate<number>(
         "Number(document.querySelector('[data-divider=\"preview\"]')?.getAttribute('aria-valuenow'))",
-      )
-      Expect(Number.isFinite(designPreviewWide)).toBe(true)
-      await browser.setViewport(1_024, 768)
-      await browser.waitFor(
-        `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) !== ${designPreviewWide}`,
-      )
-      const designPreviewNarrow = await browser.evaluate<number>(
-        "Number(document.querySelector('[data-divider=\"preview\"]')?.getAttribute('aria-valuenow'))",
-      )
-      Expect(Number.isFinite(designPreviewNarrow)).toBe(true)
-      await browser.setViewport(1_440, 900)
-      await browser.waitFor(
-        `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) !== ${designPreviewNarrow}`,
-      )
-      Expect(
-        await browser.evaluate<number>(
-          "Number(document.querySelector('[data-divider=\"preview\"]')?.getAttribute('aria-valuenow'))",
-        ),
-      ).toBe(designPreviewWide)
-      // Both dividers are dragged in the workbench layout, which is the only one that mounts them:
-      // the Run preset hands the whole window to the preview. A divider runs the full height of the
-      // body and the floating agent panel covers its lower half, so each is grabbed near its top,
-      // where it is exposed and where a person reaching for it would take hold.
-      const dividerGrip = { x: 2, y: 24 }
-      // Design gives the canvas all the width the editor's floor leaves, so a drag can only narrow it.
-      // The preview is the right-hand pane, so moving its left divider right decreases its width.
-      const initialPreview = await dividerSize(browser, 'preview')
-      await browser.dragBy('[data-divider="preview"]', { x: 40, y: 0 }, { offset: dividerGrip })
-      await browser.waitFor(
-        `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) === ${
-          initialPreview - 40
-        }`,
-      )
-      const initialLeft = await dividerSize(browser, 'left')
-      await browser.dragBy('[data-divider="left"]', { x: 48, y: 0 }, { offset: dividerGrip })
-      await browser.waitFor(
-        `Number(document.querySelector('[data-divider="left"]')?.getAttribute('aria-valuenow')) === ${
-          initialLeft + 48
-        }`,
-      )
-      await browser.captureScreenshot('studio-resized-workbench')
+      ),
+    ).toBe(designPreviewWide)
+    // Both dividers are dragged in the workbench layout, which is the only one that mounts them:
+    // the Run preset hands the whole window to the preview. A divider runs the full height of the
+    // body and the floating agent panel covers its lower half, so each is grabbed near its top,
+    // where it is exposed and where a person reaching for it would take hold.
+    const dividerGrip = { x: 2, y: 24 }
+    // Design gives the canvas all the width the editor's floor leaves, so a drag can only narrow it.
+    // The preview is the right-hand pane, so moving its left divider right decreases its width.
+    const initialPreview = await dividerSize(browser, 'preview')
+    await browser.dragBy('[data-divider="preview"]', { x: 40, y: 0 }, { offset: dividerGrip })
+    await browser.waitFor(
+      `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) === ${
+        initialPreview - 40
+      }`,
+    )
+    const initialLeft = await dividerSize(browser, 'left')
+    await browser.dragBy('[data-divider="left"]', { x: 48, y: 0 }, { offset: dividerGrip })
+    await browser.waitFor(
+      `Number(document.querySelector('[data-divider="left"]')?.getAttribute('aria-valuenow')) === ${initialLeft + 48}`,
+    )
+    await browser.captureScreenshot('studio-resized-workbench')
 
-      await browser.click('[data-preset="run"]')
-      await browser.waitFor(
-        `document.querySelector('.tao-studio-product-host')?.getAttribute('data-layout-preset') === 'run'`,
-      )
-      // Run leaves nothing but the preview, so the rest of the journey — editing, the lens, the
-      // canvas — needs the workbench back.
-      await browser.click('[data-preset="design"]')
-      await browser.waitFor(
-        `document.querySelector('.tao-studio-product-host')?.getAttribute('data-layout-preset') === 'design'`,
-      )
+    await browser.click('[data-preset="run"]')
+    await browser.waitFor(
+      `document.querySelector('.tao-studio-product-host')?.getAttribute('data-layout-preset') === 'run'`,
+    )
+    // Run leaves nothing but the preview, so the rest of the journey — editing, the lens, the
+    // canvas — needs the workbench back.
+    await browser.click('[data-preset="design"]')
+    await browser.waitFor(
+      `document.querySelector('.tao-studio-product-host')?.getAttribute('data-layout-preset') === 'design'`,
+    )
 
-      await browser.pressShortcut('k')
-      await browser.waitFor(
-        `document.querySelector('.studio-command-overlay')?.hidden === false
-          && document.activeElement === document.querySelector('.studio-command-overlay input')`,
-      )
-      await browser.insertText('show compile')
-      await browser.waitFor(
-        `document.querySelector('.studio-command-result strong')?.textContent === 'Show Compile'`,
-      )
-      await browser.click('.studio-command-result')
-      await browser.waitFor(
-        `document.querySelector('[data-drawer-tab="Compile"]')?.getAttribute('aria-current') === 'true'`,
-      )
-      await browser.waitFor(
-        `document.querySelector('.studio-drawer-content')?.textContent?.includes('Compile:') === true`,
-      )
-      Expect(await browser.evaluate<boolean>(`document.querySelector('[data-studio-tao-drawer]') === null`)).toBe(true)
+    await browser.pressShortcut('k')
+    await browser.waitFor(
+      `document.querySelector('.studio-command-overlay')?.hidden === false
+        && document.activeElement === document.querySelector('.studio-command-overlay input')`,
+    )
+    await browser.insertText('show compile')
+    await browser.waitFor(
+      `document.querySelector('.studio-command-result strong')?.textContent === 'Show Compile'`,
+    )
+    await browser.click('.studio-command-result')
+    await browser.waitFor(
+      `document.querySelector('[data-drawer-tab="Compile"]')?.getAttribute('aria-current') === 'true'`,
+    )
+    await browser.waitFor(
+      `document.querySelector('.studio-drawer-content')?.textContent?.includes('Compile:') === true`,
+    )
+    Expect(await browser.evaluate<boolean>(`document.querySelector('[data-studio-tao-drawer]') === null`)).toBe(true)
 
-      let compileRevision = await waitForCompileAfter(browser, -1)
-      await browser.click('.cm-content')
-      await browser.pressShortcut('a')
-      await browser.insertText(typedSource)
-      await browser.waitFor(
-        `document.querySelector('.cm-content')?.textContent.includes('Text("First typed")')`,
-      )
-      Expect(await FS.readText(sourcePath)).toBe(initialSource)
-      await browser.pressShortcut('s')
-      await waitForSource(sourcePath, source => source === typedSource)
-      compileRevision = await waitForCompileAfter(browser, compileRevision)
-      Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
-        .toContain('Text("First typed")')
+    let compileRevision = await waitForCompileAfter(browser, -1)
+    await browser.click('.cm-content')
+    await browser.pressShortcut('a')
+    await browser.insertText(typedSource)
+    await browser.waitFor(
+      `document.querySelector('.cm-content')?.textContent.includes('Text("First typed")')`,
+    )
+    Expect(await FS.readText(sourcePath)).toBe(initialSource)
+    await browser.pressShortcut('s')
+    await waitForSource(sourcePath, source => source === typedSource)
+    compileRevision = await waitForCompileAfter(browser, compileRevision)
+    Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
+      .toContain('Text("First typed")')
 
-      // An edit typed back out leaves nothing unsaved: the tab drops its dot, so it can close again.
-      const activeTabLabel =
-        `document.querySelector('.studio-editor-tab-item[aria-current="page"] .studio-editor-tab')?.textContent ?? ''`
-      await browser.insertText('x')
-      await browser.waitFor(`(${activeTabLabel}).startsWith('● ')`)
-      await browser.pressKey('Backspace')
-      await browser.waitFor(`!(${activeTabLabel}).startsWith('● ')`)
-      Expect(await browser.evaluate<string>(`document.querySelector('.studio-status')?.textContent ?? ''`))
-        .toBe('No unsaved changes.')
-      Expect(await FS.readText(sourcePath)).toBe(typedSource)
+    // An edit typed back out leaves nothing unsaved: the tab drops its dot, so it can close again.
+    const activeTabLabel =
+      `document.querySelector('.studio-editor-tab-item[aria-current="page"] .studio-editor-tab')?.textContent ?? ''`
+    await browser.insertText('x')
+    await browser.waitFor(`(${activeTabLabel}).startsWith('● ')`)
+    await browser.pressKey('Backspace')
+    await browser.waitFor(`!(${activeTabLabel}).startsWith('● ')`)
+    Expect(await browser.evaluate<string>(`document.querySelector('.studio-status')?.textContent ?? ''`))
+      .toBe('No unsaved changes.')
+    Expect(await FS.readText(sourcePath)).toBe(typedSource)
 
-      // The outline lens folds every declaration to its head. Both ways of reaching hidden syntax
-      // reveal the one region involved and leave every other fold alone, and neither changes the
-      // file: an edit beside a folded region is cancelled in favour of showing it, and a caret that
-      // lands on its edge opens it rather than sitting in text the person cannot see.
-      const revealedHead = 'app Smoke { id "smoke" version "1.0.0" name "Smoke" view MainView }'
-      await browser.click('[data-testid="studio-lens-preset-outline"]')
-      await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
-      const outlineFolds = await foldedRegions(browser)
-      Expect(outlineFolds).toBeGreaterThan(1)
-      await browser.click('.cm-line:has(.cm-lens-glyph)')
-      await browser.pressKey('End')
-      await browser.pressKey('Backspace')
-      await browser.waitFor(`document.querySelectorAll('.cm-lens-glyph').length === ${outlineFolds - 1}`)
-      Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
-        .toContain(revealedHead)
-      await browser.pressShortcut('s')
-      await browser.waitFor(`document.querySelector('.studio-status')?.textContent === 'No unsaved changes.'`)
-      Expect(await FS.readText(sourcePath)).toBe(typedSource)
-      await browser.click('[data-testid="studio-lens-refold"]')
-      await browser.waitFor(`document.querySelectorAll('.cm-lens-glyph').length === ${outlineFolds}`)
-      await browser.click('.cm-line:has(.cm-lens-glyph)')
-      await browser.pressKey('End')
-      await browser.pressKey('ArrowLeft')
-      await browser.waitFor(`document.querySelectorAll('.cm-lens-glyph').length === ${outlineFolds - 1}`)
-      Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
-        .toContain(revealedHead)
-      await browser.waitFor(`document.querySelector('.studio-status')?.textContent === 'No unsaved changes.'`)
-      Expect(await FS.readText(sourcePath)).toBe(typedSource)
-      // Back to the whole file: the steps after this one read and edit source the outline hides.
-      await browser.click('[data-testid="studio-lens-preset-all"]')
-      await browser.waitFor("document.querySelector('.cm-lens-glyph') === null")
+    // The outline lens folds every declaration to its head. Both ways of reaching hidden syntax
+    // reveal the one region involved and leave every other fold alone, and neither changes the
+    // file: an edit beside a folded region is cancelled in favour of showing it, and a caret that
+    // lands on its edge opens it rather than sitting in text the person cannot see.
+    const revealedHead = 'app Smoke { id "smoke" version "1.0.0" name "Smoke" view MainView }'
+    await browser.click('[data-testid="studio-lens-preset-outline"]')
+    await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
+    const outlineFolds = await foldedRegions(browser)
+    Expect(outlineFolds).toBeGreaterThan(1)
+    await browser.click('.cm-line:has(.cm-lens-glyph)')
+    await browser.pressKey('End')
+    await browser.pressKey('Backspace')
+    await browser.waitFor(`document.querySelectorAll('.cm-lens-glyph').length === ${outlineFolds - 1}`)
+    Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
+      .toContain(revealedHead)
+    await browser.pressShortcut('s')
+    await browser.waitFor(`document.querySelector('.studio-status')?.textContent === 'No unsaved changes.'`)
+    Expect(await FS.readText(sourcePath)).toBe(typedSource)
+    await browser.click('[data-testid="studio-lens-refold"]')
+    await browser.waitFor(`document.querySelectorAll('.cm-lens-glyph').length === ${outlineFolds}`)
+    await browser.click('.cm-line:has(.cm-lens-glyph)')
+    await browser.pressKey('End')
+    await browser.pressKey('ArrowLeft')
+    await browser.waitFor(`document.querySelectorAll('.cm-lens-glyph').length === ${outlineFolds - 1}`)
+    Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
+      .toContain(revealedHead)
+    await browser.waitFor(`document.querySelector('.studio-status')?.textContent === 'No unsaved changes.'`)
+    Expect(await FS.readText(sourcePath)).toBe(typedSource)
+    // Back to the whole file: the steps after this one read and edit source the outline hides.
+    await browser.click('[data-testid="studio-lens-preset-all"]')
+    await browser.waitFor("document.querySelector('.cm-lens-glyph') === null")
 
-      const selectedText = 'Text("First typed")'
-      const currentFile = await session.readFile('Smoke.tao')
-      const selectedStart = currentFile.content.indexOf(selectedText)
-      const selectedRenderId = FS.resolvePath(currentFile.path, projectRoot)
-        + ':' + selectedStart + ':' + (selectedStart + selectedText.length)
-      const selectedInspection = await session.inspectRender({
+    const selectedText = 'Text("First typed")'
+    const currentFile = await session.readFile('Smoke.tao')
+    const selectedStart = currentFile.content.indexOf(selectedText)
+    const selectedRenderId = FS.resolvePath(currentFile.path, projectRoot)
+      + ':' + selectedStart + ':' + (selectedStart + selectedText.length)
+    const selectedInspection = await session.inspectRender({
+      path: currentFile.path,
+      renderId: selectedRenderId,
+      sourceVersion: currentFile.sourceVersion,
+    })
+    if (selectedInspection.owner === undefined) {
+      Errors.throwUnexpected('The smoke selection must have an owning view render.')
+    }
+    // The preview republishes after the save above. Install the identity only once it has settled,
+    // or the reload that follows drops the global the measurement reads.
+    await waitForPreviewSourceIdentity(browser, preview.url)
+    // The preview's own handler reads this global, so it has to be written in the page's world
+    // rather than the isolated one every other probe uses.
+    await browser.evaluateInFrame(
+      preview.url,
+      `window.taoSmokeOwnerRenderId = ${JSON.stringify(selectedInspection.owner.renderId)}`,
+      { world: 'page' },
+    )
+    await clickPreviewAndWaitForState(browser, preview.url, '#measure-owner', 'measurement sent')
+    const measuredIdentity = await browser.evaluateInFrame<Record<string, unknown>>(
+      preview.url,
+      `window.taoSmokeMeasuredIdentity`,
+      { world: 'page' },
+    )
+    const measured = await Time.pollUntil(async () => {
+      const inspection = await session.inspectRender({
+        identity: measuredIdentity as never,
         path: currentFile.path,
         renderId: selectedRenderId,
         sourceVersion: currentFile.sourceVersion,
       })
-      if (selectedInspection.owner === undefined) {
-        Errors.throwUnexpected('The smoke selection must have an owning view render.')
-      }
-      // The preview republishes after the save above. Install the identity only once it has settled,
-      // or the reload that follows drops the global the measurement reads.
-      await waitForPreviewSourceIdentity(browser, preview.url)
-      // The preview's own handler reads this global, so it has to be written in the page's world
-      // rather than the isolated one every other probe uses.
-      await browser.evaluateInFrame(
-        preview.url,
-        `window.taoSmokeOwnerRenderId = ${JSON.stringify(selectedInspection.owner.renderId)}`,
-        { world: 'page' },
-      )
-      await clickPreviewAndWaitForState(browser, preview.url, '#measure-owner', 'measurement sent')
-      const measuredIdentity = await browser.evaluateInFrame<Record<string, unknown>>(
-        preview.url,
-        `window.taoSmokeMeasuredIdentity`,
-        { world: 'page' },
-      )
-      const measured = await Time.pollUntil(async () => {
-        const inspection = await session.inspectRender({
-          identity: measuredIdentity as never,
-          path: currentFile.path,
-          renderId: selectedRenderId,
-          sourceVersion: currentFile.sourceVersion,
-        })
-        return inspection.owner?.rect?.width === 241.2 && inspection.owner.rect.height === 121.6
-      }, { intervalMs: 50, timeoutMs: 30_000 })
-      Expect(measured).toBe(true)
+      return inspection.owner?.rect?.width === 241.2 && inspection.owner.rect.height === 121.6
+    }, { intervalMs: 50, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
+    Expect(measured).toBe(true)
 
-      await browser.click('[data-panel="components"]')
-      await browser.waitFor(
-        `document.querySelector('[data-tao-studio-component="Text"]') instanceof HTMLButtonElement`,
-      )
-      await browser.drag('[data-tao-studio-component="Text"]', '.cm-content', { steps: 12 })
-      await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('New text')")
-      await browser.pressShortcut('z')
-      await browser.waitFor("!document.querySelector('.cm-content')?.textContent.includes('New text')")
-      Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
-        .toContain('Text("First typed")')
-      Expect(await FS.readText(sourcePath)).toBe(typedSource)
+    await browser.click('[data-panel="components"]')
+    await browser.waitFor(
+      `document.querySelector('[data-tao-studio-component="Text"]') instanceof HTMLButtonElement`,
+    )
+    await browser.drag('[data-tao-studio-component="Text"]', '.cm-content', { steps: 12 })
+    await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('New text')")
+    await browser.pressShortcut('z')
+    await browser.waitFor("!document.querySelector('.cm-content')?.textContent.includes('New text')")
+    Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
+      .toContain('Text("First typed")')
+    Expect(await FS.readText(sourcePath)).toBe(typedSource)
 
-      await waitForPreviewSourceIdentity(browser, preview.url)
-      await clickPreviewAndWaitForState(browser, preview.url, '#select-first', 'selection sent')
-      await waitForInspectorReady(browser)
-      await browser.waitFor(`document.querySelector('.studio-canvas-focus')?.textContent === 'Focus MainView'`)
+    await waitForPreviewSourceIdentity(browser, preview.url)
+    await clickPreviewAndWaitForState(browser, preview.url, '#select-first', 'selection sent')
+    await waitForInspectorReady(browser)
+    await browser.waitFor(`document.querySelector('.studio-canvas-focus')?.textContent === 'Focus MainView'`)
 
-      await browser.wheel('.cm-scroller', { x: 0, y: 8_000 })
-      await browser.waitFor(`(document.querySelector('.cm-scroller')?.scrollTop ?? 0) > 0`)
-      const away = await browser.evaluate<number>("document.querySelector('.cm-scroller')?.scrollTop ?? 0")
-      await clickPreviewAndWaitForState(browser, preview.url, '#select-first', 'selection sent')
-      await browser.waitFor(
-        `(document.querySelector('.cm-scroller')?.scrollTop ?? 0) < ${away}`,
-      )
+    await browser.wheel('.cm-scroller', { x: 0, y: 8_000 })
+    await browser.waitFor(`(document.querySelector('.cm-scroller')?.scrollTop ?? 0) > 0`)
+    const away = await browser.evaluate<number>("document.querySelector('.cm-scroller')?.scrollTop ?? 0")
+    await clickPreviewAndWaitForState(browser, preview.url, '#select-first', 'selection sent')
+    await browser.waitFor(
+      `(document.querySelector('.cm-scroller')?.scrollTop ?? 0) < ${away}`,
+    )
 
-      // Focus frames the group's cells at the measured size of the selected element's view. The
-      // measurement reaches the client with the preview's inspection, so leaving and re-entering is
-      // what a person does when the frame has not arrived yet.
-      await focusCanvasUntilFramed(browser)
-      await browser.click('[data-tao-studio-canvas-back="true"]')
-      await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-back="true"]') === null`)
-      await browser.waitFor(
-        `(() => {
-        const viewport = document.querySelector('.studio-preview-cell-viewport')
-        return viewport instanceof HTMLElement
-          && viewport.getBoundingClientRect().width === 390
-          && viewport.getBoundingClientRect().height === 844
-      })()`,
-        { timeoutMs: 30_000 },
-      )
-      await browser.drag(
-        '[data-tao-studio-component="Text"]',
-        '.studio-preview-group-label',
-        { steps: 12 },
-      )
-      await waitForSourceOrStudioError(browser, sourcePath, source => source.includes('Text("New text")'))
-      compileRevision = await waitForCompileAfter(browser, compileRevision)
-      await browser.waitFor(
-        `document.querySelector('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')?.disabled === false`,
-      )
-      await browser.click('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')
-      await waitForSourceOrStudioError(browser, sourcePath, source => source === typedSource)
-      compileRevision = await waitForCompileAfter(browser, compileRevision)
+    // Focus frames the group's cells at the measured size of the selected element's view. The
+    // measurement reaches the client with the preview's inspection, so leaving and re-entering is
+    // what a person does when the frame has not arrived yet.
+    await focusCanvasUntilFramed(browser)
+    await browser.click('[data-tao-studio-canvas-back="true"]')
+    await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-back="true"]') === null`)
+    await browser.waitFor(
+      `(() => {
+      const viewport = document.querySelector('.studio-preview-cell-viewport')
+      return viewport instanceof HTMLElement
+        && viewport.getBoundingClientRect().width === 390
+        && viewport.getBoundingClientRect().height === 844
+    })()`,
+      { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
+    )
+    await browser.drag(
+      '[data-tao-studio-component="Text"]',
+      '.studio-preview-group-label',
+      { steps: 12 },
+    )
+    await waitForSourceOrStudioError(browser, sourcePath, source => source.includes('Text("New text")'))
+    compileRevision = await waitForCompileAfter(browser, compileRevision)
+    await browser.waitFor(
+      `document.querySelector('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')?.disabled === false`,
+    )
+    await browser.click('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')
+    await waitForSourceOrStudioError(browser, sourcePath, source => source === typedSource)
+    compileRevision = await waitForCompileAfter(browser, compileRevision)
 
-      await waitForPreviewSourceIdentity(browser, preview.url)
-      await clickPreviewUntilSource(
-        browser,
-        preview.url,
-        '#move-third',
-        sourcePath,
-        source => ordered(source, ['First typed', 'Third', 'Second']),
-      )
-      compileRevision = await waitForCompileAfter(browser, compileRevision)
-      await browser.waitFor("document.querySelector('[data-tao-studio-undo] button')?.disabled === false")
-      await browser.click('[data-tao-studio-undo] button')
-      await waitForSource(sourcePath, source => source === typedSource)
-      await waitForCompileAfter(browser, compileRevision)
+    await waitForPreviewSourceIdentity(browser, preview.url)
+    await clickPreviewUntilSource(
+      browser,
+      preview.url,
+      '#move-third',
+      sourcePath,
+      source => ordered(source, ['First typed', 'Third', 'Second']),
+    )
+    compileRevision = await waitForCompileAfter(browser, compileRevision)
+    await browser.waitFor("document.querySelector('[data-tao-studio-undo] button')?.disabled === false")
+    await browser.click('[data-tao-studio-undo] button')
+    await waitForSource(sourcePath, source => source === typedSource)
+    await waitForCompileAfter(browser, compileRevision)
 
-      const generatedSketchPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
-      const sketchCatalogPath = FS.resolvePath('.tao/store/studio/sketches.jsonc', projectRoot)
-      // A 360-pixel board needs a canvas column wider than the Design preset leaves at 1440; a
-      // designer's display gives the sketch room, and the pointer gesture below is checked against it.
-      await browser.setViewport(1_920, 1_080)
-      await browser.waitFor(
-        "document.querySelector('.studio-shell')?.getBoundingClientRect().width === window.innerWidth",
-      )
-      await enterDrawPreset(browser)
-      await browser.waitFor(
-        `document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`,
-      )
-      // V is the Draw canvas's resting tool; R draws the frame, then a rectangle inside it.
-      await browser.click(rectangleTool)
-      await browser.dragBy('[data-tao-studio-sketch-workspace]', { x: 360, y: 76 }, { steps: 12 })
-      await waitForSketchFile(browser, generatedSketchPath)
-      await waitForFile(sketchCatalogPath)
-      await waitForSketchReady(browser)
-      const generatedBeforeRect = await FS.readText(generatedSketchPath)
-      const catalogBeforeRect = await FS.readText(sketchCatalogPath)
-      const createdCatalog = smokeSketchCatalog(catalogBeforeRect)
-      Expect(createdCatalog.sketches).toHaveLength(1)
-      Expect(createdCatalog.sketches[0]).toMatchObject({ height: 76, name: 'View1', rects: [], width: 360 })
-      const createdSketchId = createdCatalog.sketches[0]!.id
+    const generatedSketchPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
+    const sketchCatalogPath = FS.resolvePath('.tao/store/studio/sketches.jsonc', projectRoot)
+    // A 360-pixel board needs a canvas column wider than the Design preset leaves at 1440; a
+    // designer's display gives the sketch room, and the pointer gesture below is checked against it.
+    await browser.setViewport(1_920, 1_080)
+    await browser.waitFor(
+      "document.querySelector('.studio-shell')?.getBoundingClientRect().width === window.innerWidth",
+    )
+    await enterDrawPreset(browser)
+    await browser.waitFor(
+      `document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`,
+    )
+    // V is the Draw canvas's resting tool; R draws the frame, then a rectangle inside it.
+    await browser.click(rectangleTool)
+    await browser.dragBy('[data-tao-studio-sketch-workspace]', { x: 360, y: 76 }, { steps: 12 })
+    await waitForSketchFile(browser, generatedSketchPath)
+    await waitForFile(sketchCatalogPath)
+    await waitForSketchReady(browser)
+    const generatedBeforeRect = await FS.readText(generatedSketchPath)
+    const catalogBeforeRect = await FS.readText(sketchCatalogPath)
+    const createdCatalog = smokeSketchCatalog(catalogBeforeRect)
+    Expect(createdCatalog.sketches).toHaveLength(1)
+    Expect(createdCatalog.sketches[0]).toMatchObject({ height: 76, name: 'View1', rects: [], width: 360 })
+    const createdSketchId = createdCatalog.sketches[0]!.id
 
-      // The first draw is a real pointer gesture through Chrome. Mark the board first so a timeout
-      // can say whether the pointer never reached it or a re-render replaced it mid-gesture.
-      const drawingBrowser = browser
-      const boardGenerationBeforeDraw = await markSketchBoard(drawingBrowser, createdSketchId)
-      const firstDraw = { x: 64, y: 24 }
-      // Draw the free rectangle against the board's right edge. An incremental Snap can only fold a
-      // new rectangle into an existing flow from one end of it, so a rectangle drawn in the middle
-      // of the board would leave the two groups interleaved and Snap would rightly refuse.
-      const firstDrawOrigin = { x: 288, y: 40 }
-      await expectPointerReachesBoard(
-        drawingBrowser,
-        createdSketchId,
-        boardGenerationBeforeDraw,
-        firstDraw,
-        firstDrawOrigin,
-      )
-      await drawingBrowser.click(rectangleTool)
-      await drawingBrowser.dragBy(`[data-tao-studio-sketch="${createdSketchId}"]`, firstDraw, {
-        offset: firstDrawOrigin,
-        steps: 8,
-      })
-      const persistedCatalog = await waitForSketchRect(
-        sketchCatalogPath,
-        createdCatalog.revision,
-        async () => {
-          await drawingBrowser.captureScreenshot('studio-sketch-draw-failure')
-          return await sketchBoardDiagnostics(drawingBrowser, createdSketchId, boardGenerationBeforeDraw)
-        },
-      )
-      await waitForSketchBoardRefresh(browser, createdSketchId, boardGenerationBeforeDraw)
-      const persistedSketch = persistedCatalog.sketches[0]!
-      const persistedRect = persistedSketch.rects[0]!
-      Expect(persistedRect).toMatchObject({ height: 24, kind: 'Placeholder', width: 64 })
-      Expect(sketchPersistenceObserved(
-        createdCatalog,
-        persistedCatalog,
-        generatedBeforeRect,
-        await FS.readText(generatedSketchPath),
-      )).toBe(true)
+    // The first draw is a real pointer gesture through Chrome. Mark the board first so a timeout
+    // can say whether the pointer never reached it or a re-render replaced it mid-gesture.
+    const drawingBrowser = browser
+    const boardGenerationBeforeDraw = await markSketchBoard(drawingBrowser, createdSketchId)
+    const firstDraw = { x: 64, y: 24 }
+    // Draw the free rectangle against the board's right edge. An incremental Snap can only fold a
+    // new rectangle into an existing flow from one end of it, so a rectangle drawn in the middle
+    // of the board would leave the two groups interleaved and Snap would rightly refuse.
+    const firstDrawOrigin = { x: 288, y: 40 }
+    await expectPointerReachesBoard(
+      drawingBrowser,
+      createdSketchId,
+      boardGenerationBeforeDraw,
+      firstDraw,
+      firstDrawOrigin,
+    )
+    await drawingBrowser.click(rectangleTool)
+    await drawingBrowser.dragBy(`[data-tao-studio-sketch="${createdSketchId}"]`, firstDraw, {
+      offset: firstDrawOrigin,
+      steps: 8,
+    })
+    const persistedCatalog = await waitForSketchRect(
+      sketchCatalogPath,
+      createdCatalog.revision,
+      async () => {
+        await drawingBrowser.captureScreenshot('studio-sketch-draw-failure')
+        return await sketchBoardDiagnostics(drawingBrowser, createdSketchId, boardGenerationBeforeDraw)
+      },
+    )
+    await waitForSketchBoardRefresh(browser, createdSketchId, boardGenerationBeforeDraw)
+    const persistedSketch = persistedCatalog.sketches[0]!
+    const persistedRect = persistedSketch.rects[0]!
+    Expect(persistedRect).toMatchObject({ height: 24, kind: 'Placeholder', width: 64 })
+    Expect(sketchPersistenceObserved(
+      createdCatalog,
+      persistedCatalog,
+      generatedBeforeRect,
+      await FS.readText(generatedSketchPath),
+    )).toBe(true)
 
-      await browser.goto(projectUrl)
-      await enterDrawPreset(browser)
-      await browser.waitFor(
-        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${persistedSketch.id}"]`)})
-          ?.querySelector(${
-          JSON.stringify(`[data-tao-studio-sketch-rect="${persistedRect.id}"]`)
-        }) instanceof HTMLElement`,
-        { timeoutMs: 30_000 },
-      )
-      const reloadedRect = await browser.evaluate<{ height: number; width: number }>(`(() => {
-        const element = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-rect="${persistedRect.id}"]`)})
-        if (!(element instanceof HTMLElement)) return { height: 0, width: 0 }
-        const bounds = element.getBoundingClientRect()
-        return { height: bounds.height, width: bounds.width }
-      })()`)
-      Expect(reloadedRect).toEqual({ height: 24, width: 64 })
+    await browser.goto(projectUrl)
+    await enterDrawPreset(browser)
+    await browser.waitFor(
+      `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${persistedSketch.id}"]`)})
+        ?.querySelector(${
+        JSON.stringify(`[data-tao-studio-sketch-rect="${persistedRect.id}"]`)
+      }) instanceof HTMLElement`,
+      { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
+    )
+    const reloadedRect = await browser.evaluate<{ height: number; width: number }>(`(() => {
+      const element = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-rect="${persistedRect.id}"]`)})
+      if (!(element instanceof HTMLElement)) return { height: 0, width: 0 }
+      const bounds = element.getBoundingClientRect()
+      return { height: bounds.height, width: bounds.width }
+    })()`)
+    Expect(reloadedRect).toEqual({ height: 24, width: 64 })
 
-      // Preserve the original free rectangle, then build the clean playlist-row projection beside it.
-      // Left of the free rectangle, so the projection's children run existing-then-new in one step.
-      const playlistRects = [
-        { height: 52, width: 52, x: 12, y: 8 },
-        { height: 20, width: 100, x: 76, y: 8 },
-        { height: 20, width: 100, x: 76, y: 40 },
-        { height: 20, width: 36, x: 188, y: 28 },
-      ] as const
-      let drawCatalog = persistedCatalog
-      const playlistRectIds: string[] = []
-      for (const rectangle of playlistRects) {
-        const boardGeneration = await drawSketchRectangle(browser, persistedSketch.id, rectangle)
-        drawCatalog = await waitForSketchCatalog(
-          sketchCatalogPath,
-          catalog =>
-            catalog.revision > drawCatalog.revision && catalog.sketches[0]?.rects.length === playlistRectIds.length + 2,
-        )
-        await waitForSketchBoardRefresh(browser, persistedSketch.id, boardGeneration)
-        playlistRectIds.push(drawCatalog.sketches[0]!.rects.at(-1)!.id)
-      }
-      for (const rectId of playlistRectIds.slice(0, -1)) {
-        await shiftSelectSketchRectangle(browser, persistedSketch.id, rectId)
-      }
-      await browser.waitFor(
-        `document.querySelectorAll(${
-          JSON.stringify(
-            `[data-tao-studio-sketch="${persistedSketch.id}"] [data-tao-studio-sketch-rect][data-selected="true"]`,
-          )
-        }).length === 4`,
-      )
-      const sourceBeforeSnap = await FS.readText(generatedSketchPath)
-      await browser.waitFor(
-        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
-          instanceof HTMLButtonElement
-          && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
-            ?.disabled === false`,
-      )
-      const snappedCatalog = await clickSketchWhenSettled(
-        browser,
-        persistedSketch.id,
-        `[data-tao-studio-sketch-snap="${persistedSketch.id}"]`,
+    // Preserve the original free rectangle, then build the clean playlist-row projection beside it.
+    // Left of the free rectangle, so the projection's children run existing-then-new in one step.
+    const playlistRects = [
+      { height: 52, width: 52, x: 12, y: 8 },
+      { height: 20, width: 100, x: 76, y: 8 },
+      { height: 20, width: 100, x: 76, y: 40 },
+      { height: 20, width: 36, x: 188, y: 28 },
+    ] as const
+    let drawCatalog = persistedCatalog
+    const playlistRectIds: string[] = []
+    for (const rectangle of playlistRects) {
+      const boardGeneration = await drawSketchRectangle(browser, persistedSketch.id, rectangle)
+      drawCatalog = await waitForSketchCatalog(
         sketchCatalogPath,
         catalog =>
-          catalog.revision > drawCatalog.revision
-          && catalog.sketches[0]?.rects.length === 1
-          && catalog.sketches[0]?.snapped.length === 4,
+          catalog.revision > drawCatalog.revision && catalog.sketches[0]?.rects.length === playlistRectIds.length + 2,
       )
-      const snappedSource = await FS.readText(generatedSketchPath)
-      Expect(snappedSource).not.toBe(sourceBeforeSnap)
-      Expect(snappedSource).toContain('render Row()')
-      Expect(snappedSource).toContain('Col()')
-      for (const rectId of playlistRectIds) {
-        Expect(snappedSource).toContain(studioRectTag(rectId))
-      }
-      Expect(snappedCatalog.sketches[0]?.rects.map(rect => rect.id)).toEqual([persistedRect.id])
-      Expect(snappedCatalog.sketches[0]?.snapped.map(item => item.rect.id)).toEqual(playlistRectIds)
-      Expect(snappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
-
-      await browser.goto(projectUrl)
-      await enterDrawPreset(browser)
-      await browser.waitFor(
-        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
-          instanceof HTMLButtonElement
-          && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
-            ?.disabled === false`,
-        { timeoutMs: 30_000 },
-      )
-      const reloadedSnapCatalog = smokeSketchCatalog(await FS.readText(sketchCatalogPath))
-      Expect(reloadedSnapCatalog.sketches[0]?.snapped.map(item => item.rect.id)).toEqual(playlistRectIds)
-      Expect(await FS.readText(generatedSketchPath)).toBe(snappedSource)
-
-      // Snap the one remaining free rectangle into the existing flow, then undo that incremental Snap.
-      await browser.click(`[data-tao-studio-sketch-rect="${persistedRect.id}"]`)
-      await browser.waitFor(
-        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
-          instanceof HTMLButtonElement
-          && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
-            ?.disabled === false`,
-      )
-      const incrementalSnapBrowser = browser
-      const incrementalSnapGeneration = await markSketchBoard(incrementalSnapBrowser, persistedSketch.id)
-      const incrementallySnappedCatalog = await clickSketchWhenSettled(
-        browser,
-        persistedSketch.id,
-        `[data-tao-studio-sketch-snap="${persistedSketch.id}"]`,
-        sketchCatalogPath,
-        catalog =>
-          catalog.revision > reloadedSnapCatalog.revision
-          && catalog.sketches[0]?.rects.length === 0
-          && catalog.sketches[0]?.snapped.length === 5,
-        {
-          diagnose: async () => {
-            await incrementalSnapBrowser.captureScreenshot('studio-sketch-incremental-snap-failure')
-            return await sketchBoardDiagnostics(incrementalSnapBrowser, persistedSketch.id, incrementalSnapGeneration)
-          },
-        },
-      )
-      Expect(await FS.readText(generatedSketchPath)).toContain(studioRectTag(persistedRect.id))
-      await browser.waitFor(
-        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)})
-          ?.disabled === false`,
-      )
-      const incrementalUndoCatalog = await clickSketchWhenSettled(
-        browser,
-        persistedSketch.id,
-        `[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`,
-        sketchCatalogPath,
-        catalog =>
-          catalog.revision > incrementallySnappedCatalog.revision
-          && catalog.sketches[0]?.rects.map(rect => rect.id).join(',') === persistedRect.id
-          && catalog.sketches[0]?.snapped.length === 4,
-      )
-      Expect(incrementalUndoCatalog.sketches[0]?.rectOrder).toEqual(reloadedSnapCatalog.sketches[0]?.rectOrder)
-      Expect(await FS.readText(generatedSketchPath)).toBe(snappedSource)
-
-      // Unsnap one rectangle rather than the whole tree, which is what the same button does when
-      // nothing is selected. The selection is therefore made inside the settled moment that presses
-      // the button, never before it: an authoritative render replaces the board and its selector,
-      // and a selection made across one is silently an instruction to unsnap everything.
-      const retained = incrementalUndoCatalog.sketches[0]!.snapped[0]!.rect
-      const selectRetained = `(() => {
-        const select = document.querySelector(${
-        JSON.stringify(
-          `[data-tao-studio-sketch-snap-controls="${persistedSketch.id}"] select[aria-label="Snapped rectangles"]`,
-        )
-      })
-        if (!(select instanceof HTMLSelectElement)) return false
-        const option = [...select.options].find(candidate => candidate.value === ${JSON.stringify(retained.id)})
-        if (!(option instanceof HTMLOptionElement)) return false
-        for (const candidate of select.options) candidate.selected = candidate === option
-        select.dispatchEvent(new Event('change', { bubbles: true }))
-        return [...select.selectedOptions].map(entry => entry.value).join(',') === ${JSON.stringify(retained.id)}
-      })()`
-      const unsnappedCatalog = await clickSketchWhenSettled(
-        browser,
-        persistedSketch.id,
-        `[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`,
-        sketchCatalogPath,
-        catalog =>
-          catalog.revision > incrementalUndoCatalog.revision
-          && catalog.sketches[0]?.rects.some(rect => rect.id === retained.id) === true
-          && catalog.sketches[0]?.snapped.length === 3,
-        { prepare: selectRetained },
-      )
-      Expect(unsnappedCatalog.sketches[0]?.rects.find(rect => rect.id === retained.id)).toEqual(retained)
-      Expect(unsnappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
-      const unsnappedSource = await FS.readText(generatedSketchPath)
-      Expect(unsnappedSource).not.toContain(studioRectTag(retained.id))
-      Expect(unsnappedSource).toContain('render Row()')
-
-      // Clear the remaining snapped tree before the isolated overlap/confirmation transaction.
-      await browser.waitFor(
-        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
-          ?.disabled === false`,
-      )
-      const fullyUnsnappedCatalog = await clickSketchWhenSettled(
-        browser,
-        persistedSketch.id,
-        `[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`,
-        sketchCatalogPath,
-        // The catalog's revision does not advance on every write (see the revision race recorded in
-        // the remediation roadmap), so this waits on the state itself. Nothing but this press can
-        // produce it: the step above leaves three rectangles snapped.
-        catalog => catalog.sketches[0]?.rects.length === 5 && catalog.sketches[0]?.snapped.length === 0,
-      )
-      Expect(await FS.readText(generatedSketchPath)).toContain(`Placeholder("View1")`)
-
-      const firstOverlap = { height: 30, width: 40, x: 200, y: 4 }
-      const firstOverlapGeneration = await drawSketchRectangle(browser, persistedSketch.id, firstOverlap)
-      const overlapOne = await waitForSketchCatalog(
-        sketchCatalogPath,
-        catalog => catalog.revision > fullyUnsnappedCatalog.revision && catalog.sketches[0]?.rects.length === 6,
-      )
-      await waitForSketchBoardRefresh(browser, persistedSketch.id, firstOverlapGeneration)
-      const firstOverlapId = overlapOne.sketches[0]!.rects.at(-1)!.id
-      const secondOverlapGeneration = await drawSketchRectangle(
-        browser,
-        persistedSketch.id,
-        { height: 20, width: -30, x: 250, y: 14 },
-      )
-      const overlapTwo = await waitForSketchCatalog(
-        sketchCatalogPath,
-        catalog => catalog.revision > overlapOne.revision && catalog.sketches[0]?.rects.length === 7,
-      )
-      await waitForSketchBoardRefresh(browser, persistedSketch.id, secondOverlapGeneration)
-      const secondOverlapId = overlapTwo.sketches[0]!.rects.at(-1)!.id
-      await shiftSelectSketchRectangle(browser, persistedSketch.id, firstOverlapId)
-      const beforeOverlapSource = await FS.readText(generatedSketchPath)
-      const beforeOverlapCatalog = smokeSketchCatalog(await FS.readText(sketchCatalogPath))
-      await browser.waitFor(
-        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
-          ?.disabled === false`,
-      )
-      await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
-      await browser.waitFor(
-        `document.querySelector(${
-          JSON.stringify(
-            `[data-tao-studio-sketch-snap-proposal="${persistedSketch.id}"]`,
-          )
-        }) instanceof HTMLElement`,
-      )
-      Expect(
-        await browser.evaluate<string>(
-          `document.querySelector(${
-            JSON.stringify(
-              `[data-tao-studio-sketch-snap-diff]`,
-            )
-          })?.textContent ?? ''`,
-        ),
-      ).toContain('+++')
-      await clickProposalButton(browser, persistedSketch.id, 'Cancel')
-      await browser.waitFor(
-        `document.querySelector(${
-          JSON.stringify(
-            `[data-tao-studio-sketch-snap-proposal="${persistedSketch.id}"]`,
-          )
-        }) === null`,
-      )
-      Expect(await FS.readText(generatedSketchPath)).toBe(beforeOverlapSource)
-      Expect(smokeSketchCatalog(await FS.readText(sketchCatalogPath))).toEqual(beforeOverlapCatalog)
-
-      await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
-      await browser.waitFor(
-        `document.querySelector(${
-          JSON.stringify(
-            `[data-tao-studio-sketch-snap-proposal="${persistedSketch.id}"]`,
-          )
-        }) instanceof HTMLElement`,
-      )
-      await clickProposalButton(browser, persistedSketch.id, 'Apply')
-      const overlapAppliedCatalog = await waitForSketchCatalog(
-        sketchCatalogPath,
-        catalog =>
-          catalog.revision > beforeOverlapCatalog.revision
-          && catalog.sketches[0]?.snapped.some(item => item.rect.id === firstOverlapId) === true
-          && catalog.sketches[0]?.snapped.some(item => item.rect.id === secondOverlapId) === true,
-      )
-      const overlapAppliedSource = await FS.readText(generatedSketchPath)
-      Expect(overlapAppliedSource).not.toBe(beforeOverlapSource)
-      Expect(overlapAppliedSource).toContain(studioRectTag(firstOverlapId))
-      Expect(overlapAppliedSource).toContain(studioRectTag(secondOverlapId))
-
-      await browser.waitFor(
-        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)})
-          ?.disabled === false`,
-      )
-      const undoneCatalog = await clickSketchWhenSettled(
-        browser,
-        persistedSketch.id,
-        `[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`,
-        sketchCatalogPath,
-        catalog =>
-          catalog.revision > overlapAppliedCatalog.revision
-          && catalog.sketches[0]?.rects.some(rect => rect.id === firstOverlapId) === true
-          && catalog.sketches[0]?.rects.some(rect => rect.id === secondOverlapId) === true,
-      )
-      Expect(await FS.readText(generatedSketchPath)).toBe(beforeOverlapSource)
-      Expect(undoneCatalog.sketches[0]?.rectOrder).toEqual(beforeOverlapCatalog.sketches[0]?.rectOrder)
-      Expect(undoneCatalog.sketches[0]?.rects).toEqual(beforeOverlapCatalog.sketches[0]?.rects)
-      Expect(undoneCatalog.sketches[0]?.snapped).toEqual(beforeOverlapCatalog.sketches[0]?.snapped)
-      await browser.captureScreenshot('studio-completed-interactions')
-      Expect(await FS.readText(sourcePath)).toBe(typedSource)
-      await exerciseStudioFeed(
-        browser,
-        session,
-        projectRoot,
-        persistedSketch.id,
-        persistedRect.id,
-        playlistRectIds.at(-1)!,
-      )
-      Expect(browser.browserFailures()).toEqual([])
-      // A blank or broken Studio usually reports itself only in the browser console, so the run
-      // fails on any page error and keeps the evidence beside the run's other artifacts.
-      await browser.captureScreenshot('simulated-user')
-      const consoleErrors = browser.consoleErrors()
-      await FS.writeJson(FS.resolvePath('logs/browser-console.json', artifactRoot), consoleErrors)
-      Expect(consoleErrors.map(entry => entry.text)).toEqual([])
+      await waitForSketchBoardRefresh(browser, persistedSketch.id, boardGeneration)
+      playlistRectIds.push(drawCatalog.sketches[0]!.rects.at(-1)!.id)
     }
+    for (const rectId of playlistRectIds.slice(0, -1)) {
+      await shiftSelectSketchRectangle(browser, persistedSketch.id, rectId)
+    }
+    await browser.waitFor(
+      `document.querySelectorAll(${
+        JSON.stringify(
+          `[data-tao-studio-sketch="${persistedSketch.id}"] [data-tao-studio-sketch-rect][data-selected="true"]`,
+        )
+      }).length === 4`,
+    )
+    const sourceBeforeSnap = await FS.readText(generatedSketchPath)
+    await browser.waitFor(
+      `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
+        instanceof HTMLButtonElement
+        && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
+          ?.disabled === false`,
+    )
+    const snappedCatalog = await clickSketchWhenSettled(
+      browser,
+      persistedSketch.id,
+      `[data-tao-studio-sketch-snap="${persistedSketch.id}"]`,
+      sketchCatalogPath,
+      catalog =>
+        catalog.revision > drawCatalog.revision
+        && catalog.sketches[0]?.rects.length === 1
+        && catalog.sketches[0]?.snapped.length === 4,
+    )
+    const snappedSource = await FS.readText(generatedSketchPath)
+    Expect(snappedSource).not.toBe(sourceBeforeSnap)
+    Expect(snappedSource).toContain('render Row()')
+    Expect(snappedSource).toContain('Col()')
+    for (const rectId of playlistRectIds) {
+      Expect(snappedSource).toContain(studioRectTag(rectId))
+    }
+    Expect(snappedCatalog.sketches[0]?.rects.map(rect => rect.id)).toEqual([persistedRect.id])
+    Expect(snappedCatalog.sketches[0]?.snapped.map(item => item.rect.id)).toEqual(playlistRectIds)
+    Expect(snappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
+
+    await browser.goto(projectUrl)
+    await enterDrawPreset(browser)
+    await browser.waitFor(
+      `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
+        instanceof HTMLButtonElement
+        && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
+          ?.disabled === false`,
+      { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
+    )
+    const reloadedSnapCatalog = smokeSketchCatalog(await FS.readText(sketchCatalogPath))
+    Expect(reloadedSnapCatalog.sketches[0]?.snapped.map(item => item.rect.id)).toEqual(playlistRectIds)
+    Expect(await FS.readText(generatedSketchPath)).toBe(snappedSource)
+
+    // Snap the one remaining free rectangle into the existing flow, then undo that incremental Snap.
+    await browser.click(`[data-tao-studio-sketch-rect="${persistedRect.id}"]`)
+    await browser.waitFor(
+      `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
+        instanceof HTMLButtonElement
+        && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
+          ?.disabled === false`,
+    )
+    const incrementalSnapBrowser = browser
+    const incrementalSnapGeneration = await markSketchBoard(incrementalSnapBrowser, persistedSketch.id)
+    const incrementallySnappedCatalog = await clickSketchWhenSettled(
+      browser,
+      persistedSketch.id,
+      `[data-tao-studio-sketch-snap="${persistedSketch.id}"]`,
+      sketchCatalogPath,
+      catalog =>
+        catalog.revision > reloadedSnapCatalog.revision
+        && catalog.sketches[0]?.rects.length === 0
+        && catalog.sketches[0]?.snapped.length === 5,
+      {
+        diagnose: async () => {
+          await incrementalSnapBrowser.captureScreenshot('studio-sketch-incremental-snap-failure')
+          return await sketchBoardDiagnostics(incrementalSnapBrowser, persistedSketch.id, incrementalSnapGeneration)
+        },
+      },
+    )
+    Expect(await FS.readText(generatedSketchPath)).toContain(studioRectTag(persistedRect.id))
+    await browser.waitFor(
+      `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)})
+        ?.disabled === false`,
+    )
+    const incrementalUndoCatalog = await clickSketchWhenSettled(
+      browser,
+      persistedSketch.id,
+      `[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`,
+      sketchCatalogPath,
+      catalog =>
+        catalog.revision > incrementallySnappedCatalog.revision
+        && catalog.sketches[0]?.rects.map(rect => rect.id).join(',') === persistedRect.id
+        && catalog.sketches[0]?.snapped.length === 4,
+    )
+    Expect(incrementalUndoCatalog.sketches[0]?.rectOrder).toEqual(reloadedSnapCatalog.sketches[0]?.rectOrder)
+    Expect(await FS.readText(generatedSketchPath)).toBe(snappedSource)
+
+    // Unsnap one rectangle rather than the whole tree, which is what the same button does when
+    // nothing is selected. The selection is therefore made inside the settled moment that presses
+    // the button, never before it: an authoritative render replaces the board and its selector,
+    // and a selection made across one is silently an instruction to unsnap everything.
+    const retained = incrementalUndoCatalog.sketches[0]!.snapped[0]!.rect
+    const selectRetained = `(() => {
+      const select = document.querySelector(${
+      JSON.stringify(
+        `[data-tao-studio-sketch-snap-controls="${persistedSketch.id}"] select[aria-label="Snapped rectangles"]`,
+      )
+    })
+      if (!(select instanceof HTMLSelectElement)) return false
+      const option = [...select.options].find(candidate => candidate.value === ${JSON.stringify(retained.id)})
+      if (!(option instanceof HTMLOptionElement)) return false
+      for (const candidate of select.options) candidate.selected = candidate === option
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+      return [...select.selectedOptions].map(entry => entry.value).join(',') === ${JSON.stringify(retained.id)}
+    })()`
+    const unsnappedCatalog = await clickSketchWhenSettled(
+      browser,
+      persistedSketch.id,
+      `[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`,
+      sketchCatalogPath,
+      catalog =>
+        catalog.revision > incrementalUndoCatalog.revision
+        && catalog.sketches[0]?.rects.some(rect => rect.id === retained.id) === true
+        && catalog.sketches[0]?.snapped.length === 3,
+      { prepare: selectRetained },
+    )
+    Expect(unsnappedCatalog.sketches[0]?.rects.find(rect => rect.id === retained.id)).toEqual(retained)
+    Expect(unsnappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
+    const unsnappedSource = await FS.readText(generatedSketchPath)
+    Expect(unsnappedSource).not.toContain(studioRectTag(retained.id))
+    Expect(unsnappedSource).toContain('render Row()')
+
+    // Clear the remaining snapped tree before the isolated overlap/confirmation transaction.
+    await browser.waitFor(
+      `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
+        ?.disabled === false`,
+    )
+    const fullyUnsnappedCatalog = await clickSketchWhenSettled(
+      browser,
+      persistedSketch.id,
+      `[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`,
+      sketchCatalogPath,
+      // The catalog's revision does not advance on every write (see the revision race recorded in
+      // the remediation roadmap), so this waits on the state itself. Nothing but this press can
+      // produce it: the step above leaves three rectangles snapped.
+      catalog => catalog.sketches[0]?.rects.length === 5 && catalog.sketches[0]?.snapped.length === 0,
+    )
+    Expect(await FS.readText(generatedSketchPath)).toContain(`Placeholder("View1")`)
+
+    const firstOverlap = { height: 30, width: 40, x: 200, y: 4 }
+    const firstOverlapGeneration = await drawSketchRectangle(browser, persistedSketch.id, firstOverlap)
+    const overlapOne = await waitForSketchCatalog(
+      sketchCatalogPath,
+      catalog => catalog.revision > fullyUnsnappedCatalog.revision && catalog.sketches[0]?.rects.length === 6,
+    )
+    await waitForSketchBoardRefresh(browser, persistedSketch.id, firstOverlapGeneration)
+    const firstOverlapId = overlapOne.sketches[0]!.rects.at(-1)!.id
+    const secondOverlapGeneration = await drawSketchRectangle(
+      browser,
+      persistedSketch.id,
+      { height: 20, width: -30, x: 250, y: 14 },
+    )
+    const overlapTwo = await waitForSketchCatalog(
+      sketchCatalogPath,
+      catalog => catalog.revision > overlapOne.revision && catalog.sketches[0]?.rects.length === 7,
+    )
+    await waitForSketchBoardRefresh(browser, persistedSketch.id, secondOverlapGeneration)
+    const secondOverlapId = overlapTwo.sketches[0]!.rects.at(-1)!.id
+    await shiftSelectSketchRectangle(browser, persistedSketch.id, firstOverlapId)
+    const beforeOverlapSource = await FS.readText(generatedSketchPath)
+    const beforeOverlapCatalog = smokeSketchCatalog(await FS.readText(sketchCatalogPath))
+    await browser.waitFor(
+      `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
+        ?.disabled === false`,
+    )
+    await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
+    await browser.waitFor(
+      `document.querySelector(${
+        JSON.stringify(
+          `[data-tao-studio-sketch-snap-proposal="${persistedSketch.id}"]`,
+        )
+      }) instanceof HTMLElement`,
+    )
+    Expect(
+      await browser.evaluate<string>(
+        `document.querySelector(${
+          JSON.stringify(
+            `[data-tao-studio-sketch-snap-diff]`,
+          )
+        })?.textContent ?? ''`,
+      ),
+    ).toContain('+++')
+    await clickProposalButton(browser, persistedSketch.id, 'Cancel')
+    await browser.waitFor(
+      `document.querySelector(${
+        JSON.stringify(
+          `[data-tao-studio-sketch-snap-proposal="${persistedSketch.id}"]`,
+        )
+      }) === null`,
+    )
+    Expect(await FS.readText(generatedSketchPath)).toBe(beforeOverlapSource)
+    Expect(smokeSketchCatalog(await FS.readText(sketchCatalogPath))).toEqual(beforeOverlapCatalog)
+
+    await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
+    await browser.waitFor(
+      `document.querySelector(${
+        JSON.stringify(
+          `[data-tao-studio-sketch-snap-proposal="${persistedSketch.id}"]`,
+        )
+      }) instanceof HTMLElement`,
+    )
+    await clickProposalButton(browser, persistedSketch.id, 'Apply')
+    const overlapAppliedCatalog = await waitForSketchCatalog(
+      sketchCatalogPath,
+      catalog =>
+        catalog.revision > beforeOverlapCatalog.revision
+        && catalog.sketches[0]?.snapped.some(item => item.rect.id === firstOverlapId) === true
+        && catalog.sketches[0]?.snapped.some(item => item.rect.id === secondOverlapId) === true,
+    )
+    const overlapAppliedSource = await FS.readText(generatedSketchPath)
+    Expect(overlapAppliedSource).not.toBe(beforeOverlapSource)
+    Expect(overlapAppliedSource).toContain(studioRectTag(firstOverlapId))
+    Expect(overlapAppliedSource).toContain(studioRectTag(secondOverlapId))
+
+    await browser.waitFor(
+      `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)})
+        ?.disabled === false`,
+    )
+    const undoneCatalog = await clickSketchWhenSettled(
+      browser,
+      persistedSketch.id,
+      `[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`,
+      sketchCatalogPath,
+      catalog =>
+        catalog.revision > overlapAppliedCatalog.revision
+        && catalog.sketches[0]?.rects.some(rect => rect.id === firstOverlapId) === true
+        && catalog.sketches[0]?.rects.some(rect => rect.id === secondOverlapId) === true,
+    )
+    Expect(await FS.readText(generatedSketchPath)).toBe(beforeOverlapSource)
+    Expect(undoneCatalog.sketches[0]?.rectOrder).toEqual(beforeOverlapCatalog.sketches[0]?.rectOrder)
+    Expect(undoneCatalog.sketches[0]?.rects).toEqual(beforeOverlapCatalog.sketches[0]?.rects)
+    Expect(undoneCatalog.sketches[0]?.snapped).toEqual(beforeOverlapCatalog.sketches[0]?.snapped)
+    await browser.captureScreenshot('studio-completed-interactions')
+    Expect(await FS.readText(sourcePath)).toBe(typedSource)
+    await exerciseStudioFeed(
+      browser,
+      session,
+      projectRoot,
+      persistedSketch.id,
+      persistedRect.id,
+      playlistRectIds.at(-1)!,
+    )
+    Expect(browser.browserFailures()).toEqual([])
+    // A blank or broken Studio usually reports itself only in the browser console, so the run
+    // fails on any page error and keeps the evidence beside the run's other artifacts.
+    await browser.captureScreenshot('simulated-user')
+    const consoleErrors = browser.consoleErrors()
+    await FS.writeJson(FS.resolvePath('logs/browser-console.json', artifactRoot), consoleErrors)
+    Expect(consoleErrors.map(entry => entry.text)).toEqual([])
   } catch (error) {
     primaryFailure = error
     throw error
@@ -887,10 +867,6 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       {
         label: 'close browser',
         run: () => browser === undefined ? undefined : stopResource('browser', () => browser!.close()),
-      },
-      {
-        label: 'stop native Studio',
-        run: () => native === undefined ? undefined : stopResource('native Studio', () => native!.stop()),
       },
       {
         label: 'stop Studio server',
@@ -918,7 +894,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       },
     ], { channel: 'studio-smoke-cleanup', subject: 'Studio smoke' })
   }
-}, 180_000)
+}, 600_000)
 
 function startPreviewServer(port: number): { stop(): void; url: string } {
   const server = Bun.serve({
@@ -1149,7 +1125,7 @@ function previewHtml(): string {
 }
 
 async function waitForSource(path: string, predicate: (source: string) => boolean): Promise<void> {
-  const deadline = Date.now() + 20_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(20_000) ?? Infinity)
   let source = ''
   while (Date.now() < deadline) {
     source = await FS.readText(path)
@@ -1204,7 +1180,7 @@ function sketchPersistenceObserved(
 }
 
 async function waitForFile(path: string): Promise<void> {
-  const deadline = Date.now() + 30_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(30_000) ?? Infinity)
   while (Date.now() < deadline) {
     if (await FS.isFile(path)) {
       return
@@ -1215,7 +1191,7 @@ async function waitForFile(path: string): Promise<void> {
 }
 
 async function waitForSketchFile(browser: StudioCdp, path: string): Promise<void> {
-  const deadline = Date.now() + 30_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(30_000) ?? Infinity)
   while (Date.now() < deadline) {
     if (await FS.isFile(path)) {
       return
@@ -1242,7 +1218,7 @@ type SmokeSketchReadiness = Readonly<{
 }>
 
 async function waitForSketchReady(browser: StudioCdp): Promise<void> {
-  const deadline = Date.now() + 30_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(30_000) ?? Infinity)
   let readiness: SmokeSketchReadiness | undefined
   while (Date.now() < deadline) {
     readiness = await browser.evaluate<SmokeSketchReadiness>(`(() => ({
@@ -1275,7 +1251,7 @@ async function waitForSketchRect(
   previousRevision: number,
   diagnose?: () => Promise<unknown>,
 ): Promise<SmokeSketchCatalog> {
-  const deadline = Date.now() + 20_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(20_000) ?? Infinity)
   let catalog: SmokeSketchCatalog | undefined
   while (Date.now() < deadline) {
     catalog = smokeSketchCatalog(await FS.readText(path))
@@ -1364,7 +1340,7 @@ async function expectPointerReachesBoard(
  */
 async function enterDrawPreset(browser: StudioCdp): Promise<void> {
   await browser.waitFor(`document.querySelector('[data-preset="draw"]') instanceof HTMLButtonElement`, {
-    timeoutMs: 30_000,
+    timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity,
   })
   await browser.click('[data-preset="draw"]')
   await browser.waitFor(`(() => {
@@ -1426,7 +1402,7 @@ async function focusCanvasUntilFramed(browser: StudioCdp): Promise<void> {
       && viewport.getBoundingClientRect().width === 242
       && viewport.getBoundingClientRect().height === 122
   })()`
-  const deadline = Date.now() + 40_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(40_000) ?? Infinity)
   while (Date.now() < deadline) {
     await browser.click('.studio-canvas-focus')
     await browser.waitFor(
@@ -1468,7 +1444,7 @@ async function clickSketchWhenSettled(
   predicate: (catalog: SmokeSketchCatalog) => boolean,
   options: { diagnose?: () => Promise<unknown>; prepare?: string } = {},
 ): Promise<SmokeSketchCatalog> {
-  const deadline = Date.now() + 20_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(20_000) ?? Infinity)
   while (Date.now() < deadline) {
     const generation = await markSketchBoard(browser, sketchId)
     await Time.sleep(300)
@@ -1493,7 +1469,7 @@ async function waitForSketchCatalog(
   predicate: (catalog: SmokeSketchCatalog) => boolean,
   diagnose?: () => Promise<unknown>,
 ): Promise<SmokeSketchCatalog> {
-  const deadline = Date.now() + 30_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(30_000) ?? Infinity)
   let catalog: SmokeSketchCatalog | undefined
   while (Date.now() < deadline) {
     catalog = smokeSketchCatalog(await FS.readText(path))
@@ -1608,7 +1584,7 @@ async function waitForSourceOrStudioError(
   path: string,
   predicate: (source: string) => boolean,
 ): Promise<void> {
-  const deadline = Date.now() + 20_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(20_000) ?? Infinity)
   let source = ''
   let status: Readonly<{ state: string; text: string }> = { state: '', text: '' }
   while (Date.now() < deadline) {
@@ -1631,7 +1607,7 @@ async function waitForSourceOrStudioError(
 }
 
 async function waitForCompileAfter(browser: StudioCdp, previousRevision: number): Promise<number> {
-  const deadline = Date.now() + 30_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(30_000) ?? Infinity)
   let last = ''
   while (Date.now() < deadline) {
     last = await browser.evaluate<string>("document.querySelector('.studio-status')?.textContent ?? ''")
@@ -1655,7 +1631,7 @@ async function clickPreviewAndWaitForState(
   selector: '#measure-owner' | '#move-third' | '#select-first',
   expected: 'measurement sent' | 'move sent' | 'selection sent',
 ): Promise<void> {
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(15_000) ?? Infinity)
   let last = ''
   const previous = await browser.evaluateInFrame<string>(
     previewUrl,
@@ -1689,7 +1665,7 @@ async function clickPreviewUntilSource(
   sourcePath: string,
   predicate: (source: string) => boolean,
 ): Promise<void> {
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(15_000) ?? Infinity)
   let lastSource = ''
   let lastStatus = ''
   while (Date.now() < deadline) {
@@ -1734,7 +1710,7 @@ async function foldedRegions(browser: StudioCdp): Promise<number> {
 }
 
 async function waitForPreviewSourceIdentity(browser: StudioCdp, previewUrl: string): Promise<void> {
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(15_000) ?? Infinity)
   let last = ''
   while (Date.now() < deadline) {
     try {
@@ -1754,7 +1730,7 @@ async function waitForPreviewSourceIdentity(browser: StudioCdp, previewUrl: stri
 }
 
 async function waitForInspectorReady(browser: StudioCdp): Promise<void> {
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + (VerificationTimeouts.resolve(15_000) ?? Infinity)
   let last:
     | Readonly<{
       ready: boolean

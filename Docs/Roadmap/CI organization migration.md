@@ -1,45 +1,47 @@
-# Move Tao to an organization and enable merge queue
+# Organization migration follow-up and merge queue rollout
 
-Status: preparation only. The repository is currently public and owned by `marcuswestin`.
-Choose the destination organization before carrying out this checklist. No transfer or settings
-change is part of preparing this document.
+Status: the repository remote is now `https://github.com/tao-dev-org/tao-lang.git`, and
+`Justfile`'s `github-setup` recipe uses that identity. The transfer preparation below is retained
+as a follow-up audit. This document does not establish that organization settings or native merge
+queue have been enabled or tested.
+
+The current feature-branch landing route is hosted `Verify` plus the local host-only complement,
+started with `./dev open-pr --auto-merge`. The checked-in workflow defaults to ten partitions;
+the `VERIFY_PARTITIONS` repository variable or a dispatch input can override that number.
+It currently has PR, main-push and dispatch triggers, but no `merge_group` trigger. Complete
+the queue prerequisites before requiring native merge queue. The live landing contract is in
+[`hosted-verification.md`](../../agents/skills/verification-lanes/references/hosted-verification.md).
 
 ## Decide and prepare
 
-- [ ] Choose `ORG`, keep the repository name `tao-lang-2`, and confirm the desired visibility.
-      Public organization repositories can use native merge queue without Enterprise. Private
-      organization repositories require Enterprise Cloud for merge queue; check the plan before
-      changing visibility.
-- [ ] Confirm repository administrator access and permission to create repositories in `ORG`.
-      The destination must not already contain a repository with this name or a fork in its network.
-      Review the organization's default member access before transfer.
+- [x] Move the repository identity to `tao-dev-org/tao-lang` and update the setup recipe.
+- [ ] Confirm current visibility, organization plan, queue availability and administrator access.
+      Review the organization's default member access and effective repository policies.
 - [ ] Decide separately whether `tao-lang-2-storage` stays under the personal account or moves.
       Transferring the parent does not transfer the storage repository.
 - [ ] Record current required checks, rulesets, branch protection, allowed merge methods,
       auto-merge, Apps, Actions permissions, runners, environments and package publishing.
-      The audited main ruleset requires `Verify`, allows squash, and has strict up-to-date checking
-      off. Re-read these live at migration time; the legacy protection API was unavailable to the
-      installed integration during the audit.
+      An earlier audit of the personal repository required `Verify`, allowed squash, and had
+      strict up-to-date checking off. Re-read the transferred repository's live settings; that
+      earlier audit is not evidence of the current effective policy.
 - [ ] Land queue-aware repository tooling before requiring the queue. Today's `merge-pr`
-      directly squash-merges after PR-head checks; it must enqueue, follow queue-group checks,
+      follows PR-head checks; it must enqueue, follow queue-group checks,
       report removal/failure, and archive only after the actual merge. Preserve expected-head
       matching, the reviewed message, and the branch archive. Adapt `open-pr`'s auto-merge request,
       fallback and check follower too; distinguish queue admission from completed landing and
       support the queue-disabled state during rollout.
 - [ ] Keep every required workflow reporting its exact check name on `merge_group`.
-      `Verify` already has that trigger; confirm it runs on `checks_requested` and verifies the
-      group SHA. Contributor agreement currently is not required; if it becomes required, adapt
-      its event and PR-specific assumptions first.
-- [ ] Fix `Justfile`'s `github-setup` recipe and its tests: it currently resets origin to the
-      personal repository. Update issue/discussion links, feedback links, badges, package metadata
-      and other hardcoded repository identities. Do not run the old recipe after updating the remote.
+      Add the missing `Verify` trigger for `checks_requested` and verify the group SHA.
+      Contributor agreement is now a job inside `Verify`; adapt its PR-specific assumptions
+      before making the workflow queue-required. Audit any other required checks separately.
+- [ ] Audit issue/discussion links, feedback links, badges, package metadata and separate clones
+      for stale repository identities. The setup recipe already points to the organization.
 
-## Transfer between verification runs
+## Transfer audit
 
 1. Let active verification and landing finish and inform working agents of the migration window.
    Save each task's branch, PR, and expected head; avoid changing repository identity during a push.
-2. On GitHub, open the repository's Settings → General → Danger Zone → Transfer.
-   Transfer the existing repository to `ORG`; do not create a replacement and copy history.
+2. Confirm the transfer preserved the existing repository rather than replacing its history.
 3. Confirm the new URL and retained PRs/issues/history. GitHub redirects the old repository URLs,
    but do not recreate a repository at the old address, because that breaks the redirects.
 4. Recheck Apps and external integrations for access to the transferred repository, organization
@@ -51,12 +53,12 @@ change is part of preparing this document.
 
 ## Update existing checkouts
 
-Run these from an existing checkout root, replacing `ORG` with the chosen organization:
+Run these from an existing checkout root:
 
 ```sh
 git remote -v
 git config --show-origin --get-regexp '^remote\.origin\.(url|pushurl)$'
-git remote set-url origin https://github.com/ORG/tao-lang-2.git
+git remote set-url origin https://github.com/tao-dev-org/tao-lang.git
 git remote -v
 git ls-remote --exit-code origin refs/heads/main
 ```

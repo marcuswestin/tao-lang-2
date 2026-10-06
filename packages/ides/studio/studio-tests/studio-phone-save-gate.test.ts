@@ -3,7 +3,7 @@ import { StudioPhoneSaveGate } from '../studio-src/client/app/StudioPhoneSaveGat
 import type { StudioDeviceConnection } from '../studio-src/device/StudioDeviceStatus'
 import type { StudioDraftSyncResult } from '../studio-src/StudioDraftSync'
 
-function compiled(revision: number): StudioDraftSyncResult {
+function compiled(revision: number, publishedRevision?: number): StudioDraftSyncResult {
   return {
     compile: {
       causes: ['studio-write'],
@@ -11,6 +11,7 @@ function compiled(revision: number): StudioDraftSyncResult {
       compileRevision: revision,
       diagnostics: [],
       message: `Compiled revision ${revision}.`,
+      ...(publishedRevision === undefined ? {} : { publishedRevision }),
       status: 'compiled',
     },
     diagnostics: [],
@@ -18,6 +19,18 @@ function compiled(revision: number): StudioDraftSyncResult {
     saved: true,
   }
 }
+
+Test('Studio does not wait for the phone to apply an unchanged compile attempt', async () => {
+  let statusReads = 0
+  const gate = new StudioPhoneSaveGate({
+    status: async () => {
+      statusReads += 1
+      return { connection: { appliedRevision: 1, state: 'connected' } as StudioDeviceConnection }
+    },
+  })
+  await gate.run(async () => compiled(2, 1))
+  Expect(statusReads).toBe(1)
+})
 
 Test('Studio holds a later Save until the paired phone acknowledges the prior revision', async () => {
   const sleeps: Array<ReturnType<typeof Deferred<void>>> = []

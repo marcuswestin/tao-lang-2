@@ -64,6 +64,16 @@
   meet this entry's admission benchmark acceptance.
 - **Workaround:** Verify when the machine is quiet, or read the `contention` block in
   `summary.json` before treating a slow lane as a regression.
+- **2026-10-05 controlled diagnostics:** Sequential quiet runs with execution watchdogs disabled
+  measured project tooling at 461.2s, compiler 210.3s, development CLI 188.6s and Studio 186.0s.
+  The runner granted two slots to several Bun suites but left blanket test concurrency at Bun's
+  default twenty. Matching that concurrency to admitted width and exposing smaller watch/compiler/
+  preview cohorts is implemented for the next parallel run. Focused scheduler tests pass; this
+  is not an isolated before/after throughput measurement or the ten-lane acceptance experiment.
+  Two independent fixture stalls were repaired: a cache waiter expected an obsolete claim file,
+  and an admission waiter used tied fake timestamps. Diagnostic resume retains explicitly reviewed
+  completed parts only; final parallel verification ignores it. Original failed run evidence is
+  retained in the Studio project task's diagnostic artifacts.
 - **2026-09-26 recurrence:** An iOS development checkout's `verify-changed` recorded three
   overlapping lanes and peak load 594.2 on 16 CPUs while native builds were also active. Its
   `2026-09-27T00-17-48-563Z-55333-cc5dc1c4` summary and CLI shard logs record 120-second

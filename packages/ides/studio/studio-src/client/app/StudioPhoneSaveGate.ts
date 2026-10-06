@@ -58,7 +58,7 @@ export class StudioPhoneSaveGate {
       this.#throwIfClosed()
       const result = await write()
       if (!this.#closed && result.saved && result.compile?.status === 'compiled') {
-        const revision = result.compile.compileRevision
+        const revision = result.compile.publishedRevision ?? result.compile.compileRevision
         const status = await this.#readStatus()
         if (this.#closed) {
           return result

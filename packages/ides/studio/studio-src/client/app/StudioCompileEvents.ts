@@ -118,6 +118,7 @@ export const StudioStatusLine = {
     openDiagnostic?: StudioOpenDiagnostic,
   ): void {
     element.dataset['state'] = state.status
+    element.dataset['publishedRevision'] = String(state.publishedRevision ?? state.compileRevision)
     const revisions = state.status === 'compiled'
       ? `compiled ${state.compileRevision} · applied ${state.appliedRevision}`
       : state.status
@@ -167,6 +168,7 @@ export const StudioCompileStatus = {
       compileRevision: completion.compileRevision,
       diagnostics: completion.diagnostics,
       message: completion.message,
+      ...(completion.publishedRevision === undefined ? {} : { publishedRevision: completion.publishedRevision }),
       status: completion.status,
     }
   },

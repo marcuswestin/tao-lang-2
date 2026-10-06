@@ -30,6 +30,7 @@ import { TaoHome } from './TaoHome'
 import { TaoResources } from './TaoResources'
 import { TaoStdlib } from './TaoStdlib'
 import { TaoTestProtocol } from './TaoTestProtocol'
+import * as VerificationTimeouts from './VerificationTimeouts'
 
 export type {
   DiagnosticRange,
@@ -73,6 +74,7 @@ export {
   TaoTestProtocol,
   Text,
   Time,
+  VerificationTimeouts,
 }
 
 export { ReleaseToolchain } from './ReleaseToolchain'

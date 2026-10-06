@@ -129,10 +129,12 @@
     PR partitions ranged156–535 seconds of verification; partition11 added about71 seconds
     for an isolated CLI retry and partition10 about182 seconds for three isolated retries.
     The outer planner had no exact numbered-shard or extracted-cohort history and used30-second
-    fallback weights. `feat/ci-partition-balance` derives estimates from current membership,
-    splits independent native files, reserves nested-build capacity, and refreshes suite/file
-    seeds from these runs. Derived file weights and one inferred isolated CLI retry are documented
-    in `.github/verify/README.md`; they are scheduling estimates, not a stable-tail speed verdict.
+    fallback weights. The initial adjustment derived estimates from current membership,
+    split independent native files, reserved nested-build capacity, and reconstructed seeds.
+    October6 main subsequently refined the cohorts, bounded concurrency and CI duration refit.
+    Integration retains those newer policies, corrects partial-suite inventory weighting, and
+    supplements missing current-file ledger weights. `.github/verify/README.md` distinguishes
+    the newer measured node durations from derived file weights; neither is a stable-tail verdict.
   - Local fallback verification on October5 stopped at a live native-publication lock wait after
     120seconds; compiler and source-action processes also reached the300second wall bound.
     The Developer approved larger bounded waits while retaining assertions and lock ownership
@@ -143,8 +145,8 @@
     Provisional stale results receive an independent locked confirmation so completed publication
     rollbacks cannot leak transient damage diagnostics; healthy reads remain unlocked.
     Lock waiters also avoid publishing fsynced claim files while a valid owner is present and
-    probe at50millisecond intervals. Compiler tests no longer start concurrent timeout windows
-    for their serialized shared session; explicit concurrency behavior tests remain intact.
+    probe at50millisecond intervals. The initial compiler serialization adjustment is superseded
+    by main's bounded-concurrency policy; explicit concurrency behavior tests remain intact.
     Complete verification and comparable clean timing remain required before attributing gains.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much

@@ -3,6 +3,7 @@ import type { FileHandle } from './FS'
 import * as HCI from './HCI'
 import * as Platform from './Platform'
 import { ProcessTree, type TrackedProcess } from './ProcessTree'
+import * as VerificationTimeouts from './VerificationTimeouts'
 
 /** CommandOutputStream names a command output stream. */
 export type CommandOutputStream = 'stderr' | 'stdout'
@@ -67,13 +68,15 @@ export type CommandSpec = {
   stdio?: CommandStdio
   /** `test` policy only: stop the tree once the child has been running this long. */
   timeoutMs?: number
+  /** Force deliberate timeout behavior fixtures to remain bounded in diagnostic verification. */
+  timeoutPolicy?: VerificationTimeouts.Policy
   unref?: boolean
 }
 
 /** CommandSyncSpec describes a synchronous process invocation. */
 export type CommandSyncSpec = Omit<
   CommandSpec,
-  'detached' | 'idleOutputMs' | 'prefixedOutput' | 'processPolicy' | 'timeoutMs' | 'unref'
+  'detached' | 'idleOutputMs' | 'prefixedOutput' | 'processPolicy' | 'timeoutMs' | 'timeoutPolicy' | 'unref'
 >
 
 /** CommandResult records a completed process invocation. */
@@ -479,7 +482,10 @@ function resolveProcessBounds(command: string, policy: CommandProcessPolicy, spe
       throwUnexpected(`Expected: a positive ${key} for '${command}', but it was ${String(value)}.`)
     }
   }
-  return { idleOutputMs: spec.idleOutputMs, timeoutMs: spec.timeoutMs }
+  return {
+    idleOutputMs: VerificationTimeouts.resolve(spec.idleOutputMs, spec.timeoutPolicy),
+    timeoutMs: VerificationTimeouts.resolve(spec.timeoutMs, spec.timeoutPolicy),
+  }
 }
 
 /** formatBoundDuration spells a bound the way its reason line reads, seconds first. */

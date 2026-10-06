@@ -88,6 +88,8 @@ export type SuiteSelection = {
 
 /** SuiteBuildContext is what a run hands every source that builds a process. */
 type SuiteBuildContext = {
+  /** Injected runner policy for argument fixtures; production reads the inherited environment. */
+  verificationEnv?: Readonly<Record<string, string | undefined>>
   /** Where native runner reports go; absent, the runner prints a summary instead. */
   reportRoot?: string
 }
@@ -379,7 +381,7 @@ async function runTestRequest(request: TestRunRequest, options: TestRunOptions =
   // in its own graph rather than starting this command inside itself, so there is no nested runner
   // left to hand a divided budget to.
   const machineLane = await MachineLanes.acquire({
-    lane,
+    lane: prepared.failurePolicy === 'collect-all' && prepared.evidenceMode !== 'mutation' ? `${lane}-targeted` : lane,
     registryRoot: options.registryRoot,
     repositoryRoot: location.repositoryRoot,
     requestedJobs: options.jobs,
@@ -431,11 +433,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   const mode = options.mode ?? WorkReporter.resolveMode()
   const graphStates = TaoAppSharedRun.attach(states, location.logRoot, location.repositoryRoot)
   await RunArtifacts.assignLogPaths(graphStates, location)
-  const estimatedNodes = new Map(states.map(state => [state.name, state.expectedMs]))
-  const expectedMs = (name: string) =>
-    estimatedNodes.has(name)
-      ? estimatedNodes.get(name)
-      : RunTimings.expectedMs(timings, name)
+  const expectedMs = TestNodes.expectedMsFor(states, timings)
   const reporter = WorkReporter.create({ lane: location.lane, logRoot: location.logRoot, mode })
   const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
   const failure = FailurePolicy.create({
@@ -945,7 +943,16 @@ function bunSuite(
   const testReport = context.reportRoot === undefined
     ? undefined
     : nativeReport(context.nodeName, suite, 'bun-junit', context.reportRoot)
-  const tuningArgs = GateCatalog.suiteTuning(suite).args ?? []
+  const verificationEnv = context.verificationEnv ?? Shared.Platform.runtimeProcess.env
+  const bounded = Shared.VerificationTimeouts.enabled('environment', verificationEnv)
+  const tuningArgs = (GateCatalog.suiteTuning(suite).args ?? []).filter(arg =>
+    verificationEnv['TAO_VERIFY_JOBS'] !== '1' || arg !== '--concurrent'
+  )
+  // Bun otherwise permits twenty simultaneous tests inside a process reserved for two slots.
+  // Match the admitted width, as the Jest worker pool does, without changing authored concurrency.
+  const concurrencyArgs = tuningArgs.includes('--concurrent')
+    ? [`--max-concurrency=${Math.max(1, context.slots)}`]
+    : []
   const args = [
     'test',
     // Bun reads a bare relative path as a filter, walks the whole repository to resolve it, and
@@ -956,11 +963,17 @@ function bunSuite(
     ...(testReport === undefined
       ? ['--reporter=dot']
       : ['--reporter=junit', `--reporter-outfile=${testReport.path}`]),
-    ...tuningArgs,
+    ...tuningArgs.filter((arg, index) =>
+      bounded
+      || (arg !== '--timeout' && !arg.startsWith('--timeout=') && tuningArgs[index - 1] !== '--timeout')
+    ),
+    ...concurrencyArgs,
     // Both spellings, because a table entry written as `['--timeout', '60000']` would otherwise get
     // a second `--timeout=` appended and Bun's argument precedence, not the table, would decide the
     // suite's hang guard.
-    ...(tuningArgs.some(arg => arg === '--timeout' || arg.startsWith('--timeout='))
+    ...(!bounded
+      ? ['--timeout=0']
+      : tuningArgs.some(arg => arg === '--timeout' || arg.startsWith('--timeout='))
       ? []
       : [`--timeout=${deadlineFor(tuningArgs)}`]),
     ...(pattern ? ['--pass-with-no-tests', `--test-name-pattern=${pattern}`] : []),
@@ -1031,12 +1044,12 @@ function starvationAdjustedTimeoutMs(loadAverage: number, cpuCount: number): num
  * nothing on a test that passes and buys headroom on the genuinely slow ones, while the
  * regression-catching property survives because the budget is still fixed rather than waived.
  */
-const TEST_BUDGET_MS = 45_000
+const TEST_BUDGET_MS = 240_000
 /** How far the lagging load average is trusted to under-report the starvation a test is feeling. */
 const LOAD_AVERAGE_LAG_ALLOWANCE = 2
 /**
  * The concurrent-suite hang guard, in milliseconds rather than budgets. It also caps the serial
- * suite's load-adjusted deadline; the uncontended serial budget above remains fixed at 45 seconds.
+ * suite's load-adjusted deadline; the uncontended serial budget above remains fixed at four minutes.
  * Ten minutes gives a test room to finish under heavy machine contention while preserving a bound
  * for a genuine hang.
  */
