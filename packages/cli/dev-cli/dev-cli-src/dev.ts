@@ -30,6 +30,7 @@ import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { MergeRecovery } from './git/MergeRecovery'
+import { SyncLocalMainCommand } from './git/SyncLocalMain'
 import { CancelVerifyCommand } from './pr/CancelVerify'
 import { CiTimingsCommand } from './pr/CiTimingsCommand'
 import { LandFixCommand } from './pr/LandFixCommand'
@@ -646,7 +647,7 @@ await runWithCommands(commands => {
     })
 
   commands
-    .command('sync-main')
+    .command('my-sync')
     .description('Fast-forward main, move the mirrors that follow it, and merge it into this branch.')
     .action(async () => {
       try {
@@ -972,6 +973,15 @@ await runWithCommands(commands => {
     )
     .action(async () => {
       await runExitCommand(async () => (await LandFixCommand.run()).exitCode)
+    })
+
+  commands
+    .command('sync-main')
+    .description(
+      'Fast-forward local main to fetched origin/main: the ref alone when no worktree has main, a clean checkout of it with merge --ff-only, and clean main mirrors; never forces, never touches a dirty checkout.',
+    )
+    .action(async () => {
+      await runExitCommand(async () => (await SyncLocalMainCommand.run()) === 'diverged' ? 1 : 0)
     })
 
   commands

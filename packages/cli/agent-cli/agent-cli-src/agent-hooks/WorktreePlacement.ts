@@ -60,8 +60,10 @@ async function baseRef(primary: string, git: Git, log?: (line: string) => void):
   const slash = ref.indexOf('/')
   const fetched = await git(['fetch', '--quiet', ref.slice(0, slash), ref.slice(slash + 1)], primary)
   if (fetched.exitCode !== 0) {
-    log?.(`worktree: could not fetch ${ref} (${fetched.stderr.trim() || `exit ${fetched.exitCode}`}); `
-      + `branching from the last fetched ${ref}`)
+    log?.(
+      `worktree: could not fetch ${ref} (${fetched.stderr.trim() || `exit ${fetched.exitCode}`}); `
+        + `branching from the last fetched ${ref}`,
+    )
   }
   return ref
 }
