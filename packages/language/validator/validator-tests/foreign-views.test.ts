@@ -10,7 +10,7 @@ Describe('validator: foreign views', () => {
       view Main() {
         action Change(Value text) { }
         render Foreign("draft", Change) {
-          @header Label("Heading")
+          @header: Label("Heading")
           Label("Body")
         }
       }

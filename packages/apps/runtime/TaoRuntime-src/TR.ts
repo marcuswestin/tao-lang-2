@@ -1223,7 +1223,17 @@ class TR {
   } = {
     ...StudioPreview,
     DeviceHost: StudioDeviceHost,
-    Environment: StudioEnvironmentControls,
+    Environment: {
+      ...StudioEnvironmentControls,
+      Argument(value, handles) {
+        const argument = StudioEnvironmentControls.Argument(value, handles)
+        if (typeof value === 'object' && value.kind === 'action-stand-in') {
+          const standIn = argument.jsValue as { invoke(...args: unknown[]): void }
+          return new RuntimeAction((...args: unknown[]) => standIn.invoke(...args), { name: value.parameter })
+        }
+        return argument
+      },
+    },
     LensRender: StudioLensRender,
     State: StudioStateControls,
     SubjectHost: StudioSubjectHost,

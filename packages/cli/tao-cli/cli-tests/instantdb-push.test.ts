@@ -20,7 +20,7 @@ function notesSource(settings: DatasourceSettings = {}, datasource?: string): st
   const configured = [
     `      AppId ${settings.appId ?? '"app-1"'}`,
     ...(settings.apiURI === undefined ? [] : [`      ApiURI ${settings.apiURI}`]),
-  ].join('\n')
+  ].join(',\n')
   return `use TestAuth from @tao/auth/testing
 use InstantDB from @tao/data/providers/instantdb
 use Text from @tao/ui
