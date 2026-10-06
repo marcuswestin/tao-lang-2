@@ -102,6 +102,10 @@ function enableAutoMergeKey(prNumber: number): string {
   )
 }
 
+function disableAutoMergeKey(prNumber: number): string {
+  return routeKey('gh', ['pr', 'merge', String(prNumber), '--disable-auto'], ROOT)
+}
+
 function hostAutoMergeKey(prNumber: number, method: 'DELETE' | 'PUT'): string {
   const fields = method === 'PUT'
     ? ['-f', `commit_message=${BODY}`, '-f', `commit_title=${SUBJECT}`, '-f', 'merge_method=squash']
@@ -234,6 +238,122 @@ Describe('open-pr', () => {
     Expect(followed).toEqual([7])
     Expect(result.lines).toContain('PASS  CI succeeded on headsha1 for #7; auto-merge is off.')
     Expect(result.lines.at(-1)).toContain('After authorization, run merge-pr')
+  })
+
+  Test('hold-auto-merge disables an existing setting without pushing or following checks', async () => {
+    const routes = cleanFeatureBranchRoutes()
+    routes[routeKey('git', ['status', '--porcelain=v1', '--untracked-files=all'], ROOT)] = {
+      stdout: ' M dirty.ts\n',
+    }
+    routes[listKey('open')] = {
+      stdout: JSON.stringify([pull(7, {
+        auto_merge: { commit_message: BODY, commit_title: SUBJECT },
+      })]),
+    }
+    routes[disableAutoMergeKey(7)] = {}
+    const { calls, dependencies, followed } = fakeDependencies(routes, {
+      exists: async () => false,
+    })
+    answerViewsInTurn(dependencies, 7, [
+      pull(7, { auto_merge: { commit_message: BODY, commit_title: SUBJECT } }),
+      pull(7),
+    ])
+
+    const result = await OpenPrCommand.run({ holdAutoMerge: true, repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(calls).toContain(disableAutoMergeKey(7))
+    Expect(calls.lastIndexOf(viewKey(7))).toBeGreaterThan(calls.indexOf(disableAutoMergeKey(7)))
+    Expect(calls).not.toContain(routeKey('git', ['status', '--porcelain=v1', '--untracked-files=all'], ROOT))
+    Expect(calls.some(call => call.startsWith('git push') || call.includes('--method POST'))).toBe(false)
+    Expect(calls).not.toContain('followChecks')
+    Expect(calls).not.toContain(checkCountKey())
+    Expect(followed).toEqual([])
+  })
+
+  Test('hold-auto-merge uses the host API when gh pr merge cannot disable it', async () => {
+    const routes = cleanFeatureBranchRoutes()
+    routes[listKey('open')] = { stdout: JSON.stringify([pull(7, { auto_merge: { enabled: true } })]) }
+    routes[disableAutoMergeKey(7)] = {
+      exitCode: 1,
+      stderr: 'HTTP 403: GitHub GraphQL is not available\nmore',
+    }
+    routes[hostAutoMergeKey(7, 'DELETE')] = {}
+    const { calls, dependencies } = fakeDependencies(routes)
+    answerViewsInTurn(dependencies, 7, [pull(7, { auto_merge: { enabled: true } }), pull(7)])
+
+    const result = await OpenPrCommand.run({ holdAutoMerge: true, repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(calls).toContain(hostAutoMergeKey(7, 'DELETE'))
+    Expect(calls.lastIndexOf(viewKey(7))).toBeGreaterThan(calls.indexOf(hostAutoMergeKey(7, 'DELETE')))
+    Expect(calls).not.toContain('followChecks')
+    Expect(calls.some(call => call.startsWith('git push'))).toBe(false)
+  })
+
+  Test('hold-auto-merge refuses to continue when read-back still shows it enabled', async () => {
+    const routes = cleanFeatureBranchRoutes()
+    routes[listKey('open')] = { stdout: JSON.stringify([pull(7, { auto_merge: { enabled: true } })]) }
+    routes[disableAutoMergeKey(7)] = {}
+    const { calls, dependencies, followed } = fakeDependencies(routes)
+    answerViewsInTurn(dependencies, 7, [
+      pull(7, { auto_merge: { enabled: true } }),
+      pull(7, { auto_merge: { enabled: true } }),
+    ])
+
+    await Expect(OpenPrCommand.run({ holdAutoMerge: true, repositoryRoot: ROOT }, dependencies)).rejects.toThrow()
+
+    Expect(calls.lastIndexOf(viewKey(7))).toBeGreaterThan(calls.indexOf(disableAutoMergeKey(7)))
+    Expect(calls).not.toContain('followChecks')
+    Expect(calls.some(call => call.startsWith('git push'))).toBe(false)
+    Expect(followed).toEqual([])
+  })
+
+  Test('hold-auto-merge rejects auto-merge mode before running commands', async () => {
+    const { calls, dependencies } = fakeDependencies({})
+
+    await Expect(OpenPrCommand.run({ autoMerge: true, holdAutoMerge: true, repositoryRoot: ROOT }, dependencies))
+      .rejects.toThrow()
+
+    Expect(calls).toEqual([])
+  })
+
+  Test('hold-auto-merge requires an open pull request for the named branch', async () => {
+    const routes = cleanFeatureBranchRoutes()
+    routes[listKey('open')] = { stdout: '[]' }
+    const { calls, dependencies } = fakeDependencies(routes)
+
+    await Expect(OpenPrCommand.run({ holdAutoMerge: true, repositoryRoot: ROOT }, dependencies)).rejects.toThrow()
+
+    Expect(calls).toContain(listKey('open'))
+    Expect(calls.some(call => call.startsWith('git push') || call.includes('--method POST'))).toBe(false)
+    Expect(calls).not.toContain('followChecks')
+  })
+
+  Test('hold-auto-merge requires gh before looking up a pull request', async () => {
+    const routes = cleanFeatureBranchRoutes()
+    routes[routeKey('gh', ['api', 'user', '--jq', '.login'], ROOT)] = {
+      error: new Errors.HostEnvironmentError('spawn gh ENOENT'),
+      exitCode: null,
+    }
+    const { calls, dependencies } = fakeDependencies(routes)
+
+    await Expect(OpenPrCommand.run({ holdAutoMerge: true, repositoryRoot: ROOT }, dependencies)).rejects.toThrow()
+
+    Expect(calls).not.toContain(listKey('open'))
+    Expect(calls.some(call => call.startsWith('git push'))).toBe(false)
+  })
+
+  Test('hold-auto-merge still requires a named branch', async () => {
+    const { calls, dependencies } = fakeDependencies({
+      [routeKey('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], ROOT)]: { exitCode: 1, stdout: '' },
+    })
+
+    await Expect(OpenPrCommand.run({ holdAutoMerge: true, repositoryRoot: ROOT }, dependencies))
+      .rejects.toThrow('HEAD is detached')
+
+    Expect(calls).not.toContain(listKey('open'))
+    Expect(calls.some(call => call.startsWith('git push'))).toBe(false)
   })
 
   Test('refuses an existing auto-merge-enabled pull request by default before pushing', async () => {

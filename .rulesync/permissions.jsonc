@@ -112,7 +112,7 @@
     // file every agent sandbox protects, such as `.gitmodules`. The SessionStart hook already runs
     // the same entry outside the sandbox; this reaches it mid-session.
     "setup",
-    "land", "finalize", "merge-main", "merge-recover", "landed", "capabilities", "open-pr", "merge-pr", "fix-agent-config", "verify-full", "diagnose-verification",
+    "land", "finalize", "merge-main", "merge-recover", "landed", "capabilities", "open-pr", "merge-pr", "fix-agent-config", "verify-full", "diagnose-verification", "verify-full-ci",
     "test-host", "qa-capture", "studio-smoke", "studio-proof-real-app", "admission-experiment", "performance-check",
     "native-module-check", "reclaim --execute", "resources",
     "prepare-release studio", "prepare-release ide-extension", "ide-extension-acceptance",

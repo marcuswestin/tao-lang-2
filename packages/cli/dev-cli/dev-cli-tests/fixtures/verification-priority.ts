@@ -12,20 +12,33 @@ if (lane === 'child') {
   HCI.writeLine(String(Platform.processPriority()))
 } else {
   const before = Platform.processPriority()
+  const mockPriorityBoundary = Platform.runtimeProcess.argv[3] === 'simulate-os-priority'
   const originalPlatform = { ...Platform }
   const originalGateRunner = { ...GateRunner }
   const originalLandingLock = { ...LandingLockModule }
+  let simulatedPriority = before
   let priorityCalls = 0
   let refused = false
+  function processPriority(): number {
+    return mockPriorityBoundary ? simulatedPriority : originalPlatform.processPriority()
+  }
+  function lowerProcessPriority(): void {
+    if (mockPriorityBoundary) {
+      simulatedPriority = Math.max(simulatedPriority, 10)
+    } else {
+      originalPlatform.lowerProcessPriority()
+    }
+  }
   MockModule('@shared/Platform', () => ({
     ...originalPlatform,
+    processPriority,
     lowerProcessPriority() {
       priorityCalls++
       try {
         if (lane === 'denied') {
           Errors.throwHostEnvironment('Could not lower command scheduling priority.')
         }
-        originalPlatform.lowerProcessPriority()
+        lowerProcessPriority()
       } catch (error) {
         refused = true
         throw error
@@ -43,7 +56,7 @@ if (lane === 'child') {
   MockModule('@verification/GateRunner', () => ({
     ...originalGateRunner,
     async runGates(options: RunGatesOptions): Promise<GateSummary> {
-      const atGate = Platform.processPriority()
+      const atGate = processPriority()
       const gate = WorkGraph.createState({
         name: 'priority-probe',
         run: {
@@ -54,7 +67,7 @@ if (lane === 'child') {
       await WorkGraph.run([gate], { jobs: options.jobs })
       // Reapplying the policy must neither compound niceness nor boost an inherited priority.
       if (priorityCalls > 0 && !refused) {
-        originalPlatform.lowerProcessPriority()
+        lowerProcessPriority()
       }
       HCI.writeLine(`PRIORITY ${
         JSON.stringify({
@@ -62,7 +75,7 @@ if (lane === 'child') {
           atGate,
           gateChild: Number(gate.fullOutput.trim()),
           gateStatus: gate.status,
-          repeated: Platform.processPriority(),
+          repeated: processPriority(),
           priorityCalls,
           refused,
           jobs: options.jobs,

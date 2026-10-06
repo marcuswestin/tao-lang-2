@@ -88,6 +88,7 @@ export const JUST_COMMANDS = [
   'verify-full',
   'diagnose-verification',
   'verify-full-sandbox',
+  'verify-full-ci',
   'worktree-status',
 ] as const
 

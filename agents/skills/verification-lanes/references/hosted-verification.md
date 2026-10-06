@@ -36,12 +36,16 @@ failure.
 
 ## Coverage and readiness
 
-`.github/workflows/verify.yml` runs `verify-full-sandbox` across twelve Linux runners
-(`--partition k/12`) on pull request pushes, merge-queue entries, and pushes to `main`; `Verify`
-is the aggregate verdict. It proves the portable gates only. Read the current workflow and lane
-membership when deciding whether they cover the slice; native, simulator, device, visible UI, and
-other host-only acceptance remain separate. Contention does not waive them. Run needed host proof
-when this machine has capacity, or report the slice as waiting for that proof.
+`.github/workflows/verify.yml` runs uncached `verify-full-ci` across twelve ARM macOS runners
+(`--partition k/12`) on pull request pushes, merge-queue entries, and pushes to `main`. Every portable
+test suite and its Darwin branches run. During host-gate
+migration, `CI_HOST_GATES` admits proven host gates and omitted gates are reported as pending;
+a staged green run proves only its admitted coverage and reports `CI stage`, which cannot satisfy
+the required `Verify` check. Restore that full verdict only after all automated host gates have been
+admitted and proved. Read the current workflow and lane membership
+when deciding whether they cover the slice; device, visible UI, and any pending host acceptance remain
+separate. Contention does not waive them. Run needed host proof when this machine has capacity, or
+report the slice as waiting for that proof.
 
 For CI-covered feature work, refresh affected documents, review and commit the exact task paths,
 and prepare the reviewed message at `.artifacts/merge/<branch>.msg` without paying for local broad
@@ -91,6 +95,10 @@ the message, edit it and run `open-pr` again; updating an
 intentionally armed PR requires the explicit `--auto-merge` option. GitHub deletes the merged
 feature branch; the archive workflow also records `merged/<name>` for a PR merged another way.
 The commands use REST where a cloud proxy refuses GraphQL.
+
+When the Developer holds landing while preparing another batch, `open-pr --hold-auto-merge` turns
+off this branch's existing PR auto-merge without pushing or starting checks, including from a dirty
+worktree. It does not cancel a run already in progress.
 
 Use `./agent pr-checks --wait` to follow checks and read failures from their annotations; failed
 partitions upload `verify-partition-<k>` logs. Diagnose with focused local checks when practical,

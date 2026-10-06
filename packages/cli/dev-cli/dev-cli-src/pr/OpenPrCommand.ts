@@ -66,6 +66,8 @@ const defaultDependencies: OpenPrDependencies = {
 export type OpenPrOptions = {
   /** Enable auto-merge explicitly; by default, observe CI with auto-merge required to stay off. */
   autoMerge?: boolean
+  /** Turn auto-merge off for this branch's existing PR without pushing or starting checks. */
+  holdAutoMerge?: boolean
   /** How often to poll the checks while they run; `pr-checks` sizes the default to GitHub's rate limit. */
   pollIntervalMs?: number
   /** Override the current repository root, principally for tests. */
@@ -97,6 +99,30 @@ export const OpenPrCommand = {
     }
 
     const branch = await requirePrBranch(dependencies.run, root, 'open-pr')
+    if (options.holdAutoMerge === true) {
+      if (options.autoMerge === true) {
+        Errors.throwUserInput('Choose either --hold-auto-merge or --auto-merge.')
+      }
+      await requireGh(dependencies, root)
+      const github = gitHubPulls(dependencies.run, root, dependencies.writeLine)
+      const existing = (await github.forBranch(branch, 'open'))[0]
+      if (existing === undefined) {
+        Errors.throwUserInput(`No open pull request exists for ${branch}.`)
+      }
+      if ((await github.view(existing.number)).auto_merge !== null) {
+        const disabled = await dependencies.run('gh', {
+          args: ['pr', 'merge', String(existing.number), '--disable-auto'],
+          cwd: root,
+          stdio: 'pipe',
+        })
+        if (!succeeded(disabled)) {
+          mustSucceed(await github.disableHostAutoMerge(existing.number), dependencies.writeLine)
+        }
+      }
+      await requireAutoMergeOff(github, existing.number)
+      report(`PASS  Auto-merge is off for #${existing.number}; no commits pushed or checks started.`)
+      return { exitCode: 0, lines }
+    }
     await requireCleanWorktree(dependencies, root)
     await requireCommitsBeyondMain(dependencies, root)
     const message = await reviewedMergeMessage(dependencies, root, branch)

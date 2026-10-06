@@ -756,6 +756,14 @@ diagnose-verification: _deps
 verify-full-sandbox no_cache='false' partition='':
     ./dev gates {{ VERIFY_FULL_GATES }} --skip-unsandboxed --lane verify-full-sandbox {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }} {{ if partition == "" { "" } else { "--partition " + partition } }}
 
+# Run portable full verification plus only the host gates admitted for this CI run. Omitted host gates
+# are reported as pending admission; this staged lane never records a green tree.
+[arg('host_gates', long='ci-host-gates')]
+[arg('partition', long='partition')]
+[group('Dev')]
+verify-full-ci partition='' host_gates='all': _deps
+    ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full-ci --no-cache {{ if partition == "" { "" } else { "--partition " + partition } }} {{ if host_gates == "all" { "" } else { "--ci-host-gates " + quote(host_gates) } }}
+
 # `verify-repo` is the end of the widening order, past where a scope can go: it is the only entry
 # that gives up every shortcut the others keep. `clean` removes the build outputs and the generated
 # trees, `verify-full --no-cache` then rebuilds and re-runs all of it rather than standing on a green

@@ -16,7 +16,9 @@
 - **Proposed change:** Keep registration accessors lazy while wrapping timeout arguments; ordinary
   import must not access `only`, and explicitly using `Test.only` in CI must still be rejected.
   Controlled timeout-forwarding fixtures may opt out of CI only inside their isolated child process.
-- **Dependencies:** Fix is owned by `feat/ci-timeout-headroom`; replacement GitHub verification pending.
+- **Dependencies:** Fix is owned by `feat/ci-timeout-headroom`. Replacement GitHub run `37395646036`
+  passed every portable partition with the focused-test guard preserved. Landing is held while the
+  Developer's combined macOS workflow and CI priority batch is implemented and verified.
 - **Acceptance:** A subprocess regression proves ordinary registration initializes under `CI=true`
   and focused registration remains rejected; the integrated head passes full portable GitHub Verify.
 - **Source:** GitHub CI logs from run `37394051451`, captured under the task's

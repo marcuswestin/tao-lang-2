@@ -12,10 +12,17 @@ type PriorityProbe = {
   jobs: number
 }
 
-async function probe(lane: string): Promise<PriorityProbe> {
-  const args = [FS.resolvePath('fixtures/verification-priority.ts', import.meta.dir), lane]
+const mockPriorityBoundary = Platform.runtimeProcess.env['CI'] === 'true'
+
+async function probe(lane: string, ci: string | undefined): Promise<PriorityProbe> {
+  const args = [
+    FS.resolvePath('fixtures/verification-priority.ts', import.meta.dir),
+    lane,
+    ...(mockPriorityBoundary ? ['simulate-os-priority'] : []),
+  ]
   const result = await CLI.run(Platform.runtimeProcess.execPath, {
     args,
+    env: { CI: ci },
     processPolicy: 'test',
   })
   Expect({ exitCode: result.exitCode, error: result.error }).toEqual({ exitCode: 0, error: undefined })
@@ -31,14 +38,14 @@ async function probe(lane: string): Promise<PriorityProbe> {
 }
 
 Describe('verification scheduling priority', () => {
-  Test('full verification lowers only its own process and its gate children without changing jobs', async () => {
+  Test('local full verification requests lower priority without changing jobs', async () => {
     const parentPriority = Platform.processPriority()
-    for (const lane of ['default', 'verify', 'verify-full', 'verify-full-sandbox']) {
-      const result = await probe(lane)
+    for (const lane of ['default', 'verify', 'verify-full', 'verify-full-sandbox', 'verify-full-ci']) {
+      const result = await probe(lane, undefined)
       Expect(result.priorityCalls).toBe(1)
       Expect(result.atGate).toBe(result.refused ? result.before : Math.max(result.before, 10))
       Expect(result.gateStatus).toBe('passed')
-      Expect(result.gateChild).toBe(result.atGate)
+      Expect(result.gateChild).toBe(mockPriorityBoundary ? result.before : result.atGate)
       Expect(result.repeated).toBe(result.atGate)
       Expect(result.jobs).toBe(3)
     }
@@ -46,7 +53,7 @@ Describe('verification scheduling priority', () => {
   })
 
   Test('reports a priority refusal and still runs the gates', async () => {
-    const result = await probe('denied')
+    const result = await probe('denied', 'false')
     Expect(result.refused).toBe(true)
     Expect(result.atGate).toBe(result.before)
     Expect(result.gateStatus).toBe('passed')
@@ -55,9 +62,30 @@ Describe('verification scheduling priority', () => {
     Expect(result.priorityCalls).toBe(1)
   })
 
+  Test('CI keeps full verification and its real child at inherited priority', async () => {
+    for (const lane of ['default', 'verify', 'verify-full', 'verify-full-sandbox', 'verify-full-ci']) {
+      const result = await probe(lane, 'true')
+      Expect(result.priorityCalls).toBe(0)
+      Expect(result.atGate).toBe(result.before)
+      Expect(result.gateStatus).toBe('passed')
+      Expect(result.gateChild).toBe(result.before)
+      Expect(result.repeated).toBe(result.before)
+      Expect(result.jobs).toBe(3)
+    }
+  })
+
+  Test('CI=false retains the local priority policy', async () => {
+    const result = await probe('verify-full', 'false')
+    Expect(result.priorityCalls).toBe(1)
+    Expect(result.atGate).toBe(result.refused ? result.before : Math.max(result.before, 10))
+    Expect(result.gateStatus).toBe('passed')
+    Expect(result.gateChild).toBe(mockPriorityBoundary ? result.before : result.atGate)
+    Expect(result.repeated).toBe(result.atGate)
+  })
+
   Test('leaves narrower and other gate commands at their inherited priority', async () => {
     for (const lane of ['verify-changed', 'check', 'test-all', 'custom']) {
-      const result = await probe(lane)
+      const result = await probe(lane, 'false')
       Expect(result.priorityCalls).toBe(0)
       Expect(result.atGate).toBe(result.before)
       Expect(result.gateStatus).toBe('passed')

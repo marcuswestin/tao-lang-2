@@ -47,6 +47,14 @@ Describe('verification lane names', () => {
     // The exact bug: two of these three used to be `full-verify`-style names that match no record.
     Expect(VerificationLanes.VERIFY_OR_WIDER).toContain('verify-full')
     Expect(VerificationLanes.VERIFY_OR_WIDER).toContain('verify-full-sandbox')
+    Expect(VerificationLanes.VERIFY_OR_WIDER).not.toContain('verify-full-ci')
+  })
+
+  Test('locks staged CI full verification without making it proof of verify', () => {
+    Expect(VerificationLanes.ALL).toContain('verify-full-ci')
+    Expect(VerificationLanes.BROAD).toContain('verify-full-ci')
+    Expect(VerificationLanes.LOCKED).toContain('verify-full-ci')
+    Expect(VerificationLanes.VERIFY_OR_WIDER).not.toContain('verify-full-ci')
   })
 
   Test('every lane the landing lock serializes is a recipe, so none of them escapes it by typo', async () => {

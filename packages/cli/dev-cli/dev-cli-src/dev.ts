@@ -1,6 +1,7 @@
 import { reportPostLandingResources } from '@cli-kit/ResourceCommands'
 import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { CiGateAdmission } from '@verification/CiGateAdmission'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
 import {
   FinalizeCommand,
@@ -54,6 +55,7 @@ type TestChangedCommandOptions = TestCommandOptions & {
 }
 
 type GatesCommandOptions = {
+  ciHostGates?: string
   showStudio?: boolean
   /**
    * Commander reads `--no-cache` as the negation of a `cache` option that defaults to true, so the
@@ -460,6 +462,7 @@ await runWithCommands(commands => {
       "Run this machine's share of the lane's readers, one-based, e.g. 2/8; the prepare phase runs in full.",
     )
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
+    .option('--ci-host-gates <names>', 'Internal CI admission: comma-separated host gates; empty admits none.')
     .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
     .option(
       '--green-tree <lanes...>',
@@ -471,13 +474,26 @@ await runWithCommands(commands => {
     // uncaught stack with a code frame from inside the error helper.
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       await runExitCommand(async () => {
+        if (
+          options.ciHostGates !== undefined
+          && (options.lane !== VerificationLanes.VERIFY_FULL_CI || options.skipUnsandboxed === true)
+        ) {
+          Errors.throwUserInput('--ci-host-gates requires the verify-full-ci lane without --skip-unsandboxed.')
+        }
+        if (options.lane === VerificationLanes.VERIFY_FULL_CI && options.greenTree !== undefined) {
+          Errors.throwUserInput('verify-full-ci cannot reuse or record a green-tree proof.')
+        }
+        const admission = CiGateAdmission.select(gates, options.ciHostGates)
         const runnable = options.skipUnsandboxed === true
-          ? gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
-          : gates
+          ? admission.gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
+          : admission.gates
         UiVisibility.preflightGates(runnable, options.showStudio)
         // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
         // Gate children inherit it; the invoking shell and landing process keep their priority.
-        if (VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)) {
+        if (
+          VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)
+          || options.lane === VerificationLanes.VERIFY_FULL_CI
+        ) {
           const { WatchmanCommand } = await import('./doctor/WatchmanCommand')
           const watchmanStart = await WatchmanCommand.startBeforeLoweringPriority(
             runnable.some(name => GateCatalog.metadata(name).usesWatchman === true),
@@ -486,10 +502,13 @@ await runWithCommands(commands => {
           if (watchmanStart !== undefined && watchmanStart !== 0) {
             HCI.logProcessWarn('verify', 'Could not start Watchman at normal priority; Studio gates may refuse it.')
           }
-          try {
-            Platform.lowerProcessPriority()
-          } catch (error) {
-            HCI.logProcessWarn('verify', `${Errors.formatForUser(error)} Continuing at inherited priority.`)
+          // Dedicated CI runners keep normal priority; only local verification yields to interactive work.
+          if (Platform.runtimeProcess.env.CI !== 'true') {
+            try {
+              Platform.lowerProcessPriority()
+            } catch (error) {
+              HCI.logProcessWarn('verify', `${Errors.formatForUser(error)} Continuing at inherited priority.`)
+            }
           }
         }
         const outputMode = WorkReporter.resolveMode({ requested: options.output })
@@ -497,7 +516,7 @@ await runWithCommands(commands => {
         return await holdingLandingLock(options.lane ?? 'verify', async () => {
           const summary = await runGates({
             showStudio: options.showStudio,
-            gates,
+            gates: admission.gates,
             greenTree: options.greenTree === undefined || options.greenTree.length === 0
               ? undefined
               : { lanes: options.greenTree, noCache: options.cache === false, sharedRoot: GreenTree.sharedRoot() },
@@ -508,7 +527,7 @@ await runWithCommands(commands => {
             outputMode,
             partition: options.partition === undefined ? undefined : VerifyPartition.parse(options.partition),
             skipUnsandboxed: options.skipUnsandboxed === true,
-            skipped: options.skipped,
+            skipped: [...(options.skipped ?? []), ...admission.skipped],
           })
           if (summary.greenTree !== undefined) {
             // A lane that ran nothing still states its verdict, and states it the same way: the record
@@ -858,10 +877,12 @@ await runWithCommands(commands => {
       'Enable GitHub auto-merge after checks start for authorized ready landing; omitted keeps it off and refuses an already enabled pull request.',
     )
     .option('--poll-interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
-    .action(async (options: { autoMerge?: boolean; pollIntervalMs?: string } = {}) => {
+    .option('--hold-auto-merge', 'Turn off auto-merge for this branch’s existing PR without pushing or starting CI.')
+    .action(async (options: { autoMerge?: boolean; holdAutoMerge?: boolean; pollIntervalMs?: string } = {}) => {
       await runExitCommand(async () =>
         (await OpenPrCommand.run({
           autoMerge: options.autoMerge,
+          holdAutoMerge: options.holdAutoMerge,
           pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
         })).exitCode
       )
