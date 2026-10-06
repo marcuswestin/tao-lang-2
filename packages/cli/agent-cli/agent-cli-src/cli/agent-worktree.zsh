@@ -21,7 +21,13 @@ if [[ "$1" == create ]]; then
   name="${BASH_REMATCH[1]}"
   target="$primary/.claude/worktrees/$name"
   if [[ ! -e "$target" ]]; then
-    git -C "$primary" worktree add -b "worktree-$name" "$target" >&2 \
+    # Branch from the freshly fetched remote default branch, as WorktreePlacement.ts does.
+    base="$(git -C "$primary" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
+    if [[ -n "$base" ]]; then
+      git -C "$primary" fetch --quiet "${base%%/*}" "${base#*/}" >&2 \
+        || printf 'worktree: could not fetch %s; branching from the last fetched %s\n' "$base" "$base" >&2
+    fi
+    git -C "$primary" worktree add -b "worktree-$name" "$target" ${base:+"$base"} >&2 \
       || git -C "$primary" worktree add "$target" "worktree-$name" >&2 || exit 1
   fi
   printf '%s\n' "$target"

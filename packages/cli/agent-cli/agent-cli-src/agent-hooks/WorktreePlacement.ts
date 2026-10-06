@@ -44,10 +44,26 @@ export async function primaryCheckout(cwd: string, git: Git = runGit): Promise<s
   return await FS.realPath(FS.dirname(commonDir))
 }
 
-/** baseRef is what a new worktree branches from: the remote's default branch, as the harness does. */
-async function baseRef(primary: string, git: Git): Promise<string> {
+/**
+ * baseRef is what a new worktree branches from: the remote's default branch, as the harness does,
+ * fetched first. Nothing else moves `origin/main` in a checkout whose pull requests GitHub merges,
+ * so without the fetch a new worktree started from whatever the last fetch saw, once 47 commits
+ * behind. A fetch that fails, offline or refused, is said on stderr and the last fetched ref used:
+ * a stale start is better than no worktree.
+ */
+async function baseRef(primary: string, git: Git, log?: (line: string) => void): Promise<string> {
   const remoteHead = await git(['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'], primary)
-  return remoteHead.exitCode === 0 && remoteHead.stdout.trim() !== '' ? remoteHead.stdout.trim() : 'HEAD'
+  const ref = remoteHead.exitCode === 0 ? remoteHead.stdout.trim() : ''
+  if (ref === '') {
+    return 'HEAD'
+  }
+  const slash = ref.indexOf('/')
+  const fetched = await git(['fetch', '--quiet', ref.slice(0, slash), ref.slice(slash + 1)], primary)
+  if (fetched.exitCode !== 0) {
+    log?.(`worktree: could not fetch ${ref} (${fetched.stderr.trim() || `exit ${fetched.exitCode}`}); `
+      + `branching from the last fetched ${ref}`)
+  }
+  return ref
 }
 
 /** registeredWorktrees lists every linked worktree git knows for this repository, symlinks resolved. */
@@ -58,7 +74,13 @@ async function registeredWorktrees(primary: string, git: Git): Promise<string[]>
 }
 
 /** addWorktree creates `name` under `directory`, or returns the worktree already there. */
-async function addWorktree(primary: string, directory: string, name: string, git: Git): Promise<string> {
+async function addWorktree(
+  primary: string,
+  directory: string,
+  name: string,
+  git: Git,
+  log?: (line: string) => void,
+): Promise<string> {
   const target = FS.resolvePath(name, directory)
   if (await FS.exists(target)) {
     const real = await FS.realPath(target)
@@ -73,7 +95,7 @@ async function addWorktree(primary: string, directory: string, name: string, git
   const added = await git(
     exists.exitCode === 0
       ? ['worktree', 'add', target, branch]
-      : ['worktree', 'add', '-b', branch, target, await baseRef(primary, git)],
+      : ['worktree', 'add', '-b', branch, target, await baseRef(primary, git, log)],
     primary,
   )
   if (added.exitCode !== 0) {
@@ -96,13 +118,13 @@ export async function createWorktree(
   }
   const primary = await primaryCheckout(input.cwd, git)
   try {
-    return await addWorktree(primary, siblingWorktreeRoot(primary), input.name, git)
+    return await addWorktree(primary, siblingWorktreeRoot(primary), input.name, git, options.log)
   } catch (error) {
     options.log?.(
       `worktree ${input.name}: could not place it beside the checkout (${Errors.asError(error).message}); `
         + `using ${FALLBACK_DIRECTORY}/ instead`,
     )
-    return await addWorktree(primary, FS.resolvePath(FALLBACK_DIRECTORY, primary), input.name, git)
+    return await addWorktree(primary, FS.resolvePath(FALLBACK_DIRECTORY, primary), input.name, git, options.log)
   }
 }
 
