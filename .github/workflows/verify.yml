@@ -432,9 +432,6 @@ jobs:
     name: CI macOS
     runs-on: macos-26
     timeout-minutes: 60
-    env:
-      # The dispatch input tries one admission for one run; the workflow's own line is the default.
-      HOST_GATES: ${{ inputs.host_gates || env.CI_HOST_GATES }}
     steps:
       - uses: actions/checkout@v4
 
@@ -478,6 +475,10 @@ jobs:
           cp .github/verify/ledger.json .artifacts/testing/ledger.json
 
       - name: Run the admitted host gates
+        env:
+          # The dispatch input tries one admission for one run; the workflow's own line is the default.
+          # (`env` is a step-level context only, so this cannot sit on the job.)
+          HOST_GATES: ${{ inputs.host_gates || env.CI_HOST_GATES }}
         run: |
           echo "Admitted host gates: '${HOST_GATES}'"
           devenv shell -- ./agent unsandboxed verify-full-ci --ci-host-gates "$HOST_GATES"
