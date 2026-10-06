@@ -18,7 +18,8 @@ import {
   type HostTarget,
   MachineResources,
 } from '@host-control'
-import { Errors, FS, Repo, Switch, Time } from '@shared'
+import { Errors, FS, Repo, Switch } from '@shared'
+import { hostArtifactDate } from '../../environment/HostArtifactClock'
 import type { ManagedMobileGrant } from '../ManagedMobileGrant'
 
 export type AppiumAndroidBuild = Readonly<{
@@ -117,6 +118,8 @@ type AppiumAndroidRevisionPublisher = (
 ) => Promise<void>
 
 export type AppiumAndroidControllerOptions = Readonly<{
+  /** Calendar time labels observations; polling and duration clocks remain monotonic. */
+  calendarClock?: () => Date
   build: AppiumAndroidBuild
   client: AppiumAndroidClient
   leases?: AppiumAndroidLeaseManager
@@ -178,6 +181,7 @@ export function appiumAndroidCapabilities(
 }
 
 class AppiumAndroidController implements HostController {
+  readonly #calendarClock: () => Date
   readonly #build?: AppiumAndroidBuild
   readonly #managed?: ManagedMobileGrant
   readonly #beforeDriverDeletion?: () => Promise<void>
@@ -194,6 +198,7 @@ class AppiumAndroidController implements HostController {
     managed?: ManagedMobileGrant,
     beforeDriverDeletion?: () => Promise<void>,
   ) {
+    this.#calendarClock = options.calendarClock ?? hostArtifactDate
     this.#managed = managed
     this.#beforeDriverDeletion = beforeDriverDeletion
     this.#build = options.build === undefined ? undefined : frozenBuild(options.build)
@@ -278,6 +283,7 @@ class AppiumAndroidController implements HostController {
       }
       let hostSession: AppiumAndroidSession
       hostSession = new AppiumAndroidSession({
+        calendarClock: this.#calendarClock,
         allocation: allocation.value,
         allocationLeases: allocation.leases,
         artifactRoot: options.artifactRoot,
@@ -372,6 +378,7 @@ class AppiumAndroidController implements HostController {
 }
 
 class AppiumAndroidSession implements HostSession {
+  readonly #calendarClock: () => Date
   readonly #managed?: ManagedMobileGrant
   readonly #beforeDriverDeletion?: () => Promise<void>
   readonly #allocation: AppiumAndroidAllocation
@@ -401,6 +408,7 @@ class AppiumAndroidSession implements HostSession {
       allocation: AppiumAndroidAllocation
       allocationLeases: readonly AppiumAndroidLease[]
       artifactRoot: string
+      calendarClock: () => Date
       build?: AppiumAndroidBuild
       descriptor: HostSessionDescriptor
       onClosed: () => void
@@ -414,6 +422,7 @@ class AppiumAndroidSession implements HostSession {
       beforeDriverDeletion?: () => Promise<void>
     }>,
   ) {
+    this.#calendarClock = options.calendarClock
     this.#allocation = options.allocation
     this.#managed = options.managed
     this.#beforeDriverDeletion = options.beforeDriverDeletion
@@ -497,7 +506,7 @@ class AppiumAndroidSession implements HostSession {
         sessionId: this.#descriptor.id,
         target: request.target,
         ...(element.getText === undefined ? {} : { text: await element.getText() }),
-        timestamp: new Date(Time.nowMs()).toISOString(),
+        timestamp: this.#calendarClock().toISOString(),
         visible,
         version: 1,
       }

@@ -100,6 +100,7 @@ change that addressed it.
 - [DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START — File watching depends on a Watchman server no agent can start](<Developer environment upgrades/DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START.md>) — Candidate
 - [DEVENV-GIT-WORKTREE-TIMEOUTS-RECUR-AFTER-COMPLETION-REPAIR — Git worktree timeouts recur after completion repair](<Developer environment upgrades/DEVENV-GIT-WORKTREE-TIMEOUTS-RECUR-AFTER-COMPLETION-REPAIR.md>) — Candidate
 - [DEVENV-HOOK-REVIEW-IGNORES-DESCRIPTIVE-NAMES — Hook review ignores descriptive names](<Developer environment upgrades/DEVENV-HOOK-REVIEW-IGNORES-DESCRIPTIVE-NAMES.md>) — Blocked
+- [DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS — Host effect lint has baseline findings](<Developer environment upgrades/DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS.md>) — Candidate
 - [DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS — iOS builds lack CocoaPods metadata access](<Developer environment upgrades/DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS.md>) — In progress
 - [DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED — A landing tests a Codex config it never regenerated](<Developer environment upgrades/DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED.md>) — Candidate
 - [DEVENV-LAZY-TEST-REGISTRATION-FAILS-CI-IMPORT — Lazy test registration fails CI import](<Developer environment upgrades/DEVENV-LAZY-TEST-REGISTRATION-FAILS-CI-IMPORT.md>) — In progress
@@ -112,7 +113,6 @@ change that addressed it.
 - [DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP — iOS dev loop can stall after an Android loop stops](<Developer environment upgrades/DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP.md>) — Candidate
 - [DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG — Model routing trails the installed catalog](<Developer environment upgrades/DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG.md>) — Candidate
 - [DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES — Native kit omits provider transitives](<Developer environment upgrades/DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES.md>) — In progress
-- [DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME — Native session timestamps use monotonic time](<Developer environment upgrades/DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME.md>) — Candidate
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
 - [DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL — Output hook requires an unavailable read tool](<Developer environment upgrades/DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL.md>) — Candidate
 - [DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT — Following checks spends GitHub's anonymous API limit](<Developer environment upgrades/DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT.md>) — Candidate
