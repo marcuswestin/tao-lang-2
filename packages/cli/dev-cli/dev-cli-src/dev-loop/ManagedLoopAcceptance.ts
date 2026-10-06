@@ -6,6 +6,7 @@ import { CLI, Errors, FS, HCI, Http, Platform, Repo, Switch, Time } from '@share
 import { ProcessTree, type TrackedProcess } from '@shared/ProcessTree'
 import { appDevReservation } from '../simulators/AgentAppDev'
 import { devLoopDirectory, type DevLoopReceipt, readDevLoopReceipt } from './DevLoopStore'
+import type { assertManagedFirebaseSubject } from './ManagedFirebaseAcceptance'
 import { managedLoopAndroidPrefix } from './ManagedLoopAcceptanceAndroidTarget'
 import { runManagedLoopChromeInteraction } from './ManagedLoopAcceptanceChrome'
 import {
@@ -66,6 +67,7 @@ type AcceptanceOperations = {
   targetFault: typeof runManagedLoopTargetFault
   borrowTarget: typeof withOwnedBorrowedTarget
   processGroupDiagnostic: typeof runManagedLoopProcessGroupDiagnostic
+  assertFirebaseSubject?: typeof assertManagedFirebaseSubject
   /** Parent wiring supplies the reviewed driver bridge. It never receives control credentials. */
   mobileInteraction?: ManagedLoopMobileInteraction
   /** Injected source regressions must never produce a real-host pass artifact. */
@@ -645,7 +647,7 @@ export async function runManagedLoopAcceptance(
     }
     if (fixture === 'firebase-sync') {
       const { assertManagedFirebaseSubject } = await import('./ManagedFirebaseAcceptance')
-      await assertManagedFirebaseSubject(receipt)
+      await (operations.assertFirebaseSubject ?? assertManagedFirebaseSubject)(receipt)
       return
     }
     if (

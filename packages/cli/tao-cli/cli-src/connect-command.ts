@@ -158,6 +158,7 @@ export async function runTaoConnect(
         rulesFile: options.rulesFile,
         inspector: options.firebaseInspector,
         currentProjectId: isObject(existing) && typeof existing['projectId'] === 'string'
+            && existing['projectId'] !== 'REPLACE_WITH_FIREBASE_PROJECT_ID'
           ? existing['projectId']
           : undefined,
         prompts,

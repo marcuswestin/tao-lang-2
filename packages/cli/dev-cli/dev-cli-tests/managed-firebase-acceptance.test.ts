@@ -1,9 +1,10 @@
-import { Errors, FS, Platform, readFirebaseConnections, Repo } from '@shared'
+import { FS, Platform, Repo } from '@shared'
 import { Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { StudioCdp } from '@studio-tooling/StudioCdp'
 import type { DevLoopReceipt } from '../dev-cli-src/dev-loop/DevLoopStore'
 import { assertManagedFirebaseSubject, openManagedFirebaseWeb } from '../dev-cli-src/dev-loop/ManagedFirebaseAcceptance'
 import { runManagedLoopAcceptance } from '../dev-cli-src/dev-loop/ManagedLoopAcceptance'
+import { assertFirebaseFixtureSubject, firebaseFixtureConnection } from './managed-firebase-fixture'
 
 for (
   const fault of ['none', 'source-before-dispatch', 'source-before-action', 'wrong-case', 'stale-generation'] as const
@@ -37,10 +38,7 @@ for (
           await FS.readText(Repo.resolvePath(`Apps/Firebase Live Acceptance/${path}`)),
         )
       }
-      const connection = await readFirebaseConnections(Repo.resolvePath('Apps/Firebase Live Acceptance'))
-      if (connection === undefined) {
-        Errors.throwUnexpected('The reviewed public Firebase connection is missing.')
-      }
+      const connection = firebaseFixtureConnection
       await FS.writeJson(FS.resolvePath('.tao/local/connections.json', projectRoot), { firebase: connection })
       const changeSubject = async () => {
         const path = FS.resolvePath('Auth.tao', projectRoot)
@@ -66,6 +64,7 @@ for (
             stdout: '',
             stderr: '',
           }),
+          assertFirebaseSubject: assertFirebaseFixtureSubject,
           inventory: async () => ({ processCount: 0, peers: [], resources: [] }),
           receipt: async () => {
             receiptReads++
@@ -118,10 +117,7 @@ Test('Firebase subject follows canonical public connections while authored place
   const reviewedAuth = await FS.readText(Repo.resolvePath('Apps/Firebase Live Acceptance/Auth.tao'))
   const reviewedItems = await FS.readText(Repo.resolvePath('Apps/Firebase Live Acceptance/Items/Items.tao'))
   const reviewedData = await FS.readText(Repo.resolvePath('Apps/Firebase Live Acceptance/Data.tao'))
-  const connection = await readFirebaseConnections(Repo.resolvePath('Apps/Firebase Live Acceptance'))
-  if (connection === undefined) {
-    Errors.throwUnexpected('The reviewed public Firebase connection is missing.')
-  }
+  const connection = firebaseFixtureConnection
   const selection = { projectRoot, appPath, appName: 'FirebaseLiveAcceptance' }
   try {
     await FS.writeText(appPath, reviewedApp)
@@ -129,7 +125,8 @@ Test('Firebase subject follows canonical public connections while authored place
     await FS.writeText(FS.resolvePath('Items/Items.tao', projectRoot), reviewedItems)
     await FS.writeText(FS.resolvePath('Data.tao', projectRoot), reviewedData)
     await FS.writeJson(connectionPath, { firebase: connection })
-    await assertManagedFirebaseSubject({ checkout, selection })
+    await assertFirebaseFixtureSubject({ checkout, selection })
+    await Expect(assertManagedFirebaseSubject({ checkout, selection })).rejects.toThrow('subject, provider, namespace')
     const changedSources = [
       {
         path: appPath,
@@ -162,7 +159,7 @@ Test('Firebase subject follows canonical public connections while authored place
     ]
     for (const changed of changedSources) {
       await FS.writeText(changed.path, changed.source)
-      await Expect(assertManagedFirebaseSubject({ checkout, selection })).rejects.toThrow(
+      await Expect(assertFirebaseFixtureSubject({ checkout, selection })).rejects.toThrow(
         'subject, provider, namespace',
       )
       await FS.writeText(changed.path, changed.original)
@@ -174,7 +171,7 @@ Test('Firebase subject follows canonical public connections while authored place
         { ...selection, projectRoot: FS.resolvePath('Apps/Hosted Firebase', checkout) },
       ]
     ) {
-      await Expect(assertManagedFirebaseSubject({ checkout, selection: changed })).rejects.toThrow('restricted')
+      await Expect(assertFirebaseFixtureSubject({ checkout, selection: changed })).rejects.toThrow('restricted')
     }
     for (
       const changed of [{ ...connection, apiKey: 'changed-public-key' }, { ...connection, appId: 'changed-app' }, {
@@ -183,7 +180,7 @@ Test('Firebase subject follows canonical public connections while authored place
       }]
     ) {
       await FS.writeJson(connectionPath, { firebase: changed })
-      await Expect(assertManagedFirebaseSubject({ checkout, selection })).rejects.toThrow(
+      await Expect(assertFirebaseFixtureSubject({ checkout, selection })).rejects.toThrow(
         'subject, provider, namespace',
       )
     }
@@ -197,10 +194,7 @@ for (const fault of ['auth-after-attach', 'items-after-attach', 'public-key-afte
     const checkout = await mkTestDir('managed-firebase-attached-')
     const projectRoot = FS.resolvePath('Apps/Firebase Live Acceptance', checkout)
     const profile = FS.resolvePath('.tao/chrome-fixture', projectRoot)
-    const connection = await readFirebaseConnections(Repo.resolvePath('Apps/Firebase Live Acceptance'))
-    if (connection === undefined) {
-      Errors.throwUnexpected('The reviewed public Firebase connection is missing.')
-    }
+    const connection = firebaseFixtureConnection
     const sourcePaths = ['App.tao', 'Auth.tao', 'Items/Items.tao', 'Data.tao']
     const browser = { pid: 90002, startedAt: 'browser-start', command: `Chrome --user-data-dir=${profile}` }
     const controller = { pid: 90001, startedAt: 'controller-start', command: 'controller' }
@@ -271,6 +265,7 @@ for (const fault of ['auth-after-attach', 'items-after-attach', 'public-key-afte
           return cdp
         },
       }, {
+        assertSubject: assertFirebaseFixtureSubject,
         receipt: async () => receipt,
         identities: () => new Map([[browser.pid, browser], [controller.pid, controller]]),
         processTable: () => [{ ...browser, ppid: controller.pid }, { ...controller, ppid: 1 }],

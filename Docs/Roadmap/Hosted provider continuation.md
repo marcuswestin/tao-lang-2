@@ -856,3 +856,27 @@ Test navigation also needed repairs. The exact Expo introduction is followed by 
 The latest complete attempt reached `native-main-signin` and failed with the visible message `The email or password is incorrect.` for the main sample account. The CRUD-sync evidence remains proved, while the overall two-account case remains failed. Driver cleanup and peer identity checks passed. The Developer must validate this account's current credentials locally; do not request a password in chat or reset the account. Earlier instructions pointing to stopped-loop URLs are superseded. The current owned session is `f964a8b3-f624-40e9-90be-5043524373bc`; consult its receipt for the current URL before giving a human step.
 
 Conditional landing remains held while the required main-account gate is unresolved. Appwrite remains deferred until the Firebase ordinary flow is accepted; its live subscription fix still needs device/reconnect, offline restart/replay, account isolation and direct hostile owner/permission checks. Jazz, Convex and Pylon retain their separate gates.
+
+### Hosted landing repair — 2026-10-06 07:04 UTC
+
+The Developer authorized landing this slice after Preview SPEED, whose PR32 merged at
+`cc75384b8b04fbfff1c4c2b45230dd920f757f05`. PR30's next Verify run37425780549
+failed two Firebase test partitions and was cancelled immediately to release the remaining jobs.
+The local host complement had passed all eight gates; that is separate from portable CI proof.
+
+The source regressions now use synthetic public connection settings in isolated fixtures instead
+of requiring an ignored local connection file. They exercise the same subject-check implementation,
+including altered source/config rejection; the live wrapper retains its fixed reviewed fingerprint
+and explicitly rejects the synthetic connection. Controller and attachment injections remain
+internal source-test dependencies, and injected acceptance evidence remains labelled source regression.
+No credentials or actual public project settings were copied into tracked fixtures.
+
+Firebase provisioning ignores the exact authored `REPLACE_WITH_FIREBASE_PROJECT_ID` sentinel as a
+saved association, while unavailable real saved project IDs still refuse setup. The creation and
+cancellation tests now choose named prompt values. Focused subject, controller, connection and
+provisioning tests passed. GitHub Verify must still pass before this repair is landed.
+
+The landing authorization supersedes earlier conditional landing holds in this dated history. It
+does not prove the remaining physical-device Companion controls, Firebase offline restart/replay,
+two-device account isolation/switching, or direct hostile-server requests. Appwrite and the other
+provider acceptance gates remain deferred. Local evidence and Developer-owned test apps are retained.

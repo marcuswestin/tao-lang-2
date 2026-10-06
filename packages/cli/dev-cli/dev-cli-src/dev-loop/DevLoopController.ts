@@ -82,6 +82,7 @@ export async function runDevLoopController(
     runAppDev?: typeof runAgentAppDev
     flushOutput?: () => Promise<void>
     onStop?: () => void
+    assertFirebaseSubject?: typeof assertManagedFirebaseSubject
     mobileFixture?: typeof runManagedMobileFixture
     writeReceipt?: typeof writeDevLoopReceipt
     onOwnershipCheckpoint?: (checkpoint: ManagedLoopOwnershipCheckpoint) => Promise<void>
@@ -457,7 +458,7 @@ export async function runDevLoopController(
                 )
               }
               if (firebaseSync) {
-                await assertManagedFirebaseSubject(receipt)
+                await (operations.assertFirebaseSubject ?? assertManagedFirebaseSubject)(receipt)
               }
               const reservation = reservations.get(target)
               const runtime = receipt.targets?.find(value => value.target === target && value.dispatched)?.mobile
@@ -486,7 +487,7 @@ export async function runDevLoopController(
                 assertOwnerCurrent: reservation.assertCurrent,
                 assertLoopCurrent: async () => {
                   if (firebaseSync) {
-                    await assertManagedFirebaseSubject(receipt)
+                    await (operations.assertFirebaseSubject ?? assertManagedFirebaseSubject)(receipt)
                   }
                   if (
                     !running || stopRequested || receipt.state !== 'ready' || receipt.generation !== loopGeneration
@@ -570,7 +571,7 @@ export async function runDevLoopController(
                       'Firebase startup lost its current owned simulator or runtime identity.',
                     )
                   }
-                  await assertManagedFirebaseSubject(durable)
+                  await (operations.assertFirebaseSubject ?? assertManagedFirebaseSubject)(durable)
                   await grant.assertRequestCurrent()
                 }
                 : undefined

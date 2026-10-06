@@ -19,6 +19,7 @@ import type {
   ManagedChildCapture,
   runAgentAppDev,
 } from '../dev-cli-src/simulators/AgentAppDev'
+import { assertFirebaseFixtureSubject, writeFirebaseFixture } from './managed-firebase-fixture'
 
 Test('managed poll heartbeats and abandoned-request cleanup keep stop deliverable exactly once', async () => {
   const record = receipt()
@@ -640,7 +641,8 @@ Test(
   'Firebase startup guard rejects durable simulator, runtime, controller, and selection drift before POST',
   async () => {
     const record = receipt()
-    const projectRoot = Repo.resolvePath('Apps/Firebase Live Acceptance')
+    const checkout = await mkTestDir('firebase-startup-guard-')
+    const projectRoot = await writeFirebaseFixture(checkout)
     record.selection = {
       appName: 'FirebaseLiveAcceptance',
       appPath: FS.resolvePath('App.tao', projectRoot),
@@ -650,6 +652,7 @@ Test(
     let hooks: Awaited<ReturnType<typeof connectDevLoopWorker>> | undefined
     let posts = 0
     const controller = await runDevLoopController(record, {
+      assertFirebaseSubject: value => assertFirebaseFixtureSubject({ ...value, checkout }),
       runAppDev: async (_args, _operations, managed) => {
         hooks = await connectDevLoopWorker(managed!.childEnv['TAO_DEV_LOOP_WORKER_CREDENTIALS']!)
         hooks.bind({
@@ -786,6 +789,7 @@ Test(
       await hooks?.close()
       await controller.close()
       await FS.remove(devLoopDirectory(record.session))
+      await FS.remove(checkout)
     }
   },
 )

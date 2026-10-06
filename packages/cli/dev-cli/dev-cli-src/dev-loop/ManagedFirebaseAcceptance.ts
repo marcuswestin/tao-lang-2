@@ -18,33 +18,40 @@ const reviewedFirebaseConnection = '19023f690abce9270fbce5b3ebaf78be7106cc5ffbcd
 export async function assertManagedFirebaseSubject(
   receipt: Pick<DevLoopReceipt, 'checkout' | 'selection'>,
 ): Promise<void> {
-  const projectRoot = FS.resolvePath('Apps/Firebase Live Acceptance', receipt.checkout)
-  const selection = receipt.selection
-  if (
-    selection?.appName !== 'FirebaseLiveAcceptance' || selection.projectRoot !== projectRoot
-    || selection.appPath !== FS.resolvePath('App.tao', projectRoot)
-  ) {
-    Errors.throwHostEnvironment(
-      'Firebase sync is restricted to Apps/Firebase Live Acceptance / FirebaseLiveAcceptance.',
+  await createManagedFirebaseSubjectGuard(reviewedFirebaseConnection)(receipt)
+}
+
+/** Dependency seam for source regressions; live callers retain the fixed reviewed connection. */
+export function createManagedFirebaseSubjectGuard(connectionFingerprint: string): typeof assertManagedFirebaseSubject {
+  return async receipt => {
+    const projectRoot = FS.resolvePath('Apps/Firebase Live Acceptance', receipt.checkout)
+    const selection = receipt.selection
+    if (
+      selection?.appName !== 'FirebaseLiveAcceptance' || selection.projectRoot !== projectRoot
+      || selection.appPath !== FS.resolvePath('App.tao', projectRoot)
+    ) {
+      Errors.throwHostEnvironment(
+        'Firebase sync is restricted to Apps/Firebase Live Acceptance / FirebaseLiveAcceptance.',
+      )
+    }
+    const sourceMatches = await Promise.all(
+      reviewedFirebaseSources.map(async ([path, hash]) =>
+        Platform.sha256Hex(await FS.readText(FS.resolvePath(path, projectRoot))) === hash
+      ),
     )
-  }
-  const sourceMatches = await Promise.all(
-    reviewedFirebaseSources.map(async ([path, hash]) =>
-      Platform.sha256Hex(await FS.readText(FS.resolvePath(path, projectRoot))) === hash
-    ),
-  )
-  const connection = await readFirebaseConnections(projectRoot)
-  if (
-    !sourceMatches.every(Boolean) || connection === undefined
-    || Platform.sha256Hex(JSON.stringify({
-        apiKey: connection.apiKey,
-        appId: connection.appId,
-        projectId: connection.projectId,
-      })) !== reviewedFirebaseConnection
-  ) {
-    Errors.throwHostEnvironment(
-      'The fixed Firebase acceptance subject, provider, namespace or sample shortcuts changed.',
-    )
+    const connection = await readFirebaseConnections(projectRoot)
+    if (
+      !sourceMatches.every(Boolean) || connection === undefined
+      || Platform.sha256Hex(JSON.stringify({
+          apiKey: connection.apiKey,
+          appId: connection.appId,
+          projectId: connection.projectId,
+        })) !== connectionFingerprint
+    ) {
+      Errors.throwHostEnvironment(
+        'The fixed Firebase acceptance subject, provider, namespace or sample shortcuts changed.',
+      )
+    }
   }
 }
 
@@ -55,12 +62,13 @@ export async function openManagedFirebaseWeb(options: {
   assertCurrent: () => Promise<void>
   attach?: typeof StudioCdp.attach
 }, observations: {
+  assertSubject?: typeof assertManagedFirebaseSubject
   receipt?: typeof readDevLoopReceipt
   identities?: typeof ProcessTree.identities
   processTable?: typeof ProcessTree.processTable
 } = {}): Promise<ManagedFirebaseWeb> {
   const { receipt } = options
-  await assertManagedFirebaseSubject(receipt)
+  await (observations.assertSubject ?? assertManagedFirebaseSubject)(receipt)
   const browser = receipt.targets?.find(target => target.target === 'web' && target.dispatched)?.browser
   if (
     browser?.process === undefined || receipt.controller === undefined || receipt.url === undefined
@@ -91,7 +99,7 @@ export async function openManagedFirebaseWeb(options: {
     ) {
       Errors.throwHostEnvironment('Firebase sync loop generation or selection changed.')
     }
-    await assertManagedFirebaseSubject(receipt)
+    await (observations.assertSubject ?? assertManagedFirebaseSubject)(receipt)
     const kernel = (observations.identities ?? ProcessTree.identities)([process.pid, controller.pid])
     const launch = (observations.processTable ?? ProcessTree.processTable)().find(entry => entry.pid === process.pid)
     if (

@@ -710,7 +710,7 @@ data Notes / Note { Body text }
             || message === 'Apply this Firebase deployment plan?'
           ) {
             Expect(defaultValue).toBe('continue')
-            Expect(choices[0]?.value).toBe('continue')
+            Expect(choices.some(choice => choice.value === 'continue')).toBe(true)
           }
           return defaultValue ?? choices[0]!.value
         },
@@ -822,7 +822,13 @@ data Notes / Note { Body text }
         return { exitCode: 0, stdout: JSON.stringify({ status: 'success', result }), stderr: '' }
       }
       await Expect(runTaoConnect('firebase', root, {
-        ...scripted(['2', 'tao-hosted-typo', '2']).options,
+        ...scripted([]).options,
+        prompts: {
+          choice: async message => message === 'Choose the Firebase project' ? '__create__' : 'stop',
+          text: async () => 'tao-hosted-typo',
+          paste: async () => '',
+          secret: async () => '',
+        },
         manual: false,
         firebaseRunner: runner,
       })).rejects.toThrow('setup was cancelled')
