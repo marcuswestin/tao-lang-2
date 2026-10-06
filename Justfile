@@ -47,7 +47,7 @@ github-setup:
     fi
     gh config set git_protocol https --host github.com
     gh auth setup-git --hostname github.com
-    git remote set-url origin https://github.com/marcuswestin/tao-lang-2.git
+    git remote set-url origin https://github.com/tao-dev-org/tao-lang.git
     git ls-remote --exit-code origin refs/heads/main >/dev/null
     printf 'GitHub HTTPS authentication is ready for %s.\n' "$(git remote get-url origin)"
 
