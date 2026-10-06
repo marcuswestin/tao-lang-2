@@ -82,6 +82,8 @@ export type GateResult = {
   resources?: readonly string[]
   /** True when the node first failed under machine contention and was run again on its own. */
   retried?: boolean
+  /** The signal that ended the node's process, when it did not exit on its own. */
+  signal?: string
   status: GateStatus
   /** The suite a sharded test node reports under; absent for a node that is not a test shard. */
   suite?: string
@@ -850,6 +852,11 @@ export function gateExitCode(summary: GateSummary): number {
   return summary.status === 'failed' ? 1 : 0
 }
 
+/** processEnding says how a failed node's process ended: its exit code, or the signal that killed it. */
+export function processEnding(exitCode: number | null | undefined, signal: string | undefined): string {
+  return signal === undefined ? `exited ${exitCode ?? 'unknown'}` : `killed by ${signal}`
+}
+
 function nodeResult(
   state: WorkState,
   expectedMs: BuildSummaryOptions['expectedMs'],
@@ -879,9 +886,10 @@ function nodeResult(
     name: state.name,
     needs: state.node.needs,
     after: state.node.after,
-    reason: state.reason ?? (failed ? `exited ${exitCode ?? 'unknown'} (${failureKind})` : undefined),
+    reason: state.reason ?? (failed ? `${processEnding(exitCode, state.signal)} (${failureKind})` : undefined),
     resources: state.node.resources,
     retried: state.retried,
+    signal: state.signal,
     status: state.status === 'passed' ? 'passed' : failed ? 'failed' : 'skipped',
     waits: reportableWaits(state.waits),
   }
