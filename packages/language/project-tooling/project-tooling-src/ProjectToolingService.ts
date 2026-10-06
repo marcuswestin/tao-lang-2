@@ -54,7 +54,10 @@ type ProjectToolingProfile = {
 }
 
 function createProjectToolingProfile(): ProjectToolingProfile | undefined {
-  if (Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] !== 'true') {
+  if (
+    Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] !== 'true'
+    && Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] !== 'true'
+  ) {
     return undefined
   }
   const startedAt = performance.now()

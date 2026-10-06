@@ -27,6 +27,9 @@ import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews
  */
 
 const EDITS_PER_MODE = 8
+const wholeAppProbe = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_WHOLE_APP'] === 'true'
+const saveGapMs = Number(Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_SAVE_GAP_MS'] ?? 500)
+Assert.input(Number.isFinite(saveGapMs) && saveGapMs >= 0, 'Diagnostic save gap is a nonnegative duration.')
 
 const latencySource = (label: string) =>
   `use Col, Text from @tao/ui
@@ -56,7 +59,7 @@ type EditSample = {
   loadAverage: number
   mode: 'on' | 'off'
   paintAt?: number
-  publishedAt: number
+  publishedAt?: number
   saveAt: number
   sourceWrittenAt: number
 }
@@ -125,7 +128,10 @@ async function copyHNReader(projectRoot: string): Promise<void> {
   await FS.mkdir(FS.resolvePath('.tao', projectRoot))
   await ProjectIdentity.ensure(projectRoot)
   for (const name of await FS.listDir(hnreaderRoot)) {
-    if (/\.(tao|ts)$/.test(name) && await FS.isFile(FS.resolvePath(name, hnreaderRoot))) {
+    if (
+      /\.(tao|ts)$/.test(name) && (!wholeAppProbe || !name.endsWith('.scenarios.tao'))
+      && await FS.isFile(FS.resolvePath(name, hnreaderRoot))
+    ) {
       await FS.copyFile(FS.resolvePath(name, hnreaderRoot), FS.resolvePath(name, projectRoot))
     }
   }
@@ -152,6 +158,16 @@ scenarios LatencyProbe "latency" {
       render ()
 }  }
 `
+
+const paddingLengthProbe = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_PADDING_LENGTH'] === 'true'
+const revertProbe = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_REVERT'] === 'true'
+const recoveryProbe = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_RECOVERY'] === 'true'
+const paddingValue = (edit: number) =>
+  revertProbe && edit % 2 === 0
+    ? 12
+    : paddingLengthProbe && edit > 0 && edit % 2 === 0
+    ? 100 + edit
+    : 12 + edit
 
 const latencyProjects: readonly LatencyProject[] = [
   {
@@ -192,7 +208,7 @@ const latencyProjects: readonly LatencyProject[] = [
     frameSelector: '.studio-preview-cell iframe[title*="HNReader.scenarios.tao#scenario:rows:leading"]',
     initialText: 'Show HN: A Tao reader',
     name: 'HNReader editor padding',
-    expectedStyle: (edit, marker) => ({ marker, padding: `${12 + edit}px`, text: 'Show HN: A Tao reader' }),
+    expectedStyle: (edit, marker) => ({ marker, padding: `${paddingValue(edit)}px`, text: 'Show HN: A Tao reader' }),
     async setup(projectRoot) {
       await copyHNReader(projectRoot)
       return FS.resolvePath('Design.tao', projectRoot)
@@ -201,22 +217,32 @@ const latencyProjects: readonly LatencyProject[] = [
       const edit = Number(/^Edit(\d+)/u.exec(marker)?.[1])
       Assert(Number.isInteger(edit), 'padding latency marker names its edit')
       Assert(hnreaderDesignSource.includes('storyCard [pad 12,'), 'HNReader fixture owns the measured story padding')
-      return hnreaderDesignSource.replace('storyCard [pad 12,', `storyCard [pad ${12 + edit},`)
+      return hnreaderDesignSource.replace('storyCard [pad 12,', `storyCard [pad ${paddingValue(edit)},`)
     },
   },
 ]
 
+const selectedMode = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_PUBLICATION']
+Assert.input(
+  selectedMode === undefined || selectedMode === 'on' || selectedMode === 'off',
+  'Select publication on or off for a diagnostic comparison.',
+)
 const selectedCase = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_CASE']
 Assert.input(
   selectedCase === undefined || latencyProjects.some(project => project.name === selectedCase),
   'Select an existing Studio latency case.',
 )
 Assert.input(
-  Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PERFORMANCE'] !== 'true' || selectedCase === undefined,
+  Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PERFORMANCE'] !== 'true'
+    || (selectedCase === undefined && selectedMode === undefined && !paddingLengthProbe
+      && !revertProbe && !recoveryProbe && !wholeAppProbe && saveGapMs === 500
+      && Platform.runtimeProcess.env['TAO_STUDIO_DESIGN_DELIVERY'] !== 'true'
+      && Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_SINGLE_CELL'] !== 'true'
+      && Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_TWO_FILE_BURST'] !== 'true'),
   'Performance qualification runs every Studio latency case.',
 )
 for (const project of latencyProjects.filter(project => selectedCase === undefined || project.name === selectedCase)) {
-  for (const mode of ['on', 'off'] as const) {
+  for (const mode of (['on', 'off'] as const).filter(mode => selectedMode === undefined || mode === selectedMode)) {
     Test(`Studio publication-${mode} edit-to-paint latency for ${project.name}`, async () => {
       await measureLatency(mode, project)
     }, 300_000)
@@ -224,6 +250,8 @@ for (const project of latencyProjects.filter(project => selectedCase === undefin
 }
 
 async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Promise<void> {
+  const designDeliveryProbe = mode === 'off' && project.expectedStyle !== undefined
+    && Platform.runtimeProcess.env['TAO_STUDIO_DESIGN_DELIVERY'] === 'true'
   const projectRoot = await mkTestDir(`tao-studio-latency-${mode}-`)
   let browser: StudioCdp | undefined
   let studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
@@ -235,7 +263,24 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     await browser.addInitScript(probeScript)
     await browser.setViewport(1_440, 900)
     await browser.goto(studio.readiness.sessionUrl)
-    await activateSmokePreviews(browser)
+    await browser.waitFor("document.querySelector('.studio-preview-activation-toggle') !== null", {
+      timeoutMs: 120_000,
+    })
+    const singleCell = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_SINGLE_CELL'] === 'true'
+    const requestedCells = singleCell
+      ? await browser.evaluate<string[]>(`(() => {
+      const cell = [...document.querySelectorAll('.studio-preview-cell')].find(cell =>
+        cell.querySelector('.studio-preview-cell-label')?.textContent?.includes('leading'))
+      if (!(cell instanceof HTMLElement)) return []
+      return [cell.dataset.taoStudioCell ?? cell.dataset.cellId]
+    })()`)
+      : wholeAppProbe
+      ? ['whole-app']
+      : undefined
+    if (singleCell) {
+      Expect(requestedCells?.length).toBe(1)
+    }
+    await activateSmokePreviews(browser, requestedCells)
     // Load events do not bubble, but a capturing listener on the document sees every cell's.
     await browser.evaluate(`(() => {
         window.__taoCellLoadAt = Date.now()
@@ -247,7 +292,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         }, true)
         return true
       })()`)
-    const frame = JSON.stringify(project.frameSelector)
+    const frame = JSON.stringify(wholeAppProbe ? '.studio-whole-app-preview iframe' : project.frameSelector)
     // An activated cell keeps its iframe off-screen, and a cell can remount
     // between two reads, so its URL is read in the same poll that sees it loaded. Every cell
     // shares the Metro origin; the chosen cell's own URL names exactly one frame.
@@ -314,7 +359,45 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         return true
       })()`)
 
+    if (recoveryProbe) {
+      Assert.input(
+        project.name === 'HNReader editor padding',
+        'Recovery probe measures the visible HNReader design edit.',
+      )
+      await browser.click('.cm-content')
+      await browser.pressShortcut('a')
+      await browser.insertText(hnreaderDesignSource + '\nview Broken( {')
+      await browser.pressShortcut('s')
+      await browser.waitFor(`document.querySelector('.studio-status')?.dataset.state === 'error'`, {
+        timeoutMs: 30_000,
+      })
+      Expect(await FS.readText(sourcePath)).toBe(hnreaderDesignSource)
+      // Syntax admission rejects before writing; an unknown style input exercises compile failure.
+      await browser.click('.cm-content')
+      await browser.pressShortcut('a')
+      await browser.insertText(
+        'use NoSuchSpeedDeclaration from ./\n' + hnreaderDesignSource,
+      )
+      await browser.pressShortcut('s')
+      await browser.waitFor(
+        `(async () => {
+        const protocol = await (await fetch(${JSON.stringify(studio.readiness.sessionUrl)} + '/api/protocol')).json()
+        return protocol.compile.status === 'error'
+      })()`,
+        { timeoutMs: 30_000 },
+      )
+      const initial = project.expectedStyle!(0, 'initial')
+      Expect(
+        await browser.evaluateInFrame<boolean>(
+          previewUrl,
+          `[...document.querySelectorAll('[data-tao-studio]')].some(node =>
+          node.textContent?.includes(${JSON.stringify(initial.text)}) &&
+          getComputedStyle(node).paddingTop === ${JSON.stringify(initial.padding)})`,
+        ),
+      ).toBe(true)
+    }
     const samples: EditSample[] = []
+    let lastPaintedRevision = 0
     for (let edit = 1; edit <= EDITS_PER_MODE; edit += 1) {
       // Each marker is longer than the last, as most real edits change a file's length and so move
       // every source range after them.
@@ -400,13 +483,142 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         loadAverage: Platform.loadAverage(),
         mode,
         paintAt: probe.painted[marker],
-        publishedAt: await newestModification(generatedRoot),
+        publishedAt: designDeliveryProbe
+          ? undefined
+          : await newestModification(generatedRoot),
         saveAt,
         sourceWrittenAt: await FS.modifiedTimeMs(sourcePath),
       })
-      await Time.sleep(500)
+      if (Platform.runtimeProcess.env['TAO_STUDIO_EXPERIMENT_FULL_PASS'] === 'after-paint') {
+        await browser.waitFor(
+          `(async () => {
+          const protocol = await (await fetch(${JSON.stringify(studio.readiness.sessionUrl)} + '/api/protocol')).json()
+          return protocol.compile.status === 'compiled'
+        })()`,
+          { timeoutMs: 30_000 },
+        )
+        const paintSignal = await browser.evaluate<{ accepted: boolean; revision: number }>(`(async () => {
+          const base = ${JSON.stringify(studio.readiness.sessionUrl)}
+          const protocol = await (await fetch(base + '/api/protocol')).json()
+          const revision = ${JSON.stringify(designDeliveryProbe)}
+            ? protocol.compile.compileRevision : (protocol.compile.publishedRevision ?? protocol.compile.compileRevision)
+          if (${
+          JSON.stringify(Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_BROWSER_SCHEDULER'] === 'true')
+        }) return { accepted: true, revision }
+          const response = await fetch(base + '/api/preview/experimental-paint', {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ revision })
+          })
+          return { ...(await response.json()), revision }
+        })()`)
+        Expect(paintSignal.accepted).toBe(true)
+        lastPaintedRevision = paintSignal.revision
+      }
+      await Time.sleep(saveGapMs)
     }
+    const activateDuringOverlay = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_ACTIVATE_DURING_OVERLAY'] === 'true'
+    if (activateDuringOverlay) {
+      Assert.input(
+        singleCell && project.expectedStyle !== undefined,
+        'Overlay activation probe requires one design cell.',
+      )
+      const nextCell = await browser.evaluate<{ id: string; selector: string }>(`(() => {
+        const cell = [...document.querySelectorAll('.studio-preview-cell')].find(cell =>
+          cell.querySelector('.studio-preview-cell-label')?.textContent?.includes('wrapping'))
+        return { id: cell.dataset.taoStudioCell ?? cell.dataset.cellId, selector: '.studio-preview-cell[data-tao-studio-cell="' + (cell.dataset.taoStudioCell ?? cell.dataset.cellId) + '"] iframe' }
+      })()`)
+      await activateSmokePreviews(browser, [nextCell.id])
+      const freshUrl = await Time.pollUntil(async () =>
+        await browser!.evaluate<string>(
+          `document.querySelector(${JSON.stringify(nextCell.selector)})?.src ?? ''`,
+        ) || undefined, { intervalMs: 50, timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity })
+      Assert.defined(freshUrl, 'newly activated design preview receives its authoritative URL')
+      const finalStyle = project.expectedStyle(EDITS_PER_MODE, 'final')
+      await browser.waitForInFrame(
+        freshUrl,
+        `[...document.querySelectorAll('[data-tao-studio]')].some(node =>
+        node.textContent?.includes(${JSON.stringify('A very long headline about local-first sync')}) &&
+        getComputedStyle(node).paddingTop === ${JSON.stringify(finalStyle.padding)})`,
+        { timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity },
+      )
+      Expect(await browser.evaluate<number>('window.__taoLatencyLoads')).toBe(0)
+    }
+    if (lastPaintedRevision > 0) {
+      const finalSourcePath = FS.relativePath(projectRoot, sourcePath)
+      const finalSourceVersion = await browser.evaluate<string>(`(async () => {
+        const protocol = await (await fetch(${JSON.stringify(studio.readiness.sessionUrl)} + '/api/protocol')).json()
+        return protocol.files.find(file => file.path === ${JSON.stringify(finalSourcePath)}).sourceVersion
+      })()`)
+      await browser.waitFor(
+        `(async () => {
+        const protocol = await (await fetch(${JSON.stringify(studio.readiness.sessionUrl)} + '/api/protocol')).json()
+        return protocol.compile.compileRevision ${designDeliveryProbe ? '>=' : '>'} ${lastPaintedRevision}
+          && protocol.compile.status === 'compiled'
+          && protocol.previewManifest.compileRevision >= ${lastPaintedRevision}
+          && protocol.previewManifest.sourceVersions[${JSON.stringify(sourcePath)}] === ${
+          JSON.stringify(finalSourceVersion)
+        }
+      })()`,
+        { timeoutMs: 30_000 },
+      )
+      const finalPadding = project.expectedStyle?.(EDITS_PER_MODE, 'final')
+      if (finalPadding !== undefined) {
+        const retained = await browser.evaluateInFrame<boolean>(
+          previewUrl,
+          `[...document.querySelectorAll('[data-tao-studio]')].some(node => node.textContent?.includes(${
+            JSON.stringify(finalPadding.text)
+          }) && getComputedStyle(node).paddingTop === ${JSON.stringify(finalPadding.padding)})`,
+          { world: 'page' },
+        )
+        Expect(retained).toBe(true)
+      }
+    }
+    if (Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_TWO_FILE_BURST'] === 'true') {
+      Assert.input(project.name === 'HNReader editor padding', 'Two-file diagnostic uses the HNReader design fixture.')
+      const burst = await browser.evaluate<{ saved: boolean[]; revision: number }>(`(async () => {
+        const base = ${JSON.stringify(studio.readiness.sessionUrl)}
+        const read = async path => await (await fetch(base + '/api/file?path=' + encodeURIComponent(path))).json()
+        const [design, feed] = await Promise.all([read('Design.tao'), read('Feed.tao')])
+        const write = async (file, content, id) => await (await fetch(base + '/api/file/draft', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ path: file.path, sourceVersion: file.sourceVersion, content, writeId: id })
+        })).json()
+        const results = await Promise.all([
+          write(design, ${JSON.stringify(project.sourceFor('Edit9x'))}, 'speed-burst-design'),
+          write(feed, feed.content + '\\n// Speed burst companion input\\n', 'speed-burst-feed')
+        ])
+        const current = await read('Design.tao')
+        const following = await write(current, ${JSON.stringify(project.sourceFor('Edit10x'))}, 'speed-burst-following')
+        const protocol = await (await fetch(base + '/api/protocol')).json()
+        return { saved: [...results, following].map(result => result.saved), revision: protocol.compile.compileRevision }
+      })()`)
+      Expect(burst.saved).toEqual([true, true, true])
+      const final = project.expectedStyle!(10, 'burst-final')
+      await browser.waitForInFrame(
+        previewUrl,
+        `[...document.querySelectorAll('[data-tao-studio]')].some(node =>
+        node.textContent?.includes(${JSON.stringify(final.text)}) && getComputedStyle(node).paddingTop === ${
+          JSON.stringify(final.padding)
+        })`,
+      )
+      await browser.waitFor(
+        `(async () => {
+        const protocol = await (await fetch(${JSON.stringify(studio.readiness.sessionUrl)} + '/api/protocol')).json()
+        return protocol.compile.status === 'compiled' && protocol.compile.compileRevision > ${burst.revision}
+      })()`,
+        { timeoutMs: 30_000 },
+      )
+      Expect(await FS.readText(FS.resolvePath('Feed.tao', projectRoot))).toContain('Speed burst companion input')
+    }
+    const previewTrace = studio.output().split('\n').flatMap(line => {
+      const entry = /\{"type":"studio-(?:preview|save)-trace"[^\n]*\}/u.exec(line)?.[0]
+      return entry === undefined ? [] : [JSON.parse(entry) as SaveTraceEvent]
+    })
     const evidence = {
+      runtimeSettings: await browser.evaluateInFrame<unknown>(
+        previewUrl,
+        "({ development: typeof __DEV__ !== 'undefined' ? __DEV__ : null, scripts: [...document.scripts].map(script => script.src).filter(Boolean) })",
+        { world: 'page' },
+      ),
       browserEvents: browser.browserEvents(),
       cellLoads: await browser.evaluate<unknown[]>('window.__taoCellLoads'),
       metroMessages: await browser.evaluateInFrame<unknown[]>(previewUrl, 'window.__taoLatencyProbe.other', {
@@ -419,19 +631,90 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         const entry = /\{"type":"studio-emitted-module-cache"[^\n]*\}/u.exec(line)?.[0]
         return entry === undefined ? [] : [JSON.parse(entry) as unknown]
       }),
+      previewTrace,
+      saveTimeline: samples.map(sample => saveTimeline(sample, previewTrace)),
       pipelineProfile: studio.output().split('\n').flatMap(line => {
         const entry =
-          /\{"type":"studio-(?:preview-pipeline|project-tooling|workspace|typescript-config|native-program|validator|validation-checks|host-module)-profile"[^\n]*\}/u
+          /\{"type":"studio-(?:preview-pipeline|compiler|runtime|project-tooling|workspace|typescript-config|native-program|validator|validation-checks|host-module)-profile"[^\n]*\}/u
             .exec(line)
             ?.[0]
         return entry === undefined ? [] : [JSON.parse(entry) as unknown]
       }),
     }
+    if (Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_REQUIRE_FULL_OVERLAP'] === 'true') {
+      Assert.input(
+        Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true',
+        'Full-overlap proof requires tracing.',
+      )
+      const fullAttempts = previewTrace.filter(event => event.event === 'attempt-start' && event.previewFirst === false)
+      const overlapping = samples.filter(sample =>
+        fullAttempts.some(attempt => {
+          const completed = previewTrace.find(event =>
+            event.event === 'published' && event.revision === attempt.revision
+          )
+          return attempt.at <= sample.saveAt && completed !== undefined && completed.at > sample.saveAt
+        })
+      )
+      Expect(overlapping.length).toBeGreaterThan(0)
+      HCI.writeLine(`Saves during authoritative work: ${overlapping.map(sample => sample.edit).join(', ')}`)
+    }
+    if (activateDuringOverlay && Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true') {
+      Expect(
+        evidence.previewTrace.some(event =>
+          typeof event === 'object' && event !== null && 'event' in event
+          && event.event === 'overlay-publication-barrier'
+        ),
+      ).toBe(true)
+    }
+    if (
+      Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_BROWSER_SCHEDULER'] === 'true'
+      && Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true'
+    ) {
+      Expect(evidence.previewTrace.some(event =>
+        typeof event === 'object' && event !== null
+        && 'event' in event && event.event === 'fast-paint-observed'
+      )).toBe(true)
+    }
+    if (
+      designDeliveryProbe
+      && Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_TWO_FILE_BURST'] !== 'true'
+    ) {
+      const deliveries = evidence.previewTrace.filter(event =>
+        typeof event === 'object' && event !== null && 'event' in event && event.event === 'design-delivered'
+      ).length
+      if (saveGapMs >= 1_000) {
+        // Full work may consume a later source before its queued fast request. Measure that race
+        // without demanding every update use the diagnostic overlay.
+        if (Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true') {
+          Expect(deliveries).toBeGreaterThan(0)
+        }
+      } else {
+        if (Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true') {
+          Expect(deliveries).toBe(EDITS_PER_MODE - (recoveryProbe ? 1 : 0))
+        }
+        Expect(
+          samples.slice(recoveryProbe ? 1 : 0).every(sample =>
+            sample.hmrAt === undefined
+          ),
+        ).toBe(true)
+      }
+    }
     await reportSamples(`${project.name} publication-${mode}`, samples, evidence)
     Expect(samples.at(-1)!.frameLoads).toBe(0)
-    Expect(evidence.cellLoads).toEqual([])
+    if (!activateDuringOverlay) {
+      Expect(evidence.cellLoads).toEqual([])
+    }
     Expect(evidence.activatedCells).toBeGreaterThan(project.name === 'HNReader' ? 1 : 0)
     Expect(JSON.stringify(evidence)).not.toContain('RevisionNotFoundError')
+  } catch (error) {
+    if (studio !== undefined) {
+      const failureRoot = FS.resolvePath('.artifacts/tests/studio-smoke/preview-latency', Repo.getRoot())
+      await FS.mkdir(failureRoot)
+      const log = FS.resolvePath(`failed-${Date.now()}.log`, failureRoot)
+      await FS.writeText(log, studio.output())
+      HCI.writeLine(`Studio latency failure subprocess log: ${log}`)
+    }
+    throw error
   } finally {
     await browser?.close()
     await studio?.stop()
@@ -465,12 +748,15 @@ async function reportSamples(
   label: string,
   samples: readonly EditSample[],
   evidence: {
+    runtimeSettings: unknown
     browserEvents: ReturnType<StudioCdp['browserEvents']>
     cellLoads: unknown[]
     metroMessages: unknown[]
     activatedCells: number
     emissionCache: unknown[]
+    previewTrace: unknown[]
     pipelineProfile: unknown[]
+    saveTimeline: unknown[]
   },
 ): Promise<void> {
   const span = (from: number | undefined, to: number | undefined) =>
@@ -520,4 +806,49 @@ function percentile(values: readonly number[], fraction: number): number | undef
   }
   const sorted = values.toSorted((left, right) => left - right)
   return Math.round(sorted[Math.min(sorted.length - 1, Math.ceil(fraction * sorted.length) - 1)]!)
+}
+
+/** Joins lightweight server events to one browser save, without guessing from generated mtimes. */
+type SaveTraceEvent = {
+  at: number
+  event: string
+  writeId?: string
+  sourceVersion?: string
+  revision?: number
+  publishedRevision?: number
+  sourceVersions?: Record<string, string>
+  previewFirst?: boolean
+  changes?: readonly { sourceVersion: string }[]
+}
+function saveTimeline(sample: EditSample, events: readonly SaveTraceEvent[]): unknown {
+  const write = events.find(event =>
+    event.event === 'source-written' && event.at >= sample.saveAt && event.at <= sample.domAt
+  )
+  const arrival = events.find(event => event.event === 'request-arrival' && event.writeId === write?.writeId)
+  const response = events.find(event => event.event === 'save-response' && event.writeId === write?.writeId)
+  const attempt = events.find(event =>
+    event.event === 'attempt-start' && event.at >= sample.saveAt
+    && event.changes?.some(change => change.sourceVersion === write?.sourceVersion)
+  )
+  const publication = events.find(event =>
+    (event.event === 'published' || event.event === 'design-delivered')
+    && event.at >= (write?.at ?? sample.saveAt) && event.at <= sample.domAt
+    && Object.values(event.sourceVersions ?? {}).includes(write?.sourceVersion ?? '')
+  )
+  return {
+    edit: sample.edit,
+    sourceVersion: write?.sourceVersion,
+    writeId: write?.writeId,
+    keypressAt: sample.saveAt,
+    requestAt: arrival?.at,
+    sourceWrittenAt: write?.at,
+    attemptAt: attempt?.at,
+    publicationAt: publication?.at,
+    publicationRevision: publication?.publishedRevision,
+    compileRevision: publication?.revision,
+    saveResponseAt: response?.at,
+    metroAt: sample.hmrAt,
+    domAt: sample.domAt,
+    paintAt: sample.paintAt,
+  }
 }

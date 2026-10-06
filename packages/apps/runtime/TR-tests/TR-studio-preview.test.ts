@@ -2,6 +2,7 @@ import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import type { ReactNode } from 'react'
 import { Debug } from '../TaoRuntime-src/TR-debug'
+import { DesignControls } from '../TaoRuntime-src/TR-design'
 import { HostEnvironmentError, UnexpectedBehaviorError, UserInputError } from '../TaoRuntime-src/TR-errors'
 import { registerRuntimeCaptureDomain } from '../TaoRuntime-src/TR-runtime-capture'
 import {
@@ -1919,12 +1920,16 @@ function previewHost(renderElements: StudioPreviewElement[]): {
   messages: PostedMessage[]
   overlays: FakeOverlay[]
   parent: StudioPreviewHost['parent']
+  flushAnimationFrame(): void
+  pendingAnimationFrames(): number
 } {
   const documentListeners = new Map<string, Set<Listener>>()
   const windowListeners = new Map<string, Set<Listener>>()
   const messages: PostedMessage[] = []
   const consoleCalls: unknown[][] = []
   const overlays: FakeOverlay[] = []
+  const animationFrames = new Map<number, (timestamp: number) => void>()
+  let nextAnimationFrameId = 0
   const parent = {
     postMessage: (message: unknown, targetOrigin: string) => messages.push({ message, targetOrigin }),
   }
@@ -1963,8 +1968,14 @@ function previewHost(renderElements: StudioPreviewElement[]): {
       addEventListener: (type, listener) => {
         addListener(windowListeners, type, listener as unknown as Listener)
       },
+      cancelAnimationFrame: id => animationFrames.delete(id),
       removeEventListener: (type, listener) => {
         removeListener(windowListeners, type, listener as unknown as Listener)
+      },
+      requestAnimationFrame: callback => {
+        nextAnimationFrameId += 1
+        animationFrames.set(nextAnimationFrameId, callback)
+        return nextAnimationFrameId
       },
     },
   }
@@ -1977,6 +1988,14 @@ function previewHost(renderElements: StudioPreviewElement[]): {
     messages,
     overlays,
     parent,
+    flushAnimationFrame: () => {
+      const callbacks = Array.from(animationFrames.values())
+      animationFrames.clear()
+      for (const callback of callbacks) {
+        callback(0)
+      }
+    },
+    pendingAnimationFrames: () => animationFrames.size,
   }
 }
 
@@ -2041,5 +2060,113 @@ Test('acknowledges the whole-app revision with its preview instance', () => {
         identity: { compileRevision: config.compileRevision, previewInstanceId: config.previewInstanceId },
       },
     })
+  cleanup()
+})
+
+Test('reports child paint only after two child frames and cancels it on cleanup', () => {
+  const fake = previewHost([])
+  const cleanup = mountStudioPreviewBridge(config, fake.host)
+  const painted = () => fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-painted')
+  Expect(painted()).toEqual([])
+  fake.flushAnimationFrame()
+  Expect(painted()).toEqual([])
+  Expect(fake.pendingAnimationFrames()).toBe(1)
+  fake.flushAnimationFrame()
+  Expect(painted()).toMatchObject([{
+    message: {
+      identity: { compileRevision: config.compileRevision, previewInstanceId: config.previewInstanceId },
+      painted: true,
+      paintRevision: config.compileRevision,
+    },
+    targetOrigin: config.parentOrigin,
+  }])
+  cleanup()
+
+  const cancelled = previewHost([])
+  const stopBeforePaint = mountStudioPreviewBridge(config, cancelled.host)
+  stopBeforePaint()
+  Expect(cancelled.pendingAnimationFrames()).toBe(0)
+  cancelled.flushAnimationFrame()
+  Expect(cancelled.pendingAnimationFrames()).toBe(0)
+  Expect(cancelled.messages.some(post => (post.message as { type?: string }).type === 'preview-painted')).toBe(false)
+})
+
+Test('reports rejected design padding without paint and ignores out-of-order design revisions', () => {
+  const designName = 'StudioPaintHandshakeTheme'
+  const sourcePath = '/project/StudioPaintHandshakeTheme.tao'
+  const source = { end: 20, kind: 'style' as const, member: 'surface', path: sourcePath, start: 1 }
+  DesignControls.Declaration(
+    {
+      bundles: { surface: DesignControls.Spec([['pad', 12]], source) },
+      name: designName,
+      tokens: {},
+    },
+    'test.studio.preview.paint-handshake',
+    { epoch: 1, path: sourcePath, sourceEpochs: {} },
+  )
+  const fake = previewHost([])
+  const experimentalConfig = { ...config, publicationChecks: false }
+  const cleanup = mountStudioPreviewBridge(experimentalConfig, fake.host)
+  const sendPadding = (
+    revision: number,
+    bundleName: string,
+    identity = {
+      appName: config.appName,
+      compileRevision: config.compileRevision,
+      previewInstanceId: config.previewInstanceId,
+      project: config.project,
+    },
+    origin = config.parentOrigin,
+    source = fake.parent,
+    malformed = false,
+  ) =>
+    fake.dispatchWindow('message', {
+      data: {
+        bundleName,
+        channel: 'tao-studio',
+        designName,
+        expectedPadding: 12,
+        identity,
+        padding: 20,
+        sourcePath,
+        entryIndex: malformed ? 'zero' : 0,
+        ownerKind: 'styles',
+        oldLiteralRange: { from: 10, to: 12 },
+        newLiteralRange: { from: 10, to: 12 },
+        oldSpecRange: { from: 1, to: 20 },
+        newSpecRange: { from: 1, to: 20 },
+        protocolVersion: 1,
+        revision,
+        type: 'experimental-design-padding',
+      },
+      origin,
+      source,
+    })
+  sendPadding(9, 'missing')
+  sendPadding(10, 'surface', undefined, config.parentOrigin, fake.parent, true)
+  Expect(fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-painted'))
+    .toMatchObject([
+      { message: { painted: false, paintRevision: 9 } },
+      { message: { painted: false, paintRevision: 10 } },
+    ])
+  sendPadding(11, 'surface')
+  sendPadding(8, 'surface')
+  sendPadding(12, 'surface', {
+    appName: config.appName,
+    compileRevision: 12,
+    previewInstanceId: config.previewInstanceId,
+    project: config.project,
+  })
+  sendPadding(13, 'surface', undefined, 'https://wrong.test')
+  Expect(fake.pendingAnimationFrames()).toBe(2)
+  fake.flushAnimationFrame()
+  fake.flushAnimationFrame()
+  Expect(fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-painted'))
+    .toMatchObject([
+      { message: { painted: false, paintRevision: 9 } },
+      { message: { painted: false, paintRevision: 10 } },
+      { message: { painted: true, paintRevision: config.compileRevision } },
+      { message: { painted: true, paintRevision: 11 } },
+    ])
   cleanup()
 })

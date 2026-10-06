@@ -712,6 +712,8 @@ export class StudioDeviceGateway {
       'compile-state': compiled => {
         this.#sendSealed(connection, { ...compileState(compiled.state), type: 'studio.compileState' })
       },
+      // Browser-only temporary design-delivery proof; native devices retain authoritative publication.
+      'experimental-design-padding': Switch.nothing,
       'file-changed': Switch.nothing,
       'files-changed': Switch.nothing,
       'preview-manifest-changed': changed => this.#manifestChanged(connection, changed.manifest),

@@ -22,12 +22,14 @@ type CompileTestPlanOptions = {
 /** Workspace coordinates project-rooted parsing, validation, and compilation. */
 export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> {
   private static readonly sharedWorkspaces = new Map<string, Promise<Workspace>>()
-  private readonly documentValidationReuse = Validator.createDocumentReuse()
+  private readonly documentValidationReuse = Validator.createDocumentReuse({
+    experimentalWholeDocumentReuse: Platform.runtimeProcess.env['TAO_STUDIO_CHANGED_VALIDATION'] === 'true',
+  })
 
   protected constructor(
     protected readonly project: ProjectContext<ServicesT>,
     readonly releaseProfile: ReleaseProfile = ReleaseCapabilities.current(),
-    private readonly nativeBindings?: MaintainedBindingOptions,
+    private readonly nativeBindings: MaintainedBindingOptions = {},
   ) {}
 
   /** open creates a Workspace rooted at `directoryPath`. */
@@ -163,11 +165,17 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
    * linked once rather than once per entry. The results describe the workspace as this call built
    * it: a later `parse`, `parseSource`, or `parseFiles` rebuilds the documents and leaves them stale.
    */
-  async parseFiles(entryFiles: readonly string[]): Promise<readonly ParseResult[]> {
-    return await this.withValidationReuse(() => this.parseEntryFiles(entryFiles))
+  async parseFiles(
+    entryFiles: readonly string[],
+    experimentalChangedPaths?: readonly string[],
+  ): Promise<readonly ParseResult[]> {
+    return await this.withValidationReuse(() => this.parseEntryFiles(entryFiles, experimentalChangedPaths))
   }
 
-  private async parseEntryFiles(entryFiles: readonly string[]): Promise<readonly ParseResult[]> {
+  private async parseEntryFiles(
+    entryFiles: readonly string[],
+    experimentalChangedPaths?: readonly string[],
+  ): Promise<readonly ParseResult[]> {
     const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
     const startedAt = profile ? performance.now() : 0
     const relink = await this.refreshProject()
@@ -177,7 +185,13 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     const parsed = await Parser.parseEntries(
       this.parserContext(),
       entryPaths.map(entryPath => Langium.URI.file(entryPath)),
-      { validation: false, relink },
+      {
+        validation: false,
+        relink,
+        experimentalChangedPaths: Platform.runtimeProcess.env['TAO_STUDIO_REUSE_SOURCE_READS'] === 'true'
+          ? experimentalChangedPaths
+          : undefined,
+      },
     )
     this.clearFailedBuild(parsed)
     if (profile) {
@@ -204,11 +218,17 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
    * imports nothing of the project it was drawn in, and on its own graph looked like a file with no
    * project at all.
    */
-  async validateFiles(entryFiles: readonly string[]): Promise<ValidationResult> {
-    const parsed = await this.parseFiles(entryFiles)
+  async validateFiles(
+    entryFiles: readonly string[],
+    experimentalChangedPaths?: readonly string[],
+  ): Promise<ValidationResult> {
+    const parsed = await this.parseFiles(entryFiles, experimentalChangedPaths)
     const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
     const startedAt = profile ? performance.now() : 0
-    const validated = await this.validateParsedFiles(parsed)
+    const validated = await this.validateParsedFiles(
+      parsed,
+      Platform.runtimeProcess.env['TAO_STUDIO_CHANGED_VALIDATION'] === 'true' ? experimentalChangedPaths : undefined,
+    )
     if (profile) {
       HCI.logProcessInfo(
         'workspace',
@@ -226,7 +246,10 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   }
 
   /** validateParsedFiles validates what one `parseFiles` call returned; see `validateFiles`. */
-  async validateParsedFiles(parsedEntries: readonly ParseResult[]): Promise<ValidationResult> {
+  async validateParsedFiles(
+    parsedEntries: readonly ParseResult[],
+    experimentalChangedPaths?: readonly string[],
+  ): Promise<ValidationResult> {
     Assert(parsedEntries.length > 0, 'workspace validation has at least one entry file')
     const filesByPath = new Map<string, ParseResult['entry']>()
     for (const parsed of parsedEntries) {
@@ -244,6 +267,7 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
         context: this.validatorContext(parsed, projectFiles),
       })),
       this.documentValidationReuse,
+      experimentalChangedPaths,
     )
     const diagnostics: Diagnostic[] = [...nativeBindings.diagnostics]
     for (const validation of validations) {
@@ -264,26 +288,41 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   }
 
   /** compileFiles compiles the union of several entry graphs while keeping the first as the app entry. */
-  async compileFiles(entryFiles: readonly string[], options: CompileOptions = {}): Promise<CompileResult> {
-    const validationResult = await this.validateFiles(entryFiles)
-    const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
-    const startedAt = profile ? performance.now() : 0
-    const compiled = await this.withValidationReuse(() =>
-      Compiler.compileValidated(validationResult, this.compilerContext(), options)
-    )
-    if (profile) {
-      HCI.logProcessInfo(
-        'workspace',
-        JSON.stringify({
-          type: 'studio-workspace-profile',
-          operation: 'emit',
-          root: this.root,
-          entries: entryFiles.length,
-          emitMs: performance.now() - startedAt,
-        }),
-      )
+  async compileFiles(
+    entryFiles: readonly string[],
+    options: CompileOptions = {},
+    experimentalChangedPaths?: readonly string[],
+  ): Promise<CompileResult> {
+    const reuseBindings = experimentalChangedPaths !== undefined
+      && Platform.runtimeProcess.env['TAO_STUDIO_FAST_BINDING_INSPECTION'] === 'true'
+    if (reuseBindings) {
+      this.nativeBindings.experimentalInspection = await inspectMaintainedNativeBindings(this.nativeBindings)
     }
-    return compiled
+    try {
+      const validationResult = await this.validateFiles(entryFiles, experimentalChangedPaths)
+      const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
+      const startedAt = profile ? performance.now() : 0
+      const compiled = await this.withValidationReuse(() =>
+        Compiler.compileValidated(validationResult, this.compilerContext(), options)
+      )
+      if (profile) {
+        HCI.logProcessInfo(
+          'workspace',
+          JSON.stringify({
+            type: 'studio-workspace-profile',
+            operation: 'emit',
+            root: this.root,
+            entries: entryFiles.length,
+            emitMs: performance.now() - startedAt,
+          }),
+        )
+      }
+      return compiled
+    } finally {
+      if (reuseBindings) {
+        delete this.nativeBindings.experimentalInspection
+      }
+    }
   }
 
   /** compileTestPlan compiles v0 Tao tests for an entry file. */

@@ -23,6 +23,8 @@ export type StudioCompileRequest = StudioProjectIdentity & {
   causes: readonly StudioCompileCause[]
   changes: readonly StudioSourceChange[]
   compileRevision: number
+  /** Wall-clock enqueue time, used only for pipeline diagnostics. */
+  queuedAt?: number
 }
 
 export type StudioCompileOutput = {
@@ -71,6 +73,7 @@ export type StudioCompileCoordinatorOptions = StudioProjectIdentity & {
 }
 
 type PendingBatch = {
+  queuedAt: number
   causes: Set<StudioCompileCause>
   changes: Map<string, StudioSourceChange>
   waiters: Array<{
@@ -238,6 +241,7 @@ export class StudioCompileCoordinator {
 
   #newPendingBatch(): PendingBatch {
     const pending: PendingBatch = {
+      queuedAt: Date.now(),
       causes: new Set(),
       changes: new Map(),
       waiters: [],
@@ -289,6 +293,7 @@ export class StudioCompileCoordinator {
     this.#compileRevision += 1
     const request: StudioCompileRequest = {
       ...this.#project,
+      queuedAt: batch.queuedAt,
       causes: [...batch.causes],
       changes: [...batch.changes.values()],
       compileRevision: this.#compileRevision,

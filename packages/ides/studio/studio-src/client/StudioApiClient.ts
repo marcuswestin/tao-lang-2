@@ -94,6 +94,7 @@ export type StudioGeneratedFixtureResult =
 /** One handler per message the event socket can send; the ones the workbench has no use for are optional. */
 export type StudioApiEventHandlers = {
   onConnect?: () => void
+  onExperimentalDesignPadding?: (update: import('../StudioProtocol').StudioExperimentalDesignPadding) => void
   onCellReconfigured?: (cellId: string) => void
   onCheckpoint?: (checkpoint: Pick<StudioCheckpointSummary, 'id' | 'status'>) => void
   onCompile: (state: StudioCompileState) => void
@@ -163,6 +164,7 @@ export const StudioApiEventStream = {
       'cell-reconfigured': event => handlers.onCellReconfigured?.(event.cellId),
       'checkpoint-changed': event => handlers.onCheckpoint?.(event.checkpoint),
       'compile-state': event => handlers.onCompile(event.state),
+      'experimental-design-padding': event => handlers.onExperimentalDesignPadding?.(event),
       'data-invalidated': event => handlers.onDataInvalidated?.({ entities: event.entities, revision: event.revision }),
       'device-state': event => handlers.onDeviceState?.(event.status),
       'file-changed': event => handlers.onFile(event.file),
@@ -299,6 +301,8 @@ export const StudioApiClient = {
   lspTransport: async (signal?: AbortSignal): Promise<StudioLspTransport> =>
     await webSocketTransport(webSocketUrl(studioSessionPath(routes.languageLsp.path)), signal),
   previewApplied: async (body: unknown): Promise<unknown> => await request(routes.previewApplied, body),
+  experimentalPreviewPaint: async (revision: number, painted = true): Promise<unknown> =>
+    await request(routes.experimentalPreviewPaint, { revision, painted }),
   previewCell: async (cellId: string): Promise<StudioCellRuntimeResponse> =>
     await get(`${routes.previewCell.path}?cellId=${encodeURIComponent(cellId)}`),
   previewLayoutMeasurements: async (body: unknown): Promise<unknown> =>

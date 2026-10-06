@@ -2,7 +2,7 @@ import type { CompileResult, EmittedModuleCache } from '@compiler/compiler'
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
 import { findProjectRoot } from '@project-tooling'
-import { Assert, type FirebaseConnection, FS, Platform, readFirebaseConnections } from '@shared'
+import { Assert, type FirebaseConnection, FS, HCI, Platform, readFirebaseConnections } from '@shared'
 import type { DevLoopMobilePublication } from '@shared/DevLoopControl'
 import { withGeneratedModuleLinks } from './generated-module-links'
 import { expoUpdateArtifacts, proveReleaseBundle } from './release-bundle-proof'
@@ -23,6 +23,8 @@ export { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 export type GeneratePreviewOptions = {
   /** Disable revision marker updates and their exact publication checks for a browser speed experiment. */
   publicationChecks?: boolean
+  /** Complete changed-source hints for the temporary preview-first experiments. */
+  experimentalChangedSourcePaths?: readonly string[]
   sourceOverrides?: Readonly<Record<string, string>>
   project: string
   revision: number
@@ -134,7 +136,10 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
   const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', runtimePackageRoot)
   const generatedAppRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
   const shipManifestPath = FS.resolvePath('ship.json', generatedAppRoot)
+  const trace = opts.preview !== undefined && Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true'
+  const requestedAt = trace ? performance.now() : 0
   return await serializeGeneration(generatedAppRoot, async () => {
+    const startedAt = trace ? performance.now() : 0
     if (opts.preview === undefined) {
       previewOutputSnapshots.delete(generatedAppRoot)
       previewPublications.delete(generatedAppRoot)
@@ -172,9 +177,11 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     const sourceRevision = opts.managedPublication === undefined
       ? undefined
       : await managedSourceRevision(opts.managedPublication.projectRoot)
+    const preparedAt = trace ? performance.now() : 0
     const compiled = opts.preview === undefined
       ? await Workspace.compile(sourcePath, compileOptions)
       : await compileStudioPreview(sourcePath, opts.preview, compileOptions, opts.previewWorkspace)
+    const compiledAt = trace ? performance.now() : 0
     let preview = opts.preview === undefined
       ? undefined
       : previewPublication(compiled.appNames, opts.appName, opts.preview)
@@ -240,6 +247,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       relativePath: 'ManagedLoopIdentity.ts',
       code: `export default ${JSON.stringify(publication ?? null)}\n`,
     }]
+    const metadataAt = trace ? performance.now() : 0
     await withGeneratedModuleLinks(
       generatedAppRoot,
       requesterRoot,
@@ -262,6 +270,21 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
         metadata: metadata!,
         attemptRevision: opts.preview!.revision,
       })
+    }
+
+    if (trace) {
+      HCI.logProcessInfo(
+        'runtime',
+        JSON.stringify({
+          type: 'studio-runtime-profile',
+          revision: opts.preview!.revision,
+          queueMs: startedAt - requestedAt,
+          preparationMs: preparedAt - startedAt,
+          compileMs: compiledAt - preparedAt,
+          metadataMs: metadataAt - compiledAt,
+          publicationMs: performance.now() - metadataAt,
+        }),
+      )
     }
 
     const generatedAppCode = generatedFiles.find(file => file.relativePath === 'App.tsx')?.code
@@ -332,7 +355,11 @@ async function compileStudioPreview(
   Assert(workspace.root === FS.resolvePath(preview.project), 'preview workspace matches its project')
   // Each workspace load refreshes package topology; feed overrides replace one atomic source snapshot.
   await workspace.setSourceOverrides(preview.sourceOverrides ?? {})
-  return await workspace.compileFiles([sourcePath, ...generatedEntries], options)
+  return await workspace.compileFiles(
+    [sourcePath, ...generatedEntries],
+    options,
+    preview.experimentalChangedSourcePaths,
+  )
 }
 
 /** resetStudioPreviewSession releases one output root for a new project/app revision stream. */

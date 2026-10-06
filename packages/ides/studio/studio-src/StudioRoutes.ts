@@ -95,6 +95,7 @@ const sessionRoutes = {
   languageHighlight: { method: 'POST', path: '/api/language/highlight' },
   languageLsp: { method: 'WS', path: '/api/language/lsp' },
   previewApplied: { method: 'POST', path: '/api/preview/applied' },
+  experimentalPreviewPaint: { method: 'POST', path: '/api/preview/experimental-paint' },
   previewCell: { method: 'GET', path: '/api/preview/cell' },
   previewCellBootstrap: { method: 'GET', path: '/api/preview/cell/bootstrap' },
   previewCellInstance: { method: 'POST', path: '/api/preview/cell/instance' },

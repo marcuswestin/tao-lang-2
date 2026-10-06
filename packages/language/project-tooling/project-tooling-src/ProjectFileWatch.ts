@@ -66,6 +66,7 @@ export async function startProjectFileWatch(
         const inventory = await readNativeInventory(plan)
         if (!disposed && nativePlan === plan && nativeInventory !== inventory) {
           nativeInventory = inventory
+          onInputChange({ event: 'native-inventory' })
           schedule()
         }
       })().catch(onError).finally(() => {
@@ -225,6 +226,7 @@ export async function startProjectFileWatch(
       const inventory = await readNativeInventory(nativePlan!)
       if (inventory !== nativeInventory) {
         nativeInventory = inventory
+        onInputChange({ event: 'native-inventory' })
         schedule()
       }
       scheduleNativeScan()
@@ -290,6 +292,7 @@ export async function startProjectFileWatch(
     nativeBindingWatchers.set(key, nativeWatcher)
     nativeWatcher.on('all', (_event, candidate) => {
       if (nativeBindingPaths.has(FS.resolvePath(candidate)) && !FS.isFileMutationAuxiliaryPath(candidate)) {
+        onInputChange({ path: FS.resolvePath(candidate), event: _event })
         schedule()
       }
     })
@@ -301,6 +304,7 @@ export async function startProjectFileWatch(
     nativePlan = plan
     nativeInventory = await readNativeInventory(plan)
     if (baseline !== nativeInventory) {
+      onInputChange({ event: 'native-inventory' })
       schedule()
     }
     scheduleNativeScan()
@@ -329,8 +333,13 @@ export async function startProjectFileWatch(
     return result
   }, options.onResult)
 
+  const onInputChange = (change: { path?: string; event: string }): void => {
+    if (!disposed) {
+      options.onInputChange?.(change)
+    }
+  }
   const schedule = (): void => {
-    if (disposed) {
+    if (disposed || options.automaticRefresh === false) {
       return
     }
     if (timer !== undefined) {
@@ -355,6 +364,7 @@ export async function startProjectFileWatch(
         nativeBindingAncestors,
       )
     ) {
+      onInputChange({ path: FS.resolvePath(path), event })
       schedule()
     }
   }

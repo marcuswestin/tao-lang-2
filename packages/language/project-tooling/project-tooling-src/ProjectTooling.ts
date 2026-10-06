@@ -2,6 +2,8 @@ import type { Diagnostic, DiagnosticRange } from '@shared'
 
 /** Options shared by a one-shot refresh and a disk-backed watch. */
 export type ProjectToolingOptions = {
+  /** Diagnostic control: retain watches and initial refresh but require explicit refresh requests. */
+  automaticRefresh?: boolean
   /** Maintained binding locations for an installed or embedded stdlib. Inspection never generates. */
   nativeBindings?: { stdlibRoot?: string; sourceRoots?: readonly string[] }
   /** The installed TypeScript and ambient packages, when they are outside the project. */
@@ -12,6 +14,8 @@ export type ProjectToolingOptions = {
   runtimeRoot?: string
   /** Called after each completed watch refresh, including a stale refresh. */
   onResult?: (result: ProjectToolingResult) => void
+  /** Called for each accepted filesystem or native-inventory change before refresh suppression or debounce. */
+  onInputChange?: (change: { path?: string; event: string }) => void
   /** Receives watcher or refresh failures that cannot be returned from a file event. */
   onError?: (error: unknown) => void
 }

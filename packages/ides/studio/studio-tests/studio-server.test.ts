@@ -150,6 +150,86 @@ Describe('Studio server request boundary', () => {
     }])
   })
 
+  Test('publishes a pending preview before registering a new preview instance', async () => {
+    for (
+      const [pathname, registration] of [
+        ['/api/preview/cell/instance', 'registerCellPreview'],
+        ['/api/preview/instance', 'registerPreview'],
+      ] as const
+    ) {
+      const calls: string[] = []
+      const registrations: string[] = []
+      const session = {
+        async experimentalEnsurePublishedPreview() {
+          calls.push('publishing')
+          await Promise.resolve()
+          calls.push('published')
+        },
+        registerCellPreview(input: unknown) {
+          calls.push('registered')
+          registrations.push('registerCellPreview')
+          return { input }
+        },
+        registerPreview(input: unknown) {
+          calls.push('registered')
+          registrations.push('registerPreview')
+          return { input }
+        },
+        subscribe: () => () => {},
+      } as unknown as StudioProjectSession
+      const url = new URL(`http://127.0.0.1:5678${pathname}`)
+      const response = await StudioServerTesting.handleRequest(
+        session,
+        {} as StudioFixtureGeneration,
+        new Request(url, {
+          body: JSON.stringify({ previewInstanceId: 'fresh-instance' }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        }),
+        url,
+        {},
+      )
+
+      Expect(response.status).toBe(200)
+      Expect(calls).toEqual(['publishing', 'published', 'registered'])
+      Expect(registrations).toEqual([registration])
+    }
+  })
+
+  Test('does not register a preview instance when pending publication fails', async () => {
+    for (const pathname of ['/api/preview/cell/instance', '/api/preview/instance']) {
+      let registered = false
+      const session = {
+        async experimentalEnsurePublishedPreview() {
+          Errors.throwUnexpected('publication failed')
+        },
+        registerCellPreview() {
+          registered = true
+          return {}
+        },
+        registerPreview() {
+          registered = true
+          return {}
+        },
+        subscribe: () => () => {},
+      } as unknown as StudioProjectSession
+      const url = new URL(`http://127.0.0.1:5678${pathname}`)
+
+      await Expect(StudioServerTesting.handleRequest(
+        session,
+        {} as StudioFixtureGeneration,
+        new Request(url, {
+          body: JSON.stringify({ previewInstanceId: 'fresh-instance' }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        }),
+        url,
+        {},
+      )).rejects.toThrow('publication failed')
+      Expect(registered).toBe(false)
+    }
+  })
+
   Test('refuses the wrong method on parameterized agent-chat routes', async () => {
     const session = { subscribe: () => () => {} } as unknown as StudioProjectSession
     const url = new URL('http://127.0.0.1:5678/api/agent-chat/send')
@@ -821,3 +901,51 @@ function fakeGateway(status: StudioDeviceStatus, calls: unknown[]): StudioServer
     },
   }
 }
+
+Describe('Studio child paint scheduling result', () => {
+  Test('forwards actual paint and rejection separately without treating rejection as paint', async () => {
+    const received: Array<[number, boolean | undefined]> = []
+    const session = {
+      subscribe: () => () => {},
+      experimentalPreviewPaint: (revision: number, painted?: boolean) => {
+        received.push([revision, painted])
+        return true
+      },
+    } as unknown as StudioProjectSession
+    const url = new URL('http://127.0.0.1:5678/api/preview/experimental-paint')
+    for (const body of [{ revision: 7, painted: true }, { revision: 8, painted: false }, { revision: 9 }]) {
+      const response = await StudioServerTesting.handleRequest(
+        session,
+        {} as StudioFixtureGeneration,
+        new Request(url, { method: 'POST', body: JSON.stringify(body) }),
+        url,
+        {},
+      )
+      Expect(await response.json()).toEqual({ accepted: true })
+    }
+    Expect(received).toEqual([[7, true], [8, false], [9, true]])
+  })
+
+  Test('rejects malformed child paint results before invoking the scheduler', async () => {
+    let calls = 0
+    const session = {
+      subscribe: () => () => {},
+      experimentalPreviewPaint: () => {
+        calls += 1
+        return true
+      },
+    } as unknown as StudioProjectSession
+    const url = new URL('http://127.0.0.1:5678/api/preview/experimental-paint')
+    await Expect(
+      StudioServerTesting.handleRequest(
+        session,
+        {} as StudioFixtureGeneration,
+        new Request(url, { method: 'POST', body: JSON.stringify({ revision: 7, painted: 'false' }) }),
+        url,
+        {},
+      ),
+    )
+      .rejects.toThrow('boolean painted result')
+    Expect(calls).toBe(0)
+  })
+})

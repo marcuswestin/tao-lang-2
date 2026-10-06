@@ -1,5 +1,5 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
-import { Assert, CLI, Errors, Json, ReleaseCapabilities, Repo, Switch } from '@shared'
+import { Assert, CLI, Errors, HCI, Json, Platform, ReleaseCapabilities, Repo, Switch } from '@shared'
 import type { AgentChatProvider } from './agent-chat/AgentChatProvider'
 import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
 import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
@@ -820,7 +820,41 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
     jsonReply(await session.readFile(requiredQuery(url, 'path', 'Missing Studio file path.'))),
   fileCreate: bodyTo((session, body) => session.createFile(createFileRequest(body)), 201),
   fileDelete: bodyTo((session, body) => session.deleteFile(deleteFileRequest(body))),
-  fileDraft: bodyTo((session, body) => session.syncDraft(draftWriteRequest(body))),
+  fileDraft: bodyTo(async (session, body) => {
+    const request = draftWriteRequest(body)
+    const trace = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true'
+    if (trace) {
+      HCI.logProcessInfo(
+        'studio',
+        JSON.stringify({
+          type: 'studio-save-trace',
+          event: 'request-arrival',
+          at: Date.now(),
+          path: request.path,
+          writeId: request.writeId,
+          priorSourceVersion: request.sourceVersion,
+        }),
+      )
+    }
+    const result = await session.syncDraft(request)
+    if (trace) {
+      HCI.logProcessInfo(
+        'studio',
+        JSON.stringify({
+          type: 'studio-save-trace',
+          event: 'save-response',
+          at: Date.now(),
+          path: request.path,
+          writeId: request.writeId,
+          sourceVersion: result.file.sourceVersion,
+          saved: result.saved,
+          revision: result.compile?.compileRevision,
+          publishedRevision: result.compile?.publishedRevision,
+        }),
+      )
+    }
+    return result
+  }),
   fileMoveGenerated: bodyTo((session, body) => session.moveGeneratedSource(moveGeneratedSourceRequest(body))),
   fileRename: bodyTo((session, body) => session.renameFile(renameFileRequest(body))),
   files: sessionTo(async session => ({ files: await session.files() })),
@@ -831,13 +865,26 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
     return jsonReply(analysis)
   },
   previewApplied: bodyTo((session, body) => ({ accepted: session.acknowledgePreview(body) })),
+  experimentalPreviewPaint: bodyTo((session, body) => {
+    Assert.input(
+      typeof body === 'object' && body !== null && 'revision' in body
+        && typeof body.revision === 'number' && Number.isSafeInteger(body.revision),
+      'Experimental paint requires a publication revision.',
+    )
+    const painted = 'painted' in body ? body.painted : true
+    Assert.input(typeof painted === 'boolean', 'Experimental paint requires a boolean painted result.')
+    return { accepted: session.experimentalPreviewPaint?.(body.revision, painted) ?? false }
+  }),
   previewCell: ({ session, url }) =>
     jsonReply(session.previewCell(requiredQuery(url, 'cellId', 'Missing Studio cell id.'))),
   previewCellBootstrap: ({ session, url }) =>
     jsonReply(
       session.previewCellBootstrap(requiredQuery(url, 'previewInstanceId', 'Missing Studio preview instance id.')),
     ),
-  previewCellInstance: bodyTo((session, body) => session.registerCellPreview(body)),
+  previewCellInstance: bodyTo(async (session, body) => {
+    await session.experimentalEnsurePublishedPreview?.()
+    return session.registerCellPreview(body)
+  }),
   previewCellRelease: bodyTo((session, body) => {
     Assert.input(Json.isRecord(body) && typeof body['previewInstanceId'] === 'string', 'Expected preview instance id.')
     session.unregisterCellPreview(body['previewInstanceId'])
@@ -845,7 +892,10 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
   }),
   previewCellReconfigure: bodyTo((session, body) => session.reconfigureCell(body)),
   previewDiagnosis: async ({ options }) => jsonReply(await previewDiagnosis(options.previewUrl)),
-  previewInstance: bodyTo((session, body) => session.registerPreview(body)),
+  previewInstance: bodyTo(async (session, body) => {
+    await session.experimentalEnsurePublishedPreview?.()
+    return session.registerPreview(body)
+  }),
   previewLayoutMeasurements: bodyTo((session, body) => session.recordPreviewLayoutMeasurements(body)),
   previewManifest: ({ session }) => {
     const manifest = session.previewManifest()

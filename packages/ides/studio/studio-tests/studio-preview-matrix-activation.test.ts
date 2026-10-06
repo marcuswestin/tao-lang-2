@@ -12,7 +12,7 @@ import {
   startRestoredPreviews,
   wireActivation,
 } from '../studio-src/client/matrix/StudioPreviewMatrix'
-import { StudioApiClient, type StudioHandshake } from '../studio-src/client/StudioApiClient'
+import { StudioApiClient, StudioApiError, type StudioHandshake } from '../studio-src/client/StudioApiClient'
 import type { StudioPreviewCell, StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 
 const windowSlot = testOverrideSlot<PropertyDescriptor | undefined>({
@@ -487,6 +487,105 @@ Test('Studio stops activation after repeated manifest changes without mounting a
   } finally {
     restoreSession()
     restoreRegistration()
+  }
+})
+
+Test('Studio retries a stale activation registration with the manifest wired during the failed request', async () => {
+  const restoreWindow = windowSlot.install({
+    configurable: true,
+    value: { location: { origin: 'http://localhost:1234', pathname: '/studio' } },
+  })
+  const registrations: {
+    cellId: string
+    cellRevision: number
+    compileRevision: number
+    manifestRevision: string
+    previewInstanceId: string
+  }[] = []
+  const preview = connection(cell('a'))
+  const previews = [preview]
+  const parent = {} as HTMLElement
+  let wireNewContext: (() => void) | undefined
+  const restoreRegistration = cellInstanceSlot.install(async body => {
+    const identity = body as typeof registrations[number]
+    registrations.push(identity)
+    if (registrations.length === 1) {
+      wireNewContext?.()
+      throw new StudioApiError('Preview manifest changed.', 409, { code: 'stale-manifest' })
+    }
+    return {}
+  })
+  const saved: string[][] = []
+  const restoreSession = saveSessionSlot.install(async (_field, value) => {
+    saved.push(value as string[])
+  })
+  try {
+    const original = manifest(preview.cell!)
+    const currentCell = cell('a', 2)
+    const currentManifest = {
+      ...manifest(currentCell),
+      compileRevision: 2,
+      manifestRevision: 'manifest-2',
+    }
+    wireNewContext = () => {
+      preview.cell = currentCell
+      wireActivation(parent, previews, currentManifest, previewUrl, handshake)
+    }
+    wireActivation(parent, previews, original, previewUrl, handshake)
+    await preview.toggleActivation!()
+
+    Expect(registrations.map(({ cellRevision, compileRevision, manifestRevision }) => ({
+      cellRevision,
+      compileRevision,
+      manifestRevision,
+    }))).toEqual([
+      { cellRevision: 1, compileRevision: 1, manifestRevision: 'manifest-1' },
+      { cellRevision: 2, compileRevision: 2, manifestRevision: 'manifest-2' },
+    ])
+    Expect(saved).toEqual([['a']])
+    Expect(preview.activated).toBe(true)
+    Expect(preview.iframe.src).toContain(registrations[1]!.previewInstanceId)
+    Expect(preview.iframe.src).not.toContain(registrations[0]!.previewInstanceId)
+  } finally {
+    restoreSession()
+    restoreRegistration()
+    restoreWindow()
+  }
+})
+
+Test('Studio leaves activation unchanged when a stale registration fails without a context change', async () => {
+  const restoreWindow = windowSlot.install({
+    configurable: true,
+    value: { location: { origin: 'http://localhost:1234', pathname: '/studio' } },
+  })
+  const registrations: string[] = []
+  const restoreRegistration = cellInstanceSlot.install(async body => {
+    registrations.push((body as { previewInstanceId: string }).previewInstanceId)
+    throw new StudioApiError('Preview manifest changed.', 409, { code: 'stale-manifest' })
+  })
+  const saved: string[][] = []
+  const restoreSession = saveSessionSlot.install(async (_field, value) => {
+    saved.push(value as string[])
+  })
+  try {
+    const preview = connection(cell('a'))
+    wireActivation({} as HTMLElement, [preview], manifest(preview.cell!), previewUrl, handshake)
+    let failure: unknown
+    try {
+      await preview.toggleActivation!()
+    } catch (error) {
+      failure = error
+    }
+
+    Expect(failure).toBeInstanceOf(StudioApiError)
+    Expect(registrations).toHaveLength(1)
+    Expect(saved).toEqual([])
+    Expect(preview.activated).toBe(false)
+    Expect(preview.iframe.src).toBe('')
+  } finally {
+    restoreSession()
+    restoreRegistration()
+    restoreWindow()
   }
 })
 

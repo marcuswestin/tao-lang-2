@@ -1,3 +1,4 @@
+import type { TaoStudioDesignPaddingUpdate } from '@runtime/TR-design'
 import type { TaoSchemeCapability } from '@runtime/TR-scheme'
 import type { TaoStudioLensCause, TaoStudioLensRenderSample } from '@runtime/TR-studio-lens'
 import {
@@ -305,6 +306,8 @@ export type StudioSessionAppState = Readonly<{
 }>
 
 export type StudioSessionHandshake = {
+  /** Advertised only while the temporary observed-paint scheduler is enabled. */
+  experimentalPreviewPaint?: true
   apps: readonly StudioAppVariant[]
   capabilities: {
     drafts: 'disk-synced-parsable'
@@ -341,7 +344,19 @@ export type StudioSessionHandshake = {
 }
 
 /** Events one project session publishes; the server relays each to that session's event sockets. */
+/** Temporary constant-padding delivery experiment; authoritative compilation follows. */
+export type StudioExperimentalDesignPadding = Readonly<
+  TaoStudioDesignPaddingUpdate & {
+    revision: number
+  }
+>
+
 export type StudioSessionEvent =
+  | (StudioExperimentalDesignPadding & {
+    channel: typeof studioProtocolChannel
+    protocolVersion: typeof studioProtocolVersion
+    type: 'experimental-design-padding'
+  })
   | {
     channel: typeof studioProtocolChannel
     protocolVersion: typeof studioProtocolVersion
@@ -509,6 +524,16 @@ type StudioPreviewMountedMessage = {
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   type: 'preview-mounted'
+}
+
+/** A child iframe reports that the named preview revision survived two child animation frames. */
+export type StudioPreviewPaintedMessage = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  painted: boolean
+  paintRevision: number
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-painted'
 }
 
 /** Parent-to-preview publication of the runtime state paired with one compiled generated module revision. */
@@ -875,6 +900,7 @@ export type StudioWindowMessage =
   | StudioJourneyRecordingControlMessage
   | StudioPreviewAppliedMessage
   | StudioPreviewMountedMessage
+  | StudioPreviewPaintedMessage
   | StudioPreviewFixtureCapturedMessage
   | StudioPreviewFixtureCaptureFailedMessage
   | StudioPreviewLogMessage
@@ -981,6 +1007,7 @@ const windowMessageParsers: {
   'highlight-source': parseHighlightSource,
   'preview-applied': parsePreviewApplied,
   'preview-mounted': parsePreviewMounted,
+  'preview-painted': parsePreviewPainted,
   'preview-canvas-gesture': parsePreviewCanvasGesture,
   'preview-canvas-pan-key': parsePreviewCanvasPanKey,
   'preview-canvas-shortcut': parsePreviewCanvasShortcut,
@@ -1774,6 +1801,15 @@ function parsePreviewMounted(value: StudioJsonObject): StudioPreviewMountedMessa
   return identity === undefined ? undefined : envelope({ identity, type: 'preview-mounted' })
 }
 
+function parsePreviewPainted(value: StudioJsonObject): StudioPreviewPaintedMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const paintRevision = nonNegativeInteger(value['paintRevision'])
+  const painted = value['painted']
+  return identity === undefined || paintRevision === undefined || typeof painted !== 'boolean'
+    ? undefined
+    : envelope({ identity, painted, paintRevision, type: 'preview-painted' })
+}
+
 function parsePreviewSource(value: StudioJsonObject): StudioPreviewSourceMessage | undefined {
   const identity = parsePreviewSourceIdentity(value['identity'])
   const range = parseSourceRange(value['range'])
@@ -1924,12 +1960,14 @@ function parsePreviewIdentity(value: unknown): StudioPreviewIdentity | undefined
   const rawCellIdentity = [
     value['cellId'],
     value['cellRevision'],
-    value['compileRevision'],
     value['manifestRevision'],
   ]
   const hasCellIdentity = rawCellIdentity.some(field => field !== undefined)
   const cellRevision = nonNegativeInteger(value['cellRevision'])
   const compileRevision = nonNegativeInteger(value['compileRevision'])
+  if (value['compileRevision'] !== undefined && compileRevision === undefined) {
+    return undefined
+  }
   if (
     hasCellIdentity
     && (
@@ -1950,7 +1988,9 @@ function parsePreviewIdentity(value: unknown): StudioPreviewIdentity | undefined
         compileRevision: compileRevision!,
         manifestRevision: value['manifestRevision'] as string,
       }
-      : {}),
+      : compileRevision === undefined
+      ? {}
+      : { compileRevision }),
     previewInstanceId: value['previewInstanceId'],
     project: value['project'],
   }

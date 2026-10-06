@@ -136,6 +136,8 @@ export type { StudioDesignValue, StudioFileDraftState }
 export type StudioProjectSessionOptions = {
   appName?: string
   compile: StudioCompileCoordinatorOptions['compile']
+  /** Runs before a new cell preview is registered when an experimental design overlay is pending. */
+  experimentalEnsurePublishedPreview?: () => Promise<void>
   entryPath?: string
   projectRoot: string
   /** Substitutes the disk behind the file listing; tests use it to count scans and reads. */
@@ -233,6 +235,7 @@ export class StudioProjectSession {
     files: StudioProjectFiles,
     compile: StudioCompileCoordinatorOptions['compile'],
     sketchCatalogIO?: StudioSketchCatalogIO,
+    readonly experimentalEnsurePublishedPreview?: () => Promise<void>,
   ) {
     this.#workspace = workspace
     this.#files = files
@@ -293,6 +296,7 @@ export class StudioProjectSession {
       files,
       options.compile,
       options.sketchCatalogIO,
+      options.experimentalEnsurePublishedPreview,
     )
     return session
   }
@@ -526,6 +530,14 @@ export class StudioProjectSession {
     })
   }
 
+  /** Temporary diagnostic hook; absent outside the observed-paint scheduling experiment. */
+  experimentalPreviewPaint?: (revision: number, painted?: boolean) => boolean
+
+  /** Diagnostic delivery only; never substitutes for eventual authoritative compilation. */
+  experimentalDesignPadding(update: import('./StudioProtocol').StudioExperimentalDesignPadding): void {
+    this.#emit({ ...update, type: 'experimental-design-padding' })
+  }
+
   compileSnapshot(): StudioCompileSnapshot {
     return this.#coordinator.snapshot()
   }
@@ -710,6 +722,7 @@ export class StudioProjectSession {
       },
       channel: studioProtocolChannel,
       compile: this.compileSnapshot(),
+      ...(this.experimentalPreviewPaint === undefined ? {} : { experimentalPreviewPaint: true as const }),
       endpoints: studioSessionEndpoints,
       entryPath: FS.relativePath(this.projectRoot, this.entryPath),
       files: await this.files(),

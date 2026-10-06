@@ -26,6 +26,23 @@ export type TaoDesignSource = Readonly<{
   start?: number
 }>
 
+type TaoStudioDesignSourceRange = Readonly<{ from: number; to: number }>
+
+/** One compiler-authenticated padding edit within a published design source. */
+export type TaoStudioDesignPaddingUpdate = Readonly<{
+  bundleName: string
+  designName: string
+  entryIndex: number
+  expectedPadding: number
+  newLiteralRange: TaoStudioDesignSourceRange
+  newSpecRange: TaoStudioDesignSourceRange
+  oldLiteralRange: TaoStudioDesignSourceRange
+  oldSpecRange: TaoStudioDesignSourceRange
+  ownerKind: 'legacy' | 'styles' | 'text'
+  padding: number
+  sourcePath: string
+}>
+
 /** TaoDesignSpec preserves authored bundle and direct-clause order until a mounted app resolves it. */
 export type TaoDesignSpec = Readonly<{
   entries: readonly TaoDesignSpecEntry[]
@@ -150,6 +167,108 @@ const designPublications = new WeakMap<TaoDesign, TaoDesignPublication>()
 const publishedDesigns = new Map<string, PublishedDesign>()
 const cohortSources = new WeakMap<object, TaoDesignCohortSource>()
 const liveCohorts = new Set<WeakRef<object>>()
+
+function validStudioDesignPaddingUpdate(update: TaoStudioDesignPaddingUpdate): boolean {
+  const { newLiteralRange, newSpecRange, oldLiteralRange, oldSpecRange } = update
+  const rangeValid = (range: TaoStudioDesignSourceRange): boolean =>
+    Number.isSafeInteger(range.from) && range.from >= 0
+    && Number.isSafeInteger(range.to) && range.to >= range.from
+  if (
+    update.designName.trim().length === 0
+    || update.bundleName.trim().length === 0
+    || !(update.sourcePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(update.sourcePath))
+    || !Number.isSafeInteger(update.entryIndex) || update.entryIndex < 0
+    || !Number.isFinite(update.expectedPadding) || update.expectedPadding < 0
+    || !Number.isFinite(update.padding) || update.padding < 0
+    || !rangeValid(oldLiteralRange) || !rangeValid(newLiteralRange)
+    || !rangeValid(oldSpecRange) || !rangeValid(newSpecRange)
+    || oldLiteralRange.to <= oldLiteralRange.from
+    || newLiteralRange.to <= newLiteralRange.from
+    || newLiteralRange.from !== oldLiteralRange.from
+  ) {
+    return false
+  }
+  const delta = newLiteralRange.to - oldLiteralRange.to
+  return oldLiteralRange.from >= oldSpecRange.from
+    && oldLiteralRange.to <= oldSpecRange.to
+    && newLiteralRange.from >= newSpecRange.from
+    && newLiteralRange.to <= newSpecRange.to
+    && newSpecRange.from === oldSpecRange.from
+    && newSpecRange.to === oldSpecRange.to + delta
+}
+
+function studioDesignOwnerSourceMatches(
+  source: TaoDesignSource | undefined,
+  update: TaoStudioDesignPaddingUpdate,
+): boolean {
+  const sourceKind = update.ownerKind === 'legacy'
+    ? 'legacy-style'
+    : update.ownerKind === 'styles'
+    ? 'style'
+    : 'text-style'
+  return source?.path === update.sourcePath
+    && source.member === update.bundleName
+    && source.kind === sourceKind
+    && source.start === update.oldSpecRange.from
+    && source.end === update.oldSpecRange.to
+}
+
+function shiftStudioDesignSource(
+  source: TaoDesignSource | undefined,
+  update: TaoStudioDesignPaddingUpdate,
+  delta: number,
+): { source: TaoDesignSource | undefined; valid: boolean } {
+  if (source === undefined || source.path !== update.sourcePath) {
+    return { source, valid: true }
+  }
+  const shift = (offset: number | undefined): number | undefined => {
+    if (offset === undefined) {
+      return undefined
+    }
+    if (!Number.isSafeInteger(offset) || offset < 0) {
+      return Number.NaN
+    }
+    if (offset <= update.oldLiteralRange.from) {
+      return offset
+    }
+    if (offset >= update.oldLiteralRange.to) {
+      return offset + delta
+    }
+    return Number.NaN
+  }
+  const start = shift(source.start)
+  const end = shift(source.end)
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return { source, valid: false }
+  }
+  return {
+    source: Object.freeze({
+      ...source,
+      ...(start === undefined ? {} : { start }),
+      ...(end === undefined ? {} : { end }),
+    }),
+    valid: true,
+  }
+}
+
+function shiftedDesignSources(
+  sources: Readonly<Record<string, TaoDesignSource>> | undefined,
+  update: TaoStudioDesignPaddingUpdate,
+  delta: number,
+): { sources: Readonly<Record<string, TaoDesignSource>> | undefined; valid: boolean } {
+  if (sources === undefined) {
+    return { sources, valid: true }
+  }
+  const shifted: Record<string, TaoDesignSource> = {}
+  for (const [name, source] of Object.entries(sources)) {
+    const result = shiftStudioDesignSource(source, update, delta)
+    if (!result.valid || result.source === undefined) {
+      return { sources, valid: false }
+    }
+    shifted[name] = result.source
+  }
+  return { sources: Object.freeze(shifted), valid: true }
+}
 
 /** Ignore changed literal values while retaining every name and reference a lookup can follow. */
 function designLookupShape(design: TaoDesign): DesignLookupShape {
@@ -424,6 +543,75 @@ export const DesignControls = {
     return snapshot
   },
 
+  /** Apply one compiler-authenticated padding overlay within the named design source. */
+  experimentalPatchPadding(update: TaoStudioDesignPaddingUpdate): boolean {
+    if (!validStudioDesignPaddingUpdate(update)) {
+      return false
+    }
+    const matches = [...publishedDesigns.entries()].filter(([, published]) =>
+      published.latest.name === update.designName && published.metadata?.path === update.sourcePath
+    )
+    if (matches.length !== 1) {
+      return false
+    }
+    const [identity, published] = matches[0]!
+    const latest = published.latest
+    const bundle = latest.bundles[update.bundleName]
+    const metadata = published.metadata
+    const provenance = [latest.sources?.[update.bundleName], bundle?.source]
+      .filter((source): source is TaoDesignSource => source !== undefined)
+    if (
+      bundle === undefined
+      || metadata === undefined
+      || provenance.length === 0
+      || provenance.some(source => !studioDesignOwnerSourceMatches(source, update))
+    ) {
+      return false
+    }
+    const entry = bundle.entries[update.entryIndex]
+    if (
+      entry === undefined
+      || entry[0] !== 'pad'
+      || entry.length !== 2
+      || entry[1] !== update.expectedPadding
+    ) {
+      return false
+    }
+    const delta = update.newLiteralRange.to - update.oldLiteralRange.to
+    const sourceUpdate = shiftedDesignSources(latest.sources, update, delta)
+    if (!sourceUpdate.valid) {
+      return false
+    }
+    const bundles: Record<string, TaoDesignSpec> = {}
+    for (const [name, current] of Object.entries(latest.bundles)) {
+      const sourceUpdate = shiftStudioDesignSource(current.source, update, delta)
+      if (!sourceUpdate.valid) {
+        return false
+      }
+      const entries = name !== update.bundleName
+        ? current.entries
+        : current.entries.map((currentEntry, index) =>
+          index === update.entryIndex
+            ? ['pad', update.padding] as TaoDesignSpecEntry
+            : currentEntry
+        )
+      bundles[name] = sourceUpdate.source === current.source && entries === current.entries
+        ? current
+        : DesignControls.Spec(entries, sourceUpdate.source)
+    }
+    const definition: TaoDesignDefinition = {
+      bundles: Object.freeze(bundles),
+      colors: latest.colors,
+      name: latest.name,
+      screens: latest.screens,
+      sizes: latest.sizes,
+      ...(sourceUpdate.sources === undefined ? {} : { sources: sourceUpdate.sources }),
+      tokens: latest.tokens,
+    }
+    DesignControls.Declaration(definition, identity, metadata)
+    return true
+  },
+
   current(design: TaoDesign | undefined): TaoDesign | undefined {
     return publishedDesign(design)?.latest ?? design
   },
@@ -502,6 +690,7 @@ class RuntimeDesign implements TaoDesign {
   readonly name: string
   readonly screens: readonly TaoDesignScreen[]
   readonly sizes: Readonly<Record<string, TaoDesignSizeValue>>
+  readonly sources?: Readonly<Record<string, TaoDesignSource>>
   readonly tokens: Readonly<Record<string, string>>
 
   constructor(definition: TaoDesignDefinition) {
@@ -515,6 +704,14 @@ class RuntimeDesign implements TaoDesign {
     this.name = definition.name
     this.screens = Object.freeze([...(definition.screens ?? [])])
     this.sizes = Object.freeze({ ...definition.sizes })
+    this.sources = definition.sources === undefined
+      ? undefined
+      : Object.freeze(Object.fromEntries(
+        Object.entries(definition.sources).map(([name, source]) => [
+          name,
+          Object.freeze({ ...source }),
+        ]),
+      ))
     this.tokens = Object.freeze({ ...definition.tokens })
     Object.freeze(this)
   }

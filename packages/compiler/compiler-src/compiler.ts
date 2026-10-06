@@ -6,7 +6,7 @@ import {
   readMaintainedNativeBridgeTypeOrigins,
 } from '@native-bindings'
 import { AST, codeProjectRoot } from '@parser'
-import { Assert, Diagnostics, ReleaseCapabilities, type ReleaseProfile } from '@shared'
+import { Assert, Diagnostics, HCI, Platform, ReleaseCapabilities, type ReleaseProfile } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { designValidationCodes } from '@validator/diagnostic-codes'
 import { Backends } from './codegen/Backend'
@@ -130,7 +130,10 @@ async function compileValidated(
   context: CompilerContext,
   options: CompileOptions = {},
 ): Promise<CompileResult> {
+  const trace = options.studio && Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true'
+  const startedAt = trace ? performance.now() : 0
   const nativeBindings = await inspectMaintainedNativeBindings(context.nativeBindings)
+  const nativeBeforeAt = trace ? performance.now() : 0
   const releaseDiagnostics = Validator.releaseDiagnostics(Validator.createContext(
     context.packagesContext,
     validationResult.files.map(file => file.ast),
@@ -176,10 +179,12 @@ async function compileValidated(
       ? `Cannot compile ambiguous app '${options.appName}'. Select its declaring Tao file as the entry.`
       : `Cannot compile unknown app '${options.appName}'. Available apps: ${appNames.join(', ')}.`,
   )
+  const selectedAt = trace ? performance.now() : 0
   const nativeBridgeTypeOrigins = await readMaintainedNativeBridgeTypeOrigins({
     ...context.nativeBindings,
     inspection: nativeBindings,
   })
+  const originsAt = trace ? performance.now() : 0
   const compiled = Backends[options.target ?? 'react-native'].compile({
     validation: validationResult,
     context: { ...context, nativeBridgeTypeOrigins },
@@ -187,12 +192,31 @@ async function compileValidated(
     appPath: selected.path,
     options,
   })
-  const afterNativeBindings = await inspectMaintainedNativeBindings(context.nativeBindings)
+  const backendAt = trace ? performance.now() : 0
+  const afterNativeBindings = await inspectMaintainedNativeBindings({
+    ...context.nativeBindings,
+    experimentalInspection: undefined,
+  })
+  const nativeAfterAt = trace ? performance.now() : 0
   Assert.input(
     afterNativeBindings.status === 'fresh' && afterNativeBindings.identity === nativeBindings.identity,
     Diagnostics.errorMessages(afterNativeBindings.diagnostics).join('; ')
       || 'Native binding inputs changed during compilation. Regenerate maintained bindings and retry.',
   )
+  if (trace) {
+    HCI.logProcessInfo(
+      'compiler',
+      JSON.stringify({
+        type: 'studio-compiler-profile',
+        nativeBeforeMs: nativeBeforeAt - startedAt,
+        selectionMs: selectedAt - nativeBeforeAt,
+        originsMs: originsAt - selectedAt,
+        backendMs: backendAt - originsAt,
+        nativeAfterMs: nativeAfterAt - backendAt,
+        totalMs: nativeAfterAt - startedAt,
+      }),
+    )
+  }
   return compiled
 }
 

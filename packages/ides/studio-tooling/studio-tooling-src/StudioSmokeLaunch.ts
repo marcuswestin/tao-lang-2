@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Repo, Time, VerificationTimeouts } from '@shared'
+import { Assert, CLI, Errors, FS, Platform, Repo, Time, VerificationTimeouts } from '@shared'
 import { stopLaunches } from './StudioLifecycle'
 import type { StudioReadiness } from './StudioReadiness'
 
@@ -159,12 +159,17 @@ function defaultStart(
   args: readonly string[],
   onOutput: (chunk: Buffer) => void,
 ): CLI.StartedCommand {
+  const nodeEnv = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_NODE_ENV'] ?? 'development'
+  Assert.input(
+    nodeEnv === 'development' || nodeEnv === 'production',
+    'Studio smoke NODE_ENV must be development or production.',
+  )
   return CLI.start(command, {
     args: [...args],
     // Metro's dev-middleware refuses to launch its debugger tooling under NODE_ENV=test, assuming
     // that means its own jest suite; override it so this real subprocess launch is not mistaken
     // for that unit-test context.
-    env: { NODE_ENV: 'development' },
+    env: { NODE_ENV: nodeEnv },
     onOutput: (_stream, chunk) => onOutput(chunk),
     stdio: ['ignore', 'pipe', 'pipe'],
   })

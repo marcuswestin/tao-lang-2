@@ -138,11 +138,27 @@ type DocumentVariant = {
   reports: DocumentReports
 }
 type DocumentReuseState = Map<string, readonly DocumentVariant[]>
+type PreviewValidationSnapshot = {
+  packagesContext: Packages.Context
+  files: readonly AST.TaoFile[]
+  diagnostics: ReadonlyMap<AST.TaoFile, readonly Diagnostic[]>
+  dependencies: ReadonlyMap<AST.TaoFile, DocumentVariant['dependencies']>
+}
+const previewValidationSnapshots = new WeakMap<DocumentReuse, Map<string, PreviewValidationSnapshot>>()
 const documentReuseStates = new WeakMap<DocumentReuse, DocumentReuseState>()
 
-function createDocumentReuse(): DocumentReuse {
+function createDocumentReuse(options: { experimentalWholeDocumentReuse?: boolean } = {}): DocumentReuse {
   const state: DocumentReuseState = new Map()
-  const reuse = { clear: () => state.clear() }
+  const snapshots = options.experimentalWholeDocumentReuse ? new Map<string, PreviewValidationSnapshot>() : undefined
+  const reuse = {
+    clear: () => {
+      state.clear()
+      snapshots?.clear()
+    },
+  }
+  if (snapshots !== undefined) {
+    previewValidationSnapshots.set(reuse, snapshots)
+  }
   documentReuseStates.set(reuse, state)
   return reuse
 }
@@ -162,6 +178,16 @@ function replayReports(reports: readonly CapturedReport[], ctx: ValidationContex
   }
 }
 
+/** Compare frozen dependency observations, never the mutable linked documents themselves. */
+function sameValidationDependencies(
+  left: DocumentVariant['dependencies'],
+  right: DocumentVariant['dependencies'],
+): boolean {
+  const same = <T>(a: readonly T[], b: readonly T[]) =>
+    a.length === b.length && a.every((value, index) => value === b[index])
+  return left.signature === right.signature && same(left.files, right.files) && same(left.targets, right.targets)
+}
+
 function documentVariant(
   file: AST.TaoFile,
   context: ValidationRunContext,
@@ -175,13 +201,9 @@ function documentVariant(
   }
   const path = AST.getDocument(file).uri.path
   const variants = state.get(path) ?? []
-  const same = <T>(left: readonly T[], right: readonly T[]) =>
-    left.length === right.length && left.every((value, index) => value === right[index])
   const previous = variants.find(candidate =>
     candidate.file === file && candidate.packagesContext === context.packagesContext
-    && candidate.contextKey === contextKey && candidate.dependencies.signature === dependencies.signature
-    && same(candidate.dependencies.files, dependencies.files)
-    && same(candidate.dependencies.targets, dependencies.targets)
+    && candidate.contextKey === contextKey && sameValidationDependencies(candidate.dependencies, dependencies)
   )
   if (previous) {
     return previous
@@ -258,6 +280,7 @@ type BatchReuse = {
 async function validateParseResults(
   runs: readonly { parseResult: ParseResult; context: ValidationRunContext }[],
   documentReuse?: DocumentReuse,
+  experimentalChangedPaths?: readonly string[],
 ): Promise<readonly ValidationResult[]> {
   const reuse: BatchReuse = {
     apps: AppValidator.createBatchMemo(),
@@ -274,10 +297,22 @@ async function validateParseResults(
   // New reports are published only after every entry has completed successfully.
   const staged = persisted && !failedBuild ? new Map(persisted) : undefined
   const activeVariants = new Set<DocumentVariant>()
+  const snapshots = documentReuse && previewValidationSnapshots.get(documentReuse)
+  const stagedSnapshots = snapshots && !failedBuild ? new Map(snapshots) : undefined
   try {
     const results: ValidationResult[] = []
     for (const { parseResult, context } of runs) {
-      results.push(await validateParseResult(parseResult, context, reuse, staged, activeVariants))
+      results.push(
+        await validateParseResult(
+          parseResult,
+          context,
+          reuse,
+          staged,
+          activeVariants,
+          stagedSnapshots,
+          failedBuild ? undefined : experimentalChangedPaths,
+        ),
+      )
     }
     if (persisted && staged) {
       const paths = new Set(runs.flatMap(run => run.context.workspaceFiles.map(file => AST.getDocument(file).uri.path)))
@@ -286,6 +321,12 @@ async function validateParseResults(
         if (paths.has(path)) {
           persisted.set(path, variants.filter(variant => activeVariants.has(variant)))
         }
+      }
+    }
+    if (snapshots && stagedSnapshots) {
+      snapshots?.clear()
+      for (const [key, snapshot] of stagedSnapshots) {
+        snapshots.set(key, snapshot)
       }
     }
     return results
@@ -369,6 +410,8 @@ async function validateParseResult(
   reuse?: BatchReuse,
   documents?: DocumentReuseState,
   activeVariants?: Set<DocumentVariant>,
+  snapshots?: Map<string, PreviewValidationSnapshot>,
+  experimentalChangedPaths?: readonly string[],
 ): Promise<ValidationResult> {
   if (Diagnostics.hasError(parseResult.diagnostics, 'lexer', 'parser')) {
     return validationResultFromParse(parseResult, parseResult.diagnostics)
@@ -391,7 +434,63 @@ async function validateParseResult(
   const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
   const phases = { structural: 0, types: 0, foreign: 0 }
   const contextKey = documents ? documentContextKey(context) : undefined
+  const snapshotKey = documentContextKey(context)
+  const previousSnapshot = snapshots?.get(snapshotKey)
+  const changed = new Set(experimentalChangedPaths)
+  // These observations include transitive references, import candidates, package boundaries
+  // and project-wide structural inputs. An unchanged AST alone cannot authorize replay.
+  const dependencies = new Map<AST.TaoFile, DocumentVariant['dependencies']>()
+  if (snapshots !== undefined) {
+    for (const file of context.workspaceFiles) {
+      const observed = Parser.validationDependencies(file)
+      if (observed) {
+        dependencies.set(file, observed)
+      }
+    }
+  }
+  const workspacePaths = new Set(context.workspaceFiles.map(file => AST.getDocument(file).uri.path))
+  const selective = experimentalChangedPaths !== undefined
+    && changed.size > 0
+    && dependencies.size === context.workspaceFiles.length
+    && previousSnapshot?.dependencies.size === context.workspaceFiles.length
+    && [...changed].every(path => workspacePaths.has(path))
+    && previousSnapshot?.packagesContext === context.packagesContext
+    && previousSnapshot.files.length === context.workspaceFiles.length
+    // Entire-file reports also include workspace-global commands and navigation render sites.
+    // The reference graph does not certify those reverse/global inputs across package roots:
+    // until those reports are partitioned, every workspace input must remain identical.
+    && context.workspaceFiles.every((file, index) => {
+      const previousDependencies = previousSnapshot.dependencies.get(file)
+      const currentDependencies = dependencies.get(file)
+      return previousSnapshot.files[index] === file && previousDependencies !== undefined
+        && currentDependencies !== undefined && sameValidationDependencies(previousDependencies, currentDependencies)
+    })
+  const completed = new Map<AST.TaoFile, readonly Diagnostic[]>()
+  const completedDiagnostics = [...validationDiagnostics.diagnostics]
+  let validatedFiles = 0
+  let reusedFiles = 0
   for (const file of context.workspaceFiles) {
+    const previousDependencies = previousSnapshot?.dependencies.get(file)
+    const currentDependencies = dependencies.get(file)
+    const previousDiagnostics = selective && !changed.has(AST.getDocument(file).uri.path)
+        && previousDependencies && currentDependencies
+        && sameValidationDependencies(previousDependencies, currentDependencies)
+      ? previousSnapshot?.diagnostics.get(file)
+      : undefined
+    if (previousDiagnostics !== undefined) {
+      // Skipping a document must not evict its ordinary guarded cache before the full pass.
+      for (const variant of documents?.get(AST.getDocument(file).uri.path) ?? []) {
+        if (variant.file === file && variant.contextKey === snapshotKey) {
+          activeVariants?.add(variant)
+        }
+      }
+      completedDiagnostics.push(...previousDiagnostics)
+      completed.set(file, previousDiagnostics)
+      reusedFiles++
+      continue
+    }
+    validatedFiles++
+    const diagnosticStart = validationDiagnostics.diagnostics.length
     const document = documents ? documentVariant(file, context, documents, contextKey!) : undefined
     if (document) {
       activeVariants?.add(document)
@@ -419,6 +518,9 @@ async function validateParseResult(
     }
     const typesAt = profile ? performance.now() : 0
     await Validate.ForeignImplementationFiles(file, ctx)
+    const fileDiagnostics = validationDiagnostics.diagnostics.slice(diagnosticStart)
+    completed.set(file, fileDiagnostics)
+    completedDiagnostics.push(...fileDiagnostics)
     if (profile) {
       phases.structural += structuralAt - startedAt
       phases.types += typesAt - structuralAt
@@ -432,12 +534,23 @@ async function validateParseResult(
         type: 'studio-validator-profile',
         entry: context.entryFilePath,
         files: context.workspaceFiles.length,
+        validatedFiles,
+        reusedFiles,
         phases,
       }),
     )
   }
 
-  return validationResultFromParse(parseResult, [...parseResult.diagnostics, ...validationDiagnostics.diagnostics])
+  // Only full passes refresh the authoritative snapshot; fast attempts never seed another fast attempt.
+  if (!selective) {
+    snapshots?.set(snapshotKey, {
+      packagesContext: context.packagesContext,
+      files: [...context.workspaceFiles],
+      diagnostics: completed,
+      dependencies,
+    })
+  }
+  return validationResultFromParse(parseResult, [...parseResult.diagnostics, ...completedDiagnostics])
 }
 
 /**

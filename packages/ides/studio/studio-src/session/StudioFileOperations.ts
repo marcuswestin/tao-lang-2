@@ -1,6 +1,6 @@
 import type { Workspace } from '@compiler/workspace'
 import { AST, Langium, Parser } from '@parser'
-import { Assert, Diagnostics, Errors, FS } from '@shared'
+import { Assert, Diagnostics, Errors, FS, HCI, Platform } from '@shared'
 import SourceActions from '@source-actions'
 import type { StudioCompileCoordinator } from '../StudioCompileCoordinator'
 import { studioGeneratedSourceHeader, StudioGeneratedSources } from '../StudioGeneratedSources'
@@ -162,6 +162,19 @@ export class StudioFileOperations {
 
     const sourceVersion = SourceActions.studioSourceVersion(request.content)
     await FS.writeText(resolved, request.content)
+    if (Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true') {
+      HCI.logProcessInfo(
+        'studio',
+        JSON.stringify({
+          type: 'studio-save-trace',
+          event: 'source-written',
+          at: Date.now(),
+          path: request.path,
+          writeId: request.writeId,
+          sourceVersion,
+        }),
+      )
+    }
     files.note(resolved, sourceVersion)
     const compile = await coordinator.noteStudioWrite({ path: resolved, sourceVersion, writeId: request.writeId })
     files.clearDraft(current.path)

@@ -2,7 +2,12 @@ import { Assert, Errors } from '@shared/core'
 import { previewCompatibilitySignature } from '../../StudioPreviewCompatibility'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../../StudioPreviewManifest'
 import { StudioProtocol } from '../../StudioProtocol'
-import { StudioApiClient, type StudioCellRuntimeResponse, type StudioHandshake } from '../StudioApiClient'
+import {
+  StudioApiClient,
+  StudioApiError,
+  type StudioCellRuntimeResponse,
+  type StudioHandshake,
+} from '../StudioApiClient'
 import { StudioScenarioControls } from '../StudioScenarioControls'
 import { invalidatePreviewJourneyRecording } from './StudioJourneyRecording'
 import { StudioMatrixGrid } from './StudioMatrixGrid'
@@ -287,7 +292,22 @@ export function wireActivation(
                   manifestRevision: manifest.manifestRevision,
                   project: handshake.identity.project,
                 }
-                await StudioApiClient.cellInstance({ ...cellIdentity, previewInstanceId })
+                try {
+                  await StudioApiClient.cellInstance({ ...cellIdentity, previewInstanceId })
+                } catch (error) {
+                  // Publishing a pending design overlay may replace the context while
+                  // registration is in flight. Restart with that context, never weaken
+                  // the server's identity check or retry an unchanged stale request.
+                  if (
+                    error instanceof StudioApiError && error.status === 409
+                    && (error.details?.['code'] === 'stale-manifest' || error.details?.['code'] === 'stale-compile')
+                    && (activation.context !== context || connection.cell !== cell
+                      || StudioPreviewActivationGate.generation(parent) !== generation)
+                  ) {
+                    continue
+                  }
+                  throw error
+                }
                 releaseRegistered = releaseCellInstance(previewInstanceId)
               }
             }
@@ -470,6 +490,14 @@ async function runRestoredPreviews(
           return
         } catch (error) {
           releaseRegistered?.()
+          if (
+            error instanceof StudioApiError && error.status === 409
+            && (error.details?.['code'] === 'stale-manifest' || error.details?.['code'] === 'stale-compile')
+            && (context !== activation.context || cell !== connection.cell
+              || generation !== StudioPreviewActivationGate.generation(parent))
+          ) {
+            continue
+          }
           throw error
         }
       }
