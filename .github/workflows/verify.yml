@@ -209,9 +209,9 @@ jobs:
             exit 1
           fi
 
-      # The Verify job reads every partition's summary; the gate logs matter only when one failed, so a
-      # green partition uploads its summary alone.
-      - name: Collect the run's summary, and its logs when it failed
+      # Keep both attempts when a retry recovered a failed gate, even if the partition passed.
+      # Failed partitions retain every gate log; clean passes need only their summary.
+      - name: Collect the run's summary and failure or retry logs
         if: always()
         env:
           JOB_STATUS: ${{ job.status }}
@@ -220,6 +220,11 @@ jobs:
           latest=.artifacts/logs/verify-full-sandbox/latest
           if [ "$JOB_STATUS" = success ] && [ -e "$latest/summary.json" ]; then
             cp -L "$latest/summary.json" "$RUNNER_TEMP/verify-logs/"
+            for log in "$latest"/*.initial.log "$latest"/*.retry.log; do
+              if [ -f "$log" ]; then
+                cp -L "$log" "$RUNNER_TEMP/verify-logs/"
+              fi
+            done
           elif [ -e "$latest" ]; then
             cp -RL "$latest/." "$RUNNER_TEMP/verify-logs/"
           fi

@@ -30,7 +30,7 @@ Describe('Tao local build and clean CLI', () => {
     } finally {
       await FS.remove(output)
     }
-  })
+  }, 180_000)
 
   Test('runs selected targets together and retains both success and failure', async () => {
     const web = Deferred<string>()
@@ -100,7 +100,7 @@ Describe('Tao local build and clean CLI', () => {
     } finally {
       await FS.remove(root)
     }
-  }, 60_000)
+  }, 180_000)
 })
 
 async function servesOnlyContainedFiles(buildRoot: string): Promise<void> {
@@ -116,14 +116,14 @@ async function servesOnlyContainedFiles(buildRoot: string): Promise<void> {
     const port = await until(() => {
       const value = Number(output.match(/Serving http:\/\/localhost:(\d+)/)?.[1])
       return value > 0 ? value : undefined
-    }, { description: 'the standalone web server to announce its bound port' })
+    }, { description: 'the standalone web server to announce its bound port', timeoutMs: 90_000 })
     await until(async () => {
       try {
         return (await fetch(`http://127.0.0.1:${port}/`)).status === 200 ? true : undefined
       } catch {
         return undefined
       }
-    }, { description: `the standalone web server to start: ${output}` })
+    }, { description: `the standalone web server to start: ${output}`, timeoutMs: 90_000 })
     Expect((await fetch(`http://127.0.0.1:${port}/%252e%252e/secret.txt`)).status).toBe(400)
     Expect((await fetch(`http://127.0.0.1:${port}/escape`)).status).toBe(400)
     Expect((await fetch(`http://127.0.0.1:${port}/missing`)).status).toBe(404)
@@ -139,7 +139,7 @@ async function runTao(args: string[]): Promise<CLI.CommandResult> {
     args,
     cwd: Repo.getRoot(),
     processPolicy: 'test',
-    timeoutMs: 50_000,
-    idleOutputMs: 45_000,
+    timeoutMs: 120_000,
+    idleOutputMs: 90_000,
   })
 }

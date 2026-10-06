@@ -15,6 +15,8 @@ module.exports = {
   cacheDirectory: '<rootDir>/../../../.artifacts/jest-policy-probe',
   moduleNameMapper: {},
   transform: {},
+  // These fixed-file execution probes do not need Watchman, which refuses low-priority CI children.
+  watchman: false,
   testEnvironment: require.resolve(`jest-environment-${process.env.TAO_JEST_PROBE_ENVIRONMENT ?? 'node'}`, {
     paths: [cliRoot],
   }),
