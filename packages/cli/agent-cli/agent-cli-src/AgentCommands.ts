@@ -10,6 +10,8 @@ export const JUST_COMMANDS = [
   'bench',
   'board',
   'capabilities',
+  // Cancels the Verify runs still in flight for HEAD once a local gate has decided the landing.
+  'cancel-verify',
   'check',
   // Like `pr-checks`, reads the public Actions API, so a before-and-after needs no credentials.
   'ci-timings',
@@ -26,6 +28,9 @@ export const JUST_COMMANDS = [
   'fmt-file',
   'ide-extension-package',
   'land',
+  // Merges a fix committed after GitHub merged the branch into fetched origin/main and pushes it,
+  // with a receipt and no verification: the route's late-failure step.
+  'land-fix',
   'lint',
   // The landing lock is the turn-taking primitive every broad lane and the landing itself go
   // through, so an agent has to be able to claim and return it by the same spelling it reads in
@@ -85,6 +90,8 @@ export const JUST_COMMANDS = [
   // the same way a developer does: by completing a prefix, not by recalling which flag it took.
   'verify',
   'verify-changed',
+  // The local half of a landing: only the host-only gates hosted Verify does not admit.
+  'verify-complement',
   'verify-full',
   'diagnose-verification',
   'verify-full-sandbox',
