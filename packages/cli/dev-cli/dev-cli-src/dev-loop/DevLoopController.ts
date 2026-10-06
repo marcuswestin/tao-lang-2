@@ -16,6 +16,7 @@ import {
   writeDevLoopConnection,
   writeDevLoopReceipt,
 } from './DevLoopStore'
+import { assertManagedFirebaseSubject, openManagedFirebaseWeb } from './ManagedFirebaseAcceptance'
 
 function sameCapturedProcess(current: TrackedProcess | undefined, expected: TrackedProcess): boolean {
   return current?.pid === expected.pid && current.startedAt === expected.startedAt
@@ -81,9 +82,12 @@ export async function runDevLoopController(
     runAppDev?: typeof runAgentAppDev
     flushOutput?: () => Promise<void>
     onStop?: () => void
+    assertFirebaseSubject?: typeof assertManagedFirebaseSubject
     mobileFixture?: typeof runManagedMobileFixture
     writeReceipt?: typeof writeDevLoopReceipt
     onOwnershipCheckpoint?: (checkpoint: ManagedLoopOwnershipCheckpoint) => Promise<void>
+    /** Scheduling seam for deterministic long-poll expiry regressions. */
+    schedulePollHeartbeat?: (expire: () => void) => () => void
   } = {},
 ): Promise<{ close: () => Promise<void>; waitForWorker: () => Promise<void>; waitForDisposal: () => Promise<void> }> {
   if (receipt.ownershipRefusal) {
@@ -95,7 +99,9 @@ export async function runDevLoopController(
   receipt.logPath ??= `.artifacts/dev-loops/${receipt.session}/loop.log`
   receipt.warnings ??= []
   receipt.failures ??= []
-  const log = await FS.openAppend(FS.resolvePath('loop.log', directory))
+  const logPath = FS.resolvePath('loop.log', directory)
+  const log = await FS.openAppend(logPath)
+  await FS.chmod(logPath, 0o600)
   let writes = Promise.resolve()
   const append = (chunk: string | Buffer): void => {
     writes = writes.then(async () => {
@@ -199,6 +205,7 @@ export async function runDevLoopController(
   let authorizedGeneration = receipt.generation
   let cleanupFailed = false
   let running = false
+  let stopping: Promise<void> | undefined
   let poll: ((command: DevLoopWorkerCommand | null) => void) | undefined
   const queue: DevLoopWorkerCommand[] = []
   const pending = new Map<string, { resolve: () => void; reject: (error: unknown) => void }>()
@@ -243,13 +250,18 @@ export async function runDevLoopController(
   }
   const refreshOwnership = async (checkpoint = true, closing = false): Promise<void> => {
     const generation = receipt.generation
+    let stage: 'preflight' | 'android' | 'capture' | 'save' | 'ack' = 'preflight'
     try {
       if ((!closing && stopRequested) || receipt.ownershipRefusal) {
         Errors.throwHostEnvironment('Managed ownership refresh requires an active unrefused loop.')
       }
+      stage = 'android'
       await refreshAndroidOwnership?.()
+      stage = 'capture'
       captureProcesses()
+      stage = 'save'
       await save()
+      stage = 'ack'
       if ((!closing && stopRequested) || receipt.generation !== generation) {
         Errors.throwHostEnvironment('Managed ownership refresh was cancelled after publication.', {
           details: { retainsTargetLease: true },
@@ -277,12 +289,11 @@ export async function runDevLoopController(
         }
       }
     } catch (cause) {
+      append(`Managed ownership refresh failed at ${stage}: ${Errors.formatForLog(cause).slice(0, 8_192)}\n`)
+      await writes.catch(() => {})
       const failure = new Errors.HostEnvironmentError(
         'Managed ownership publication was refused; fences remain retained.',
-        {
-          cause,
-          details: { retainsTargetLease: true },
-        },
+        { details: { retainsTargetLease: true } },
       )
       await recordOwnershipRefusal(failure, generation).catch(() => {})
       throw failure
@@ -319,7 +330,7 @@ export async function runDevLoopController(
     mutations = result.catch(() => {})
     return result
   }
-  const stop = async (): Promise<void> => {
+  const stopOnce = async (): Promise<void> => {
     proof?.grant.revoke()
     operations.onStop?.()
     if (receipt.state === 'stopped') {
@@ -352,6 +363,7 @@ export async function runDevLoopController(
       Errors.throwHostEnvironment(receipt.message ?? 'Dev-loop cleanup was not proved.')
     }
   }
+  const stop = (): Promise<void> => stopping ??= stopOnce()
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
@@ -383,7 +395,25 @@ export async function runDevLoopController(
               return Http.jsonResponse({ error: 'Worker already polling' }, 409)
             }
             const next = queue.shift() ?? await new Promise<DevLoopWorkerCommand | null>(resolve => {
-              poll = resolve
+              let cancelHeartbeat = () => {}
+              const finish = (value: DevLoopWorkerCommand | null) => {
+                if (poll === finish) {
+                  poll = undefined
+                }
+                request.signal.removeEventListener('abort', abort)
+                cancelHeartbeat()
+                resolve(value)
+              }
+              const abort = () => finish(null)
+              poll = finish
+              request.signal.addEventListener('abort', abort, { once: true })
+              cancelHeartbeat = operations.schedulePollHeartbeat?.(() => finish(null)) ?? (() => {
+                const timer = setTimeout(() => finish(null), 30_000)
+                return () => clearTimeout(timer)
+              })()
+              if (request.signal.aborted) {
+                abort()
+              }
             })
             return Http.jsonResponse(next)
           }
@@ -400,8 +430,12 @@ export async function runDevLoopController(
             target?: 'ios' | 'android'
             artifactRoot?: string
           }
-          if (path === '/mobile-acceptance') {
-            if ((body.target !== 'ios' && body.target !== 'android') || typeof body.artifactRoot !== 'string') {
+          if (path === '/mobile-acceptance' || path === '/firebase-sync') {
+            const firebaseSync = path === '/firebase-sync'
+            if (
+              (body.target !== 'ios' && body.target !== 'android') || typeof body.artifactRoot !== 'string'
+              || (firebaseSync && body.target !== 'ios')
+            ) {
               return Http.jsonResponse(
                 { error: 'Expected one finite mobile fixture target and artifact directory.' },
                 400,
@@ -423,17 +457,21 @@ export async function runDevLoopController(
                   'Managed mobile evidence must use a checkout artifact directory outside private loop records.',
                 )
               }
+              if (firebaseSync) {
+                await (operations.assertFirebaseSubject ?? assertManagedFirebaseSubject)(receipt)
+              }
               const reservation = reservations.get(target)
               const runtime = receipt.targets?.find(value => value.target === target && value.dispatched)?.mobile
               if (
-                reservation === undefined || runtime === undefined || runtime.appName !== 'DataMVPApp'
+                reservation === undefined || runtime === undefined
+                || runtime.appName !== (firebaseSync ? 'FirebaseLiveAcceptance' : 'DataMVPApp')
                 || receipt.selection?.appName !== runtime.appName
                 || runtime.projectRoot !== receipt.selection.projectRoot
                 || runtime.session !== receipt.session || runtime.loopGeneration !== receipt.generation
                 || runtime.checkout !== receipt.checkout
               ) {
                 Errors.throwHostEnvironment(
-                  'The selected managed mobile target has no current Data MVP runtime identity.',
+                  'The selected managed mobile target has no current fixed-fixture runtime identity.',
                 )
               }
               const loopGeneration = receipt.generation
@@ -448,6 +486,9 @@ export async function runDevLoopController(
                 },
                 assertOwnerCurrent: reservation.assertCurrent,
                 assertLoopCurrent: async () => {
+                  if (firebaseSync) {
+                    await (operations.assertFirebaseSubject ?? assertManagedFirebaseSubject)(receipt)
+                  }
                   if (
                     !running || stopRequested || receipt.state !== 'ready' || receipt.generation !== loopGeneration
                     || receipt.targets?.find(value => value.target === target)?.mobile?.nonce !== runtime.nonce
@@ -460,40 +501,98 @@ export async function runDevLoopController(
                   }
                 },
               })
+              const assertOwnedDiagnosticTargetCurrent = receipt.devices?.some(device =>
+                  device.platform === target && device.id === reservation.id && device.owned
+                )
+                ? async (): Promise<void> => {
+                  await grant.assertRequestCurrent()
+                  const durable = await readDevLoopReceipt(receipt.session)
+                  const device = durable.devices?.find(value =>
+                    value.platform === target && value.id === reservation.id
+                  )
+                  if (
+                    durable.generation !== loopGeneration || durable.state !== 'ready'
+                    || !ProcessTree.sameProcess(durable.controller, controller)
+                    || durable.targets?.find(value =>
+                        value.target === target
+                      )?.mobile?.nonce !== runtime.nonce
+                    || device?.owned !== true || device.state !== 'booted'
+                    || device.resources?.length !== reservation.resources.length
+                    || reservation.resources.some(owner =>
+                      !device.resources?.some(current => current.name === owner.name && current.id === owner.id)
+                    )
+                  ) {
+                    Errors.throwHostEnvironment(
+                      'Managed handshake diagnostics require the current durable owned target and resource generations.',
+                    )
+                  }
+                  await grant.assertRequestCurrent()
+                }
+                : undefined
+              const assertFirebaseStartupCurrent = firebaseSync && target === 'ios'
+                  && receipt.devices?.some(device =>
+                    device.platform === 'ios' && device.id === reservation.id && device.owned
+                    && device.state === 'booted'
+                  ) && assertOwnedDiagnosticTargetCurrent !== undefined
+                ? async (): Promise<void> => {
+                  await grant.assertRequestCurrent()
+                  await assertOwnedDiagnosticTargetCurrent()
+                  const durable = await readDevLoopReceipt(receipt.session)
+                  const device = durable.devices?.find(value => value.platform === 'ios' && value.id === reservation.id)
+                  const currentRuntime = durable.targets?.find(value => value.target === 'ios' && value.dispatched)
+                    ?.mobile
+                  if (
+                    durable.session !== receipt.session || durable.checkout !== receipt.checkout
+                    || durable.generation !== loopGeneration || durable.state !== 'ready'
+                    || durable.ownershipRefusal !== undefined
+                    || !ProcessTree.sameProcess(durable.controller, controller)
+                    || !ProcessTree.sameProcess(
+                      ProcessTree.identities([controller.pid]).get(controller.pid),
+                      controller,
+                    )
+                    || currentRuntime?.session !== runtime.session || currentRuntime.checkout !== runtime.checkout
+                    || currentRuntime.loopGeneration !== runtime.loopGeneration
+                    || currentRuntime.appName !== runtime.appName || currentRuntime.projectRoot !== runtime.projectRoot
+                    || currentRuntime.appId !== runtime.appId || currentRuntime.nonce !== runtime.nonce
+                    || currentRuntime.sourceRevision !== runtime.sourceRevision
+                    || currentRuntime.compiledRevision !== runtime.compiledRevision
+                    || device?.owned !== true || device.state !== 'booted'
+                    || !ProcessTree.sameProcess(device.holder, controller)
+                    || device.resources?.length !== reservation.resources.length
+                    || reservation.resources.some(owner =>
+                      !device.resources?.some(current =>
+                        current.name === owner.name && current.id === owner.id && current.pid === owner.pid
+                        && current.processStartedAt === owner.processStartedAt
+                        && current.repositoryRoot === owner.repositoryRoot
+                      )
+                    )
+                  ) {
+                    Errors.throwHostEnvironment(
+                      'Firebase startup lost its current owned simulator or runtime identity.',
+                    )
+                  }
+                  await (operations.assertFirebaseSubject ?? assertManagedFirebaseSubject)(durable)
+                  await grant.assertRequestCurrent()
+                }
+                : undefined
               receipt.mobileDriverCleanup = 'opening'
               receipt.mobileDriverProcesses = []
               await save()
               const completed = (operations.mobileFixture ?? runManagedMobileFixture)({
                 grant,
                 artifactRoot,
-                ...(receipt.devices?.some(device =>
-                    device.platform === target && device.id === reservation.id && device.owned
-                  )
+                ...(assertFirebaseStartupCurrent === undefined ? {} : { assertFirebaseStartupCurrent }),
+                ...(firebaseSync
                   ? {
-                    assertOwnedDiagnosticTargetCurrent: async () => {
-                      await grant.assertRequestCurrent()
-                      const durable = await readDevLoopReceipt(receipt.session)
-                      const device = durable?.devices?.find(value =>
-                        value.platform === target && value.id === reservation.id
-                      )
-                      if (
-                        durable?.generation !== loopGeneration || durable.state !== 'ready'
-                        || !ProcessTree.sameProcess(durable.controller, controller)
-                        || durable.targets?.find(value => value.target === target)?.mobile?.nonce !== runtime.nonce
-                        || device?.owned !== true || device.state !== 'booted'
-                        || device.resources?.length !== reservation.resources.length
-                        || reservation.resources.some(owner =>
-                          !device.resources?.some(current => current.name === owner.name && current.id === owner.id)
-                        )
-                      ) {
-                        Errors.throwHostEnvironment(
-                          'Managed handshake diagnostics require the current durable owned target and resource generations.',
-                        )
-                      }
-                      await grant.assertRequestCurrent()
-                    },
+                    openFirebaseWeb: () =>
+                      openManagedFirebaseWeb({
+                        receipt: { ...receipt },
+                        artifactRoot,
+                        assertCurrent: () => grant.assertCurrent(),
+                      }),
                   }
                   : {}),
+                ...(assertOwnedDiagnosticTargetCurrent === undefined ? {} : { assertOwnedDiagnosticTargetCurrent }),
                 onDriverProcess: async process => {
                   const identity = process.pid === undefined
                     ? undefined
@@ -526,7 +625,7 @@ export async function runDevLoopController(
                 }
               }
               completed.then(clearProof, clearProof)
-              const deadline = setTimeout(() => grant.revoke(), 120_000)
+              const deadline = setTimeout(() => grant.revoke(), firebaseSync ? 300_000 : 120_000)
               try {
                 return await settleManagedMobileProof(completed, grant.externalCancellationSignal)
               } catch (error) {
@@ -653,7 +752,18 @@ export async function runDevLoopController(
             path === '/command' && (body.action === 'stop' || body.action === 'restart' || body.action === 'reload')
           ) {
             if (body.action === 'stop') {
-              await stop()
+              const signal = AbortSignal.timeout(30_000)
+              await Promise.race([
+                stop(),
+                new Promise<never>((_resolve, reject) => {
+                  signal.addEventListener('abort', () =>
+                    reject(
+                      new Errors.HostEnvironmentError(
+                        'Dev-loop stop did not finish within its cleanup bound; inspect the session before controller recovery.',
+                      ),
+                    ), { once: true })
+                }),
+              ])
             } else {
               await mutate(body.action)
             }

@@ -34,6 +34,7 @@ import Run from '@expo-host/dev-loop/Run'
 import { CLI, Errors, FS, Platform, ProcessTree, Repo, type TrackedProcess } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
 import { connect, createServer, type Server } from 'node:net'
+import { dexiePromotion } from '../../../shared/shared-tests/fixtures/dexie-promotion'
 
 Describe('Expo dev-loop output severity', () => {
   Test('reads a child process line by its text, not by the stream it chose', () => {
@@ -305,10 +306,11 @@ Describe('Expo dev-loop command helpers', () => {
         shouldStop: () => stopped,
         stopServices: async () => {},
       }
-      await withCapturedOutput(async () => {
+      const captured = await withCapturedOutput(async () => {
         const opening = handleCommandKey('p', context)
         try {
           await probeStarted.promise
+          await handleCommandKey('r', context)
           await handleCommandKey('\u0003', context)
         } finally {
           finishProbe.resolve(installed)
@@ -316,6 +318,9 @@ Describe('Expo dev-loop command helpers', () => {
         }
       })
       Expect(phone.commands).toHaveLength(1)
+      Expect(captured.stdout + captured.stderr).toContain(
+        'Command already running: open physical device; ignored key r.',
+      )
     })
   })
 
@@ -445,6 +450,43 @@ Describe('Expo dev-loop command helpers', () => {
     ].join('\n'))
   })
 
+  Test('hides the exact promotion in ordinary Expo display while retaining raw logs and native warnings', async () => {
+    const root = await mkTestDir('tao-expo-app-log-display-')
+    const config = createExpoConfig(49_156)
+    const server = new ExpoServer(root, config, async () => {}, {
+      command: {
+        executable: '/bin/sh',
+        argsPrefix: [
+          '-c',
+          // Stay live until stop captures the launch ancestry; natural exit cannot prove descendant ownership.
+          'printf "%s\\n" "$1"; printf "%s\\n" "WARN Native Firebase persistence unavailable" >&2; while :; do sleep 1; done',
+          'expo-fixture',
+          ` WARN ${dexiePromotion}`,
+        ],
+      },
+      logRoot: root,
+      runtimeToolchainSourceRoot: root,
+    })
+    try {
+      const captured = await withCapturedOutput(async () => {
+        await server.start()
+        await until(async () => {
+          const raw = await FS.readText(FS.resolvePath(FS.basename(config.EXPO_LOG_PATH), root))
+          return raw.includes('WARN Native Firebase persistence unavailable')
+        }, { description: 'the complete Expo app-log fixture' })
+        await server.stop()
+      })
+      Expect(captured.stdout + captured.stderr).not.toContain('https://rxdb.info/premium/?console=dexie')
+      Expect(captured.stdout + captured.stderr).toContain('WARN Native Firebase persistence unavailable')
+      const raw = await FS.readText(FS.resolvePath(FS.basename(config.EXPO_LOG_PATH), root))
+      Expect(raw).toContain(dexiePromotion)
+      Expect(raw).toContain('WARN Native Firebase persistence unavailable')
+    } finally {
+      await server.stop()
+      await FS.remove(root)
+    }
+  })
+
   // `bunx` takes the package name first; an installed Tao's launcher already names Expo's script,
   // and Expo reads a stray `expo` as its project root.
   Test('drops the package name only for a launcher that already names Expo’s script', async () => {
@@ -453,20 +495,23 @@ Describe('Expo dev-loop command helpers', () => {
       const argsPath = FS.resolvePath('args.txt', root)
       const server = new ExpoServer(root, createExpoConfig(49_154), async () => {}, {
         command: {
-          argsPrefix: ['-c', 'printf "%s\\n" "$@" > "$0.pending"; mv "$0.pending" "$0"', argsPath],
+          argsPrefix: [
+            '-c',
+            'printf "%s\\n" "$@" > "$0.pending"; mv "$0.pending" "$0"; while :; do sleep 1; done',
+            argsPath,
+          ],
           executable: '/bin/sh',
           namesExpoScript,
         },
         logRoot: root,
         runtimeToolchainSourceRoot: root,
-        stopTimeoutMs: 25,
       })
       try {
         await server.start()
         await until(() => FS.isFile(argsPath), { description: 'the complete Expo launcher argument receipt' })
         return (await FS.readText(argsPath)).split('\n')[0] ?? ''
       } finally {
-        await server.stop().catch(() => undefined)
+        await server.stop()
         await FS.remove(root)
       }
     }
@@ -489,7 +534,6 @@ Describe('Expo dev-loop command helpers', () => {
       command: { argsPrefix: ['-c', shellScript, descendantPidPath, descendantReadyPath], executable: '/bin/sh' },
       logRoot: root,
       runtimeToolchainSourceRoot: root,
-      stopTimeoutMs: 25,
     })
     let descendant: TrackedProcess | undefined
     try {
@@ -984,11 +1028,14 @@ en7: flags=8863
           'PHONE-1',
           '--terminate-existing',
           '--payload-url',
-          'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.1.20%3A8099',
+          'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.1.20%3A8099&disableOnboarding=1&disableAutoLaunch=1&disableFab=1',
           'com.devtao.studio.companion',
         ],
       ])
       Expect(captured.stdout + captured.stderr).toContain('opened roPhone (Tao Companion)')
+      Expect(captured.stdout + captured.stderr).toContain('Finding connected physical devices…')
+      Expect(captured.stdout + captured.stderr).toContain('Checking whether Tao Companion is installed on roPhone…')
+      Expect(captured.stdout + captured.stderr).toContain('Opening Tao Companion on roPhone…')
     })
   })
 
@@ -1424,7 +1471,9 @@ Describe('Expo Metro runtime link helpers', () => {
 
     const link = await expoRuntimeLink('http://127.0.0.1:8081', { devClient: true, fetch: fetchImpl, platform: 'ios' })
 
-    Expect(link).toBe('taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.1.20%3A8081')
+    Expect(link).toBe(
+      'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.1.20%3A8081&disableOnboarding=1&disableAutoLaunch=1&disableFab=1',
+    )
     Expect(requests).toEqual(['http://127.0.0.1:8081/_expo/link?platform=ios&choice=expo-dev-client'])
   })
 

@@ -4,6 +4,7 @@ import { managedLoopIdentityMarker } from '../../../apps/expo-host/ManagedLoopId
 import { appiumAndroidClient } from '../../e2e-testing/native/AppiumMobileClients'
 import { createManagedMobileGrant } from '../../e2e-testing/native/ManagedMobileGrant'
 import {
+  type AppiumHttpRequest,
   AppiumNoSuchAlertError,
   AppiumNoSuchElementError,
   createAppiumHttpTransport,
@@ -224,6 +225,167 @@ Describe('Appium W3C transport', () => {
     await Expect(element.screenshot!()).rejects.toThrow('private capture limit')
     Expect(requests.some(request => request.path === '/session/owned%2Fsession%3F%23/screenshot')).toBe(false)
   })
+
+  Test(
+    'managed handshake screenshots reject invalid base64 and non-PNG payloads before returning evidence',
+    async () => {
+      for (const payload of ['bad!', 'AQID', 'iVBORw0KGgp=']) {
+        const stages: string[] = []
+        const foregroundCategories: string[] = []
+        const client = createAppiumWebDriverClient({
+          request: async request => ({
+            status: 200,
+            body: {
+              value: request.path === '/session'
+                ? { sessionId: 'owned' }
+                : request.path.endsWith('/execute/sync')
+                ? { bundleId: 'owned.bundle' }
+                : request.path.endsWith('/source')
+                ? '<Application />'
+                : payload,
+            },
+          }),
+        })
+        const session = await client.createSession({ platformName: 'iOS' })
+        await Expect(session.captureManagedHandshakeDiagnostics!({
+          platform: 'ios',
+          expectedAppId: 'owned.bundle',
+          signal: new AbortController().signal,
+          assertCurrent: async () => {},
+          onStage: stage => {
+            stages.push(stage)
+          },
+          onForegroundCategory: category => {
+            foregroundCategories.push(category)
+          },
+        })).rejects.toThrow(/managed handshake diagnostic screenshot/u)
+        Expect(stages).toEqual(['foreground-bundle', 'xml', 'foreground-bundle', 'screenshot'])
+        Expect(foregroundCategories).toEqual(['unobserved', 'expected', 'unobserved', 'expected'])
+      }
+    },
+  )
+
+  for (const foreground of ['springboard', 'expo-go', 'other', 'missing', 'transport'] as const) {
+    Test(`managed diagnostic classifies ${foreground} before any source or screenshot read`, async () => {
+      const paths: string[] = []
+      const stages: string[] = []
+      const categories: string[] = []
+      const client = createAppiumWebDriverClient({
+        request: async request => {
+          paths.push(request.path)
+          if (foreground === 'transport' && request.path.endsWith('/execute/sync')) {
+            Errors.throwHostEnvironment('Foreground query transport failed.')
+          }
+          return {
+            status: 200,
+            body: {
+              value: request.path === '/session'
+                ? { sessionId: 'owned' }
+                : foreground === 'missing'
+                ? {}
+                : {
+                  bundleId: foreground === 'springboard'
+                    ? 'com.apple.springboard'
+                    : foreground === 'expo-go'
+                    ? 'host.exp.Exponent'
+                    : 'unrelated.bundle',
+                },
+            },
+          }
+        },
+      })
+      const session = await client.createSession({ platformName: 'iOS' })
+      await Expect(session.captureManagedHandshakeDiagnostics!({
+        platform: 'ios',
+        expectedAppId: 'owned.bundle',
+        signal: new AbortController().signal,
+        assertCurrent: async () => {},
+        onStage: stage => {
+          stages.push(stage)
+        },
+        onForegroundCategory: category => {
+          categories.push(category)
+        },
+      })).rejects.toThrow(
+        foreground === 'transport'
+          ? 'Appium request POST /session/owned/execute/sync did not complete.'
+          : 'unrelated foreground application',
+      )
+      Expect(stages).toEqual(['foreground-bundle'])
+      Expect(categories).toEqual(foreground === 'transport' ? ['unobserved'] : ['unobserved', foreground])
+      Expect(paths).toEqual(['/session', '/session/owned/execute/sync'])
+    })
+  }
+
+  for (const outcome of ['text', 'empty', 'over-limit', 'query-failed', 'revoked', 'aborted'] as const) {
+    Test(`owned SpringBoard alert query ${outcome} stays read-only and bounded`, async () => {
+      const cancellation = new AbortController()
+      let current = true
+      const requests: AppiumHttpRequest[] = []
+      const observations: { status: string; text?: string }[] = []
+      const client = createAppiumWebDriverClient({
+        request: async request => {
+          requests.push(request)
+          if (request.path === '/session') {
+            return { status: 200, body: { value: { sessionId: 'owned' } } }
+          }
+          if (request.path.endsWith('/execute/sync')) {
+            return { status: 200, body: { value: { bundleId: 'com.apple.springboard' } } }
+          }
+          Expect(request.path).toBe('/session/owned/alert/text')
+          Expect(request.method).toBe('GET')
+          Expect(request.purpose).toBe('managed-diagnostic')
+          Expect(request.responseByteLimit).toBe(8 * 1024)
+          if (outcome === 'query-failed') {
+            Errors.throwHostEnvironment('Private alert query failed.')
+          }
+          if (outcome === 'revoked') {
+            current = false
+          }
+          if (outcome === 'aborted') {
+            cancellation.abort()
+          }
+          return {
+            status: 200,
+            body: {
+              value: outcome === 'over-limit'
+                ? 'x'.repeat(4 * 1024 + 1)
+                : outcome === 'empty'
+                ? ''
+                : 'SpringBoard permission prompt',
+            },
+          }
+        },
+      })
+      const session = await client.createSession({ platformName: 'iOS' })
+      await Expect(session.captureManagedHandshakeDiagnostics!({
+        platform: 'ios',
+        expectedAppId: 'owned.bundle',
+        signal: cancellation.signal,
+        assertCurrent: async () => {
+          if (!current) {
+            Errors.throwHostEnvironment('Owned target changed.')
+          }
+        },
+        onSpringBoardAlert: observation => observations.push(observation),
+      })).rejects.toThrow(
+        outcome === 'revoked' ? 'Owned target changed.' : outcome === 'aborted'
+          ? /aborted/iu
+          : 'unrelated foreground application',
+      )
+      Expect(requests.map(request => request.path)).toEqual([
+        '/session',
+        '/session/owned/execute/sync',
+        '/session/owned/alert/text',
+      ])
+      Expect(observations).toEqual(
+        outcome === 'revoked' || outcome === 'aborted' ? [] : [{
+          status: outcome === 'text' ? 'captured' : outcome === 'query-failed' ? 'query-failed' : outcome,
+          ...(outcome === 'text' ? { text: 'SpringBoard permission prompt' } : {}),
+        }],
+      )
+    })
+  }
 
   Test(
     'diagnostic HTTP bounds cancel an oversized streamed response without affecting ordinary responses',
@@ -489,6 +651,74 @@ Describe('Appium W3C transport', () => {
         )
         Expect(JSON.stringify(handshake)).not.toContain('content-desc')
         Expect(JSON.stringify(handshake)).not.toContain('accessibility id')
+      },
+    )
+  }
+
+  for (const foreground of ['owned.bundle', 'foreign.bundle'] as const) {
+    Test(
+      `iOS managed identity ${
+        foreground === 'owned.bundle' ? 'reads its mounted marker' : 'refuses a foreign foreground before marker lookup'
+      } through HTTP transport`,
+      async () => {
+        const paths: string[] = []
+        const requests: Array<{ path: string; purpose?: string; body?: unknown }> = []
+        const label = JSON.stringify({ nonce: 'mounted' })
+        const transport = createAppiumHttpTransport({
+          serverUrl: 'http://127.0.0.1:4723',
+          requestTimeoutMs: 1_000,
+          assertRequest: async request => {
+            requests.push(request)
+            if (
+              request.purpose === 'managed-identity' && !isManagedRuntimeIdentityRequest(request, 'ios', 'owned.bundle')
+            ) {
+              Errors.throwHostEnvironment('Unexpected managed identity request.')
+            }
+          },
+          fetch: async (url, init) => {
+            const path = new URL(url).pathname
+            paths.push(path)
+            const value = path === '/session'
+              ? { sessionId: 'driver' }
+              : path.endsWith('/execute/sync')
+              ? { bundleId: foreground }
+              : path.endsWith('/element')
+              ? { 'element-6066-11e4-a52e-4f735466cecf': 'marker' }
+              : `tao-managed-loop-identity.${encodeURIComponent(label)}`
+            if (path.endsWith('/element')) {
+              Expect(JSON.parse(String(init?.body))).toEqual({
+                using: 'xpath',
+                value: "//*[starts-with(@name, 'tao-managed-loop-identity.')]",
+              })
+            }
+            return new Response(JSON.stringify({ value }), { status: 200 })
+          },
+        })
+        const session = await createAppiumWebDriverClient(transport).createSession({ platformName: 'iOS' })
+        if (foreground === 'owned.bundle') {
+          Expect(await session.readManagedRuntimeIdentity!('ios', 'owned.bundle')).toEqual({
+            appId: 'owned.bundle',
+            label,
+          })
+          Expect(paths).toEqual([
+            '/session',
+            '/session/driver/execute/sync',
+            '/session/driver/element',
+            '/session/driver/element/marker/attribute/name',
+          ])
+        } else {
+          let failure: unknown
+          try {
+            await session.readManagedRuntimeIdentity!('ios', 'owned.bundle')
+          } catch (error) {
+            failure = error
+          }
+          Expect(Errors.messageOf(failure)).toContain('foreground iOS bundle differs from the managed runtime')
+          Expect(Errors.messageOf(failure)).not.toContain('foreign.bundle')
+          Expect(paths).toEqual(['/session', '/session/driver/execute/sync'])
+        }
+        Expect(requests.slice(1).every(request => request.purpose === 'managed-identity')).toBe(true)
+        Expect(JSON.stringify(requests)).not.toContain('foreign.bundle')
       },
     )
   }

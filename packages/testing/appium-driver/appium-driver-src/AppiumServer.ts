@@ -1,4 +1,5 @@
 import { CLI, Errors, Platform, ProcessTree, Time } from '@shared'
+import type { TrackedProcess } from '@shared/ProcessTree'
 
 export type AppiumPortReservation = Readonly<{
   port: number
@@ -33,6 +34,7 @@ export type StartAppiumServerOptions = Readonly<{
   onStartupCleanup?: (proved: boolean) => void
   detached?: boolean
   signal?: AbortSignal
+  processIsAlive?: (pid: number) => boolean
   processTree?: Pick<
     typeof ProcessTree,
     'descendants' | 'identities' | 'processGroupOf' | 'signalTracked' | 'groupMembers' | 'isGroupAlive'
@@ -62,6 +64,7 @@ export async function startAppiumServer(options: StartAppiumServerOptions): Prom
   const startupTimeoutMs = options.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS
   const shutdownTimeoutMs = options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS
   const tree = options.processTree ?? ProcessTree
+  const processIsAlive = options.processIsAlive ?? ((pid: number) => Platform.signalProcess(pid, 0))
   if (!Number.isFinite(pollIntervalMs) || pollIntervalMs <= 0) {
     Errors.throwUserInput('Appium server pollIntervalMs must be greater than zero.')
   }
@@ -94,8 +97,23 @@ export async function startAppiumServer(options: StartAppiumServerOptions): Prom
     await reservation.release()
     throw error
   }
+  // The direct child is the only root that grants descendant capture authority later.
+  const spawnRoot = options.detached && process.pid !== undefined
+    ? tree.identities([process.pid]).get(process.pid)
+    : undefined
+  if (options.detached && spawnRoot === undefined) {
+    options.onStartupCleanup?.(false)
+    Errors.throwHostEnvironment(
+      'Appium server kernel identity was not captured after spawn; its port remains retained.',
+    )
+  }
   let released = false
   let closePromise: Promise<void> | undefined
+  let captured: {
+    root: TrackedProcess | undefined
+    descendants: TrackedProcess[]
+    groups: Set<number>
+  } | undefined
   const releaseReservation = async () => {
     if (!released) {
       await reservation.release()
@@ -115,54 +133,124 @@ export async function startAppiumServer(options: StartAppiumServerOptions): Prom
     }
   }
   const stopOwnedProcess = async () => {
-    const ownedDescendants = options.detached && process.pid !== undefined
-      ? tree.descendants(process.pid)
-      : []
-    const ownedGroups = options.detached && process.pid !== undefined
-      ? new Set([
-        process.pid,
-        ...ownedDescendants.flatMap(child => {
-          const group = tree.processGroupOf(child.pid)
-          if (group === undefined && Platform.signalProcess(child.pid, 0)) {
-            Errors.throwHostEnvironment('Appium descendant group identity is unproved; its ports remain retained.')
+    if (options.detached && process.pid !== undefined && captured === undefined) {
+      const before = tree.identities([process.pid]).get(process.pid)
+      if (spawnRoot === undefined || !ProcessTree.sameProcess(before, spawnRoot)) {
+        Errors.throwHostEnvironment(
+          'Appium server identity changed before descendant capture; its port remains retained.',
+        )
+      }
+      const descendants = tree.descendants(process.pid)
+      const groups = new Set([process.pid])
+      for (const child of descendants) {
+        const current = tree.identities([child.pid]).get(child.pid)
+        if (current !== undefined && !ProcessTree.sameProcess(current, child)) {
+          Errors.throwHostEnvironment('Appium descendant changed identity during capture; its port remains retained.')
+        }
+        if (current === undefined && processIsAlive(child.pid)) {
+          Errors.throwHostEnvironment(
+            'Appium descendant identity is unreadable during capture; its port remains retained.',
+          )
+        }
+        const group = tree.processGroupOf(child.pid)
+        if (group === undefined) {
+          Errors.throwHostEnvironment('Appium descendant group identity is unproved; its ports remain retained.')
+        }
+        groups.add(group)
+      }
+      const root = tree.identities([process.pid]).get(process.pid)
+      if (!ProcessTree.sameProcess(root, spawnRoot)) {
+        Errors.throwHostEnvironment(
+          'Appium server identity changed during descendant capture; its port remains retained.',
+        )
+      }
+      captured = { root, descendants, groups }
+    }
+    const closure = (transientUnreadableIsPending = false) => {
+      if (captured === undefined) {
+        return true
+      }
+      let closed = true
+      if (process.pid !== undefined && captured.root !== undefined) {
+        const root = tree.identities([process.pid]).get(process.pid)
+        if (root !== undefined && !ProcessTree.sameProcess(root, captured.root)) {
+          Errors.throwHostEnvironment('Appium server PID has a different kernel identity; its ports remain retained.')
+        }
+        if (root === undefined && processIsAlive(process.pid)) {
+          if (!transientUnreadableIsPending) {
+            Errors.throwHostEnvironment('Appium server identity is unreadable; its ports remain retained.')
           }
-          return group === undefined ? [] : [group]
-        }),
-      ])
-      : new Set<number>()
-    if (options.detached) {
-      tree.signalTracked(ownedDescendants, 'SIGTERM')
+          closed = false
+        }
+      }
+      const tracked = captured.descendants
+      const live = tree.identities(tracked.map(child => child.pid))
+      for (const child of tracked) {
+        const identity = live.get(child.pid)
+        if (identity === undefined && processIsAlive(child.pid)) {
+          if (!transientUnreadableIsPending) {
+            Errors.throwHostEnvironment('Appium descendant identity is unreadable; its ports remain retained.')
+          }
+          closed = false
+        }
+        if (identity !== undefined && !ProcessTree.sameProcess(identity, child)) {
+          Errors.throwHostEnvironment(
+            'Appium descendant PID has a different kernel identity; its ports remain retained.',
+          )
+        }
+        closed &&= identity === undefined
+      }
+      for (const group of captured.groups) {
+        const members = tree.groupMembers(group)
+        for (const member of members) {
+          if (
+            !(member.pid === process.pid && captured.root !== undefined
+              && ProcessTree.sameProcess(member, captured.root))
+            && !tracked.some(child => child.pid === member.pid && ProcessTree.sameProcess(child, member))
+          ) {
+            Errors.throwHostEnvironment(
+              'Appium process group contains an unrecorded member; its ports remain retained.',
+            )
+          }
+        }
+        closed &&= members.length === 0 && !tree.isGroupAlive(group)
+      }
+      return closed
+    }
+    // Validate membership before either signal. Never signal an entire process group.
+    closure()
+    if (captured !== undefined) {
+      tree.signalTracked(captured.descendants, 'SIGTERM')
     }
     process.kill('SIGTERM')
-    if (!await waitForCloseWithin(process, shutdownTimeoutMs)) {
-      process.kill('SIGKILL')
-      if (!await waitForCloseWithin(process, shutdownTimeoutMs)) {
+    const rootStopped = await waitForCloseWithin(process, shutdownTimeoutMs)
+    const descendantsStopped = rootStopped && await Time.pollUntil(
+          () => closure(true) ? true : undefined,
+          { timeoutMs: shutdownTimeoutMs, intervalMs: 50 },
+        ) === true
+    if (!rootStopped || !descendantsStopped) {
+      closure()
+      if (captured !== undefined) {
+        tree.signalTracked(captured.descendants, 'SIGKILL')
+      }
+      if (!rootStopped) {
+        process.kill('SIGKILL')
+      }
+      if (
+        !await waitForCloseWithin(process, shutdownTimeoutMs)
+        || await Time.pollUntil(() => closure(true) ? true : undefined, {
+            timeoutMs: shutdownTimeoutMs,
+            intervalMs: 50,
+          }) !== true
+      ) {
         Errors.throwHostEnvironment(
           'Appium did not stop after bounded SIGTERM and SIGKILL attempts; retaining its port reservation.',
-          {
-            details: { logs: logs.value(), url },
-          },
+          { details: { logs: logs.value(), url } },
         )
       }
     }
     await boundedOperation(process.closeOutput(), shutdownTimeoutMs)
-    if (options.detached && process.pid !== undefined) {
-      const stopped = await Time.pollUntil(() => {
-        const live = tree.identities(ownedDescendants.map(child => child.pid))
-        return [...ownedGroups].every(group => tree.groupMembers(group).length === 0 && !tree.isGroupAlive(group))
-            && ownedDescendants.every(child => {
-              const identity = live.get(child.pid)
-              return identity === undefined
-                ? !Platform.signalProcess(child.pid, 0)
-                : !ProcessTree.sameProcess(identity, child)
-            })
-          ? true
-          : undefined
-      }, { timeoutMs: shutdownTimeoutMs, intervalMs: 50 })
-      if (stopped !== true) {
-        Errors.throwHostEnvironment('Appium descendants remain in its owned process group; retaining its server port.')
-      }
-    }
+    closure()
     process.dispose()
     await releaseReservation()
   }

@@ -23,6 +23,16 @@
   and passed all 12 tests in 7 seconds overall. This does not replace the aborted broad proof or
   establish that every timeout had the same cause; retain the lock failure alongside the existing
   fixed-deadline evidence. No lock was removed and no runtime code was changed.
+- **Additional evidence (Firebase CLI follow-up, 2026-10-05):** Commit `7b38b1da5` failed
+  `verify-changed` and `verify` at the IDE build's native `files.tao` mutation lock. Both runs
+  recorded overlapping lanes, peak loads 23.3 and 21.4 on 18 CPUs, compiler/validator timeouts,
+  and skipped checks after the lock failure. Logs:
+  `.artifacts/logs/verify-changed/2026-10-05T18-56-18-460Z-64395-55255934/ide-extension-build.log`
+  and `.artifacts/logs/verify/2026-10-05T19-11-46-820Z-58453-8b882630/ide-extension-build.log`.
+  Automatic isolated retries recovered two compiler shards in the first run and three in the
+  second. Between runs, isolated `ide-extension-package` passed in 11.1 seconds and all 19
+  nominal-admission tests passed in 1.7 seconds. Other timed-out scopes remain unconfirmed;
+  these checks do not replace either failed broad verdict. No lock or unrelated process was removed.
 - **Workaround:** Re-run once the load average falls.
 - **Proposed change:** Judge the lock by its holder rather than by the clock, as the archived
   per-test wall-time entry did for test timeouts: keep waiting while the holder is alive and making

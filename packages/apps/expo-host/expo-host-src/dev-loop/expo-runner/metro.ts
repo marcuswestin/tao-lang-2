@@ -1,5 +1,6 @@
 import { Errors, Json, Time } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
+import { companionLaunchUrl } from '../prebuilt-host/CompanionIdentity'
 import { ExpoConfig, type ExpoPlatform, type ExpoSessionConfig } from './expo-config'
 import { Ports } from './Ports'
 
@@ -177,7 +178,8 @@ export async function expoRuntimeLink(origin: string, options: ExpoRuntimeLinkOp
     redirect: 'manual',
   })
   if (response.status >= 300 && response.status < 400) {
-    return response.headers.get('location') ?? undefined
+    const link = response.headers.get('location') ?? undefined
+    return options.devClient === true && link !== undefined ? companionLaunchUrl(link) : link
   }
   return undefined
 }

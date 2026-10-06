@@ -39,7 +39,7 @@ export type CreationPrompts = {
 
 export type CreateCommandOptions = TerminalStreams & {
   ai?: CreateAiOption
-  provider?: 'firebase'
+  provider?: 'local' | 'firebase'
   validationTools?: boolean
   brief?: Pick<BuildCreationBriefOptions, 'fetch' | 'paletteFromImage' | 'urlTimeoutMs'>
   cwd?: string
@@ -70,6 +70,16 @@ type ShapedPlan = {
  * format, validate, and test the result. Without a model the plain starter is created instead.
  */
 export async function runCreate(description: string, options: CreateCommandOptions = {}): Promise<CreateCommandResult> {
+  if (options.provider !== 'local' && options.provider !== 'firebase') {
+    Errors.throwUserInput(
+      'Choose a datasource with --provider; no project was created.\n'
+        + '1. local — data stays on this device; use --provider local\n'
+        + (ReleaseCapabilities.allows('hosted-data')
+          ? '2. firebase — sign-in and synced data; use --provider firebase\n'
+          : '')
+        + 'Rerun the same create command with the chosen --provider value.',
+    )
+  }
   if (options.validationTools && options.provider !== 'firebase') {
     Errors.throwUserInput('--validation-tools requires --provider firebase.')
   }
@@ -133,7 +143,7 @@ export async function runCreate(description: string, options: CreateCommandOptio
 
   const files = lowerCreationPlan(plan, {
     description: brief.description,
-    provider: options.provider,
+    provider: options.provider === 'firebase' ? 'firebase' : undefined,
     validationTools: options.validationTools,
   })
   await writeCreationFiles(directory, files)
