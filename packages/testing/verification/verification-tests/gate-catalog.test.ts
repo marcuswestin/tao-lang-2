@@ -415,7 +415,12 @@ Describe('gate catalog metadata', () => {
     // accounting slot lets those host waits overlap the CPU-heavy package nodes.
     // A browser smoke ported to hosted Linux after studio-agent-browser starved there packed beside
     // other gates instead reserves the whole 4-vCPU runner, so its partition runs it alone.
-    const reservedHosted = ['keyboard-navigation-smoke', 'studio-network-simulation', 'studio-smoke-simulated-user']
+    const reservedHosted = [
+      'keyboard-navigation-smoke',
+      'studio-agent-browser',
+      'studio-network-simulation',
+      'studio-smoke-simulated-user',
+    ]
     for (const name of HOST_ONLY_GATES) {
       Expect(nodeOf(name).cost).toBe(
         reservedHosted.includes(name) ? GateCatalog.HOSTED_BROWSER_LANE_COST : GateCatalog.STUDIO_LANE_COST,
@@ -456,6 +461,7 @@ Describe('gate catalog metadata', () => {
     const hostedLinux = HOST_ONLY_GATES.filter(name => GateCatalog.metadata(name).runsOnHostedLinux === true)
     Expect(hostedLinux.toSorted()).toEqual([
       'keyboard-navigation-smoke',
+      'studio-agent-browser',
       'studio-dialog-browser',
       'studio-metro-refresh',
       'studio-network-simulation',

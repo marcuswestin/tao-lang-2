@@ -676,7 +676,14 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ],
     [
       'studio-agent-browser',
-      studioSmoke('studio-agent-browser', 'packages/ides/studio-tooling/studio-smoke/studio-agent-browser.test.ts'),
+      {
+        ...studioSmoke(
+          'studio-agent-browser',
+          'packages/ides/studio-tooling/studio-smoke/studio-agent-browser.test.ts',
+        ),
+        cost: HOSTED_BROWSER_LANE_COST,
+        runsOnHostedLinux: true,
+      },
     ],
     [
       'studio-network-simulation',
