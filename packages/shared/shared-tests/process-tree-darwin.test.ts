@@ -11,11 +11,12 @@ const script = source.match(/const inspectScript = String\.raw`([\s\S]*?)`\n/)?.
 if (script === undefined) {
   Errors.throwUnexpected('Expected the fixed Darwin process inspection script.')
 }
-const execute = new Function('require', 'request', 'fail', 'process', script) as (
+const execute = new Function('require', 'request', 'fail', 'process', 'Atomics', script) as (
   require: (name: string) => unknown,
   request: { kind: Kind; pids: number[] },
   fail: typeof Errors.throwHostEnvironment,
   process: { pid: number; kill: (pid: number, signal: number) => boolean },
+  atomics: { wait: (array: Int32Array, index: number, value: number, timeout: number) => string },
 ) => Record[]
 const helperFailure = source.match(/const helperFailScript = String\.raw`([\s\S]*?)`\n/)?.[1]
 if (helperFailure === undefined) {
@@ -28,6 +29,7 @@ function fixture(options: {
   returnedPid?: number
   returnedParentPid?: number
   unreadableReads?: number
+  unreadableUntilYield?: boolean
   group?: number
   probe?: 'live' | 'EPERM' | 'EIO' | 'ESRCH' | 'uncoded' | 'undefined'
   probeErrno?: number
@@ -42,6 +44,7 @@ function fixture(options: {
   let closes = 0
   let expectedArg = 0
   let identityReads = 0
+  let waitedMs = 0
   const symbols = {
     proc_listpids: (_kind: number, group: number, pids: Int32Array) => {
       Expect(group).toBe(700)
@@ -65,14 +68,16 @@ function fixture(options: {
       identityReads++
       Expect(pid).toBe(701)
       Expect(kind).toBe(3)
-      Expect(arg).toBe(expectedArg)
+      Expect(arg).toBe(expectedArg === 0 && identityReads > 1 ? 1 : expectedArg)
       if (
         options.unreadable === true || identityReads <= (options.unreadableReads ?? 0)
+        || options.unreadableUntilYield === true && waitedMs === 0
         || options.zombie === true && arg === 0
       ) {
         return 0
       }
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+      view.setUint32(4, options.zombie === true ? 5 : 2, true)
       view.setUint32(12, options.returnedPid ?? pid, true)
       view.setUint32(16, options.returnedParentPid ?? 700, true)
       view.setUint32(100, options.group ?? 700, true)
@@ -105,12 +110,19 @@ function fixture(options: {
             throw failure
           },
         },
+        {
+          wait: (_array, _index, _value, timeout) => {
+            waitedMs += timeout
+            return 'timed-out'
+          },
+        },
       )
     },
     probes,
     failure,
     closes: () => closes,
     identityReads: () => identityReads,
+    waitedMs: () => waitedMs,
   }
 }
 
@@ -148,6 +160,13 @@ for (const kind of ['group', 'descendants'] as const) {
     Expect(host.closes()).toBe(1)
   })
 
+  Test(`Darwin ${kind} yields before rechecking an exit transition`, () => {
+    const host = fixture({ unreadableUntilYield: true, probe: 'live' })
+    Expect(host.inspect(kind)).toEqual([{ pid: 701, group: 700, startedAt: '123:456', command: '' }])
+    Expect(host.probes).toEqual([])
+    Expect(host.waitedMs()).toBe(5)
+  })
+
   for (const probe of ['live', 'EPERM', 'EIO', 'uncoded', 'undefined'] as const) {
     Test(`Darwin ${kind} refuses an unreadable enumerated PID when its probe is ${probe}`, () => {
       const host = fixture({ unreadable: true, probe })
@@ -165,6 +184,7 @@ for (const kind of ['group', 'descendants'] as const) {
       Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
       Expect(host.closes()).toBe(1)
       Expect(host.identityReads()).toBe(3)
+      Expect(host.waitedMs()).toBe(10)
     })
   }
 
@@ -196,20 +216,41 @@ Test('Darwin direct identity queries retain process-exit semantics for zombies',
   Expect(host.inspect('identities')).toEqual([])
   Expect(host.probes).toEqual([])
   Expect(host.closes()).toBe(1)
+  Expect(host.identityReads()).toBe(2)
 })
 
-for (const options of [{ unreadable: true }, { returnedPid: 702 }]) {
-  Test(
-    `Darwin identities keeps unreadable ${
-      options.unreadable === true ? 'records' : 'PID mismatches'
-    } omitted without a probe`,
-    () => {
-      const host = fixture(options)
-      Expect(host.inspect('identities')).toEqual([])
-      Expect(host.probes).toEqual([])
-      Expect(host.closes()).toBe(1)
-    },
-  )
+Test('Darwin direct identity queries recover a live exact identity after an unreadable primary record', () => {
+  const host = fixture({ unreadableReads: 1, probe: 'live' })
+  Expect(host.inspect('identities')).toEqual([{ pid: 701, group: 700, startedAt: '123:456', command: '' }])
+  Expect(host.probes).toEqual([])
+  Expect(host.identityReads()).toBe(2)
+  Expect(host.closes()).toBe(1)
+})
+
+Test('Darwin direct identity queries confirm absent unreadable records with ESRCH', () => {
+  const host = fixture({ unreadable: true, probe: 'ESRCH' })
+  Expect(host.inspect('identities')).toEqual([])
+  Expect(host.identityReads()).toBe(4)
+  Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
+  Expect(host.closes()).toBe(1)
+})
+
+for (const options of [{ unreadable: true }, { returnedPid: 702 }] as const) {
+  for (const probe of ['live', 'EPERM', 'EIO'] as const) {
+    Test(
+      `Darwin identities refuses unreadable ${
+        'unreadable' in options ? 'records' : 'PID mismatches'
+      } when its probe is ${probe}`,
+      () => {
+        const host = fixture({ ...options, probe })
+        Expect(() => host.inspect('identities')).toThrow(Errors.HostEnvironmentError)
+        Expect(host.identityReads()).toBe(4)
+        Expect(host.waitedMs()).toBe(15)
+        Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
+        Expect(host.closes()).toBe(1)
+      },
+    )
+  }
 }
 
 for (
@@ -244,6 +285,19 @@ for (
         expectedBytes: 136,
         expectedParentPid: 700,
         actualParentPid: 800,
+      },
+    },
+    {
+      name: 'live unreadable direct identity',
+      kind: 'identities',
+      options: { unreadable: true, probe: 'live' },
+      expected: {
+        failureKind: 'identity-unreadable',
+        routine: 'proc_pidinfo',
+        pid: 701,
+        returnedBytes: 0,
+        expectedBytes: 136,
+        probeStatus: 'live',
       },
     },
     {
@@ -305,7 +359,7 @@ for (
     Expect(failure.details).toEqual({
       ...scenario.expected,
       inspection: scenario.kind,
-      requestedPids: [700],
+      requestedPids: [scenario.kind === 'identities' ? 701 : 700],
       requestedPidCount: 1,
     })
     if ('probeErrno' in scenario.options) {

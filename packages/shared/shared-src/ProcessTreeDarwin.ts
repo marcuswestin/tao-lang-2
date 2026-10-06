@@ -31,6 +31,7 @@ const library = dlopen('/usr/lib/libproc.dylib', {
   },
 });
 try {
+  const retryWait = new Int32Array(new SharedArrayBuffer(4));
   const unreadableIdentity = (pid, details) => {
     try {
       process.kill(pid, 0);
@@ -48,24 +49,29 @@ try {
       details: { ...details, probeStatus: 'live' },
     });
   };
-  const identity = (pid, unreadable, parentPid) => {
+  const identity = (pid, parentPid, direct = false) => {
     const bytes = new Uint8Array(136);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    // Enumerations include zombies; direct queries retain their process-exit semantics.
+    // A direct query first excludes zombies, then checks their records before claiming absence.
     // Enumeration and identity queries are separate observations. Recheck an incomplete record
     // before declaring a live PID unreadable; persistent uncertainty still fails inspection.
     let returnedBytes;
-    for (let attempt = 0; attempt < (unreadable ? 3 : 1); attempt++) {
-      returnedBytes = library.symbols.proc_pidinfo(pid, 3, unreadable ? 1 : 0, ptr(bytes), bytes.byteLength);
+    for (let attempt = 0; attempt < (direct ? 4 : 3); attempt++) {
+      // Give an exit transition time to settle; immediate calls can repeat the same observation.
+      // Only incomplete reads wait, at most 10 ms for enumeration or 15 ms for a direct query.
+      if (attempt > 0) Atomics.wait(retryWait, 0, 0, 5);
+      returnedBytes = library.symbols.proc_pidinfo(pid, 3, direct && attempt === 0 ? 0 : 1, ptr(bytes), bytes.byteLength);
       if (returnedBytes >= bytes.byteLength && view.getUint32(12, true) === pid) break;
     }
     const details = { routine: 'proc_pidinfo', pid, returnedBytes, expectedBytes: bytes.byteLength };
     if (returnedBytes < bytes.byteLength) {
-      return unreadable && unreadable(pid, { ...details, failureKind: 'identity-unreadable' });
+      return unreadableIdentity(pid, { ...details, failureKind: 'identity-unreadable' });
     }
     if (view.getUint32(12, true) !== pid) {
-      return unreadable && unreadable(pid, { ...details, failureKind: 'identity-pid-mismatch' });
+      return unreadableIdentity(pid, { ...details, failureKind: 'identity-pid-mismatch' });
     }
+    // proc_bsdinfo.pbi_status uses BSD SZOMB (5): execution ended, even if not yet reaped.
+    if (direct && view.getUint32(4, true) === 5) return undefined;
     if (parentPid !== undefined && view.getUint32(16, true) !== parentPid) {
       failInspection('macOS process ' + pid + ' changed parent during inspection.', {
         details: { ...details, failureKind: 'parent-changed', expectedParentPid: parentPid,
@@ -81,9 +87,9 @@ try {
       startedAt: String(view.getBigUint64(120, true)) + ':' + String(view.getBigUint64(128, true)),
     };
   };
-  const enumeratedIdentity = (pid, parentPid) => identity(pid, unreadableIdentity, parentPid);
+  const enumeratedIdentity = (pid, parentPid) => identity(pid, parentPid);
   if (request.kind === 'identities') {
-    return request.pids.map(pid => identity(pid)).filter(value => value !== undefined);
+    return request.pids.map(pid => identity(pid, undefined, true)).filter(value => value !== undefined);
   }
   if (request.kind === 'group') {
     let pids = new Int32Array(4096);

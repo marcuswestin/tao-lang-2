@@ -89,6 +89,17 @@
   unreadability, denied liveness probes and changed ownership still fail inspection. Focused
   fixtures cover transient reads, permanent failures, exact identities and the shared helper
   failure envelope; current host acceptance remains required.
+- **Identity and retry follow-up (2026-10-06):** The next Studio complement again passed the inner
+  launch test but failed cleanup with `identity-unreadable`, zero returned bytes and `probeStatus: live`:
+  `.artifacts/logs/verify-complement/2026-10-06T19-42-16-038Z-70048-2c40ccd5/studio-smoke.log`.
+  Three immediate native retries did not establish an exact identity. Retries now yield five
+  milliseconds between incomplete reads, for at most ten milliseconds on enumeration and fifteen
+  on a direct query. This is a bounded race mitigation, not a diagnosis of the original failure.
+  Direct identity queries also verify a zombie-aware record or an `ESRCH` result before returning
+  absence; unreadable live records can no longer bypass exact-identity joins. Confirmed zombies
+  still count as stopped for direct queries, while enumeration retains their identities. The
+  focused native fixture suite passes 41 cases, including permanent uncertainty and the shared
+  helper envelope. Final host acceptance remains unproved.
 - **Related observation (2026-10-06):** On `feat/tutorial-first-hour` at `eb1c7f95a`, sandboxed
   `verify-changed` stopped at five `project-dev-session.test.ts` assertions: `markParentReused`
   expected owner record version 2 but received 1. The unchanged focused test reproduced all five
