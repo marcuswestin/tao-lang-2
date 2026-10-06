@@ -135,6 +135,14 @@ export async function openStudioPreviewSession(
         const startedAt = profileNow()
         const feedSources = session.feedSourceOverrides()
         const sourceOverrides = feedSources === undefined ? undefined : Object.freeze({ ...feedSources })
+        // Feed scenarios may exist only in the captured overlay. Include them in both the
+        // authoritative source snapshot and its independent membership audit.
+        const snapshotPaths = async () => [
+          ...new Set([
+            ...await discoverProjectTaoFiles(request.project),
+            ...Object.keys(sourceOverrides ?? {}),
+          ]),
+        ]
         const files = await session.files()
         const sourceVersions = Object.fromEntries(files.map(file => [file.path, file.sourceVersion]))
         for (const [path, source] of Object.entries(sourceOverrides ?? {})) {
@@ -221,7 +229,7 @@ export async function openStudioPreviewSession(
         if (!previewFirst) {
           // Initial watcher attachment and an authoritative refresh can discover inputs
           // before Studio's listing receives their watch events. Consume current bytes.
-          const currentPaths = await discoverProjectTaoFiles(request.project)
+          const currentPaths = await snapshotPaths()
           for (const path of Object.keys(sourceVersions)) {
             delete sourceVersions[path]
           }
@@ -290,7 +298,7 @@ export async function openStudioPreviewSession(
                 return false
               }
               if (!previewFirst) {
-                const currentPaths = await discoverProjectTaoFiles(request.project)
+                const currentPaths = await snapshotPaths()
                 if (
                   currentPaths.length !== Object.keys(sourceVersions).length
                   || currentPaths.some(path => !Object.hasOwn(sourceVersions, FS.relativePath(request.project, path)))

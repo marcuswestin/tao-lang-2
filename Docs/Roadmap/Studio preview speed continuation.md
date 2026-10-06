@@ -1150,6 +1150,17 @@ pass without changing deadlines. The first changed-scope gate stopped on an unus
 compiler range type; it is now internal, with focused dead-export and type checks passing. The
 complete changed-scope gate must be repeated; its canceled checks are not coverage.
 
+The repeat gate exposed a Feed-overlay regression: authoritative disk rediscovery discarded a
+virtual-only scenario and its source hash. The exact test reproduced the missing scenario in an
+isolated run. Snapshot membership and the independent final membership audit now include paths
+from the immutable captured overlay as well as disk. The original eight assertions pass, covering
+the scenario, frozen hashes, generated publication and absence of disk writes. This repair adds
+no disk scan beyond the two existing discovery points. The gate also timed out build dependency
+and external-watch cases under contention, without exclusive confirmation, and stopped with
+118 checks unrun. Serial exact-file repeats pass without changing timeouts: sidecar closure
+(one case), sidecar root (one), build dependencies (two) and watch topology (four). The complete
+changed-scope gate still needs a successful repeat; those focused runs are iteration evidence.
+
 All six canonical performance cases and their ceilings are preserved. A separate production-default
 padding qualification requires seven real warm delivery/paint receipts plus eventual authoritative
 source parity, rather than fabricated generated modification times. Quiet admission, paired

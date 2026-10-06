@@ -40,10 +40,13 @@ main-only preparation plan as the proposed execution sequence, without supersedi
 2. The lead completed the integrated source review, using one permitted read-only aid and checking
    its claims. Repairs include queued/initial compile drain on close, final epoch rechecking,
    stronger real-session/identity/barrier mutation witnesses, a nonvacuous forged-padding fixture,
-   and rejection of duplicate/reversed warm delivery receipts. Trace-only journals preserve
-   startup output and partial samples across test-process timeouts; ordinary qualification has
-   no journal timer or writes. Focused checks and intended mutation failures are recorded in the
-   task checkpoint. The local changed-scope gate still needs its final run.
+   rejection of duplicate/reversed warm delivery receipts, canceled-callback timer ownership,
+   and preservation of virtual Feed scenario membership in snapshots and final audits. Trace-only
+   journals preserve startup output and partial samples across test-process timeouts; ordinary
+   qualification has no journal timer or writes. Focused checks and intended mutation failures are recorded in the
+   task checkpoint. Two local changed-scope attempts exposed repaired export and Feed-membership
+   failures. Serial repeats of all timed-out scopes pass without raising limits; canceled checks
+   still require a complete successful changed-scope repeat.
 3. Four real editor trials pass: two-preview width/recovery/rapid/burst/retained-state; single-cell
    revert and fresh activation during an overlay; whole-app retained-state; actual full-work
    overlap. Each records eight computed padding/paint samples and final source parity. Repeated
