@@ -3826,6 +3826,30 @@
       "lastWallMs": 231822,
       "source": "wall"
     },
+    "runtime-jest#1": {
+      "emaMs": 77679,
+      "lastMs": 77679,
+      "lastRunAt": "2026-10-06T12:46:16Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 77679
+    },
+    "runtime-jest#2": {
+      "emaMs": 77671,
+      "lastMs": 77671,
+      "lastRunAt": "2026-10-06T12:46:16Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 77671
+    },
+    "runtime-jest#3": {
+      "emaMs": 77673,
+      "lastMs": 77673,
+      "lastRunAt": "2026-10-06T12:46:16Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 77673
+    },
     "services/account-server": {
       "emaMs": 102156,
       "lastMs": 102156,
