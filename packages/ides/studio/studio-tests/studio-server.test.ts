@@ -215,7 +215,7 @@ Describe('Studio server request boundary', () => {
         ['/api/agent-chat/stream/respond', 'GET'],
         ['/api/ship/beta', 'GET'],
         ['/studio.js', 'POST'],
-      ]
+      ] as const
     ) {
       const request = new Request(`http://127.0.0.1:5678${pathname}`, { method })
       StudioServerTesting.configureRequestLifetime(request, server as never, pathname)
