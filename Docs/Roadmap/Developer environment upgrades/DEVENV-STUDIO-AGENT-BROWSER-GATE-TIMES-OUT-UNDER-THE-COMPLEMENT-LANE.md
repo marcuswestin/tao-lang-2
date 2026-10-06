@@ -30,3 +30,26 @@
   and a missed approval click remain distinguishable hypotheses; capture approval controls, chat
   input state, chat-log tail and model-call count on recurrence. No assertions, timeouts or
   ownership checks were weakened.
+- **Separate request-lifetime evidence (2026-10-06):** PR #59 merged before its complement
+  failed at initial chat readiness (`2026-10-06T18-52-53-172Z-55524-86256e74`); an unchanged
+  retry failed later waiting for the stale-undo refusal (`2026-10-06T18-57-56-270Z-45344-fcd47cac`).
+  Both `studio-agent-browser.log` files report Bun's ten-second request idle timeout, without
+  identifying the request. The streamed approval response can wait quietly for the turn to finish;
+  the lazy browser bundle also awaits a build before responding. Studio now exempts these exact
+  GET bundle and POST stream routes, alongside beta shipping, from the request idle timeout.
+  Ordinary requests retain their default timeout. This closes an HTTP lifetime gap; it does not
+  prove which request timed out in either retained failure or settle the shared click-helper work.
+- **Startup boundary follow-up (2026-10-06):** The recovery complement
+  `2026-10-06T19-07-03-229Z-70886-3846e816` still failed with a blank initial page, but no Bun
+  timeout warning. The direct-server fixture now awaits the real browser client bundle before
+  opening Chrome, matching `StudioDev`'s existing readiness boundary. Its UI wait and overall
+  journey deadline are unchanged. Initial-readiness failures now include the document URL and
+  ready state as well as text and browser failures, so a remaining navigation failure can be
+  distinguished from client startup. The retained failures remain separate evidence.
+- **Approval follow-up (2026-10-06):** Complement
+  `2026-10-06T19-14-19-314Z-41579-3a25a34c` reached edits and failed at the final stale-undo
+  approval, without a Bun timeout warning. That click now waits for the approval button's
+  settled box and center hit target, following the earlier cloud-switch fix, rather than only
+  checking the panel's animation list. A failure now records approval state, input busy state,
+  chat text, scripted model calls and browser failures. The refusal and unchanged-source
+  assertions remain intact; the shared click-helper acceptance is still open.

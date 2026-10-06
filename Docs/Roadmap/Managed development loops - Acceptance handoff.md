@@ -1,5 +1,13 @@
 # Managed development loops — Remaining acceptance handoff
 
+Current-source clarification, 2026-10-06: the detached-WDA registration and non-releasing managed
+mobile attachment seams described as missing in the original handoff are now implemented on main.
+Mac2 also holds its stopped port through resource-lease release. See the current execution plan for
+the measured acceptance disposition; these source repairs do not close real device lifecycle,
+Mac2 physical input, consent, focus/coexistence or human window checks. The original checkout and
+permission instructions below are historical context, not a current assignment. Scoped driver
+hardening is recorded in [UI interaction driver hardening](<../Archive/Plans/Repository simplification 3/Plan.md>).
+
 Prepared 2026-10-02; refreshed after the authorized test-and-commit pass. This is continuation context
 for the next task's planning, not authorization
 to implement, commit, land, change machine configuration, or bypass native consent.

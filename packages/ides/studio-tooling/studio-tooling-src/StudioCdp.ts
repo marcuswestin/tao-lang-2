@@ -83,6 +83,14 @@ type StudioCdpOptions = {
   useMockKeychain?: boolean
 }
 
+type StudioCdpAttachmentOptions = {
+  /** Activation is an explicit foreground operation; attaching alone stays quiet. */
+  activate?: boolean
+  artifactRoot?: string
+  /** Omission preserves the attached target's existing viewport. */
+  viewport?: { width: number; height: number }
+}
+
 type StudioCdpKeyOptions = {
   alt?: boolean
   control?: boolean
@@ -182,7 +190,7 @@ export class StudioCdp {
           await stopChrome(startedCommand, userDataRoot, 'SIGTERM')
         }
       }, options)
-      await configure(client)
+      await configure(client, { viewport: { width: 1440, height: 900 } })
       return studio
     } catch (error) {
       try {
@@ -205,21 +213,49 @@ export class StudioCdp {
     }
   }
 
-  static async attach(options: {
-    artifactRoot?: string
-    baseUrl: string
-    targetUrlPrefix?: string
-  }): Promise<StudioCdp> {
+  static async attach(
+    options: StudioCdpAttachmentOptions & {
+      baseUrl: string
+      targetUrlPrefix?: string
+    },
+  ): Promise<StudioCdp> {
     const target = await waitForTarget(options.baseUrl, options.targetUrlPrefix)
     const client = await CdpClient.connect(requireWebSocketUrl(target))
-    const studio = new StudioCdp(client, async () => client.close(), { artifactRoot: options.artifactRoot })
-    await configure(client)
-    return studio
+    return await StudioCdp.attachClient(client, async () => client.close(), options)
+  }
+
+  private static async attachClient(
+    client: StudioCdpTransport,
+    disconnect: () => Promise<void>,
+    options: StudioCdpAttachmentOptions,
+  ): Promise<StudioCdp> {
+    const studio = new StudioCdp(client, disconnect, { artifactRoot: options.artifactRoot })
+    try {
+      await configure(client, options)
+      return studio
+    } catch (error) {
+      try {
+        await studio.close()
+      } catch (cleanupError) {
+        Errors.throwHostEnvironment(Errors.messageOf(error), {
+          cause: error,
+          details: { cleanupFailure: Errors.formatForLog(cleanupError).slice(0, 4_000) },
+        })
+      }
+      throw error
+    }
   }
 
   static readonly testing = {
     stopChrome,
     waitForActivePort,
+    attach(
+      client: StudioCdpTransport,
+      options: StudioCdpAttachmentOptions = {},
+      disconnect: () => Promise<void> = async () => {},
+    ): Promise<StudioCdp> {
+      return StudioCdp.attachClient(client, disconnect, options)
+    },
     create(client: StudioCdpTransport, options: StudioCdpOptions = {}): StudioCdp {
       return new StudioCdp(client, async () => {}, options)
     },
@@ -1281,16 +1317,24 @@ function consoleEntry(method: string, params: Record<string, unknown>): BrowserC
   return { level: type, text: args.map(argument => argument.description ?? String(argument.value ?? '')).join(' ') }
 }
 
-async function configure(client: StudioCdpTransport): Promise<void> {
+async function configure(client: StudioCdpTransport, options: StudioCdpAttachmentOptions): Promise<void> {
+  if (options.viewport !== undefined) {
+    requirePositiveInteger(options.viewport.width, 'Studio browser viewport width')
+    requirePositiveInteger(options.viewport.height, 'Studio browser viewport height')
+  }
   await client.send('Page.enable')
   await client.send('Runtime.enable')
-  await client.send('Emulation.setDeviceMetricsOverride', {
-    deviceScaleFactor: 1,
-    height: 900,
-    mobile: false,
-    width: 1440,
-  })
-  await client.send('Page.bringToFront')
+  if (options.viewport !== undefined) {
+    await client.send('Emulation.setDeviceMetricsOverride', {
+      deviceScaleFactor: 1,
+      height: options.viewport.height,
+      mobile: false,
+      width: options.viewport.width,
+    })
+  }
+  if (options.activate === true) {
+    await client.send('Page.bringToFront')
+  }
 }
 
 function requirePositiveInteger(value: number, label: string): void {

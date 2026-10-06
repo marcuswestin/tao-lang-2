@@ -34,6 +34,7 @@ class FakeCdpTransport implements StudioCdpTransport {
   private readonly listeners = new Map<string, Set<(params: unknown) => void>>()
   private intercepting = false
   failMouseType: string | undefined
+  failMethod: string | undefined
 
   listenerCount(method: string): number {
     return this.listeners.get(method)?.size ?? 0
@@ -44,6 +45,9 @@ class FakeCdpTransport implements StudioCdpTransport {
     params: Record<string, unknown> = {},
   ): Promise<Result> {
     this.calls.push({ method, params })
+    if (method === this.failMethod) {
+      Errors.throwHostEnvironment('CDP configuration failed')
+    }
     if (method === 'Input.setInterceptDrags') {
       this.intercepting = params['enabled'] === true
     }
@@ -183,6 +187,82 @@ Describe('Studio browser CDP harness', () => {
     const profile = await mkTestDir('tao-studio-cdp-startup-')
     await FS.writeText(FS.resolvePath('DevToolsActivePort', profile), '9222\n/browser/token')
     Expect(await StudioCdp.testing.waitForActivePort(profile, { exitCode: null, signalCode: null })).toBe(9222)
+  })
+
+  Test('attaches without activating or resizing a borrowed target and disconnects only once', async () => {
+    const transport = new FakeCdpTransport()
+    let disconnects = 0
+    const browser = await StudioCdp.testing.attach(transport, {}, async () => {
+      disconnects++
+    })
+    Expect(transport.calls).toEqual([
+      { method: 'Page.enable', params: {} },
+      { method: 'Runtime.enable', params: {} },
+    ])
+    await browser.close()
+    await browser.close()
+    Expect(disconnects).toBe(1)
+    Expect(transport.listenerCount('Runtime.executionContextCreated')).toBe(0)
+    Expect(transport.calls.map(call => call.method)).toEqual(['Page.enable', 'Runtime.enable'])
+  })
+
+  Test('applies only explicitly requested attachment viewport and foreground activation', async () => {
+    const transport = new FakeCdpTransport()
+    const browser = await StudioCdp.testing.attach(transport, {
+      viewport: { width: 1440, height: 900 },
+      activate: true,
+    })
+    Expect(transport.calls).toEqual([
+      { method: 'Page.enable', params: {} },
+      { method: 'Runtime.enable', params: {} },
+      {
+        method: 'Emulation.setDeviceMetricsOverride',
+        params: { deviceScaleFactor: 1, height: 900, mobile: false, width: 1440 },
+      },
+      { method: 'Page.bringToFront', params: {} },
+    ])
+    await browser.close()
+  })
+
+  Test('disconnects a failed attachment and rejects invalid viewport dimensions before configuration', async () => {
+    for (const invalidViewport of [true, false]) {
+      const transport = new FakeCdpTransport()
+      transport.failMethod = 'Runtime.enable'
+      let disconnects = 0
+      await Expect(StudioCdp.testing.attach(
+        transport,
+        invalidViewport ? { viewport: { width: 0, height: 900 } } : {},
+        async () => {
+          disconnects++
+        },
+      )).rejects.toThrow(invalidViewport ? 'width must be a positive integer' : 'CDP configuration failed')
+      Expect(disconnects).toBe(1)
+      Expect(transport.listenerCount('Runtime.executionContextCreated')).toBe(0)
+      if (invalidViewport) {
+        Expect(transport.calls).toEqual([])
+      }
+    }
+  })
+
+  Test('retains the attachment configuration error when disconnect also fails', async () => {
+    const transport = new FakeCdpTransport()
+    transport.failMethod = 'Runtime.enable'
+    let disconnects = 0
+    let caught: unknown
+    try {
+      await StudioCdp.testing.attach(transport, {}, async () => {
+        disconnects++
+        Errors.throwHostEnvironment('Disconnect failed')
+      })
+    } catch (error) {
+      caught = error
+    }
+    Expect(caught).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect(Errors.messageOf(caught)).toBe('CDP configuration failed')
+    Expect(Errors.formatForLog((caught as Errors.HostEnvironmentError).cause)).toContain('CDP configuration failed')
+    Expect(Errors.formatForLog(caught)).toContain('Disconnect failed')
+    Expect(disconnects).toBe(1)
+    Expect(transport.listenerCount('Runtime.executionContextCreated')).toBe(0)
   })
 
   Test('sets explicit deterministic desktop viewport dimensions', async () => {
