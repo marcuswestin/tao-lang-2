@@ -328,6 +328,7 @@
       "WebSearch",
       "mcp__Claude_Browser__*",
       "mcp__Claude_Code_iOS_Simulator__*",
+      "mcp__ccd_session_mgmt__send_message",
       "mcp__claude-in-chrome__*",
       "Bash(./agent unsandboxed notify-developer)",
       "Bash(./agent unsandboxed notify-developer *)",
@@ -445,8 +446,7 @@
       "Bash(./agent unsandboxed storage *)"
     ],
     "ask": [
-      "Bash(./agent land-unlock --force*)",
-      "mcp__ccd_session_mgmt__send_message"
+      "Bash(./agent land-unlock --force*)"
     ],
     "deny": [
       "Bash(bun install *)",
