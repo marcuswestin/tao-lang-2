@@ -97,6 +97,13 @@ export function gitHubPulls(run: GhRunner, root: string, writeLine: (line: strin
     async checkRunCount(sha: string): Promise<number> {
       return (await api<{ total_count: number }>([`${REPOSITORY}/commits/${sha}/check-runs?per_page=1`])).total_count
     },
+    /**
+     * How many check suites the commit carries. GitHub makes one per app as the push event reaches
+     * it, before any run is queued, so none at all means the event never reached Actions.
+     */
+    async checkSuiteCount(sha: string): Promise<number> {
+      return (await api<{ total_count: number }>([`${REPOSITORY}/commits/${sha}/check-suites?per_page=1`])).total_count
+    },
     /** The conclusion of the newest check run named `name` on the commit, if one has concluded. */
     async checkConclusion(sha: string, name: string): Promise<string | undefined> {
       const runs = await api<{ check_runs: { conclusion: string | null }[] }>([

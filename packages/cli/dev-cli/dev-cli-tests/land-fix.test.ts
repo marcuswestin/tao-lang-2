@@ -1,4 +1,4 @@
-import { CLI } from '@shared'
+import { CLI, Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { CancelVerifyCommand } from '../dev-cli-src/pr/CancelVerify'
 import { LandFixCommand, type LandFixDependencies } from '../dev-cli-src/pr/LandFixCommand'
@@ -24,6 +24,7 @@ type Script = {
   head?: string
   mainHoldsSquash?: boolean
   merged?: boolean
+  syncFails?: boolean
 }
 
 function fakeDependencies(script: Script = {}) {
@@ -90,6 +91,12 @@ function fakeDependencies(script: Script = {}) {
       }
       return result(spec, '')
     },
+    syncLocalMain: async () => {
+      calls.push('syncLocalMain')
+      if (script.syncFails === true) {
+        Errors.throwHostEnvironment('fetch refused')
+      }
+    },
     writeJson: async (_path, content) => {
       written.push(content)
     },
@@ -119,6 +126,7 @@ Describe('land-fix', () => {
     )
     Expect(push).toBeGreaterThan(commitTree)
     Expect(archive).toBeGreaterThan(push)
+    Expect(fake.calls.indexOf('syncLocalMain')).toBeGreaterThan(archive)
     Expect(fake.written).toEqual([{
       at: '2026-10-06T01:02:03.456Z',
       branch: 'feat/example',
@@ -133,11 +141,20 @@ Describe('land-fix', () => {
     Expect(fake.calls.some(call => call.startsWith('git merge ') || call.startsWith('git checkout'))).toBe(false)
   })
 
+  Test('still lands, warning, when local main cannot be brought forward afterwards', async () => {
+    const fake = fakeDependencies({ syncFails: true })
+    const outcome = await LandFixCommand.run({ repositoryRoot: ROOT }, fake.dependencies)
+    Expect(outcome.exitCode).toBe(0)
+    Expect(fake.lines).toContain('WARN  Could not bring local main up to date (fetch refused); run sync-main.')
+    Expect(fake.written).toHaveLength(1)
+  })
+
   Test('refuses a conflict before writing anything, naming the resolution', async () => {
     const fake = fakeDependencies({ conflict: true })
     await Expect(LandFixCommand.run({ repositoryRoot: ROOT }, fake.dependencies)).rejects.toThrow(/run land-fix again/u)
     Expect(fake.lines).toContain('FAIL  feat/example conflicts with origin/main:')
     Expect(fake.calls.some(call => call.startsWith('git commit-tree') || call.startsWith('git push'))).toBe(false)
+    Expect(fake.calls).not.toContain('syncLocalMain')
     Expect(fake.written).toEqual([])
   })
 

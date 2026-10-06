@@ -54,6 +54,10 @@ function checkCountKey(sha = HEAD_SHA): string {
   return routeKey('gh', ['api', `repos/{owner}/{repo}/commits/${sha}/check-runs?per_page=1`], ROOT)
 }
 
+function checkSuitesKey(sha = HEAD_SHA): string {
+  return routeKey('gh', ['api', `repos/{owner}/{repo}/commits/${sha}/check-suites?per_page=1`], ROOT)
+}
+
 /** pull is GitHub's REST pull request, reduced to what open-pr reads. */
 function pull(
   prNumber: number,
@@ -208,6 +212,8 @@ function openedPullRequestRoutes(prNumber: number, branch = BRANCH): Record<stri
     [createKey(branch)]: { stdout: JSON.stringify(pull(prNumber)) },
     [viewKey(prNumber)]: { stdout: JSON.stringify(pull(prNumber)) },
     [checkCountKey()]: { stdout: '{"total_count":2}' },
+    [verifyRunsKey()]: { stdout: '{"workflow_runs":[]}' },
+    [checkSuitesKey()]: { stdout: '{"total_count":1}' },
     [enableAutoMergeKey(prNumber)]: {},
   }
 }
@@ -249,6 +255,10 @@ function fakeDependencies(
     now: () => clock,
     readText: async path =>
       path === messageFile(branch) ? `${SUBJECT}\n\n${BODY}\n` : Errors.throwUnexpected(`unexpected read: ${path}`),
+    refreshNativeBindings: async () => {
+      calls.push('refreshNativeBindings')
+      return { exitCode: 0 }
+    },
     run: fakeRun(routes, calls),
     runComplement: async () => {
       calls.push('runComplement')
@@ -257,6 +267,9 @@ function fakeDependencies(
     sleep: async ms => {
       sleeps.push(ms)
       clock += ms
+    },
+    syncLocalMain: async () => {
+      calls.push('syncLocalMain')
     },
     writeLine: () => {},
     ...overrides,
@@ -566,14 +579,139 @@ Describe('open-pr', () => {
   Test('fails, without following, when no checks ever appear on the pushed commit', async () => {
     const routes = openedPullRequestRoutes(2)
     routes[checkCountKey()] = { stdout: '{"total_count":0}' }
-    const { calls, dependencies } = fakeDependencies(routes)
+    const { calls, dependencies, sleeps } = fakeDependencies(routes)
 
     const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(1)
-    Expect(result.lines.some(line => line.startsWith('FAIL  No checks appeared on headsha1'))).toBe(true)
+    // 36 looks five seconds apart span the 180 s window: on 2026-10-06 GitHub started a run 90 s late.
+    Expect(sleeps.filter(ms => ms === 5_000)).toHaveLength(35)
+    Expect(result.lines.some(line => line.startsWith('FAIL  No checks appeared on headsha1 within 180s'))).toBe(true)
+    // Suites on the commit mean Actions saw the push, so the remedy is to wait for its run, not to push again.
     Expect(result.lines.some(line => line.includes('Actions may be disabled'))).toBe(true)
+    Expect(result.lines.some(line => line.includes('--allow-empty'))).toBe(false)
     Expect(calls.some(call => call === 'followChecks' || call.startsWith('gh pr merge'))).toBe(false)
+    Expect(calls).not.toContain('runComplement')
+  })
+
+  Test(
+    'names a lost push event, and the empty commit that replaces it, when the commit has no check suite',
+    async () => {
+      const routes = openedPullRequestRoutes(2)
+      routes[checkCountKey()] = { stdout: '{"total_count":0}' }
+      routes[checkSuitesKey()] = { stdout: '{"total_count":0}' }
+      const { calls, dependencies } = fakeDependencies(routes)
+
+      const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
+
+      Expect(result.exitCode).toBe(1)
+      Expect(result.lines.at(-1)).toBe(
+        'FAIL  No checks appeared on headsha1 within 180s of the push, and the commit has no check suite at all:'
+          + " the push event never reached Actions. Push a new head with `git commit --allow-empty -m 'Run Verify"
+          + " again'` and run open-pr again.",
+      )
+      Expect(calls).toContain(checkSuitesKey())
+      Expect(calls.some(call => call === 'followChecks' || call.startsWith('gh pr merge'))).toBe(false)
+    },
+  )
+
+  Test('counts a queued Verify run with no check run yet as the checks appearing', async () => {
+    // On 2026-10-06 GitHub created the run at the push but its jobs only once runners freed up.
+    const routes = openedPullRequestRoutes(2)
+    routes[checkCountKey()] = { stdout: '{"total_count":0}' }
+    routes[verifyRunsKey()] = {
+      stdout: JSON.stringify({
+        workflow_runs: [{
+          conclusion: null,
+          head_sha: HEAD_SHA,
+          html_url: 'https://github.com/tao/tao/actions/runs/9',
+          id: 9,
+          status: 'queued',
+        }],
+      }),
+    }
+    const { calls, dependencies, followed, sleeps } = fakeDependencies(routes)
+    mergesAfterChecks(dependencies, 2)
+
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(result.lines).toContain(
+      'PASS  Verify run 9 exists for headsha1 (queued); GitHub starts its jobs as runners free up.',
+    )
+    Expect(sleeps).toEqual([])
+    Expect(calls.indexOf(enableAutoMergeKey(2))).toBeGreaterThan(calls.indexOf(verifyRunsKey()))
+    Expect(calls).toContain('runComplement')
+    Expect(followed).toEqual([2])
+    Expect(calls).not.toContain(checkSuitesKey())
+  })
+
+  Test('refreshes maintained native bindings before the push, only when the complement runs', async () => {
+    const landing = fakeDependencies(openedPullRequestRoutes(2))
+    mergesAfterChecks(landing.dependencies, 2)
+    Expect((await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, landing.dependencies)).exitCode)
+      .toBe(0)
+    const refresh = landing.calls.indexOf('refreshNativeBindings')
+    Expect(refresh).toBeGreaterThan(-1)
+    Expect(refresh).toBeLessThan(landing.calls.indexOf(PUSH_KEY))
+    Expect(refresh).toBeLessThan(landing.calls.indexOf('runComplement'))
+
+    const routes = openedPullRequestRoutes(2)
+    delete routes[enableAutoMergeKey(2)]
+    const unattended = fakeDependencies(routes)
+    Expect((await OpenPrCommand.run({ repositoryRoot: ROOT }, unattended.dependencies)).exitCode).toBe(0)
+    Expect(unattended.calls).not.toContain('refreshNativeBindings')
+
+    const declined = fakeDependencies(openedPullRequestRoutes(2))
+    mergesAfterChecks(declined.dependencies, 2)
+    await OpenPrCommand.run({ autoMerge: true, complement: false, repositoryRoot: ROOT }, declined.dependencies)
+    Expect(declined.calls).not.toContain('refreshNativeBindings')
+  })
+
+  Test('refuses before pushing when regenerating bindings changes the worktree or fails', async () => {
+    const statusKey = routeKey('git', ['status', '--porcelain=v1', '--untracked-files=all'], ROOT)
+    const changed = fakeDependencies(openedPullRequestRoutes(2))
+    const run = changed.dependencies.run
+    changed.dependencies.run = (async (command, spec = {}) => {
+      const result = await run(command, spec)
+      return routeKey(command, spec.args ?? [], spec.cwd) === statusKey
+          && changed.calls.includes('refreshNativeBindings')
+        ? { ...result, stdout: ' M packages/native/bindings.ts\n' }
+        : result
+    }) as OpenPrRunner
+    await Expect(OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, changed.dependencies)).rejects.toThrow(
+      'Regenerating maintained native bindings changed the worktree; nothing was pushed. Review and commit these'
+        + ' paths, then run open-pr again:\n M packages/native/bindings.ts',
+    )
+    Expect(changed.calls.some(call => call.startsWith('git push'))).toBe(false)
+
+    const failed = fakeDependencies(openedPullRequestRoutes(2), {
+      refreshNativeBindings: async () => ({ exitCode: 2 }),
+    })
+    await Expect(OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, failed.dependencies)).rejects.toThrow(
+      'Regenerating maintained native bindings failed (exit 2); nothing was pushed.',
+    )
+    Expect(failed.calls.some(call => call.startsWith('git push'))).toBe(false)
+  })
+
+  Test('brings local main forward once GitHub has merged, and not before or without a merge', async () => {
+    const merged = fakeDependencies(openedPullRequestRoutes(2))
+    mergesAfterChecks(merged.dependencies, 2)
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, merged.dependencies)
+    Expect(result.exitCode).toBe(0)
+    Expect(result.lines.indexOf('Bringing local main up to origin/main...')).toBeGreaterThan(
+      result.lines.indexOf(`PASS  GitHub merged #2 at ${MERGED_AT}.`),
+    )
+    Expect(merged.calls.indexOf('syncLocalMain')).toBeGreaterThan(merged.calls.lastIndexOf(viewKey(2)))
+
+    const unmerged = fakeDependencies(openedPullRequestRoutes(2))
+    await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, unmerged.dependencies)
+    Expect(unmerged.calls).not.toContain('syncLocalMain')
+
+    const failing = fakeDependencies(openedPullRequestRoutes(2), { followChecks: async () => ({ exitCode: 1 }) })
+    mergesAfterChecks(failing.dependencies, 2)
+    await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, failing.dependencies)
+    Expect(failing.calls).not.toContain('syncLocalMain')
   })
 
   Test('names a conflict with main as the reason no checks appeared', async () => {
