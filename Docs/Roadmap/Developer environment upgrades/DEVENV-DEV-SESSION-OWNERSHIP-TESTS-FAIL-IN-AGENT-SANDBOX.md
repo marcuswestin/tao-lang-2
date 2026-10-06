@@ -1,7 +1,7 @@
 # DEVENV-DEV-SESSION-OWNERSHIP-TESTS-FAIL-IN-AGENT-SANDBOX — Dev-session ownership tests fail in the agent sandbox
 
 - **Status:** Open
-- **Section:** Validation
+- **Section:** Deferred
 - **Area:** `packages/shared/shared-tests/project-dev-session.test.ts` and the sandboxed local lanes.
 - **Impact:** `./agent verify-changed` stops at `shared` in a sandboxed agent shell on any branch
   that selects the shared suite, though nothing is wrong with the code; the agent must rerun
