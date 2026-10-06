@@ -41,6 +41,32 @@
   all three cells in 46.6 seconds; all images were inspected, with complete receipts under
   `Docs/QA/evidence/tutorial-first-hour/capture-complete/`. This proves the tutorial repair, not the
   causes of every older failure; complete HNReader and Notebook rechecks remain this entry's acceptance.
+- **Related scenario-discovery observation (2026-10-06):** Automatic discovery on
+  `feat/scenario-qa-discovery` found 14 apps and
+  35 cells with no discovery failures. A 90-second-per-app batch retained every expected cell and
+  recorded four app deadline failures before it was interrupted during Notebook. A separate
+  Pantry capture reached Studio, Metro and headless Chrome, then failed all six cells at the
+  existing 60-second ready/failed predicate (`last=false`). It completed in 381.2 seconds with a
+  `partial` source snapshot and exit 1, with no screenshots. The preceding package test run was
+  contended, and host load during capture was still elevated; neither observation establishes a
+  cause. Logs and manifests: `.artifacts/qa/scenario-round-marked/coverage.json`,
+  `.artifacts/qa/pantry-discovery-smoke/review.json`, its `logs/studio.log`, and
+  `.artifacts/logs/agent/qa-capture/2026-10-06T17-31-46-222Z-90049.log`.
+  Discovery and bounded failure reporting are verified separately from successful browser capture.
+  The 2026-10-06 Pantry failure was traced to inactive cells: fresh staged projects have no saved
+  activated previews, but the review runner only scrolled cells and waited for readiness. The
+  runner now activates each inactive cell through Studio's existing control before waiting. With
+  that repair, `.artifacts/qa/pantry-activated-smoke/review.json` captured all six cells in 53.4
+  seconds with exit 0 and a complete source snapshot; its phone screenshot was inspected.
+  An expression-executing regression covers inactive and already active previews, and removing
+  the activation click makes the inactive case fail. This explains the fresh-session failure;
+  it does not establish the cause of the older missing-manifest or intermittent-cell failures.
+  The final automatic batch, `.artifacts/qa/scenario-discovery-final/coverage.json`, discovered
+  14 apps and 37 cells, including unimported HNReader sketch scenarios. In 268.7 seconds it
+  captured 21 cells across six apps, retained three failed Auth Review previews and 13 missing
+  WordFlower cells blocked by source-isolation checks, and exited 1. There were no discovery
+  failures or unexpected cells. The partial verdict preserved the actual gaps; sibling captures
+  did not turn them into complete coverage.
 - **Workaround:** Inspect every manifest cell status and keep the affected visual dimension blocked.
   A fresh HNReader capture reached the manifest but still missed one cell, so retry is not a proven
   recovery. Preserve the original failure and any partial bundle when conducting a bounded recheck.

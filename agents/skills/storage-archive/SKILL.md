@@ -24,7 +24,7 @@ This skill owns the order of operations and what an agent must not do to the arc
 4. **Pin**, from any clean checkout: `./dev storage pin`. Off a feature branch it starts
    `feat/storage-pin-<commit>` from `origin/main`, commits only the pointer, and records the merge
    message so the landing asks nothing more.
-5. **Land** the `feat/storage-pin-<commit>` branch through `verification-lanes`' landing route,
+5. **Land** the `feat/storage-pin-<commit>` branch through `landing`'s route,
    under the Developer's landing authorization as for any slice.
 
 Pinning is occasional; a routine capture can stop after step 3. When changing the capture tooling

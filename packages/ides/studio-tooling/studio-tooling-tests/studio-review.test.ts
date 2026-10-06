@@ -114,6 +114,7 @@ Describe('Studio visual review', () => {
     Expect(run.browserClosed).toBe(true)
     Expect(run.studioStopped).toBe(true)
     Expect(run.manifest.cells[0]?.status).toBe('captured')
+    Expect(run.activationClicks).toBe(0)
     Expect(await FS.readJson(FS.resolvePath('logs/browser-events.json', run.artifactRoot))).toEqual([{
       kind: 'console',
       level: 'error',
@@ -125,6 +126,7 @@ Describe('Studio visual review', () => {
     const inactive = await reviewOneCell([], 'cell-frame', { initiallyActivated: false, initiallyDisabled: true })
     Expect(inactive.activationClicks).toBe(1)
     Expect(inactive.manifest.cells[0]?.status).toBe('captured')
+    Expect(inactive.captureSelectors).toHaveLength(2)
 
     const active = await reviewOneCell([], 'cell-frame', { initiallyActivated: true })
     Expect(active.activationClicks).toBe(0)
@@ -427,7 +429,13 @@ async function reviewOneCell(
   const activationButton = new MockHtmlButton()
   const frame = new MockHtmlElement(surface.cells[0].status)
   const document = {
-    querySelectorAll: (selector: string) => selector === '.studio-preview-cell[data-tao-review-key]' ? [frame] : [],
+    querySelectorAll: (selector: string) => {
+      Expect([
+        '.studio-preview-cell[data-tao-review-key]',
+        '[data-tao-review-capture]',
+      ]).toContain(selector)
+      return [frame]
+    },
   }
   const evaluateExpression = (expression: string): unknown =>
     new Function('document', 'HTMLElement', 'HTMLButtonElement', `return ${expression}`)(
@@ -502,10 +510,10 @@ async function reviewOneCell(
     }),
   })
   return {
+    activationClicks,
     artifactRoot,
     browserClosed,
     captureSelectors,
-    activationClicks,
     manifest: await FS.readJson<StudioReviewManifest>(result.manifestPath),
     navigatedTo,
     studioStopped,

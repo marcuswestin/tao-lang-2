@@ -433,7 +433,7 @@ my-status:
 # Fast-forward main, move the mirrors that follow it, and merge it into your branch
 [group('Mine')]
 my-sync:
-    ./dev sync-main
+    ./dev my-sync
 
 # Hand merge conflicts in this checkout to an agent for best-effort focused checks and a merge commit
 [group('Mine')]
@@ -622,6 +622,11 @@ cancel-verify *ARGS:
 land-fix *ARGS:
     ./dev land-fix {{ ARGS }}
 
+# Fast-forward local main to fetched origin/main, with a clean checkout of it and main mirrors; never forces
+[group('Dev')]
+sync-main:
+    ./dev sync-main
+
 # Report a pull request's checks and why failed ones failed; --wait follows them to the end
 [group('Dev')]
 pr-checks *ARGS:
@@ -758,12 +763,13 @@ verify-full no_cache='false' show_studio='false' jobs='': _deps
 diagnose-verification: _deps
     TAO_VERIFY_NO_TIMEOUTS=true TAO_VERIFY_JOBS=1 ./dev gates {{ VERIFY_FULL_GATES }} --lane diagnose-verification --jobs 1 --output lines --no-cache
 
-# Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree; --partition k/n runs one CI machine's share
+# Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree; --partition k/n runs one CI machine's share; --hosted-linux (hosted Verify only) keeps the host gates proved on its Linux runners
+[arg('hosted_linux', long='hosted-linux', value='true')]
 [arg('no_cache', long='no-cache', value='true')]
 [arg('partition', long='partition')]
 [group('Dev')]
-verify-full-sandbox no_cache='false' partition='':
-    ./dev gates {{ VERIFY_FULL_GATES }} --skip-unsandboxed --lane verify-full-sandbox {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }} {{ if partition == "" { "" } else { "--partition " + partition } }}
+verify-full-sandbox no_cache='false' partition='' hosted_linux='false':
+    ./dev gates {{ VERIFY_FULL_GATES }} --skip-unsandboxed {{ if hosted_linux == "true" { "--hosted-linux" } else { "" } }} --lane verify-full-sandbox {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }} {{ if partition == "" { "" } else { "--partition " + partition } }}
 
 # The local half of a landing: the host-only gates hosted Verify does not admit, derived from the workflow, run under the lock and GUI lease, reported as the Verify (host) status on HEAD
 [arg('status', long='no-status', value='false')]

@@ -35,7 +35,12 @@ const excludedDirectories = new Set([
 export class QaCapture {
   constructor(private readonly root: string, private readonly capture: Capture) {}
 
-  async run(project: string, options: CaptureOptions): Promise<unknown> {
+  async run(project: string, options: CaptureOptions): Promise<{
+    result: unknown
+    snapshot: string
+    stagedProject: string
+    status: string
+  }> {
     const sourceRoot = await FS.realPath(FS.resolvePath(project, this.root))
     const repositoryRoot = await FS.realPath(this.root)
     if (
@@ -125,10 +130,11 @@ export class QaCapture {
           Errors.throwUserInput('Project content changed while staging QA capture; retry.')
         }
       }
+      // Studio resolves project ownership through a .tao marker. Create a fresh one in the snapshot;
+      // never copy the original project's credentials, sessions, caches or identity.
+      await FS.mkdir(FS.resolvePath('.tao', stagedRoot))
       manifest.status = 'capturing'
       await FS.writeJson(receiptPath, manifest)
-      // Staging omits machine state, but Studio still needs a fresh project-root marker.
-      await FS.writeText(FS.resolvePath('.tao/.gitkeep', stagedRoot), '')
       const result = await this.capture(stagedRoot, { appName: options.app, artifactRoot })
       manifest.cells = await this.cells(result)
       // Capture finishing is not capture succeeding: only a manifest whose every cell was captured completes.
@@ -137,7 +143,7 @@ export class QaCapture {
         : 'partial'
       await FS.writeJson(receiptPath, manifest)
       await FS.writeJson(FS.resolvePath('source-snapshot.json', artifactRoot), manifest)
-      return { result, snapshot: receiptPath, stagedProject: stagedRoot }
+      return { result, snapshot: receiptPath, stagedProject: stagedRoot, status: manifest.status }
     } catch (error) {
       manifest.status = 'blocked'
       manifest.error = Errors.formatForUser(error)

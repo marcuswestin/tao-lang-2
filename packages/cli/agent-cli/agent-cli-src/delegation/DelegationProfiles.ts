@@ -7,6 +7,15 @@ export const DELEGATION_SKILL_PATH = 'agents/skills/delegation/SKILL.md'
 /** The phrases that make a description route work to a profile instead of describing one. */
 const TRIGGER_PHRASES = ['use proactively', 'use when', 'use for']
 
+/**
+ * A skill's description is the only text a harness reads before deciding to load it, so it must say
+ * when, not only what. `Use only when` is the deliberately narrow spelling `second-opinion` needs.
+ */
+const SKILL_TRIGGER = /\bUse (?:only )?(?:when|for|before)\b/
+
+/** The Agent Skills format caps a description at this many characters. */
+const SKILL_DESCRIPTION_LIMIT = 1_024
+
 export type AgentDocument = {
   path: string
   name?: string
@@ -177,9 +186,27 @@ export function delegationIssues(sources: DelegationSources): string[] {
     if (skill.name !== expected) {
       issues.push(`${skill.path} declares name '${skill.name ?? ''}'; it must match its directory '${expected}'.`)
     }
-    if ((skill.description ?? '').trim() === '') {
-      issues.push(`${skill.path} must carry a description; it is what decides whether the skill is ever loaded.`)
-    }
+    issues.push(...skillDescriptionIssues(skill))
+  }
+  return issues
+}
+
+/** skillDescriptionIssues keeps each description present, within the limit, and saying when to load the skill. */
+function skillDescriptionIssues(skill: AgentDocument): string[] {
+  const description = (skill.description ?? '').trim()
+  if (description === '') {
+    return [`${skill.path} must carry a description; it is what decides whether the skill is ever loaded.`]
+  }
+  const issues: string[] = []
+  if (description.length > SKILL_DESCRIPTION_LIMIT) {
+    issues.push(
+      `${skill.path} description is ${description.length} characters; keep it within ${SKILL_DESCRIPTION_LIMIT}.`,
+    )
+  }
+  if (!SKILL_TRIGGER.test(description)) {
+    issues.push(
+      `${skill.path} description must say when to load the skill with "Use when", "Use for", or "Use before".`,
+    )
   }
   return issues
 }
