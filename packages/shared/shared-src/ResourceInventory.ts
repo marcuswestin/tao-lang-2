@@ -510,6 +510,14 @@ async function legacyProjects(
     ['bridge-check.tsconfig.json', 'legacy-project-bridge-check', 'file'],
   ] as const
   for (const root of roots) {
+    // Installed app runs retain launch provenance in their durable local state.
+    // Discover it through the same authored roots as the project metadata.
+    await registrations(
+      FS.resolvePath('.tao/local/resource-inventory', root),
+      candidates,
+      warnings,
+      options.mode === 'startup' ? Math.max(0, MAX_ENTRIES - candidates.length) : Number.POSITIVE_INFINITY,
+    )
     for (const [relative, kind, expected] of paths) {
       const path = FS.resolvePath(`.tao/${relative}`, root)
       try {

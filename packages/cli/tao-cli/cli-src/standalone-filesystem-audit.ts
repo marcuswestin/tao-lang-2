@@ -222,6 +222,10 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     'com.apple.amsaccountsd',
     'com.apple.containermanagerd',
     'com.apple.remindd',
+    'com.apple.AMPLibraryAgent',
+    'com.apple.Spotlight',
+    'com.apple.helpd',
+    'com.apple.tipsd',
   ].map(name => FS.resolvePath(`Library/Caches/${name}`, guestHome))
   const guestSystem = [
     // The base image's login shell runs outside the isolated acceptance HOME.
@@ -246,6 +250,8 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     'Library/HTTPStorages/com.apple.appleaccountd',
     'Library/HTTPStorages/com.apple.appstoreagent',
     'Library/HTTPStorages/com.apple.itunescloudd',
+    'Library/HTTPStorages/com.apple.AMPLibraryAgent',
+    'Library/HTTPStorages/com.apple.tipsd',
     'Library/AppleMediaServices',
     'Library/Application Scripts',
     'Library/Application Support',
@@ -265,6 +271,7 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     'Library/IdentityServices',
     'Library/Keychains',
     'Library/Logs/com.apple.CloudTelemetry',
+    'Library/Logs/DiagnosticReports',
     'Library/Messages',
     'Library/Metadata',
     'Library/Passes',
@@ -282,6 +289,7 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     '/System/Library/AssetsV2',
     '/System/Library/Caches',
     '/Library/Trial',
+    '/Library/OSAnalytics',
     '/Library/Application Support/CrashReporter',
     '/Library/Application Support/com.apple.TCC',
     '/Library/Caches/com.apple.amsengagementd.classicdatavault',
@@ -294,6 +302,20 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     '/private/var/protected',
     '/private/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress',
   ].map(onVolume)
+  const systemExact = [
+    '/Library/CoreAnalytics/taskedConfig.json',
+    '/Library/Receipts/InstallHistory.plist',
+    '/Library/Updates/index.plist',
+  ].map(onVolume)
+  const guestSystemExact = [
+    'Library/Safari/PasswordBreachStore.plist',
+  ].map(path => FS.resolvePath(path, guestHome))
+  const guestSystemTrees = [
+    // Apple documents Movies/TV as the default location for TV media libraries:
+    // https://support.apple.com/en-ie/guide/tvapp-mac/atvebf18f94f/mac
+    'Movies/TV/Media.localized',
+    'Movies/TV/TV Library.tvlibrary',
+  ].map(path => FS.resolvePath(path, guestHome))
   const systemParents = [
     '/System',
     '/System/Library',
@@ -316,6 +338,8 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     '/Volumes',
     '/Volumes/Macintosh HD',
     '/Library/Logs',
+    '/Library/CoreAnalytics',
+    '/Library/Receipts',
     '/Library/Updates',
     '/Library/Updates/ProductMetadata.plist',
     '/private',
@@ -391,6 +415,8 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     FS.resolvePath('Library/Safari', guestHome),
     FS.resolvePath('Library/Photos', guestHome),
     FS.resolvePath('Library/Photos/Libraries', guestHome),
+    FS.resolvePath('Movies', guestHome),
+    FS.resolvePath('Movies/TV', guestHome),
     ...['', '-shm', '-wal'].map(suffix =>
       FS.resolvePath(`Library/Safari/IgnoredSiriSuggestedSites.db${suffix}`, guestHome)
     ),
@@ -509,7 +535,7 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
       || /^cryptex\.personalize\.[A-Za-z0-9]{6}(?:\/im4m)?$/.test(FS.relativePath(guestTemp, path))
       || /^cryptex_personalized_manifest\.[A-Za-z0-9]{6}$/.test(FS.relativePath(guestTemp, path))
     )
-  const allowedSystem = [...system, ...guestSystem, ...guestCache, ...xcodeSystem]
+  const allowedSystem = [...system, ...guestSystem, ...guestCache, ...guestSystemTrees, ...xcodeSystem]
   const changed = [
     ...diff.added,
     ...diff.changed.map(change => change.path),
@@ -526,7 +552,8 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
       return true
     }
     if (
-      xcodeExact.includes(path) || xcodeCryptex(path) || xcodeRemoved(path)
+      xcodeExact.includes(path) || systemExact.includes(path) || guestSystemExact.includes(path)
+      || xcodeCryptex(path) || xcodeRemoved(path)
       || (scope.vmProfile === 'xcode' && xcodeTimestampDirectories.includes(path) && timestampChanged.has(path))
       || (path === newsDirectory && timestampChanged.has(path))
       || observedMetadataChanges.has(path)

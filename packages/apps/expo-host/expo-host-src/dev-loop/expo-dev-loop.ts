@@ -184,6 +184,9 @@ async function runDevLoopWithActiveReporter(
       TAO_DEV_PROJECT_NAME: FS.basename(selection.projectRoot),
     },
     logRoot: ProjectLocal.cacheResolve('logs', selection.projectRoot),
+    ...(installedLauncher === undefined
+      ? {}
+      : { resourceIndexRoot: ProjectLocal.localResolve('resource-inventory', selection.projectRoot) }),
     runtimeToolchainSourceRoot: runtime.sourceRoot,
   })
   const output = DevLoopOutput.start()

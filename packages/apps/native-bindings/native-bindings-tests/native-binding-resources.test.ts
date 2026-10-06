@@ -137,9 +137,11 @@ Describe('installed native binding resource staging', () => {
       await withResources(outputRoot, async () => {
         Expect(TaoStdlib.declaredRoot()).toBe(FS.resolvePath(TaoResources.STDLIB_DIRECTORY, outputRoot))
         Expect(resolveTypeScriptApiEngineInput(root)).toBe(stagedEngine)
-        const inspected = await inspectMaintainedNativeBindings({ sourceRoots: [] })
+        const inspected = await inspectMaintainedNativeBindings()
         Expect(inspected.status).toBe('fresh')
         Expect(inspected.inputPaths).toContain(stagedEngine)
+        Expect(inspected.inputPaths).not.toContain(FS.resolvePath('../../../..', import.meta.dirname))
+        Expect(inspected.inputPaths).not.toContain('/')
       })
     })
   })
