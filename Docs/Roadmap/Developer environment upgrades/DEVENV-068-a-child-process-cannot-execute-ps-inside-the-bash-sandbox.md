@@ -67,6 +67,13 @@
   `.artifacts/logs/verify-changed/2026-10-06T17-35-43-839Z-65220-22a913f9/shared_4.log`,
   `.artifacts/logs/agent/test-file/2026-10-06T17-36-14-969Z-71871.log`, and
   `.artifacts/logs/agent/capabilities/2026-10-06T17-41-04-678Z-32576.log`.
+  The session acquisition dependency is now removed: the shared runtime exposes the current
+  parent PID, and acquisition reads both exact kernel identities directly. The focused file
+  passes all nine cases, including a denied process-table fixture and the existing orphan
+  confirmation, PID-reuse and refusal checks. This preserves the conservative legacy fallback
+  when exact identity inspection fails. Log:
+  `.artifacts/logs/agent/test-file/2026-10-06T18-15-41-071Z-2831.log`.
+  This fixes one repository dependency; it does not establish general subprocess or signal access.
   The same session could inspect the start identity of its failed wrapper, but an exact-PID
   `Platform.signalProcess(pid, 'SIGTERM')` returned `kill() failed: EPERM: Operation not permitted`.
   Its test children were independently absent; stopping that wrapper required the Developer's

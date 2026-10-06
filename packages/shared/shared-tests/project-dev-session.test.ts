@@ -1,7 +1,32 @@
-import { CLI, FS, Platform, ProjectDevSession } from '@shared'
-import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
+import { CLI, Errors, FS, Platform, ProcessTree, ProjectDevSession } from '@shared'
+import { Describe, Expect, mkTestDir, Test, testOverrideSlot, until } from '@shared/test'
+
+const mutableProcessTree = ProcessTree as unknown as { processTable: typeof ProcessTree.processTable }
+const processTableSlot = testOverrideSlot({
+  read: () => ProcessTree.processTable,
+  write: value => mutableProcessTree.processTable = value,
+})
 
 Describe('project development session ownership', () => {
+  Test('records exact owner and parent identities when a process-table subprocess is denied', async () => {
+    const root = await mkTestDir('tao-dev-native-owner-')
+    const restore = processTableSlot.install(() => Errors.throwHostEnvironment('fixture process table denied'))
+    let session: Awaited<ReturnType<typeof ProjectDevSession.acquire>> | undefined
+    try {
+      session = await ProjectDevSession.acquire(root, 'cli')
+      Expect(session.record.version).toBe(2)
+      Expect(session.record.ownerIdentity?.pid).toBe(Platform.runtimeProcess.pid)
+      Expect(session.record.parentIdentity?.pid).toBe(Platform.runtimeProcess.ppid)
+      const identities = ProcessTree.identities([Platform.runtimeProcess.pid, Platform.runtimeProcess.ppid])
+      Expect(session.record.ownerIdentity).toEqual(identities.get(Platform.runtimeProcess.pid))
+      Expect(session.record.parentIdentity).toEqual(identities.get(Platform.runtimeProcess.ppid))
+    } finally {
+      restore()
+      await session?.release()
+      await FS.remove(root)
+    }
+  })
+
   Test('refuses a second process and retains a secret-free completed record', async () => {
     const root = await mkTestDir('tao-dev-owner-')
     const modulePath = FS.resolvePath('../shared-src/ProjectDevSession.ts', import.meta.dir)
