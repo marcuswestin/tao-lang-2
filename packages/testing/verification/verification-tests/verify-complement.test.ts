@@ -52,7 +52,7 @@ Describe('verify-complement', () => {
     Expect(plan.gates.indexOf('_parser-gen')).toBeLessThan(plan.gates.indexOf('studio-smoke'))
   })
 
-  Test('leaves out what hosted Verify admits', () => {
+  Test('leaves out what CI macOS admits', () => {
     const plan = VerifyComplement.plan(FULL_LANE, "env:\n  CI_HOST_GATES: 'studio-smoke'\n")
     Expect(plan.admitted).toEqual(['studio-smoke'])
     Expect(plan.host).toEqual(['studio-canary'])
