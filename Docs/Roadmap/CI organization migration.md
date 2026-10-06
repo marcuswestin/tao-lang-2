@@ -7,8 +7,10 @@ as a follow-up audit. This document does not establish that organization setting
 queue have been enabled or tested.
 
 The current feature-branch landing route is hosted `Verify` plus the local host-only complement,
-started with `./dev open-pr --auto-merge`. The checked-in workflow defaults to ten partitions;
-the `VERIFY_PARTITIONS` repository variable or a dispatch input can override that number.
+started with `./dev open-pr --auto-merge`. The checked-in workflow runs 20 partitions when no
+other `Verify` run is in flight and 11 when one is; the `VERIFY_PARTITIONS` and
+`VERIFY_PARTITIONS_SHARED` repository variables override those two defaults and a dispatch input
+overrides both for one run, and `open-pr` waits before pushing while two runs are already in flight.
 It currently has PR, main-push and dispatch triggers, but no `merge_group` trigger. Complete
 the queue prerequisites before requiring native merge queue. The live landing contract is in
 [`hosted-verification.md`](../../agents/skills/verification-lanes/references/hosted-verification.md).

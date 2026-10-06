@@ -368,7 +368,7 @@ Describe('validator: multiple datasources', () => {
           Navigator StackNav { Initial Main }
           Datasource { Feed, Personal }
         }
-        app Ambiguous = Reader with { id "ambiguous" Datasource with { StorageKey "prod" } }
+        app Ambiguous = Reader with { id "ambiguous", Datasource with { StorageKey "prod" } }
       `,
       datasourceMembershipMessages.ambiguousBindingPatch('Ambiguous'),
     ),
@@ -381,7 +381,7 @@ Describe('validator: multiple datasources', () => {
         ${prelude}
         action Run() { }
         command Ready() { Title "Ready" do Run() }
-        nav Main2 = StackNav { Initial Main Toolbar { Ready with { Title "Go" } } }
+        nav Main2 = StackNav { Initial Main, Toolbar { Ready with { Title "Go" } } }
         datasource Feed = Memory { }
         app Reader { id "reader" version "1.0.0" name "Reader"
           Navigator StackNav { Initial Main }

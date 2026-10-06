@@ -78,7 +78,7 @@ view FocusSessionControls(FocusSession) {
             #resumeFocus
             FormButton("Resume") {
                on press -> { update FocusSession {
-                  EndsAt: now + (FocusSession.EndsAt - FocusSession.PausedAt)
+                  EndsAt: now + (FocusSession.EndsAt - FocusSession.PausedAt),
                   Running
                } }
          }  }

@@ -265,7 +265,12 @@ export async function writeProjectVersion(app: ShipProjectApp, version: ShipVers
       if (close < block.offset) {
         Errors.throwUnexpected(`App '${app.name}' in ${app.sourcePath} has no closing brace.`)
       }
-      replaced = `${source.slice(0, close)}\n   version ${JSON.stringify(version)}\n${source.slice(close)}`
+      // A variant patch is comma-separated; inserting first leaves existing separators intact.
+      const insertion = refinement ? block.offset + 1 : close
+      const separator = refinement && refinement.patchBlock.entries.length > 0 ? ',' : ''
+      replaced = `${source.slice(0, insertion)}\n   version ${JSON.stringify(version)}${separator}\n${
+        source.slice(insertion)
+      }`
     }
     const temporary = ProjectLocal.stagingPath(app.sourcePath, app.projectRoot)
     try {

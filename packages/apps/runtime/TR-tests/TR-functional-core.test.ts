@@ -1,11 +1,119 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
+import { Deferred, Describe, Expect, Test } from '@shared/test'
+import React from 'react'
 
 function identity(name: string): TR.DeclarationIdentity {
   return TR.Navigation.Identity(['tao.declaration', 1, 'tests', '@workspace', 'FunctionalCore', 'enum', name])
 }
 
 Describe('TR functional core', () => {
+  Test('admits native enum names into the selected declaration and rejects unknown names', () => {
+    const cases = TR.Enum(identity('NativeComparison'), ['less', 'equal', 'greater'])
+    const other = TR.Enum(identity('OtherComparison'), ['less', 'equal', 'greater'])
+    const selected = TR.EnumFromJS(cases, 'less')
+    Expect(selected).toBe(cases['less'])
+    Expect(selected).not.toBe(other['less'])
+    Expect(TR.IsCase(selected, cases['less']!).getJSValue()).toBe(true)
+    Expect(TR.IsCase(selected, other['less']!).getJSValue()).toBe(false)
+    Expect(() => TR.EnumFromJS(cases, 'unknown')).toThrow('native result must name a declared case')
+    Expect(() => TR.EnumFromJS(cases, 'toString')).toThrow('native result must name a declared case')
+  })
+
+  Test('retains inferred callable payload types through text and action factories', async () => {
+    const text = TR.Function(() => TR.Value('Typed text'))
+    const result: TR.Value<string> = TR.Call(text)
+    Expect(result.getJSValue()).toBe('Typed text')
+    let calls = 0
+    const factory = TR.Function(() =>
+      TR.Action(() => {
+        calls += 1
+      })
+    )
+    const action: TR.Value<TR.Action['jsValue']> = TR.Call(factory)
+    await TR.Do(action.evaluate())
+    Expect(calls).toBe(1)
+  })
+
+  Test('render when captures every predicate before bodies and preserves source branch keys', () => {
+    let current = true
+    let reads = 0
+    const condition = () => {
+      reads += 1
+      return TR.Value(current)
+    }
+    const rendered = TR.WhenPredicatesRender([
+      [condition, () => {
+        current = false
+        return 'first'
+      }],
+      [condition, () => 'second'],
+    ], () => 'unexpected fallback')
+    const children = React.Children.toArray(rendered)
+    Expect(reads).toBe(2)
+    Expect(children.map(child => React.isValidElement<{ children: string }>(child) ? child.props.children : child))
+      .toEqual(['first', 'second'])
+    Expect(children.map(child => React.isValidElement(child) ? child.key : undefined)).toEqual(['.$0', '.$1'])
+    Expect(TR.WhenPredicatesRender([[condition, () => 'unexpected body']], () => 'fallback')).toBe('fallback')
+    const subject = TR.Value(false)
+    const selected = React.Children.toArray(TR.WhenAllRender(subject, [
+      ['true', () => 'unexpected true'],
+      ['false', () => 'false body'],
+    ]))
+    Expect(selected).toHaveLength(1)
+    Expect(React.isValidElement(selected[0]) ? selected[0].key : undefined).toBe('.$false')
+  })
+
+  Test('action when captures the subject before effects and joins a suspended selected body', async () => {
+    const gate = Deferred()
+    const started = Deferred()
+    const seen: string[] = []
+    let current = true
+    let reads = 0
+    const subject = TR.Alias(() => {
+      reads += 1
+      return TR.Value(current)
+    })
+    const running = TR.Action(() =>
+      TR.WhenAll(subject, [
+        ['true', async () => {
+          current = false
+          seen.push('start')
+          started.resolve()
+          await gate.promise
+          seen.push('finish')
+        }],
+        ['false', () => seen.push('unexpected changed match')],
+      ], () => seen.push('unexpected fallback'))
+    ).jsValue.invoke()
+    await started.promise
+    Expect(reads).toBe(1)
+    Expect(seen).toEqual(['start'])
+    gate.resolve()
+    await running
+    Expect(seen).toEqual(['start', 'finish'])
+    await TR.Action(() =>
+      TR.WhenAll(subject, [['true', () => seen.push('unexpected true')]], () => {
+        seen.push('fallback')
+      })
+    ).jsValue.invoke()
+    Expect(reads).toBe(2)
+    Expect(seen).toEqual(['start', 'finish', 'fallback'])
+  })
+
+  Test('preserves omitted leading slots while a wrapped none suppresses the default', () => {
+    let defaults = 0
+    const format = TR.Function((prefix: TR.Value<string | null> | undefined, count: TR.Value<number>) => {
+      const selected = prefix ?? (() => {
+        defaults += 1
+        return TR.Value('default')
+      })()
+      return TR.Value([selected.getJSValue(), count.getJSValue()])
+    })
+    Expect(TR.Call(format, undefined, TR.Value(2)).getJSValue()).toEqual(['default', 2])
+    Expect(TR.Call(format, TR.Value(null), TR.Value(3)).getJSValue()).toEqual([null, 3])
+    Expect(defaults).toBe(1)
+  })
+
   Test('evaluates operators, interpolation, functions, subject cases, guards, and members', () => {
     Expect(TR.Binary(TR.Value(2), '+', TR.Value(3)).jsValue).toBe(5)
     Expect(TR.Binary(TR.Value(3), '>', TR.Value(2)).jsValue).toBe(true)

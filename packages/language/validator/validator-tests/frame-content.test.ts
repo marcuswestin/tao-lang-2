@@ -28,9 +28,9 @@ Describe('validator: frame content and render injection channels', () => {
       view Main() {
         render Card() {
           Label()
-          @actions Button() {
+          @actions: {
             #resetSignedOut
-            on press -> { }
+            Button() { on press -> { } }
           }
         }
       }
@@ -55,6 +55,16 @@ Describe('validator: frame content and render injection channels', () => {
     `)
   })
 
+  Test('allows repeated named-slot placements', async () => {
+    await testValidateCode(`
+      view Card() {
+        @actions = empty
+        render Col() { @actions @actions @@content }
+      }
+      view Col() { render inject Content @@content ${tsFence} return Content ${fence} }
+    `)
+  })
+
   Test('limits caller content to at most one placement', async () => {
     const result = await testValidateCodeWithErrors(`
       view RepeatedView() {
@@ -76,23 +86,22 @@ Describe('validator: frame content and render injection channels', () => {
     Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.leafContent('Leaf'))
   })
 
-  Test('rejects duplicate slot declarations, placements, and fills', async () => {
+  Test('rejects duplicate slot declarations and fills', async () => {
     const result = await testValidateCodeWithErrors(`
       view Card() {
         @actions = empty
         @actions = empty
-        render Col() { @actions @actions @@content }
+        render Col() { @actions @@content }
       }
       view Col() { render inject Content @@content ${tsFence} return Content ${fence} }
       view Button() { render inject ${tsFence} return null ${fence} }
       view Main() {
-        render Card() { @actions Button() @actions Button() }
+        render Card() { @actions: Button() @actions: Button() }
       }
     `)
 
     const messages = validationErrorMessages(result)
     Expect(messages).toContain(ViewsValidator.messages.duplicateRenderSlot('@actions'))
-    Expect(messages).toContain(ViewsValidator.messages.renderSlotPlacementCount('@actions'))
     Expect(messages).toContain(ViewsValidator.messages.duplicateRenderSlotFill('@actions'))
   })
 

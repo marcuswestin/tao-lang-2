@@ -136,6 +136,28 @@ Describe('tao ship project discovery', () => {
     })
   })
 
+  for (const [name, patch] of [['Trailing', '{ id "notes-trailing", }'], ['Empty', '{ }']] as const) {
+    Test(
+      `writes an inherited version in a variant patch with ${name === 'Trailing' ? 'a trailing comma' : 'no entries'}`,
+      async () => {
+        await withTaoFiles('tao-ship-project-', {
+          'App.tao': projectSource,
+        }, async paths => {
+          const project = await discoverShipProject(paths['App.tao']!)
+          // An empty variant initially duplicates its base's release identity; version it before discovery.
+          await FS.writeText(paths['App.tao']!, `${projectSource}\napp Notes${name} = Notes with ${patch}\n`)
+          await writeProjectVersion({ ...selectShipApp(project, 'Notes')!, name: `Notes${name}` }, '2.0.0-beta.1')
+          const updated = await discoverShipProject(paths['App.tao']!)
+          Expect(selectShipApp(updated, `Notes${name}`)?.version).toBe('2.0.0-beta.1')
+          Expect(selectShipApp(updated, `Notes${name}`)?.id).toBe(name === 'Trailing' ? 'notes-trailing' : 'notes')
+          Expect(selectShipApp(updated, 'Notes')?.version).toBe('1.2.3')
+          Expect(await FS.listDir(FS.resolvePath('.tao/cache/tmp', project.root))).toEqual([])
+          Expect(await FS.listDir(FS.resolvePath('.tao/cache/locks', project.root))).toEqual([])
+        })
+      },
+    )
+  }
+
   Test('reads every provider an app mounts through its variants, declarations, and types', async () => {
     const source = `
 use CloudKit from @tao/data/providers/cloudkit

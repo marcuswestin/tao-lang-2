@@ -1,0 +1,18 @@
+public
+type Comparison is one of less, equal, greater
+
+// Self keeps ordered comparisons within one concrete semantic domain.
+public
+can Ordered {
+   Compare(Other Self) fails never -> Comparison
+}
+
+public
+func UpperCase(Value text) fails never -> text {
+   return UpperCase(Value) from ./Core.ts
+}
+
+public
+func Length where type T is text (Values list of T) fails never -> number {
+   return Values.Count
+}

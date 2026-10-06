@@ -14,9 +14,9 @@ import {
 } from './test-cli-files'
 
 Describe('tao fix', () => {
-  Test('migrates value commas in place through the CLI and leaves the second fix unchanged', async () => {
+  Test('formats comma-separated values in place through the CLI and leaves the second fix unchanged', async () => {
     await withTaoFixture({
-      'Values.tao': 'let Item = item { First: 1 Second: 2 }\nlet Settings = nav { First 1 Second 2 }\n',
+      'Values.tao': 'let Item = item { First: 1, Second: 2 }\nlet Settings = nav { First 1, Second 2 }\n',
     }, async rootDir => {
       const path = FS.resolvePath('Values.tao', rootDir)
       const first = await runTaoCliForTest(['fix', path])

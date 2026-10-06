@@ -49,18 +49,18 @@ action ApplyFocusedCellEnvironment(CellId text, CellRevision number, Preset text
 project
 view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
    render ProductHostBoundary() {
-      @files FilesPanel(CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)
-      @components ComponentsPanel()
-      @projectViews ProjectViewsPanel()
-      @screens ScreensPanel()
-      @tokens DesignTokensPanel()
-      @data StudioDataRailPanel(InitialDataPanel)
-      @search StudioSearchPanel([])
-      @drawer StudioDrawerPanel(Tab: "Problems", Compile: InitialCompilePanel, Problems: InitialProblemsPanel, Data: InitialDataPanel, Debug: InitialDebugPanel, Tests: InitialTestsPanel, Logs: InitialLogsPanel)
-      @scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")
-      @environment StudioEnvironmentPanel(FocusedCellId: "", CellRevision: 0, ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser")
-      @editor StudioCodeEditor()
-      @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", FocusedCellId: "", CellRevision: 0, FocusedScenarioId: "", ViewportWidth: 0, ViewportHeight: 0, InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null", LensLines: [], LensJourneyPath: "")
+      @files: FilesPanel(CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)
+      @components: ComponentsPanel()
+      @projectViews: ProjectViewsPanel()
+      @screens: ScreensPanel()
+      @tokens: DesignTokensPanel()
+      @data Data -> StudioDataRailPanel(Data: Data)
+      @search Rows -> StudioSearchPanel(Rows: Rows)
+      @drawer Tab, Compile, Problems, Data, Debug, Tests, Logs -> StudioDrawerPanel(Tab: Tab, Compile: Compile, Problems: Problems, Data: Data, Debug: Debug, Tests: Tests, Logs: Logs)
+      @scenario State, JourneyRecording, JourneyRecordable, ResolvedAppearance -> StudioScenarioPanel(State: State, JourneyRecording: JourneyRecording, JourneyRecordable: JourneyRecordable, ResolvedAppearance: ResolvedAppearance)
+      @environment FocusedCellId, CellRevision, ViewportPresetId, ViewportWidth, ViewportHeight, NetworkOutcome, NetworkLatencyMs, NetworkErrorMessage, NetworkErrorStatus, SchemeRequested, SchemeResolved, SchemeSource, SchemeCapability -> StudioEnvironmentPanel(FocusedCellId: FocusedCellId, CellRevision: CellRevision, ViewportPresetId: ViewportPresetId, ViewportWidth: ViewportWidth, ViewportHeight: ViewportHeight, NetworkOutcome: NetworkOutcome, NetworkLatencyMs: NetworkLatencyMs, NetworkErrorMessage: NetworkErrorMessage, NetworkErrorStatus: NetworkErrorStatus, SchemeRequested: SchemeRequested, SchemeResolved: SchemeResolved, SchemeSource: SchemeSource, SchemeCapability: SchemeCapability)
+      @editor: StudioCodeEditor()
+      @inspector Revision, ProjectRoot, ActiveFilePath, ActiveFileContent, ActiveFileVersion, SelectionAnchor, SelectionHead, SelectedRenderId, SelectedRenderPath, SelectedRenderVersion, FocusedCellId, CellRevision, FocusedScenarioId, ViewportWidth, ViewportHeight, InspectorBusy, InspectorCanUndo, InspectorInspection, InspectorSelection, LensLines, LensJourneyPath -> StudioContextPanel(Revision: Revision, ProjectRoot: ProjectRoot, ActiveFilePath: ActiveFilePath, ActiveFileContent: ActiveFileContent, ActiveFileVersion: ActiveFileVersion, SelectionAnchor: SelectionAnchor, SelectionHead: SelectionHead, SelectedRenderId: SelectedRenderId, SelectedRenderPath: SelectedRenderPath, SelectedRenderVersion: SelectedRenderVersion, FocusedCellId: FocusedCellId, CellRevision: CellRevision, FocusedScenarioId: FocusedScenarioId, ViewportWidth: ViewportWidth, ViewportHeight: ViewportHeight, InspectorBusy: InspectorBusy, InspectorCanUndo: InspectorCanUndo, InspectorInspection: InspectorInspection, InspectorSelection: InspectorSelection, LensLines: LensLines, LensJourneyPath: LensJourneyPath)
 }  }
 
-view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @environment, @editor, @inspector from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @data(Data StudioDataPanel), @search(Rows list of StudioSearchPanelRow), @drawer(Tab text, Compile StudioCompilePanel, Problems StudioProblemsPanel, Data StudioDataPanel, Debug StudioDebugPanel, Tests StudioTestsPanel, Logs StudioLogsPanel), @scenario(State text, JourneyRecording text, JourneyRecordable boolean, ResolvedAppearance text), @environment(FocusedCellId text, CellRevision number, ViewportPresetId text, ViewportWidth number, ViewportHeight number, NetworkOutcome text, NetworkLatencyMs number, NetworkErrorMessage text, NetworkErrorStatus number, SchemeRequested text, SchemeResolved text, SchemeSource text, SchemeCapability text), @editor, @inspector(Revision number, ProjectRoot text, ActiveFilePath text, ActiveFileContent text, ActiveFileVersion text, SelectionAnchor number, SelectionHead number, SelectedRenderId text, SelectedRenderPath text, SelectedRenderVersion text, FocusedCellId text, CellRevision number, FocusedScenarioId text, ViewportWidth number, ViewportHeight number, InspectorBusy boolean, InspectorCanUndo boolean, InspectorInspection text, InspectorSelection text, LensLines list of text, LensJourneyPath text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx

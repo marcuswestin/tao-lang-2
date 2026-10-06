@@ -12,6 +12,8 @@ import type {
   TaoDataWriteIntent,
   TaoDescriptorValue,
   TaoEntityAvailability,
+  TaoFillOps,
+  TaoFillRequest,
   TaoQueryDescriptor,
   TaoQueryPlan,
 } from './TR-data'
@@ -32,6 +34,7 @@ import {
   type StoredData,
   type StoredRow,
 } from './TR-data-persistence'
+import { registerQueryContext } from './TR-data-query-context'
 import { type DataStatus, emitDataChange } from './TR-data-registry'
 import {
   compare,
@@ -48,6 +51,7 @@ import {
   errorMessage,
   HostEnvironmentError,
   reportUnownedFailure,
+  TaoActionFailure,
   UnexpectedBehaviorError,
   UserInputError,
 } from './TR-errors'
@@ -587,6 +591,15 @@ export class RuntimeDataSchema {
 
   query(plan: TaoQueryPlan): unknown[] {
     const entity = this.requireEntity(plan.entity)
+    if (plan.pageSize !== undefined) {
+      RuntimeAssert.input(
+        Number.isSafeInteger(plan.pageSize) && plan.pageSize > 0,
+        'A paginated query requires a positive integral page size.',
+      )
+      if (this.status === 'ready') {
+        RuntimeAssert.input(this.connection.pagedQueries === true, 'This datasource does not support bounded pages.')
+      }
+    }
     const filters = plan.filters.map(filter => ({
       filter,
       expected: queryFilterValue(plan.entity, entity, filter, this),
@@ -631,6 +644,35 @@ export class RuntimeDataSchema {
       Refreshing: { configurable: true, value: fill?.status === 'filling' && filled },
       Stale: { configurable: true, value: fill?.status === 'failed' && filled },
     })
+    const generation = this.generation
+    const descriptor = this.fillDescriptor(plan)
+    const observedKey = this.queryActivationKey(plan)
+    registerQueryContext(limited, () => {
+      RuntimeAssert.input(generation === this.generation, 'This query belongs to an inactive datasource connection.')
+      const connection = this.connection
+      return {
+        connection,
+        descriptor,
+        run: operation => {
+          RuntimeAssert.input(
+            generation === this.generation,
+            'This query belongs to an inactive datasource connection.',
+          )
+          const key = observedKey
+          RuntimeAssert.input(key !== undefined, 'This datasource does not support query acquisition.')
+          const previous = this.fills.get(key)
+          RuntimeAssert.input(previous?.status !== 'filling', 'This query is already fetching.')
+          return this.startFill(
+            key,
+            plan,
+            previous,
+            (_request, ops) => operation(connection, descriptor, ops),
+            true,
+            descriptor,
+          )
+        },
+      }
+    })
     return limited
   }
 
@@ -652,9 +694,8 @@ export class RuntimeDataSchema {
       ([left], [right]) => left < right ? -1 : 1,
     )
     const order = this.effectiveOrder(plan)
-    return JSON.stringify(
-      [plan.entity, order?.field ?? null, order?.direction ?? null, plan.limit ?? null, where],
-    )
+    const identity = [plan.entity, order?.field ?? null, order?.direction ?? null, plan.limit ?? null, where]
+    return JSON.stringify(plan.pageSize === undefined ? identity : [...identity, { pageSize: plan.pageSize }])
   }
 
   /**
@@ -716,15 +757,24 @@ export class RuntimeDataSchema {
     return key === undefined ? undefined : this.fills.get(key)
   }
 
-  private startFill(key: string, plan: TaoQueryPlan, previous: FillState | undefined): void {
+  private startFill(
+    key: string,
+    plan: TaoQueryPlan,
+    previous: FillState | undefined,
+    fill: (request: TaoFillRequest, ops: TaoFillOps) => Promise<void> = this.connection.fill!,
+    propagate = false,
+    observedDescriptor?: TaoQueryDescriptor,
+  ): Promise<void> {
     const generation = this.generation
-    const fill = this.connection.fill!
     this.fills.set(key, { filledAtMs: previous?.filledAtMs, message: '', status: 'filling' })
     this.emit()
-    const request = { descriptor: this.fillDescriptor(plan) }
+    const request = { descriptor: observedDescriptor ?? this.fillDescriptor(plan) }
     const ops = {
       upsert: (entity: string, rows: readonly Record<string, unknown>[]): void => {
         if (generation !== this.generation) {
+          if (propagate) {
+            throw new TaoActionFailure('cancelled', 'The datasource changed while fetching.')
+          }
           return
         }
         this.upsertFromFill(entity, rows)
@@ -733,6 +783,9 @@ export class RuntimeDataSchema {
     const pending = Promise.resolve().then(() => fill(request, ops)).then(
       () => {
         if (generation !== this.generation) {
+          if (propagate) {
+            throw new TaoActionFailure('cancelled', 'The datasource changed while fetching.')
+          }
           return
         }
         this.fills.set(key, { filledAtMs: Clock.now(), message: '', status: 'ready' })
@@ -740,6 +793,9 @@ export class RuntimeDataSchema {
       },
       error => {
         if (generation !== this.generation) {
+          if (propagate) {
+            throw error
+          }
           return
         }
         this.fills.set(key, {
@@ -748,11 +804,17 @@ export class RuntimeDataSchema {
           status: 'failed',
         })
         this.emit()
+        if (propagate) {
+          throw error
+        }
       },
-    ).finally(() => {
-      this.pendingFills.delete(pending)
+    )
+    // Query observers settle without throwing; the joined action separately retains its failure.
+    const tracked = pending.then(() => undefined, () => undefined).finally(() => {
+      this.pendingFills.delete(tracked)
     })
-    this.pendingFills.add(pending)
+    this.pendingFills.add(tracked)
+    return pending
   }
 
   private fillDescriptor(plan: TaoQueryPlan): TaoQueryDescriptor {
@@ -770,6 +832,7 @@ export class RuntimeDataSchema {
     return {
       entity: plan.entity,
       ...(plan.limit !== undefined ? { limit: plan.limit } : {}),
+      ...(plan.pageSize !== undefined ? { pageSize: plan.pageSize } : {}),
       ...(order !== undefined ? { orderBy: order.field, orderDirection: order.direction } : {}),
       where,
     }
@@ -1229,6 +1292,31 @@ export class RuntimeDataSchema {
       { context },
     )
     return metadata.id
+  }
+
+  /** Native adapters obtain the current connection only from an owned, present entity handle. */
+  nativeEntityContext(handle: RuntimeEntityHandle): Readonly<{
+    connection: TaoDataConnection
+    entity: string
+    id: string
+    notifyMetadataChanged(): void
+  }> {
+    const metadata = this.requireOwnedHandle(handle)
+    this.requireReady('access')
+    RuntimeAssert.input(
+      this.storedRow(metadata.entity, metadata.id),
+      `This operation refers to unavailable ${metadata.entity} '${metadata.id}'.`,
+    )
+    return {
+      connection: this.connection,
+      entity: metadata.entity,
+      id: metadata.id,
+      notifyMetadataChanged: () => {
+        // Reauthenticate retained native contexts before notifying mounted data consumers.
+        this.nativeEntityContext(handle)
+        this.emit()
+      },
+    }
   }
 
   availability(handle: RuntimeEntityHandle): TaoEntityAvailability {
@@ -1721,6 +1809,11 @@ export class RuntimeDataSchema {
       this.providerUnsubscribe = connection.subscribe({
         error: error => this.failSubscription(generation, error),
         snapshot: value => this.receiveSnapshot(generation, value),
+        metadataChanged: () => {
+          if (generation === this.generation && connection === this.connection) {
+            this.emit()
+          }
+        },
       })
     } catch (error) {
       this.failSubscription(generation, error)

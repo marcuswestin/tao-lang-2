@@ -29,7 +29,7 @@ scene DocumentScreen(Document) {
    render Col() [grow] {
       // The screen names the one case it words itself; loading, unauthorized, and error go to the net.
       guard Document {
-         missing -> {
+         none -> {
             TextMultiline("Document { Document.Id } no longer exists.") [body] // a handle keeps its Id
       }  }
       DocumentEditor(Document)
@@ -98,7 +98,7 @@ view DocumentEditor(Document) {
       // action for the very save it announces, reading the values captured above.
       present SavedToast(Revert: -> {
          update Document {
-            Title: PreviousTitle
+            Title: PreviousTitle,
             Body: PreviousBody
          }
          set Input.Title = PreviousTitle
@@ -112,8 +112,8 @@ view DocumentEditor(Document) {
       set DetachedParagraphText = ParagraphText
       async {
          create Paragraph {
-            Text: DetachedParagraphText
-            Ordering: Paragraphs.Count + 1
+            Text: DetachedParagraphText,
+            Ordering: Paragraphs.Count + 1,
             Document
       }  }
       set ParagraphText = ""
@@ -229,13 +229,13 @@ view ConfirmCloseDialogue(Document) responds ConfirmResult {
 let ParagraphGoal = 10
 
 // A function body is a block and hands its result back with `return`, so an early return can
-// take a guard's place. `returns <type>` is optional and inferred when omitted.
-function DocumentLabel(Title text) returns text {
+// take a guard's place. `-> <type>` is optional and inferred when omitted.
+func DocumentLabel(Title text) -> text {
    return "Document: { Title }"
 }
 
 // A fraction between 0 and 1 for `Progress`.
-function GoalFraction(Count number) {
+func GoalFraction(Count number) {
    if Count == 0 {
       return 0
    }

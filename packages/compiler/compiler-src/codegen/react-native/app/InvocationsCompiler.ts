@@ -1,10 +1,14 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Assert } from '@shared'
+import { Assert, Switch } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { actionBlockInterruptsAsk, actionBlockRequiresAsync } from './action-control-flow'
+import { compileValueForType } from './capability-projection'
 import { compileReactiveArgument } from './reactive-parameters'
+import { compileForwardedSlotSelection, emitSlotBody } from './renderer-slot-codegen'
+import { compileStructuralUiRender } from './structural-ui-render-codegen'
+import { compileBareTextRender } from './ui-render-codegen'
 
 export const InvocationsCompiler = {
   /** RenderStatementBody compiles a Tao render statement into a JSX fragment. */
@@ -24,47 +28,62 @@ export const InvocationsCompiler = {
   /** Render compiles a Tao view invocation into a JSX fragment. */
   Render(render: AST.Render, options: CodegenOptions = {}): Compiled {
     const target = ASTUtils.resolveRenderTarget(render)
-    Assert.defined(target, 'validated render names a view, a nav, or a parameter', { render: render.view?.$refText })
-    if (target.kind !== 'view') {
-      return Compile.RenderOccurrence(render, target, options)
-    }
-    const invocation = ASTUtils.resolveRenderInvocation(render)
-    const view = invocation.view
-    Assert.defined(view, 'validated render targets a view declaration', { render: render.view?.$refText })
-    Assert(invocation.diagnostics.length === 0, 'validated render invocation has no binding diagnostics')
-    Assert(invocation.eventDiagnostics.length === 0, 'validated render events have no binding diagnostics')
+    Assert.defined(target, 'validated render names a supported visual or text value', { render: render.view?.$refText })
+    return Switch.on(target, 'kind', {
+      ui: target => studioLensRender(render, compileStructuralUiRender(render, target, options), options),
+      rendered: target => studioLensRender(render, compileStructuralUiRender(render, target, options), options),
+      text: target => {
+        return studioLensRender(
+          render,
+          compileBareTextRender(
+            render,
+            target.expression !== undefined ? target.expression : target.declaration,
+            options,
+          ),
+          options,
+        )
+      },
+      nav: target => Compile.RenderOccurrence(render, target, options),
+      parameter: target => Compile.RenderOccurrence(render, target, options),
+      view: () => {
+        const invocation = ASTUtils.resolveRenderInvocation(render)
+        const view = invocation.view
+        Assert.defined(view, 'validated render targets a view declaration', { render: render.view?.$refText })
+        Assert(invocation.diagnostics.length === 0, 'validated render invocation has no binding diagnostics')
+        Assert(!invocation.genericDiagnostics?.length, 'validated generic render has one bounded specialization')
+        Assert(invocation.eventDiagnostics.length === 0, 'validated render events have no binding diagnostics')
 
-    const renderArguments = Compile.RenderArguments(invocation)
-    const viewName = AST.isQuotedRender(render) ? gen`__tao_quoted_Text$` : gen.scopeName(view)
-    const taoProps = Compile.RenderTaoProps(render, options)
-    const block = render.block
-    const slotFills = AST.renderSlotUsesOf(block).filter(
-      (use): use is AST.RenderSlotUse & { render: AST.ViewRender } => use.render !== undefined,
-    )
-    if (block && slotFills.length > 0) {
-      return Compile.RenderWithSlots(render, view, renderArguments, taoProps, block, slotFills, options)
-    }
-    const children = AST.statementsOf(block).filter(statement =>
-      !AST.isEventHandler(statement)
-      && !(AST.isTagStatement(statement) && AST.isSlotFillRootTag(statement))
-      && !(AST.isRenderSlotUse(statement) && statement.render)
-    )
-    if (children.length === 0) {
-      return studioLensRender(render, gen`<${viewName}${renderArguments}${taoProps} />`, options)
-    }
-    Assert.defined(block, 'render with child statements has a child block')
+        const renderArguments = Compile.RenderArguments(invocation)
+        const viewName = AST.isQuotedRender(render) ? gen`__tao_quoted_Text$` : gen.scopeName(view)
+        const taoProps = Compile.RenderTaoProps(render, options)
+        const block = render.block
+        const slotFills = AST.renderSlotUsesOf(block).filter(AST.isRenderSlotFill)
+        if (block && slotFills.length > 0) {
+          return Compile.RenderWithSlots(render, view, renderArguments, taoProps, block, slotFills, options)
+        }
+        const children = AST.statementsOf(block).filter(statement =>
+          !AST.isEventHandler(statement)
+          && !(AST.isTagStatement(statement) && AST.isSlotFillRootTag(statement))
+          && !(AST.isRenderSlotUse(statement) && statement.render)
+        )
+        if (children.length === 0) {
+          return studioLensRender(render, gen`<${viewName}${renderArguments}${taoProps} />`, options)
+        }
+        Assert.defined(block, 'render with child statements has a child block')
 
-    return studioLensRender(
-      render,
-      gen`
-      <${viewName}${renderArguments}${taoProps}>
-        {TR.BlockScope(_Scope, _Scope => {
-          ${Compile.RenderBlockBody(block, options)}
-        })}
-      </${viewName}>
-    `,
-      options,
-    )
+        return studioLensRender(
+          render,
+          gen`
+          <${viewName}${renderArguments}${taoProps}>
+            {TR.BlockScope(_Scope, _Scope => {
+              ${Compile.RenderBlockBody(block, options)}
+            })}
+          </${viewName}>
+        `,
+          options,
+        )
+      },
+    })
   },
 
   /**
@@ -74,7 +93,10 @@ export const InvocationsCompiler = {
    * its clauses and its tag, and the validator has already refused arguments, content, and events.
    */
   RenderOccurrence(render: AST.Render, target: ASTUtils.RenderTarget, options: CodegenOptions = {}): Compiled {
-    Assert(target.kind !== 'view', 'a view target compiles as an invocation')
+    Assert(
+      target.kind === 'nav' || target.kind === 'parameter',
+      'a navigation or bound visual target compiles as an occurrence',
+    )
     const declaration = target.kind === 'nav' ? target.declaration : target.parameter
     return studioLensRender(
       render,
@@ -88,7 +110,7 @@ export const InvocationsCompiler = {
   /** RenderArguments compiles render invocation arguments into JSX props. */
   RenderArguments(invocation: ASTUtils.ResolvedRenderInvocation): Compiled {
     return gen`
-      ${gen.join(invocation.pairs, Compile.InvocationArgument, { separator: '' })}
+      ${gen.join(invocation.pairs, pair => Compile.InvocationArgument(pair, invocation), { separator: '' })}
       ${gen.join(invocation.eventPairs, Compile.EventHandlerArgument, { separator: '' })}
       ${invocation.implicitChange ? Compile.ImplicitChangeArgument(invocation.implicitChange) : ''}
     `
@@ -101,7 +123,7 @@ export const InvocationsCompiler = {
     renderArguments: Compiled,
     taoProps: Compiled,
     block: AST.Block,
-    slotFills: readonly (AST.RenderSlotUse & { render: AST.ViewRender })[],
+    slotFills: readonly AST.RenderSlotUse[],
     options: CodegenOptions = {},
   ): Compiled {
     const setupStatements = block.statements.filter(statement =>
@@ -128,22 +150,25 @@ export const InvocationsCompiler = {
 
   /** RenderSlotProps compiles opaque named visual fills into private generated component props. */
   RenderSlotProps(
-    slotFills: readonly (AST.RenderSlotUse & { render: AST.ViewRender })[],
+    slotFills: readonly AST.RenderSlotUse[],
     options: CodegenOptions = {},
   ): Compiled {
     return gen` __taoSlots={{
       ${
       gen.list(
         slotFills,
-        fill => gen`${gen.jsLiteral(fill.slot.$refText)}: ${Compile.Render(fill.render, options)},`,
+        fill => compileSlotFill(fill, options),
       )
     }
     }}`
   },
 
   /** InvocationArgument compiles one render invocation argument into a JSX prop. */
-  InvocationArgument(pair: ASTUtils.RenderInvocationPair): Compiled {
-    let value = Compile.Argument(pair.argument)
+  InvocationArgument(pair: ASTUtils.RenderInvocationPair, invocation?: ASTUtils.ResolvedRenderInvocation): Compiled {
+    const source = Type.genericRoleConstructor(pair.argument)?.value ?? pair.argument.value
+    let value = compileReactiveArgument(source)
+    const expected = invocation?.transportTypes?.get(pair.parameter) ?? Type.ofParameter(pair.parameter)
+    value = compileValueForType(value, Type.ofExpression(source), expected)
     const render = pair.argument.$container?.$container
     if (pair.parameter.mutable && Type.parameterName(pair.parameter) === 'Value' && AST.isRender(render)) {
       const invocation = ASTUtils.resolveRenderInvocation(render)
@@ -155,7 +180,7 @@ export const InvocationsCompiler = {
         ? Compile.Argument(argument.argument)
         : undefined
       if (change) {
-        value = gen`TR.Mapped(() => ${Compile.Expression(pair.argument.value)}, ${change})`
+        value = gen`TR.Mapped(() => ${Compile.Expression(source)}, ${change})`
       }
     }
     return gen` ${gen.Name({ name: Type.parameterName(pair.parameter) })}={${value}}`
@@ -186,7 +211,7 @@ export const InvocationsCompiler = {
   EventHandlerBodyAction(pair: ASTUtils.RenderEventBindingPair): Compiled {
     const handler = pair.handler
     if (handler.action) {
-      return Compile.Expression(handler.action)
+      return gen`TR.BindEventAction(${Compile.Expression(handler.action)}, _TaoActionOwner)`
     }
     Assert.defined(handler.block, 'inline event handler has an action block')
     const parameterType = Type.ofParameter(pair.parameter)
@@ -204,11 +229,12 @@ export const InvocationsCompiler = {
         ? gen`_TaoEventValue: ${Compile.RuntimeType(eventInput.type)}`
         : ''
     }) => {
-        const _TaoActionContinuation = TR.ActionContinuation()
-        return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
-          ${handler.payload ? gen`${gen.scopeName(handler.payload)} = _TaoEventValue` : ''}
-          ${Compile.ActionBlockBody(handler.block)}
-        })
+        return ${
+      Compile.ActionScopedBlock(
+        handler.block,
+        handler.payload ? gen`${gen.scopeName(handler.payload)} = _TaoEventValue` : gen.noop(),
+      )
+    }
       }, { owner: _TaoActionOwner, ${actionBlockInterruptsAsk(handler.block) ? gen`interrupt: true` : gen``} })
     `
   },
@@ -231,6 +257,53 @@ export const InvocationsCompiler = {
     `
   },
 } as const
+
+/** compileSlotFill emits an explicit null or a fresh descriptor for one caller-owned fill. */
+function compileSlotFill(fill: AST.RenderSlotUse, options: CodegenOptions): Compiled {
+  const contract = fill.slot.ref
+  Assert.defined(contract, 'validated slot fill resolves its receiving contract')
+  const body = AST.renderSlotBodyOf(fill)
+  if (body.kind === 'empty') {
+    return gen`${gen.jsLiteral(fill.slot.$refText)}: null,`
+  }
+  if (body.kind === 'forwarded') {
+    const comparison = ASTUtils.compareRendererSlotForwarding(fill)
+    Assert(comparison?.compatible, 'validated forwarding has a safe input correspondence')
+    if (
+      comparison.correspondence.every(pair => {
+        if (pair.required.labelName !== pair.supplied.labelName) {
+          return false
+        }
+        if (!ASTUtils.containsCapability(pair.supplied.type)) {
+          return true
+        }
+        const transport = ASTUtils.planCapabilityTransport(pair.required.type, pair.supplied.type)
+        return transport.kind === 'ready' && transport.plan.kind === 'identity'
+      })
+    ) {
+      return gen`${gen.jsLiteral(fill.slot.$refText)}: ${compileForwardedSlotSelection(fill)},`
+    }
+  }
+  Assert(body.kind !== 'absent', 'validated slot fill has a body')
+  const environment = gen`{
+    _Scope,
+    _ViewProps,
+    _TaoActionOwner,
+    _TaoAuthScope,
+    _TaoSlotDefaults,
+  }`
+  const renderer = emitSlotBody({
+    anchor: fill,
+    contract,
+    body: fill,
+    options,
+    environment,
+  })
+  const selected = body.kind === 'forwarded'
+    ? gen`${compileForwardedSlotSelection(fill)} === null ? null : ${renderer}`
+    : renderer
+  return gen`${gen.jsLiteral(fill.slot.$refText)}: ${selected},`
+}
 
 /** studioLensRender wraps exactly each preview occurrence while leaving test and production output untouched. */
 function studioLensRender(render: AST.Render, child: Compiled, options: CodegenOptions): Compiled {

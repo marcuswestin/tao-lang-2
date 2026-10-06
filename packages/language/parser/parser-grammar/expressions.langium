@@ -8,6 +8,7 @@ import "./configuration"
 import "./types"
 import "./terminals"
 import "./restoration"
+import "./numeric-units"
 
 entry ExpressionsGrammarEntrypoint:
     ArgumentList | Expression | FunctionDeclaration | PhraseDeclaration;
@@ -21,10 +22,21 @@ Argument:
 ArgumentValue infers Expression:
     Expression;
 
-// `returns` accepts a full type expression so `returns { ... } { body }` parses.
+// Both return spellings accept a full type expression, including structural records.
 FunctionDeclaration:
-    visibility=DeclarationVisibility? 'function' name=ID parameterList=ParameterList
-    ('returns' returnType=TypeExpression)? block=FunctionBlock;
+    visibility=DeclarationVisibility? ('func' | 'function') name=ID
+    ('where' genericParameters+=GenericTypeParameter (',' genericParameters+=GenericTypeParameter)*)?
+    parameterList=ParameterList
+    ('fails' failureBound=ID (',' additionalFailureBounds+=ID)*)? (('->' | 'returns') returnType=TypeExpression)? block=FunctionBlock;
+
+// Associated methods inherit their owner's visibility and keep their own callable identity.
+AssociatedFunctionDeclaration:
+    static?='static'? 'func' (receiverName=ID '.')? name=AssociatedFunctionName ('where' genericParameters+=GenericTypeParameter (',' genericParameters+=GenericTypeParameter)*)?
+    parameterList=ParameterList ('fails' failureBound=ID (',' additionalFailureBounds+=ID)*)?
+    ('->' returnType=TypeExpression)? block=FunctionBlock;
+
+AssociatedFunctionName returns string:
+    ID | '+' | '-' | '*' | '/' | '==' | '!=' | '<' | '<=' | '>' | '>=';
 
 FunctionBlock:
     '{' statements+=FunctionStatement* '}';
@@ -90,28 +102,36 @@ DeclarationSlotComparisonExpression infers Expression:
     ({infer BinaryExpression.left=current} operator=('<=' | '>=' | '<' | '>') right=CaseTestExpression)*;
 
 DeclarationSlotCaseTestExpression infers Expression:
-    DeclarationSlotAdditionExpression
+    DeclarationSlotConversionExpression
     ({infer CaseTestExpression.value=current} 'is' negated?='not'?
         (builtinCase=BuiltInSubjectCaseName | declaredCase=[CaseDeclaration:ID]))?;
+
+DeclarationSlotConversionExpression infers Expression:
+    DeclarationSlotAdditionExpression ({infer ConversionExpression.value=current} 'as' target=TypeReference)*;
 
 DeclarationSlotAdditionExpression infers Expression:
     DeclarationSlotMultiplicationExpression
     ({infer BinaryExpression.left=current} operator=('+' | '-') right=MultiplicationExpression)*;
 
 DeclarationSlotMultiplicationExpression infers Expression:
-    DeclarationSlotUnaryExpression
-    ({infer BinaryExpression.left=current} operator=('*' | '/') right=UnaryExpression)*;
+    DeclarationSlotNumericUnitExpression
+    ({infer BinaryExpression.left=current} operator=('*' | '/') right=NumericUnitExpression)*;
+
+DeclarationSlotNumericUnitExpression infers Expression:
+    RequiredNumericUnitConstruction | DeclarationSlotUnaryExpression;
 
 DeclarationSlotUnaryExpression infers Expression:
     ({infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression)
     | DeclarationSlotPostfixExpression;
 
 DeclarationSlotPostfixExpression infers Expression:
-    DeclarationSlotPrimaryExpression ({infer PostfixMemberAccess.receiver=current} '.' member=ID)*;
+    DeclarationSlotPrimaryExpression
+    ({infer PostfixMemberAccess.receiver=current} '.' member=ID
+      ({infer MethodCallExpression.callee=current} '(' argumentList=ArgumentList? ')')?)*;
 
 DeclarationSlotPrimaryExpression infers Expression:
     CopyExpression | WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor
-    | ConfigurationConstructor | ListLiteral | MemberAccessExpression
+    | ConfigurationConstructor | ListLiteral | MemberMethodCallExpression | MemberAccessExpression
     | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral
     | FunctionCallExpression | RefinementExpression | ValueReference;
 
@@ -134,24 +154,33 @@ ComparisonExpression infers Expression:
     CaseTestExpression ({infer BinaryExpression.left=current} operator=('<=' | '>=' | '<' | '>') right=CaseTestExpression)*;
 
 CaseTestExpression infers Expression:
-    AdditionExpression ({infer CaseTestExpression.value=current} 'is' negated?='not'?
+    ConversionExpression ({infer CaseTestExpression.value=current} 'is' negated?='not'?
         (builtinCase=BuiltInSubjectCaseName | declaredCase=[CaseDeclaration:ID]))?;
+
+ConversionExpression infers Expression:
+    AdditionExpression ({infer ConversionExpression.value=current} 'as' target=TypeReference)*;
 
 AdditionExpression infers Expression:
     MultiplicationExpression ({infer BinaryExpression.left=current} operator=('+' | '-') right=MultiplicationExpression)*;
 
 MultiplicationExpression infers Expression:
-    UnaryExpression ({infer BinaryExpression.left=current} operator=('*' | '/') right=UnaryExpression)*;
+    NumericUnitExpression ({infer BinaryExpression.left=current} operator=('*' | '/') right=NumericUnitExpression)*;
+
+// A signed literal is the construction input; negating a grouped quantity stays an outer unary.
+NumericUnitExpression infers Expression:
+    RequiredNumericUnitConstruction | UnaryExpression;
 
 // Postfix `.member` on any primary carries unit accessors (`1.ms`, `(1.cm).meters`).
 UnaryExpression infers Expression:
     ({infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression) | PostfixExpression;
 
 PostfixExpression infers Expression:
-    PrimaryExpression ({infer PostfixMemberAccess.receiver=current} '.' member=ID)*;
+    PrimaryExpression
+    ({infer PostfixMemberAccess.receiver=current} '.' member=ID
+      ({infer MethodCallExpression.callee=current} '(' argumentList=ArgumentList? ')')?)*;
 
 PrimaryExpression infers Expression:
-    '(' Expression ')' | CopyExpression | WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | RefinementExpression | ValueReference;
+    '(' Expression ')' | CopyExpression | WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberMethodCallExpression | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | RefinementExpression | ValueReference;
 
 CopyExpression:
     'copy' value=PostfixExpression ('as' type=TypeReference)?;
@@ -159,7 +188,14 @@ CopyExpression:
 // A bare configuration block instantiates a declared type. `with` is reserved for copying and
 // patching an existing configured value.
 ConfigurationConstructor:
-    type=[ConstructorDeclaration:ID] ('.' members+=ID)* (block=ConfigurationBlock | value=DeclaredConstructorValue);
+    relative?='.' type=[ConstructorDeclaration:ID] ('.' members+=ID)*
+      (block=ConfigurationBlock | value=DeclaredConstructorValue)
+    | type=[ConstructorDeclaration:ID] ('.' members+=ID)*
+      (block=ConfigurationBlock | value=UnparenthesizedDeclaredConstructorValue);
+
+// A typed block is a directive boundary without admitting adjacent scalar values.
+ConfigurationBlockConstructor infers ConfigurationConstructor:
+    type=[ConstructorDeclaration:ID] block=ConfigurationBlock;
 
 // `with` is the one refinement operation. Primitive constructors accept the bare-block
 // construction sugar as well as its explicit spelling.
@@ -174,21 +210,29 @@ InferredConfigurationConstructor:
     block=ConfigurationBlock;
 
 type ConfiguredValue = ConfigurationConstructor;
-type ConstructorDeclaration = TypeDeclaration | ParameterizedDeclaration;
+type ConstructorDeclaration = TypeDeclaration | ParameterizedDeclaration | ParameterTypeDeclaration;
 
 ConfigurationBlock:
-    '{' (entries+=ConfigurationEntry (','? entries+=ConfigurationEntry)*)? '}';
+    '{' (entries+=ConfigurationDirective ','?)*
+    (ConfigurationValues (entries+=ConfigurationDirective ','? ConfigurationValues?)*)? '}';
+
+fragment ConfigurationValues:
+    entries+=ConfigurationValueEntry (',' entries+=ConfigurationValueEntry)* ','?;
 
 // `view Shell(Other)` in an app variant's patch rebinds the root view the way a property entry rebinds
 // a slot; it is legal only where an app value is being configured, which the validator enforces.
-ConfigurationEntry:
+ConfigurationDirective infers ConfigurationEntry:
     restoration=RestorationPolicy
     | rootView=AppView
     | requirement=PackageRequires
     | appGuard=AppGuardStatement
     | key=USE_IMPORT_PATH block=ConfigurationBlock
-    | label=ID ':' expression=Expression
-    | name=MetadataName ('.' nameMembers+=ID)* (value=ConfigurationValue | block=ConfigurationBlock)
+    | name=MetadataName ('.' nameMembers+=ID)* block=ConfigurationBlock
+    | name=MetadataName ('.' nameMembers+=ID)* value=ConfigurationBlockConstructor;
+
+ConfigurationValueEntry infers ConfigurationEntry:
+    label=ID ':' expression=Expression
+    | name=MetadataName ('.' nameMembers+=ID)* value=ConfigurationValue
     | memberReference=MemberAccessExpression
     | reference=[ListedDeclaration:ID]
     | expression=NonIdentifierConstructorEntryValue;
@@ -204,8 +248,15 @@ type ListedDeclaration = ValueDeclaration | EntityDataDeclaration;
 // edge, which is what makes a slot's presence a property of the data rather than of layout.
 ConfigurationValue:
     PropertyConfigurationPatch | ConfigurationConstructor | ConfigurationKeyValue | WhenExpression
-    | NoneLiteral | ListLiteral | StringLiteral | NumberLiteral | BooleanLiteral | ViewBinding
-    | ConfigurationReference;
+    | NoneLiteral | ListLiteral | StringLiteral | RequiredNumericUnitConstruction | NumberLiteral | BooleanLiteral
+    | ViewBinding | ConfigurationReference;
+
+RequiredNumericUnitConstruction infers NumericUnitConstruction:
+    input=NumericUnitConstructionInput unit=[NumericUnitDeclaration:NumericUnitName];
+
+NumericUnitConstructionInput infers Expression:
+    '(' Expression ')' | NumberLiteral
+    | ({infer UnaryExpression} operator='-' operand=NumberLiteral);
 
 // A parameterized view remains a first-class presentation descriptor in configuration position.
 // Its arguments are captured as live bindings when the owning nav is configured; this is distinct
@@ -214,7 +265,8 @@ ViewBinding:
     view=[ViewDeclaration:ID] '(' argumentList=ArgumentList? ')';
 
 NonIdentifierConstructorEntryValue infers Expression:
-    TypedConstructor | ListLiteral | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral;
+    TypedConstructor | ListLiteral | InterpolatedString | StringLiteral | RequiredNumericUnitConstruction
+    | NumberLiteral | BooleanLiteral | NoneLiteral;
 
 PropertyConfigurationPatch:
     'with' block=ConfigurationBlock;
@@ -233,7 +285,9 @@ ConfigurationReference:
 // `when` subject stops before `{`, which is what distinguishes a block from a bare item constructor,
 // and it stops before `/`, which is what leaves the compact form's separator visible.
 WhenExpression:
-    'when' (subject=WhenSubjectExpression
+    pickSyntax?='pick' ('{' branches+=PickPredicateBranch* otherwise=WhenOtherwise? '}'
+        | subject=WhenSubjectExpression '{' branches+=WhenBranch* otherwise=WhenOtherwise? '}')
+    | 'when' (subject=WhenSubjectExpression
     ('{' branches+=WhenBranch* otherwise=WhenOtherwise '}'
         | branches+=BarWhenBranch* otherwise=BarWhenOtherwise
         | positive=WhenSubjectExpression ('/' negativeLabel=CompactNegativeLabel negative=WhenSubjectExpression)?)
@@ -271,19 +325,24 @@ WhenSubjectAdditionExpression infers Expression:
 // `/` is the compact form's separator here, so division inside a `when` subject or branch value is
 // written with parentheses.
 WhenSubjectMultiplicationExpression infers Expression:
-    WhenSubjectUnaryExpression ({infer BinaryExpression.left=current} operator='*'
-        right=WhenSubjectUnaryExpression)*;
+    WhenSubjectNumericUnitExpression ({infer BinaryExpression.left=current} operator='*'
+        right=WhenSubjectNumericUnitExpression)*;
+
+WhenSubjectNumericUnitExpression infers Expression:
+    RequiredNumericUnitConstruction | WhenSubjectUnaryExpression;
 
 WhenSubjectUnaryExpression infers Expression:
     ({infer UnaryExpression} operator=('not' | '-') operand=WhenSubjectUnaryExpression) | WhenSubjectPostfixExpression;
 
 WhenSubjectPostfixExpression infers Expression:
-    WhenSubjectPrimaryExpression ({infer PostfixMemberAccess.receiver=current} '.' member=ID)*;
+    WhenSubjectPrimaryExpression
+    ({infer PostfixMemberAccess.receiver=current} '.' member=ID
+      ({infer MethodCallExpression.callee=current} '(' argumentList=ArgumentList? ')')?)*;
 
 // Every brace-initial primary is left out, which is what lets the block form be recognized by its
 // opening brace alone.
 WhenSubjectPrimaryExpression infers Expression:
-    '(' Expression ')' | WhenExpression | NowExpression | ListLiteral | MemberAccessExpression
+    '(' Expression ')' | WhenExpression | NowExpression | ListLiteral | MemberMethodCallExpression | MemberAccessExpression
     | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral
     | FunctionCallExpression | ValueReference;
 
@@ -295,6 +354,9 @@ BarWhenBranch infers WhenBranch:
 
 PredicateWhenBranch infers WhenBranch:
     barSyntax?='|' condition=OrExpression '->' value=OrExpression;
+
+PickPredicateBranch infers WhenBranch:
+    condition=OrExpression '->' value=OrExpression;
 
 WhenOtherwise:
     'otherwise' '->' value=OrExpression;
@@ -310,7 +372,7 @@ SubjectCaseName returns string:
     BuiltInSubjectCaseName | ID;
 
 BuiltInSubjectCaseName returns string:
-    'empty' | 'loading' | 'refreshing' | 'stale' | 'missing' | 'unauthorized' | 'error' | 'true' | 'false' | 'yes' | 'no';
+    'empty' | 'loading' | 'refreshing' | 'stale' | 'none' | 'unauthorized' | 'error' | 'true' | 'false' | 'yes' | 'no';
 
 CasePayload:
     name=ID;
@@ -318,8 +380,11 @@ CasePayload:
 TypedConstructor:
     type=ConstructablePrimitiveTypeReference value=TypedConstructorValue;
 
-DeclaredConstructorValue:
-    StringLiteral | NumberLiteral | ListLiteral;
+DeclaredConstructorValue infers Expression:
+    UnparenthesizedDeclaredConstructorValue | '(' Expression ')';
+
+UnparenthesizedDeclaredConstructorValue infers Expression:
+    StringLiteral | NumberLiteral | BooleanLiteral | InterpolatedString | ListLiteral | MemberAccessExpression | ValueReference;
 
 TypedConstructorValue:
     StringLiteral | NumberLiteral | ListLiteral | ItemLiteral;
@@ -328,7 +393,7 @@ ListLiteral:
     '[' (elements+=Expression (',' elements+=Expression)*)? ']';
 
 ItemLiteral:
-    '{' (properties+=ItemProperty (','? properties+=ItemProperty)*)? '}';
+    '{' (properties+=ItemProperty (',' properties+=ItemProperty)* ','?)? '}';
 
 ItemProperty:
     (label=ID ':')? value=Expression;
@@ -336,7 +401,10 @@ ItemProperty:
 // A numeric member names a design color family shade (`schemeAccent.20`), which a `color` argument
 // or default may pass; the validator rejects a shade on any other value.
 MemberAccessExpression:
-    target=[ValueDeclaration:ID] '.' (members+=ID ('.' members+=ID)* | shade=NUMBER);
+    target=[ValueReferenceTarget:ID] '.' (members+=ID ('.' members+=ID)* | shade=NUMBER);
+
+MemberMethodCallExpression infers MethodCallExpression:
+    callee=MemberAccessExpression '(' argumentList=ArgumentList? ')';
 
 // A call invokes a pure function or named copy; both share this one shape (`Name(...)`), so a
 // separate phrase-call rule would be structurally ambiguous with this one at parse time — nothing
@@ -369,7 +437,7 @@ BooleanLiteral:
     value=BooleanLiteralValue;
 
 BooleanLiteralValue returns string:
-    'true' | 'false';
+    'true' | 'false' | 'yes' | 'no';
 
 NoneLiteral:
     value='none';
@@ -378,7 +446,10 @@ NowExpression:
     {infer NowExpression} 'now';
 
 ValueReference:
-    target=[ValueDeclaration:ID];
+    target=[ValueReferenceTarget:ID];
+
+// A type is a value only for its contextual receiver inside an associated method body.
+type ValueReferenceTarget = ValueDeclaration | TypeDeclaration | EntityDataDeclaration;
 
 RefinementExpression:
     target=[RefinementBaseDeclaration:ID] 'with' patchBlock=ConfigurationBlock;
@@ -386,5 +457,5 @@ RefinementExpression:
 type RefinementBaseDeclaration = ValueDeclaration | TypeDeclaration;
 // A design color is a value only where a `color` argument or default names it; the scope offers
 // the mounted designs' colors there and nowhere else.
-type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | CommandDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | ViewDeclaration | EntityDataField | CaseSetCase | AskStatement | ActionResultStatement | DesignDeclaration | DesignColor | PhraseDeclaration;
+type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | RenderSlotInputBinding | StateDeclaration | ActionDeclaration | CommandDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | ViewDeclaration | EntityDataField | CaseSetCase | AskStatement | ActionResultStatement | DesignDeclaration | DesignColor | PhraseDeclaration;
 type DesignColor = DesignColorEntry | DesignToken;

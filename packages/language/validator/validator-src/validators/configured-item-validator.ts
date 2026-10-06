@@ -5,6 +5,7 @@ import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 export const configuredItemValidationMessages = {
+  abstractTypeConstruction: (type: string) => `Abstract type '${type}' cannot be constructed directly.`,
   constructorShape: (type: string, expected: string) => `Typed constructor '${type}' expects a ${expected} literal.`,
   constructorValueType: (type: string, expected: string, actual: string) =>
     `Typed constructor '${type}' expects ${expected}, got ${actual}.`,
@@ -35,6 +36,7 @@ export const configuredItemValidationChecks = {
     if (
       (AST.isTypeDeclaration(configured.type.ref) && !AST.isConfigurableDeclaration(configured.type.ref))
       || AST.isParameterizedDeclaration(configured.type.ref)
+      || AST.isParameterTypeDeclaration(configured.type.ref)
     ) {
       validateConfiguredItemConstructor(configured, ctx)
     }
@@ -44,7 +46,8 @@ export const configuredItemValidationChecks = {
 
 export function constructorLiteralKind(type: ASTUtils.TaoType): string {
   return Switch.kind(type, {
-    primitive: type => type.primitive,
+    capability: type => type.declaration.name,
+    primitive: type => type.primitive === 'numeric' ? 'number' : type.primitive,
     list: () => 'list',
     item: () => 'item',
     entity: type => Type.dataEntityName(type.entity),
@@ -58,27 +61,51 @@ function validateConfiguredItemConstructor(
   value: AST.ConfigurationConstructor,
   ctx: ValidationContext,
 ): void {
-  const constructed = Type.ofConfiguredValue(value)
-  if (!AST.isTypeDeclaration(value.type.ref) && !AST.isParameterizedDeclaration(value.type.ref)) {
+  let constructed = Type.ofConfiguredValue(value)
+  if (AST.isArgument(value.$container)) {
+    const role = Type.genericRoleConstructor(value.$container)
+    const owner = role?.parameter.$container?.$container
+    if (
+      role
+      && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner)
+        || AST.isViewDeclaration(owner))
+    ) {
+      const arguments_ = value.$container.$container
+      if (AST.isArgumentList(arguments_)) {
+        const generic = Type.instantiateGenericInvocation(owner, arguments_.arguments)
+        if (generic.genericDiagnostics.length > 0) {
+          return
+        }
+        constructed = generic.parameterTypes.get(role.parameter) ?? constructed
+      }
+    }
+  }
+  if (
+    !AST.isTypeDeclaration(value.type.ref) && !AST.isParameterizedDeclaration(value.type.ref)
+    && !AST.isParameterTypeDeclaration(value.type.ref)
+  ) {
+    return
+  }
+  const typeName = [value.type.$refText, ...(value.members ?? [])].join('.')
+  if (Type.isAbstractDomain(constructed)) {
+    ctx.error(value, configuredItemValidationMessages.abstractTypeConstruction(typeName))
     return
   }
   if (!validateConfiguredConstructorMembers(value, ctx)) {
     return
   }
-  const typeName = [value.type.ref?.name ?? value.type.$refText, ...(value.members ?? [])].join('.')
   if (value.value) {
     const expectedKind = constructorLiteralKind(constructed)
-    const actualKind = Switch.type(value.value, {
-      StringLiteral: () => 'text' as const,
-      NumberLiteral: () => 'number' as const,
-      ListLiteral: () => 'list' as const,
-    })
-    if (actualKind !== expectedKind) {
+    const actual = Type.ofExpression(value.value)
+    if (actual.kind === 'unresolved') {
+      return
+    }
+    const actualKind = constructorLiteralKind(actual)
+    if (constructed.kind !== 'capability' && actualKind !== expectedKind) {
       ctx.error(value, configuredItemValidationMessages.constructorShape(typeName, expectedKind))
       return
     }
-    const actual = Type.ofExpression(value.value)
-    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, constructed)) {
+    if (!Type.isAssignable(actual, constructed)) {
       ctx.error(
         value.value,
         configuredItemValidationMessages.constructorValueType(
@@ -209,7 +236,7 @@ function collectConfiguredItemCandidates(
       state.namedEntries.set(entry.label, entry)
       const actual = Type.ofExpression(entry.expression)
       const expectedType = Type.itemFieldType(expected)
-      if (actual.kind !== 'unresolved' && !Type.isCastCompatible(actual, expectedType)) {
+      if (actual.kind !== 'unresolved' && !Type.isAssignableToConstruction(actual, expectedType)) {
         state.ctx.error(
           entry,
           configuredItemValidationMessages.namedPropertyType(
@@ -410,13 +437,11 @@ function validateConfiguredConstructorMembers(
   let members = value.members ?? []
   let ownerName = declaration?.name ?? value.type.$refText
   let current: ASTUtils.TaoType
-  if (AST.isTypeDeclaration(declaration)) {
+  if (AST.isTypeDeclaration(declaration) || AST.isParameterTypeDeclaration(declaration)) {
     current = Type.ofDefinition(declaration)
   } else if (AST.isParameterizedDeclaration(declaration)) {
     const [parameterName, ...remaining] = members
-    const parameterType = parameterName
-      ? AST.parametersOf(declaration).find(parameter => parameter.inlineType?.name === parameterName)?.inlineType
-      : undefined
+    const parameterType = parameterName ? Type.signatureParameterDefinition(declaration, parameterName) : undefined
     if (!parameterName || !parameterType) {
       if (parameterName) {
         ctx.error(value, configuredItemValidationMessages.unknownMember(ownerName, parameterName))

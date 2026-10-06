@@ -7,7 +7,7 @@ import type {
   TaoFillRequest,
 } from '../TaoRuntime-src/TR-data'
 import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
-import { HostEnvironmentError, onUnownedFailure } from '../TaoRuntime-src/TR-errors'
+import { HostEnvironmentError, onUnownedFailure, TaoActionFailure } from '../TaoRuntime-src/TR-errors'
 import { Clock } from '../TaoRuntime-src/TR-units'
 
 const feedDefinition: TaoDataSchemaDefinition = {
@@ -55,6 +55,158 @@ function storiesPlan(limit?: number): Parameters<TR.DataSchema['query']>[0] {
 }
 
 Describe('TR.Data query fills', () => {
+  Test('native entity adapters authenticate row identity and reject old or reconstructed handles', async () => {
+    const connection = testDataConnection()
+    const schema = TR.Data.Schema(feedDefinition, connection)
+    await schema.settle()
+    const row = schema.create('Story', { HnId: 7, Title: 'Seven', Rank: 7 })
+    const context = TR.Data.NativeEntityContext(row)
+    Expect(context).toMatchObject({ connection, entity: 'Story', id: TR.Data.Read(row, 'Id') })
+    Expect(() => TR.Data.NativeEntityContext({ Id: context.id })).toThrow('live data item')
+    const snapshot = TR.Data.NativeSnapshots.decode(schema.captureSnapshot(), feedDefinition)
+    const encoded = TR.Data.NativeSnapshots.encode(snapshot, feedDefinition)
+    Expect(TR.Data.NativeSnapshots.decode(encoded, feedDefinition)).toEqual(snapshot)
+    Expect(() => TR.Data.NativeSnapshots.encode({ ...snapshot, rows: {} }, feedDefinition)).toThrow(
+      'entity collections',
+    )
+    const before = schema.captureSnapshot()
+    let notifications = 0
+    const stop = schema.subscribe(() => notifications++)
+    context.notifyMetadataChanged()
+    stop()
+    Expect(notifications).toBe(1)
+    Expect(schema.captureSnapshot()).toBe(before)
+    schema.configure(testDataConnection())
+    await schema.settle()
+    Expect(() => TR.Data.NativeEntityContext(row)).toThrow('inactive provider generation')
+    Expect(() => context.notifyMetadataChanged()).toThrow('inactive provider generation')
+  })
+
+  Test('fences a suspended native acquisition from a replacement datasource connection', async () => {
+    const connection = fillConnection(async () => undefined)
+    const schema = TR.Data.Schema(feedDefinition, connection)
+    await schema.settle()
+    const context = TR.Data.NativeQueryContext(schema.query(storiesPlan()))
+    const gate = Deferred()
+    const started = Deferred()
+    const operation = context.run(async (_connection, _descriptor, ops) => {
+      started.resolve()
+      await gate.promise
+      ops.upsert('Story', [{ HnId: 1, Title: 'Old connection', Rank: 1 }])
+    })
+    await started.promise
+    schema.configure(testDataConnection())
+    gate.resolve()
+    await Expect(operation).rejects.toBeInstanceOf(TaoActionFailure)
+    await schema.settle()
+    Expect(schema.query(storiesPlan())).toHaveLength(0)
+  })
+
+  Test(
+    'joined native query operations preserve cached content and expose their failure without poisoning settle',
+    async () => {
+      const connection = fillConnection(async (_request, ops) => {
+        ops.upsert('Story', [{ HnId: 1, Title: 'Cached', Rank: 1 }])
+      })
+      connection.pagedQueries = true
+      const schema = TR.Data.Schema(feedDefinition, connection)
+      await schema.settle()
+      const plan = { ...storiesPlan(), pageSize: 40 }
+      schema.activateQuery(plan)
+      await schema.settle()
+      const rows = schema.query(plan)
+      const context = TR.Data.NativeQueryContext(rows)
+      const gate = Deferred()
+      const fault = new HostEnvironmentError('Continuation unavailable')
+      const operation = context.run(async (actualConnection, descriptor) => {
+        Expect(actualConnection).toBe(connection)
+        Expect(descriptor.pageSize).toBe(40)
+        await gate.promise
+        throw fault
+      })
+      const refreshing = schema.query(plan) as QueryRows
+      Expect(refreshing.Refreshing).toBe(true)
+      Expect(refreshing.Loading).toBe(false)
+      Expect(refreshing).toHaveLength(1)
+      gate.resolve()
+      await Expect(operation).rejects.toBe(fault)
+      await schema.settle()
+      const stale = schema.query(plan) as QueryRows
+      Expect(stale.Stale).toBe(true)
+      Expect(stale.Error).toBe('')
+      Expect(stale).toHaveLength(1)
+      await TR.Data.NativeQueryContext(stale).run(async (_connection, _descriptor, ops) => {
+        ops.upsert('Story', [{ HnId: 2, Title: 'Next page', Rank: 2 }])
+      })
+      Expect(schema.query(plan)).toHaveLength(2)
+      Expect((schema.query(plan) as QueryRows).Stale).toBe(false)
+    },
+  )
+
+  Test(
+    'preserves private native query ownership for empty results and rejects stale or reconstructed lists',
+    async () => {
+      const connection = fillConnection(async () => undefined)
+      connection.pagedQueries = true
+      const schema = TR.Data.Schema(feedDefinition, connection)
+      await schema.settle()
+      const plan = { ...storiesPlan(), pageSize: 40 }
+      const rows = schema.query(plan)
+      Expect(rows).toHaveLength(0)
+      const context = TR.Data.NativeQueryContext(rows)
+      Expect(context.connection).toBe(connection)
+      Expect(context.descriptor).toEqual({
+        entity: 'Story',
+        pageSize: 40,
+        orderBy: 'Rank',
+        orderDirection: 'asc',
+        where: {},
+      })
+      Expect(Object.keys(rows)).toEqual([])
+      Expect(() => TR.Data.NativeQueryContext([])).toThrow('This operation expects a live query result.')
+      schema.configure(testDataConnection())
+      await schema.settle()
+      Expect(() => TR.Data.NativeQueryContext(rows)).toThrow('This query belongs to an inactive datasource connection.')
+    },
+  )
+
+  Test('bounds provider page requests without truncating accumulated local rows', async () => {
+    const requests: TaoFillRequest[] = []
+    const connection = fillConnection(async (request, ops) => {
+      requests.push(request)
+      ops.upsert('Story', [
+        { HnId: 1, Title: 'First', Rank: 1 },
+        { HnId: 2, Title: 'Second', Rank: 2 },
+      ])
+    })
+    connection.pagedQueries = true
+    const schema = TR.Data.Schema(feedDefinition, connection)
+    await schema.settle()
+    const plan = { ...storiesPlan(), pageSize: 2 }
+    schema.activateQuery(plan)
+    await schema.settle()
+    schema.upsertFromFill('Story', [{ HnId: 3, Title: 'Later page', Rank: 3 }])
+    Expect(requests.map(request => request.descriptor)).toEqual([
+      { entity: 'Story', pageSize: 2, orderBy: 'Rank', orderDirection: 'asc', where: {} },
+    ])
+    Expect(schema.query(plan)).toHaveLength(3)
+    Expect(schema.query(storiesPlan(2))).toHaveLength(2)
+    Expect(schema.queryActivationKey(plan)).not.toBe(schema.queryActivationKey(storiesPlan(2)))
+  })
+
+  Test('rejects unsupported paginated connections and invalid page sizes', async () => {
+    const schema = TR.Data.Schema(feedDefinition, testDataConnection())
+    await schema.settle()
+    Expect(() => schema.query({ ...storiesPlan(), pageSize: 2 })).toThrow(
+      'This datasource does not support bounded pages.',
+    )
+    for (const pageSize of [0, -1, 0.5, Infinity]) {
+      Expect(() => schema.query({ ...storiesPlan(), pageSize })).toThrow(
+        'A paginated query requires a positive integral page size.',
+      )
+    }
+  })
+
   Test('fills an activated query and upserts rows by the unique field', async () => {
     let fetchedTitle = 'Original'
     const connection = fillConnection(async (_request, ops) => {

@@ -155,12 +155,12 @@ use ${names.app}AuthNavigator from ./Auth`
     : 'use Local from @tao/data/providers/local'
   const connection = firebase
     ? `   Auth FirebaseAuth {
-      ApiKey "REPLACE_WITH_FIREBASE_API_KEY"
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY",
       ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID"
    }
    Datasource Firebase {
-      ApiKey "REPLACE_WITH_FIREBASE_API_KEY"
-      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID"
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY",
+      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID",
       StorageKey ${taoString(plan.id)}
    }`
     : `   Datasource Local {
@@ -265,7 +265,7 @@ ${plan.entities.length === 1 ? '' : `   state Active = ${taoString(plan.entities
             }
             when Account {
                loading -> Text("Opening account…")
-               missing -> Text("Account data is missing")
+               none -> Text("Account data is missing")
                unauthorized -> Text("You do not have access")
                error -> Text("Account data could not be loaded")
                otherwise -> {
@@ -408,8 +408,8 @@ nav ${names.navigator} = StackNav {
   ).join('\n\n')
   const tabs = plan.entities.map((entity, index) =>
     `   ${tabKey(entity)} {
-      Label ${taoString(humanize(entity.plural))}
-      Icon ${taoString(TAB_ICONS[index % TAB_ICONS.length]!)}
+      Label ${taoString(humanize(entity.plural))},
+      Icon ${taoString(TAB_ICONS[index % TAB_ICONS.length]!)},
       Content ${stackNav(entity)}
    }`
   ).join('\n')
@@ -421,8 +421,8 @@ ${stacks}
 
 folder
 nav ${names.navigator} = SelectionNav {
-   Initial ${tabKey(plan.entities[0]!)}
-   Display "automatic"
+   Initial ${tabKey(plan.entities[0]!)},
+   Display "automatic",
 ${tabs}
 }
 `
@@ -623,7 +623,7 @@ ${draftStates.join('\n')}
    action Save${singular}() {
       check ${title.name}Draft is not empty
       update ${singular} {
-${saveUpdates.join('\n')}
+${saveUpdates.join(',\n')}
       }
    }
 ${flagActions.map(action => `${action}\n`).join('')}   action Delete${singular}() {
@@ -643,7 +643,7 @@ ${flagActions.map(action => `${action}\n`).join('')}   action Delete${singular}(
          Text(${taoString(humanize(singular).toUpperCase())}) [eyebrow]
          guard ${singular} {
             loading -> { Spinner() }
-            missing -> { TextMultiline(${taoString(`This ${singularWords} no longer exists.`)}) [body] }
+            none -> { TextMultiline(${taoString(`This ${singularWords} no longer exists.`)}) [body] }
             error -> Context { TextMultiline(${
     taoString(`The ${singularWords} could not be loaded: { Context.Message }`)
   }) [body] }
@@ -673,7 +673,7 @@ function scenariosFile(plan: CreationPlan, names: ProjectNames): string {
   const bindings = plan.entities.flatMap(entity => {
     const handles = names.handles.get(entity.plural) ?? []
     return (plan.samples[entity.plural] ?? []).map((row, index) => {
-      const fields = fixtureFields(entity, row).map(field => `      ${field}`).join('\n')
+      const fields = fixtureFields(entity, row).map(field => `      ${field}`).join(',\n')
       return `   ${handles[index]!} = create ${entity.singular} {
 ${fields}
    }`

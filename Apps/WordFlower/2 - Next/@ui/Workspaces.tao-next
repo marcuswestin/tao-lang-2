@@ -119,11 +119,11 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
    // `search` keeps the rows whose `(search)` fields match the term the way keyboard narrowing
    // does, word prefixes in order; a blank term keeps every row.
    query Drafts = Workspace.Documents with {
-      where is Draft // filters by boolean case name, mirroring `update Document { Final }`
+      where Final == no // the `no` pole of Final is Draft
       search Find
    }
    query FinishedDocuments = Workspace.Documents with {
-      where is Final
+      where Final == yes
       search Find
    }
    action SaveWorkspace() {
@@ -144,7 +144,7 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
    action AddDocument() {
       check DocumentTitle is not empty
       create Document {
-         Title: DocumentTitle
+         Title: DocumentTitle,
          Workspace // unlabeled arguments bind by type; the entity matches the relation field
       }
       set DocumentTitle = ""

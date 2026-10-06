@@ -85,12 +85,12 @@ Describe('compiler: bare renders', () => {
     })
   })
 
-  Test('loads only the executable Syntax2 shell and leaves future targets undiscovered', async () => {
+  Test('loads graduated Syntax2 sources and leaves future targets undiscovered', async () => {
     const workspace = await Workspace.open(Repo.resolvePath('Apps/Syntax2'))
     const parsed = await workspace.parse('Main.tao')
     Expect(parsed.files.some(file => file.path.endsWith('/Apps/Syntax2/Main.tao'))).toBe(true)
     Expect(parsed.files.some(file => file.path.endsWith('.future'))).toBe(false)
-    Expect(parsed.files.some(file => file.path.endsWith('/Apps/Syntax2/library/Library.tao'))).toBe(false)
+    Expect(parsed.files.some(file => file.path.endsWith('/Apps/Syntax2/library/Library.tao'))).toBe(true)
     Expect(parsed.diagnostics.map(diagnostic => diagnostic.message)).toEqual([])
   })
 

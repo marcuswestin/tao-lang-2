@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type ArgumentBindingResult, resolveParameterArgumentBindings } from './argument-bindings'
-import { type FailureContract, failureContractSatisfiesBound } from './effect-outcomes'
+import { type FailureContract, failureContractSatisfiesBound } from './failure-contracts'
 import { parameterRequiresWritable } from './reactive-parameters'
 import { type TaoType, Type } from './Type'
 import { type BindingDiagnostic, resolveBindings } from './type-binding-matches'
@@ -24,6 +24,12 @@ export type CallableSignature = Readonly<{
   failures: FailureContract
 }>
 
+/** Contract discovery supplies a guarded domain resolver without entering structural admission. */
+export type CallableSignatureResolution = Readonly<{
+  inputDomain(parameter: AST.ParameterDeclaration): TaoType
+  accepts(actual: TaoType, expected: TaoType): boolean
+}>
+
 type InputIncompatibility = 'input-domain' | 'omission' | 'caller-storage' | 'write-domain'
 
 export type CallableSignatureDiagnostic =
@@ -44,14 +50,29 @@ export type CallableSignatureComparison = Readonly<{
   diagnostics: readonly CallableSignatureDiagnostic[]
 }>
 
-/** callableSignatureOf extracts concrete view inputs; unknown body failures remain open. */
+/** callableSignatureOf extracts view or concrete parameter inputs; unknown body failures remain open. */
 export function callableSignatureOf(
-  view: AST.ViewDeclaration,
+  view: AST.ViewDeclaration | AST.AssociatedViewDeclaration,
+  failures?: FailureContract,
+  resolution?: CallableSignatureResolution,
+): CallableSignature
+export function callableSignatureOf(
+  parameters: readonly AST.ParameterDeclaration[],
+  failures?: FailureContract,
+  resolution?: CallableSignatureResolution,
+): CallableSignature
+export function callableSignatureOf(
+  source: AST.ViewDeclaration | AST.AssociatedViewDeclaration | readonly AST.ParameterDeclaration[],
   failures: FailureContract = { cases: [], open: true },
+  resolution?: CallableSignatureResolution,
 ): CallableSignature {
+  // Keep real parameter ownership for storage analysis; view aliases still resolve through AST.
+  const parameters = AST.isViewDeclaration(source) || AST.isAssociatedViewDeclaration(source)
+    ? AST.parametersOf(source)
+    : source
   return {
-    inputs: AST.parametersOf(view).map(parameter => {
-      const type = inputDomain(parameter)
+    inputs: parameters.map(parameter => {
+      const type = resolution ? resolution.inputDomain(parameter) : inputDomain(parameter)
       const name = Type.parameterName(parameter)
       return {
         declaration: parameter,
@@ -59,7 +80,7 @@ export function callableSignatureOf(
         labelName: name,
         localName: name,
         type,
-        acceptsNone: Type.isAssignable(Type.ofNone(), type),
+        acceptsNone: (resolution?.accepts ?? Type.isAssignable)(Type.ofNone(), type),
         omissible: parameter.defaultValue !== undefined,
         callerWritable: parameterRequiresWritable(parameter),
       }
@@ -72,6 +93,7 @@ export function callableSignatureOf(
 export function compareCallableSignatures(
   supplied: CallableSignature,
   required: CallableSignature,
+  accepts: (actual: TaoType, expected: TaoType) => boolean = Type.isAssignable,
 ): CallableSignatureComparison {
   const resolution = resolveBindings<CallableInput, CallableInput>({
     candidates: required.inputs,
@@ -80,8 +102,9 @@ export function compareCallableSignatures(
     targetName: input => input.role ?? input.labelName,
     candidateType: input => input.type,
     targetType: input => input.type,
-    namedTypeAccepts: Type.isAssignable,
-    pairAccepts: (caller, implementation) => inputIncompatibilities(caller, implementation).length === 0,
+    namedTypeAccepts: accepts,
+    compatibleTypeAccepts: accepts,
+    pairAccepts: (caller, implementation) => inputIncompatibilities(caller, implementation, accepts).length === 0,
     targetRequiresValue: input => !input.omissible,
     completeCorrespondence: true,
     duplicateTargetTypesOnlyWithCandidates: true,
@@ -93,7 +116,7 @@ export function compareCallableSignatures(
         kind: 'incompatible-input',
         required: diagnostic.candidate,
         supplied: diagnostic.target,
-        reasons: inputIncompatibilities(diagnostic.candidate, diagnostic.target),
+        reasons: inputIncompatibilities(diagnostic.candidate, diagnostic.target, accepts),
       }
     }
     return diagnostic
@@ -114,7 +137,7 @@ export function compareCallableSignatures(
   return {
     compatible: diagnostics.length === 0,
     correspondence: resolution.pairs
-      .filter(([caller, implementation]) => inputIncompatibilities(caller, implementation).length === 0)
+      .filter(([caller, implementation]) => inputIncompatibilities(caller, implementation, accepts).length === 0)
       .map(([caller, implementation]) => ({ required: caller, supplied: implementation })),
     diagnostics,
   }
@@ -142,11 +165,15 @@ export function bindCallableArguments(
   )
 }
 
-function inputIncompatibilities(required: CallableInput, supplied: CallableInput): InputIncompatibility[] {
+function inputIncompatibilities(
+  required: CallableInput,
+  supplied: CallableInput,
+  accepts: (actual: TaoType, expected: TaoType) => boolean,
+): InputIncompatibility[] {
   const reasons: InputIncompatibility[] = []
   if (
     unresolvedDomain(required.type) || unresolvedDomain(supplied.type)
-    || !Type.isAssignable(required.type, supplied.type)
+    || !accepts(required.type, supplied.type)
   ) {
     reasons.push('input-domain')
   }
@@ -156,7 +183,7 @@ function inputIncompatibilities(required: CallableInput, supplied: CallableInput
   if (supplied.callerWritable && !required.callerWritable) {
     reasons.push('caller-storage')
   }
-  if (supplied.callerWritable && !Type.isAssignable(supplied.type, required.type)) {
+  if (supplied.callerWritable && !accepts(supplied.type, required.type)) {
     reasons.push('write-domain')
   }
   return reasons

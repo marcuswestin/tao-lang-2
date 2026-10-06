@@ -107,127 +107,127 @@ view StudioScenarioArgument(State text, Drafts text, ParameterId text, ChangeDra
          otherwise -> { TextInput(Value: StudioScenarioArgumentDraft(Drafts: Drafts, ParameterId: ParameterId), Change: Change, Submit: Submit, Label: StudioScenarioArgumentLabel(State: State, ParameterId: ParameterId)) }
 }  }  }
 
-function StudioScenarioAvailable(State text) returns boolean {
+func StudioScenarioAvailable(State text) -> boolean {
    return StudioScenarioAvailable(State) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioArgumentDrafts(State text) returns text {
+func StudioScenarioArgumentDrafts(State text) -> text {
    return StudioScenarioArgumentDrafts(State) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioArgumentIds(State text) returns list of text {
+func StudioScenarioArgumentIds(State text) -> list of text {
    return StudioScenarioArgumentIds(State) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioEntryLabel(State text) returns text {
+func StudioScenarioEntryLabel(State text) -> text {
    return StudioScenarioEntryLabel(State) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioGroupLabel(State text) returns text {
+func StudioScenarioGroupLabel(State text) -> text {
    return StudioScenarioGroupLabel(State) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioSubjectId(State text) returns text {
+func StudioScenarioSubjectId(State text) -> text {
    return StudioScenarioSubjectId(State) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioCellIdentity(State text) returns text {
+func StudioScenarioCellIdentity(State text) -> text {
    return StudioScenarioCellIdentity(State) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioCapturedLayers(State text) returns list of text {
+func StudioScenarioCapturedLayers(State text) -> list of text {
    return StudioScenarioCapturedLayers(State) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioFailureAvailable(State text) returns boolean {
+func StudioScenarioFailureAvailable(State text) -> boolean {
    return StudioScenarioFailureAvailable(State) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioJourneyActive(Recording text) returns boolean {
+func StudioScenarioJourneyActive(Recording text) -> boolean {
    return StudioScenarioJourneyActive(Recording) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioJourneyAvailable(Recording text) returns boolean {
+func StudioScenarioJourneyAvailable(Recording text) -> boolean {
    return StudioScenarioJourneyAvailable(Recording) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioJourneyBusy(Recording text) returns boolean {
+func StudioScenarioJourneyBusy(Recording text) -> boolean {
    return StudioScenarioJourneyBusy(Recording) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioJourneyCommand(Recording text) returns text {
+func StudioScenarioJourneyCommand(Recording text) -> text {
    return StudioScenarioJourneyCommand(Recording) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioJourneyCanRecord(State text, Recording text, Ready boolean) returns boolean {
+func StudioScenarioJourneyCanRecord(State text, Recording text, Ready boolean) -> boolean {
    return StudioScenarioJourneyCanRecord(State: State, Recording: Recording, Ready: Ready) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioJourneyCanSave(Recording text) returns boolean {
+func StudioScenarioJourneyCanSave(Recording text) -> boolean {
    return StudioScenarioJourneyCanSave(Recording) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioJourneyButtonLabel(Recording text) returns text {
+func StudioScenarioJourneyButtonLabel(Recording text) -> text {
    return StudioScenarioJourneyButtonLabel(Recording) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioJourneyLines(Recording text) returns list of text {
+func StudioScenarioJourneyLines(Recording text) -> list of text {
    return StudioScenarioJourneyLines(Recording) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioJourneyStatus(Recording text) returns text {
+func StudioScenarioJourneyStatus(Recording text) -> text {
    return StudioScenarioJourneyStatus(Recording) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioJourneyPayload(State text, CaptureSensitiveText boolean) returns text {
+func StudioScenarioJourneyPayload(State text, CaptureSensitiveText boolean) -> text {
    return StudioScenarioJourneyPayload(State: State, CaptureSensitiveText: CaptureSensitiveText) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioFixtureNameValid(FixtureName text) returns boolean {
+func StudioScenarioFixtureNameValid(FixtureName text) -> boolean {
    return StudioScenarioFixtureNameValid(FixtureName) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioIdentityPayload(State text) returns text {
+func StudioScenarioIdentityPayload(State text) -> text {
    return StudioScenarioIdentityPayload(State) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioArgumentDraft(Drafts text, ParameterId text) returns text {
+func StudioScenarioArgumentDraft(Drafts text, ParameterId text) -> text {
    return StudioScenarioArgumentDraft(Drafts: Drafts, ParameterId: ParameterId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioArgumentUsesPicker(State text, ParameterId text) returns boolean {
+func StudioScenarioArgumentUsesPicker(State text, ParameterId text) -> boolean {
    return StudioScenarioArgumentUsesPicker(State: State, ParameterId: ParameterId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioArgumentLabel(State text, ParameterId text) returns text {
+func StudioScenarioArgumentLabel(State text, ParameterId text) -> text {
    return StudioScenarioArgumentLabel(State: State, ParameterId: ParameterId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioArgumentOptions(State text, ParameterId text) returns list of text {
+func StudioScenarioArgumentOptions(State text, ParameterId text) -> list of text {
    return StudioScenarioArgumentOptions(State: State, ParameterId: ParameterId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioUpdateArgumentDraft(Drafts text, ParameterId text, Value text) returns text {
+func StudioScenarioUpdateArgumentDraft(Drafts text, ParameterId text, Value text) -> text {
    return StudioScenarioUpdateArgumentDraft(Drafts: Drafts, ParameterId: ParameterId, Value: Value) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioArgumentsValid(State text, Drafts text) returns boolean {
+func StudioScenarioArgumentsValid(State text, Drafts text) -> boolean {
    return StudioScenarioArgumentsValid(State: State, Drafts: Drafts) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioArgumentIssues(State text, Drafts text) returns text {
+func StudioScenarioArgumentIssues(State text, Drafts text) -> text {
    return StudioScenarioArgumentIssues(State: State, Drafts: Drafts) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioArgumentsPayload(State text, Drafts text, Appearance text) returns text {
+func StudioScenarioArgumentsPayload(State text, Drafts text, Appearance text) -> text {
    return StudioScenarioArgumentsPayload(State: State, Drafts: Drafts, Appearance: Appearance) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioFixturePayload(State text, FixtureName text) returns text {
+func StudioScenarioFixturePayload(State text, FixtureName text) -> text {
    return StudioScenarioFixturePayload(State: State, FixtureName: FixtureName) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioScenarioReplayPayload(State text, Capture text) returns text {
+func StudioScenarioReplayPayload(State text, Capture text) -> text {
    return StudioScenarioReplayPayload(State: State, Capture: Capture) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 

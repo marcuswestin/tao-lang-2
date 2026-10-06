@@ -17,10 +17,12 @@ const declaredStdlib = testOverrideSlot({
 
 Describe('project tooling selected native bindings', () => {
   Test('preserves real maintained File and Directory families in ordinary authored consumers', async () => {
+    // File and Directory are native handle families with action contracts. Publish their bridge
+    // signatures as foreign actions so this test checks consumer types without promising purity.
     await withTaoFiles('tao-tooling-native-facade-', {
       'Project/.tao/.gitkeep': '',
       'Project/Main.tao':
-        'use File, Directory from @tao/device/files\npublic function PreserveFile(Value File) returns File { return PreserveFile(Value) from ./Consumer.ts }\npublic function PreserveDirectory(Value Directory) returns Directory { return PreserveDirectory(Value) from ./Consumer.ts }\n',
+        'use File, Directory from @tao/device/files\npublic action PreserveFile(Value File) returns File from ./Consumer.ts\npublic action PreserveDirectory(Value Directory) returns Directory from ./Consumer.ts\n',
       'Project/Consumer.ts':
         'import type { PreserveFile as FileContract, PreserveDirectory as DirectoryContract } from "./Main.tao"\ntype FileValue = Parameters<FileContract>[0]\ntype DirectoryValue = Parameters<DirectoryContract>[0]\ndeclare const file: FileValue\ndeclare const directory: DirectoryValue\nexport const acceptedFile: FileValue = file\nexport const acceptedDirectory: DirectoryValue = directory\nexport function PreserveFile(value: FileValue): FileValue { return value }\nexport function PreserveDirectory(value: DirectoryValue): DirectoryValue { return value }\n',
       'selected-stdlib/.tao/.gitkeep': '',

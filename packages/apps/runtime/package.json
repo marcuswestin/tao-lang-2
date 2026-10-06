@@ -8,6 +8,9 @@
   "types": "TaoRuntime-src/TR.ts",
   "files": [
     "TaoRuntime-src",
+    "android",
+    "expo-module.config.json",
+    "ios",
     "swiftui"
   ],
   "exports": {

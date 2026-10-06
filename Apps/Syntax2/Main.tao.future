@@ -5,16 +5,10 @@ use BookStore, InvalidInput, Occurrence, LoadedItems,
     LoadAfter, Refresh from ./library/BookIO
 use Col, Row, Button, TextField, Spinner, Spacer, LazyList from @tao/ui
 use Length, ConversionFailure from @tao/core
-use Minutes, Seconds from @tao/time
+use minutes, seconds from @tao/time
 
-// 1. Future project; activate only with a dependency-complete entry slice.
-project {
-   id "syntax2"
-   name "Syntax2 Library"
-   version "0.1.0"
-   app LibraryApp
-   remote none
-}
+// 1. App metadata graduated to Main.tao; the former project block is retired.
+// The implemented project/module contract puts identity and dependencies on apps.
 
 app LibraryApp {
    Datasource BookStore
@@ -26,55 +20,32 @@ app LibraryApp {
    }
 }
 
-// 2. Repeated types, renderer defaults, repeated placement and forwarding.
-view Banner(Title text, Subtitle text) {
-   render Col { "{Title}" [caption] "{Subtitle}" }
-}
-view Heading(Title) { render Title [caption] }
-view NumberedBook(Book, Occurrence) {
-   render Row { "{Occurrence.Ordinal}." Book }
-}
-view Shelf(Items list of Book) {
-   @header(Title): Heading
-   @item(Book, Occurrence): NumberedBook
-   @footer: "Loaded snapshot" [caption]
-   render Col {
-      @header(Title "Library")
-      LazyList(Items) [claim 2] { @item: @item }
-      @header(Title "End")
-      @footer
-   }
-}
-view GroupedShelf(Items list of Book) {
-   render LazyList(GroupedRows(Items)) [claim 2] {
-      @item Entry, Occurrence -> Entry
-   }
-}
+// 2. Repeated types, renderer defaults, repeated placement and forwarding graduated to Shelves.tao.
 
 // 3. Signature projections and canonical named state construction.
-type ProfileName is PersonName.GivenName
+// ProfileName graduated to Main.tao.
 view Library {
    state Draft = NewBook { Title TitleType "" }
    state Feedback = TitleType ""
    state GroupMode no
    let GroupMode2 = GroupMode yes
    let Title = TitleType.Default()
-   let Person = PersonName(ProfileName "Ada", .FamilyName "Lovelace")
-   let Readers = ComparedNames ["Ada", "Lovelace"]
+   // Person construction and bare text placement graduated to Main.tao.
+   // Readers construction graduated to Main.tao.
    let Label = EarlierLabel(.Right TitleType "Shelf", .Left Title)
    let Score = Score 2 + Score 3
 
    // 3.1 Canonical seconds; arithmetic retains the leftmost quantity's view.
-   let Span = 2 Minutes + 30 Seconds
+   let Span = 2 minutes + 30 seconds
    let Scaled = 2 * Span
-   let Factor = Span / 30 Seconds
-   let Offset = -2 Seconds
+   let Factor = Span / 30 seconds
+   let Offset = -2 seconds
 
    // 4. Provisional app-level bounded query contract; see README.
-   query Feed = Books with { order by ID asc, paginate 40 }
+   query Feed = Books with { order by Id asc, paginate 40 }
    render Col {
       #heading accessible label "Library"
-      Banner(.Subtitle "{Scaled.Seconds()} / {Factor}", .Title Label)
+      Banner(.Subtitle "{Scaled.seconds()} / {Factor}", .Title Label)
       Person
       "{Subtract(Right 2, Left 5)} / {Score as TitleType} / {Offset}"
       Spacer [claim 2]
@@ -125,5 +96,5 @@ view Library {
 // Subtract(2, 5) is ambiguous: use Subtract(Right 2, Left 5).
 // PersonName(Name "Ada", .FamilyName "Lovelace") cannot narrow Name:
 // use PersonName(.GivenName "Ada", .FamilyName "Lovelace").
-// Subtract(1 Minutes, 30 Seconds) cannot discard semantics:
-// use 1 Minutes - 30 Seconds.
+// Subtract(1 minutes, 30 seconds) cannot discard semantics:
+// use 1 minutes - 30 seconds.

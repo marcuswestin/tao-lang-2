@@ -1,0 +1,183 @@
+import { AST } from '@parser'
+import { Assert } from '@shared'
+import {
+  type ArgumentBindingDiagnostic,
+  type ArgumentBindingMetadata,
+  type RenderInvocationPair,
+  resolveParameterArgumentBindings,
+} from './argument-bindings'
+import {
+  type AssociatedCallableDeclaration,
+  type AssociatedCallableDescriptor,
+  type AssociatedCallableOwner,
+  type AssociatedDescriptorMaterialization,
+  associatedMethodCallTarget,
+  type AssociatedMethodDispatch,
+  type AssociatedMethodReceiver,
+  associatedMethodTypeRoot,
+} from './associated-methods'
+import { substituteGenericType } from './generic-bindings'
+import { type TaoType, Type } from './Type'
+
+/** Associated calls retain their real receiver, selected owner and shared argument-binding witnesses. */
+export type ResolvedAssociatedMethodInvocation = {
+  invocation: AST.MethodCallExpression
+  receiver?: TaoType
+  declaration?: AssociatedCallableDeclaration
+  descriptor?: AssociatedCallableDescriptor
+  pairs: RenderInvocationPair[]
+  diagnostics: ArgumentBindingDiagnostic[]
+  parameterTypes?: ReadonlyMap<AST.ParameterDeclaration, TaoType>
+  transportTypes?: ReadonlyMap<AST.ParameterDeclaration, TaoType>
+  genericDiagnostics?: ReturnType<typeof Type.instantiateGenericInvocation>['genericDiagnostics']
+  problem?: 'unresolved-receiver' | 'unknown-method' | 'pending-contract' | 'unsupported-callee'
+}
+
+/** Resolve a real postfix call without fabricating a receiver expression or rebinding its root. */
+export function resolveAssociatedMethodInvocation(
+  invocation: AST.MethodCallExpression,
+  options: {
+    receiverType?(receiver: AssociatedMethodReceiver): TaoType
+    descriptor?(
+      declaration: AssociatedCallableDeclaration,
+    ): AssociatedDescriptorMaterialization | undefined
+    methodDeclaration?(
+      receiver: TaoType,
+      name: string,
+      dispatch?: AssociatedMethodDispatch,
+    ):
+      | Readonly<{
+        declaration: AST.AssociatedFunctionDeclaration | AST.AssociatedViewDeclaration
+        owner: AssociatedCallableOwner
+      }>
+      | undefined
+    bindingMetadata?: ArgumentBindingMetadata
+  } = {},
+): ResolvedAssociatedMethodInvocation {
+  const target = associatedMethodCallTarget(invocation)
+  if (!target) {
+    return { invocation, pairs: [], diagnostics: [], problem: 'unsupported-callee' }
+  }
+  const typeRoot = associatedMethodTypeRoot(target.receiver)
+  const staticCall = typeRoot !== undefined
+  const dispatch: AssociatedMethodDispatch = staticCall ? 'static' : 'instance'
+  const receiver = options.receiverType
+    ? options.receiverType(target.receiver)
+    : typeRoot
+    ? Type.ofDefinition(typeRoot)
+    : target.receiver.kind === 'expression'
+    ? Type.ofExpression(target.receiver.expression)
+    : Type.atMemberPath(Type.ofReferenceRoot(target.receiver.site), target.receiver.members)
+  if (receiver.kind === 'unresolved') {
+    return { invocation, receiver, pairs: [], diagnostics: [], problem: 'unresolved-receiver' }
+  }
+
+  let descriptor: AssociatedCallableDescriptor | undefined
+  if (options.descriptor) {
+    const declaration = !staticCall && (receiver.kind === 'capability' || receiver.genericParameter)
+      ? Type.aggregateCapabilityRequirements(receiver).find(requirement => requirement.name === target.name)
+      : options.methodDeclaration
+      ? options.methodDeclaration(receiver, target.name, dispatch)?.declaration
+      : Type.associatedMethodDeclaration(receiver, target.name, undefined, dispatch)?.declaration
+    if (!declaration) {
+      return { invocation, receiver, pairs: [], diagnostics: [], problem: 'unknown-method' }
+    }
+    const contract = options.descriptor(declaration)
+    if (!contract || contract.kind === 'pending') {
+      return { invocation, receiver, declaration, pairs: [], diagnostics: [], problem: 'pending-contract' }
+    }
+    descriptor = contract.descriptor
+  } else if (!staticCall && (receiver.kind === 'capability' || receiver.genericParameter)) {
+    const requirements = Type.aggregateCapabilityRequirements(receiver)
+    const index = requirements.findIndex(requirement => requirement.name === target.name)
+    if (index === -1) {
+      return { invocation, receiver, pairs: [], diagnostics: [], problem: 'unknown-method' }
+    }
+    const contract = Type.capabilityMethods(receiver)[index]
+    Assert.defined(contract, 'a materialized contract for every capability requirement')
+    if (contract.kind === 'pending') {
+      return {
+        invocation,
+        receiver,
+        declaration: requirements[index],
+        pairs: [],
+        diagnostics: [],
+        problem: 'pending-contract',
+      }
+    }
+    descriptor = contract.descriptor
+  } else {
+    descriptor = Type.associatedMethods(receiver, dispatch).find(selection =>
+      selection.descriptor.declaration.name === target.name
+    )
+      ?.descriptor
+    if (!descriptor) {
+      const declaration = Type.associatedMethodDeclaration(receiver, target.name, undefined, dispatch)
+      return {
+        invocation,
+        receiver,
+        ...(declaration ? { declaration: declaration.declaration } : {}),
+        pairs: [],
+        diagnostics: [],
+        problem: declaration ? 'pending-contract' : 'unknown-method',
+      }
+    }
+  }
+
+  descriptor = staticCall ? descriptor : Type.specializeAssociatedDescriptor(descriptor, receiver)
+  const inputs = new Map(descriptor.signature.inputs.map(input => [input.declaration, input]))
+  const inputOf = (parameter: AST.ParameterDeclaration) => {
+    const input = inputs.get(parameter)
+    Assert.defined(input, 'a signature input for every associated method parameter')
+    return input
+  }
+  AST.parametersOf(descriptor.declaration).forEach(inputOf)
+  const generic =
+    AST.isAssociatedFunctionDeclaration(descriptor.declaration) && descriptor.declaration.genericParameters.length > 0
+      ? Type.instantiateGenericInvocation(descriptor.declaration, AST.argumentsOf(invocation), {
+        ...options.bindingMetadata,
+        parameterType: parameter => inputOf(parameter).type,
+      })
+      : undefined
+  if (generic) {
+    descriptor = {
+      ...descriptor,
+      signature: {
+        ...descriptor.signature,
+        inputs: descriptor.signature.inputs.map(input => ({
+          ...input,
+          type: generic.parameterTypes.get(input.declaration) ?? input.type,
+        })),
+      },
+      result: staticCall ? generic.result : substituteGenericType(generic.result, generic.bindings, receiver),
+    }
+  }
+  const bindings = generic ?? resolveParameterArgumentBindings(
+    descriptor.signature.inputs.map(input => input.declaration),
+    AST.argumentsOf(invocation),
+    {
+      ...options.bindingMetadata,
+      parameterType: parameter => inputOf(parameter).type,
+      parameterName: options.bindingMetadata?.parameterName ?? Type.parameterName,
+      parameterOmissible: parameter => inputOf(parameter).omissible,
+      argumentType: options.bindingMetadata?.argumentType ?? Type.ofArgument,
+      accepts: options.bindingMetadata?.accepts ?? Type.isAssignable,
+    },
+  )
+  return {
+    invocation,
+    receiver,
+    declaration: descriptor.declaration,
+    descriptor,
+    pairs: bindings.pairs,
+    diagnostics: bindings.diagnostics,
+    ...(generic
+      ? {
+        parameterTypes: generic.parameterTypes,
+        transportTypes: generic.transportTypes,
+        genericDiagnostics: generic.genericDiagnostics,
+        ...(generic.genericDiagnostics.length > 0 ? { problem: 'pending-contract' as const } : {}),
+      }
+      : {}),
+  }
+}

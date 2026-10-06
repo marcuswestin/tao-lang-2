@@ -6,7 +6,27 @@ import {
 } from './app-configuration'
 import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
+import { associatedCallableWitnessKey } from './associated-callable-witness-key'
+import { createAssociatedEffects } from './associated-effect-context'
+import { resolveAssociatedMethodInvocation } from './associated-invocations'
+import {
+  associatedCallableAnalysis,
+  associatedCallableDescriptor,
+  associatedMethodCallTarget,
+  capabilityActionRequirements,
+  capabilityRequirements,
+  materializeAssociatedCallable,
+  ownAssociatedActions,
+  ownAssociatedMethods,
+  ownAssociatedViews,
+  withAssociatedEffects,
+} from './associated-methods'
+import { discoverCallableEffectFacts } from './callable-effect-facts'
+import { projectCallableEffectPublications } from './callable-effect-publications'
+import { analyzeCallableEffects } from './callable-effects'
 import { bindCallableArguments, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
+import { publishCanonicalEffectSnapshot } from './canonical-effect-snapshot'
+import { containsCapability, planCapabilityTransport } from './capability-transport'
 import { colorValues } from './color-values'
 import {
   commandSlots,
@@ -16,6 +36,7 @@ import {
   parseShortcut,
   reservedCommandShortcuts,
 } from './commands'
+import { resolveConfiguredItemConstruction } from './configured-item-bindings'
 import {
   datasourceCollectionNames,
   datasourceCollections,
@@ -39,6 +60,7 @@ import {
   invocationFailureContract,
   invokedEffect,
   isRootEffectInvocation,
+  resolveInvocationFailureDeclaration,
   unhandledOutcomeCases,
   unhandledOutcomeContract,
   unionFailureContracts,
@@ -55,11 +77,14 @@ import {
 import {
   resolveActionInvocation,
   resolveActionTarget,
+  resolveAssociatedActionTarget,
   resolveFunctionInvocation,
   resolveRenderInvocation,
 } from './invocations'
 import { resolveItemPropertyBindings } from './item-property-bindings'
 import { layoutEntryValues, layoutTermValue } from './layouts'
+import { numericUnitReadingCollisions, resolveNumericUnitReading } from './numeric-unit-readings'
+import { NumericUnits } from './NumericUnits'
 import { Packages } from './Packages'
 import {
   appAuthBinding,
@@ -75,16 +100,58 @@ import { isPluralCategory, phraseIsPlural, phraseNumberParameters, pluralCategor
 import { literalExpression, parameterRequiresWritable, writableExpression } from './reactive-parameters'
 import { referencedNames } from './references'
 import { renderTargetIsNav, renderTargetName, resolveRenderTarget } from './render-targets'
+import {
+  bindRendererSlotArguments,
+  compareRendererSlotForwarding,
+  compareRendererSlotRenderer,
+  rendererSlotDefaultParameterCorrespondence,
+  rendererSlotSignatureOf,
+  resolveRendererSlotInputBinding,
+} from './renderer-slots'
+import { sourceActionResult } from './source-action-results'
 import { Type } from './Type'
 import { literalDurationOf, Units } from './Units'
 
-export { design, Packages, Type, Units }
+export { design, NumericUnits, Packages, Type, Units }
+export type {
+  AssociatedCallableWitnessKeyContext,
+  AssociatedOperatorWitnessDeclaration,
+} from './associated-callable-witness-key'
+export { declaredCallableFailureContract } from './failure-contracts'
+export type { NumericUnitsDeclarationPlan, NumericUnitsSuffixResolution } from './NumericUnits'
+export type { RendererSlotInputDomain } from './renderer-slots'
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
+  resolveNumericUnitReading,
+  numericUnitReadingCollisions,
+  createAssociatedEffects,
+  discoverCallableEffectFacts,
+  projectCallableEffectPublications,
+  publishCanonicalEffectSnapshot,
+  resolveAssociatedMethodInvocation,
+  associatedCallableWitnessKey,
+  associatedCallableAnalysis,
+  associatedCallableDescriptor,
+  associatedMethodCallTarget,
+  capabilityActionRequirements,
+  capabilityRequirements,
+  materializeAssociatedCallable,
+  ownAssociatedActions,
+  ownAssociatedMethods,
+  ownAssociatedViews,
+  withAssociatedEffects,
+  containsCapability,
+  planCapabilityTransport,
   parameterRequiresWritable,
   writableExpression,
   literalExpression,
+  bindRendererSlotArguments,
+  compareRendererSlotForwarding,
+  compareRendererSlotRenderer,
+  resolveRendererSlotInputBinding,
+  rendererSlotDefaultParameterCorrespondence,
+  rendererSlotSignatureOf,
   appBoundDatasources,
   effectiveAppConfiguration,
   listedEntryOf,
@@ -96,6 +163,7 @@ export const ASTUtils = {
   reservedCommandShortcuts,
   mentionFills,
   colorValues,
+  resolveConfiguredItemConstruction,
   bindCallableArguments,
   callableSignatureOf,
   compareCallableSignatures,
@@ -111,6 +179,7 @@ export const ASTUtils = {
   storeOfDatasource,
   resolveDatasourceValue,
   design,
+  analyzeCallableEffects,
   effectFailureCases,
   effectFailureContract,
   effectOutcomeWords,
@@ -119,6 +188,7 @@ export const ASTUtils = {
   invocationFailureContract,
   invokedEffect,
   isRootEffectInvocation,
+  resolveInvocationFailureDeclaration,
   unhandledOutcomeCases,
   unhandledOutcomeContract,
   unionFailureContracts,
@@ -135,6 +205,7 @@ export const ASTUtils = {
   renderTargetIsNav,
   renderTargetName,
   resolveActionInvocation,
+  resolveAssociatedActionTarget,
   resolveArgumentBindings,
   resolveActionTarget,
   resolveDataWriteBindings,
@@ -144,6 +215,7 @@ export const ASTUtils = {
   resolveRenderInvocation,
   resolveRenderTarget,
   rootAppValue,
+  sourceActionResult,
   isPluralCategory,
   phraseIsPlural,
   phraseNumberParameters,
@@ -159,6 +231,20 @@ export const ASTUtils = {
 } as const
 
 export namespace ASTUtils {
+  export type CallableAnalysis = import('./callable-effects').CallableAnalysis
+  export type NumericUnitReading = import('./numeric-unit-readings').NumericUnitReading
+  export type AssociatedCallableDescriptor = import('./associated-methods').AssociatedCallableDescriptor
+  export type AssociatedOperatorWitnessDeclaration =
+    import('./associated-callable-witness-key').AssociatedOperatorWitnessDeclaration
+  export type AssociatedCallableOwner = import('./associated-methods').AssociatedCallableOwner
+  export type AssociatedEffectsContext = import('./associated-methods').AssociatedEffectsContext
+  export type CapabilityTransportPlan = import('./capability-transport').CapabilityTransportPlan
+  export type CapabilityTransportMethod = import('./capability-transport').CapabilityTransportMethod
+  export type CapabilityTransportResult = import('./capability-transport').CapabilityTransportResult
+  export type AssociatedCapabilityWitness = import('./Type').AssociatedCapabilityWitness
+  export type AssociatedDescriptorMaterialization = import('./associated-methods').AssociatedDescriptorMaterialization
+  export type AssociatedMethodReceiver = import('./associated-methods').AssociatedMethodReceiver
+  export type AssociatedMethodSelection = import('./associated-methods').AssociatedMethodSelection
   export type ActionInvocationPair = import('./invocations').ActionInvocationPair
   export type AppDatasourceBinding = import('./app-configuration').AppDatasourceBinding
   export type AppPropertySource = import('./app-configuration').AppPropertySource
@@ -187,6 +273,8 @@ export namespace ASTUtils {
   export type ItemPropertyBindingDiagnostic = import('./item-property-bindings').ItemPropertyBindingDiagnostic
   export type ItemPropertyBindingPair = import('./item-property-bindings').ItemPropertyBindingPair
   export type ItemPropertyBindingResult = import('./item-property-bindings').ItemPropertyBindingResult
+  export type ConfiguredItemConstruction = import('./configured-item-bindings').ConfiguredItemConstruction
+  export type ConfiguredItemOperand = import('./configured-item-bindings').ConfiguredItemOperand
   export type ItemShape = import('./Type').ItemShape
   export type ItemShapeField = import('./Type').ItemShapeField
   export type ImplicitChangeBinding = import('./invocations').ImplicitChangeBinding
@@ -208,6 +296,7 @@ export namespace ASTUtils {
   export type ResolvedActionTarget = import('./invocations').ResolvedActionTarget
   export type PluralCategory = import('./phrases').PluralCategory
   export type ResolvedFunctionInvocation = import('./invocations').ResolvedFunctionInvocation
+  export type ResolvedAssociatedMethodInvocation = import('./associated-invocations').ResolvedAssociatedMethodInvocation
   export type ResolvedRenderInvocation = import('./invocations').ResolvedRenderInvocation
   export type TaoType = import('./Type').TaoType
   export type UnitFamily = import('./Units').UnitFamily

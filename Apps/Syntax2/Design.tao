@@ -1,0 +1,6 @@
+folder
+design LibraryDesign {
+   styles {
+      caption [size 14]
+   }
+}

@@ -9,7 +9,7 @@ app FormsInteractionMVP {
       Initial MainView
 }  }
 
-function SubmittedLabel(Title text) returns text {
+func SubmittedLabel(Title text) -> text {
    return "Submitted: { Title }"
 }
 

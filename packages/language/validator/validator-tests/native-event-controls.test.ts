@@ -36,6 +36,7 @@ Describe('validator: native event controls', () => {
     accepts(eventApp(`
     Button() { on press (preventDefault, stopPropagation) -> Save }
     Button() { on press (stopPropagation) -> { do Save() } }
+    Button() { on press (preventDefault) -> do Save() }
     Button() { on press Save }
   `)),
   )
