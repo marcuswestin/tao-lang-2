@@ -905,9 +905,11 @@ Describe('Studio smoke resource isolation', () => {
     Expect(environment['WATCHMAN_SOCK']).toBe('/repo/.watchman.sock')
     Expect(environment['TAO_STUDIO_FAST_HMR']).toBe('true')
     Expect(environment['TAO_STUDIO_FAST_FILE_MAP']).toBe('true')
+    Expect(environment['CI']).toBe('false')
 
     const diagnosticOptOut = await StudioDev.testing.studioWatchmanEnvironment({
       environment: {
+        CI: 'true',
         PATH: '/usr/bin',
         TAO_STUDIO_FAST_HMR: 'false',
         TAO_STUDIO_FAST_FILE_MAP: 'false',
@@ -933,6 +935,8 @@ Describe('Studio smoke resource isolation', () => {
     })
     Expect(diagnosticOptOut['TAO_STUDIO_FAST_HMR']).toBe('false')
     Expect(diagnosticOptOut['TAO_STUDIO_FAST_FILE_MAP']).toBe('false')
+    // A hosted job's `CI=true` would otherwise switch Expo's Metro watcher and reloads off.
+    Expect(diagnosticOptOut['CI']).toBe('false')
     Expect(calls[0]?.args).toEqual(['list-capabilities', '--output-encoding=json', '--no-pretty', '--no-spawn'])
     Expect(calls[1]?.args).toEqual(['--no-pretty', 'get-sockname', '--no-spawn'])
     Expect(calls[2]?.args).toEqual(['watch-project', '/repo/.artifacts/dev/studio-preview/runtime-test'])
