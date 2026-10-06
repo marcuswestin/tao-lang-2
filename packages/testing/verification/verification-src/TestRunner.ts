@@ -376,11 +376,12 @@ async function runTestRequest(request: TestRunRequest, options: TestRunOptions =
   }
   const lane = prepared.evidenceMode === 'mutation' ? 'dev-test-mutation' : LANE
   const location = RunArtifacts.locate({ lane, repositoryRoot })
+  const machineLaneName = laneForFailurePolicy(lane, prepared)
   // `./dev test` is always a top-level lane now: a verification run schedules the same suite nodes
   // in its own graph rather than starting this command inside itself, so there is no nested runner
   // left to hand a divided budget to.
   const machineLane = await MachineLanes.acquire({
-    lane: prepared.failurePolicy === 'collect-all' && prepared.evidenceMode !== 'mutation' ? `${lane}-targeted` : lane,
+    lane: machineLaneName,
     registryRoot: options.registryRoot,
     repositoryRoot: location.repositoryRoot,
     requestedJobs: options.jobs,
@@ -390,6 +391,14 @@ async function runTestRequest(request: TestRunRequest, options: TestRunOptions =
   } finally {
     await machineLane.release()
   }
+}
+
+function laneForFailurePolicy(lane: string, prepared: Pick<PreparedRun, 'evidenceMode' | 'failurePolicy'>): string {
+  // Exact-file, filtered, and retry requests collect all failures and must remain admissible while a
+  // broad fail-fast run owns the machine. Keep mutation's established lane name; it is already narrow.
+  return prepared.failurePolicy === 'collect-all' && prepared.evidenceMode !== 'mutation'
+    ? `${lane}-targeted`
+    : lane
 }
 
 type RunSuitesOptions = {
@@ -451,7 +460,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   })
   await liveArtifacts.finish()
   await reporter.finish()
-  if (!result.interrupted && !mutation) {
+  if (!result.interrupted && result.haltedBy === undefined && !mutation) {
     await ContentionRetry.confirmContendedFailures({
       contention: machineLane.report(),
       location,
@@ -1149,6 +1158,7 @@ export const TestRunner = {
   completeRun,
   discoverTestSuites,
   noTestsMatched,
+  laneForFailurePolicy,
   observationsFor,
   prepareRun,
   printFlakes,

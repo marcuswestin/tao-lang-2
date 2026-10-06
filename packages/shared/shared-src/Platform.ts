@@ -9,9 +9,15 @@ import {
 } from 'node:child_process'
 import { createHash, createPrivateKey, sign, timingSafeEqual } from 'node:crypto'
 import { EventEmitter } from 'node:events'
+import { createRequire } from 'node:module'
 import { availableParallelism, constants, getPriority, loadavg, setPriority } from 'node:os'
 import { Readable, Writable } from 'node:stream'
 import { asError, throwHostEnvironment, throwUnexpected } from './core/Errors'
+
+/** createModuleRequire loads CommonJS dependencies relative to an installed module entry. */
+export function createModuleRequire(moduleEntryPath: string): NodeRequire {
+  return createRequire(moduleEntryPath)
+}
 
 export type ProcessEnv = NodeJS.ProcessEnv
 export type ProcessSignal = NodeJS.Signals

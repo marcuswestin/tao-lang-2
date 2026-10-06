@@ -979,6 +979,17 @@ Describe('test runner suite registry', () => {
     ).toBe('runtime-jest')
   })
 
+  Test('keeps collect-all requests out of the broad fail-fast machine lane', () => {
+    Expect(TestRunner.laneForFailurePolicy('dev-test', { failurePolicy: 'collect-all' }))
+      .toBe('dev-test-targeted')
+    Expect(TestRunner.laneForFailurePolicy('dev-test', { failurePolicy: 'fail-fast' }))
+      .toBe('dev-test')
+    Expect(TestRunner.laneForFailurePolicy('dev-test-mutation', {
+      evidenceMode: 'mutation',
+      failurePolicy: 'collect-all',
+    })).toBe('dev-test-mutation')
+  })
+
   Test('an exact-file subset does not teach the full-suite timing estimate', async () => {
     const root = await mkTestDir('tao-test-runner-subset-timing-')
     const file = 'packages/example/example-tests/example.test.ts'

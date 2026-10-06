@@ -911,8 +911,9 @@ await runWithCommands(commands => {
       "Cancel the Verify runs still in flight for this worktree's HEAD, after a local gate decided the landing.",
     )
     .option('--sha <commit>', 'The commit whose runs to cancel; by default HEAD.')
-    .action(async (options: { sha?: string } = {}) => {
-      await runExitCommand(async () => (await CancelVerifyCommand.run({ sha: options.sha })).exitCode)
+    .option('--all-workflows', 'Also cancel other workflows on this failed commit.')
+    .action(async (options: { sha?: string; allWorkflows?: boolean } = {}) => {
+      await runExitCommand(async () => (await CancelVerifyCommand.run(options)).exitCode)
     })
 
   commands

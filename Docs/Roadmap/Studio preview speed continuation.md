@@ -909,6 +909,65 @@ save-to-paint medians (4856ms checks on, 9040ms off) are not speed qualification
 with the earlier experimental pipeline. A quiet periodic run remains required to establish
 current numerical budget compliance. No ceiling was changed.
 
+## Approved Metro timer experiment, 2026-10-05
+
+The Developer approved a narrow, reproducible patch for the Expo host's exact Metro 0.84.5
+installation and Expo file-map fork 57.0.3. Studio's Metro child defaults to `TAO_STUDIO_FAST_HMR=true` and
+`TAO_STUDIO_FAST_FILE_MAP=true`; setting either variable to `false` retains that timer's upstream
+behavior. Ordinary app launches retain the upstream defaults unless explicitly opted in.
+
+The HMR patch changes only its debounce delay from 50ms to 0ms. The file-map patch replaces the
+30ms polling interval with one event-triggered 1ms flush, waits for already-observed processing,
+and cancels pending work on shutdown. It preserves Metro's HMR queue, revision handling, event
+aggregation, and recrawl logic. The rejected revision fallback and revision-error retry remain
+ruled out for the reasons above.
+
+The upstream waits collect nearby events and reduce repeated work. Shortening them can produce
+more refresh cycles or expose intermediate states during multi-file writes; queue serialization
+alone does not make a publication atomic. The exact choice of 30ms and 50ms has no documented
+rationale in the inspected upstream source. Actual installed-module tests must cover batching,
+delayed processing, deletion/recreation, recrawl, shutdown, and queued HMR edits. Real Metro
+burst-save and latency evidence is required before reporting this experiment as ready to land.
+The pinned patches must reproduce through frozen setup and be reassessed on a Metro upgrade.
+Standalone host staging carries the root patch registrations and their exact version pins;
+installed-host setup copies the captured patch bytes and includes them in its install identity.
+
+Integration evidence: six actual-installed-module timer tests, 72 Studio launch cases, eight
+standalone packaging cases, and eleven installed-host cases pass. Frozen setup reproduces the
+patches. The real Metro burst smoke handles three paired two-file saves and a later follow-up
+save, with final content present, no observed HMR errors, and no iframe reloads.
+
+After integrating stable dependency links, sixteen HNReader padding saves pass with each timer
+configuration. Publication-to-HMR p50 is 122/132ms with upstream timers and 50/53ms with fast
+timers (publication checks on/off). Total p50 is 5924/5028ms upstream and 3876/3663ms fast, but
+load ranges differ (16.6–20.7 versus 14.0–18.8 on 18 CPUs), and the control overlapped a focused
+runtime test. These totals cannot establish the patch's save-to-paint gain or budget compliance.
+The existing ceilings remain unchanged; quiet periodic qualification is still outstanding.
+
+A later sequential repeat, with no other local lane from this task, passed another sixteen saves
+per timer configuration. With publication checks on, upstream versus fast p50 was 2660 versus
+2597ms total, 2513 versus 2502ms source-to-publication, and 86 versus 26ms publication-to-HMR.
+With checks off, the corresponding p50 values were 2859 versus 2572ms total, 2682 versus 2498ms
+source-to-publication, and 119 versus 28ms publication-to-HMR. Loads were 4.5–7.2 upstream and
+7.2–9.6 fast on 18 CPUs. This supports a shorter post-publication wait, with compilation still
+dominating. It is not periodic quiet-machine admission or proof of meeting the existing ceilings.
+
+## Confirmed-failure verification cleanup
+
+The Developer approved cancelling running verification peers once a broad lane confirms a
+failure. The failing result remains the cause; pending work is not started and cancelled peers
+remain incomplete even if their cleanup exits successfully. Owned processes receive termination,
+then identity-checked survivors receive a force-stop after three seconds. Verification retains
+its leases and the landing lock until owned process cleanup completes, avoiding overlap with
+another landing. A confirmed fail-fast halt also skips contention retry and resume work.
+Targeted collect-all runs and uncertain-timeout classification retain their existing behavior.
+
+Focused proof passes 32 work-graph cases, 44 test-runner cases, nine failure-policy cases,
+42 gate-runner cases, and 32 machine-lane cases. The process regression verifies termination of
+the owned peer and its descendant while an unrelated detached process stays alive. Targeted
+collect-all requests retain their artifact paths but register as narrow machine lanes; narrow
+lanes remain admissible during landing priority, and broad verification continues to yield.
+
 ## Identical-publication production slice, 2026-10-05
 
 Preview generation compares the exact non-marker path-to-code map and publication metadata with
@@ -1004,3 +1063,23 @@ timeout fixtures, per-attempt retry cadence and performance assertions remain un
 The corrected real Metro drag journey passes independently in22seconds. Retain the interrupted
 run and compare identical test/group membership across sequential and parallel artifacts; for
 example, the split receipt group passed33.9s sequentially and399.4s in that parallel run.
+
+## Metro hosted-landing integration, 2026-10-06
+
+The outstanding Metro slice integrated current main and its hosted verification route. Frozen
+setup reproduces the pinned patches. All six installed-module timer regressions pass; the real
+paired-file burst and follow-up save smoke passes in20.6seconds with no observed HMR errors or
+iframe reloads. These are focused integration checks, not portable merge proof.
+
+The standalone performance attempt was inconclusive at quiet admission: another host complement
+was active and load was34.6 on18 CPUs. Retain that result; no performance ceiling changed and no
+new save-to-paint gain is claimed. Hosted Verify and the local host-only complement own landing
+proof. Earlier sequential-versus-parallel research evidence remains in the verification handoff.
+
+Hosted retry correction, 2026-10-06: the first Verify run (37420417279, PR 32) found strict typing and shared-boundary lint defects in the installed-module timer tests, plus incoming root-instruction budget and formatter drift defects. The run was cancelled after those failures were observed. Repairs preserve assertions and timer behavior; the retry still requires hosted Verify and the host-only complement on its new head.
+
+The cancellation command now accepts `--all-workflows --sha <commit>` to stop other workflows on an already-failed owned PR head. It excludes completed runs and runs on other heads; six cancellation/landing-fix checks pass. This stopped the remaining native-parity run on the first failed head. The repaired six installed-module timer checks, typecheck and lint pass; hosted retry proof is still pending.
+
+The local iteration run stopped on a stale incoming hook-policy assertion after 10m49s, under peak load 54.8 on 18 CPUs. The corrected hook file passes 15 checks. The external-watch topology file passes all five checks unchanged in a separate 47.5s run, versus 149.2s with a helper-observation timeout during the contended run. No watchdog or assertion was weakened. Main's matching instruction/hook corrections were integrated; hosted Verify and the host-only complement remain the final merge proof.
+
+Hosted queue continuation, 2026-10-06: retry 37423918637 on head 5050a8a7 was cancelled before contributor agreement or partition planning executed; the aggregate failed because those prerequisite jobs were cancelled, with no portable tests run. The owned complement was stopped and exact-head cancellation confirmed no remaining workflows. With the Developer reserving the CI queue for this slice, a fresh hosted attempt will provide the missing complete portable and host proof.
