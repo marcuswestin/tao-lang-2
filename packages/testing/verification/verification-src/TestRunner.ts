@@ -208,10 +208,11 @@ function selectSuites(
       result.selected.push({
         buildProcess: (nodeName, nodeUnits, slots) =>
           source.build(nodeUnits, selection, { ...context, nodeName, slots }),
+        estimationUnits: source.shardUnits ?? source.files,
         files,
         name: source.name,
         ...(shardUnits === undefined ? {} : { shardUnits }),
-        ...(shardUnits === undefined || source.unitCostMs === undefined ? {} : { unitCostMs: source.unitCostMs }),
+        ...(source.unitCostMs === undefined ? {} : { unitCostMs: source.unitCostMs }),
       })
     }
   }
