@@ -89,17 +89,14 @@
     "mcp__claude-in-chrome__*": {
       "*": "allow",
     },
-    // Messaging a subagent you spawned is always allowed. `SendMessage` cannot tell a subagent from
-    // another session by its arguments, so the rule that a message to any other agent or session
-    // is the Developer's to approve lives in AGENTS.md and the `delegation` skill; the session-management
-    // tool below only ever reaches another session, so it keeps its gate. As with the force-unlock
-    // rules above, Codex gets no equivalent gate, because `CodexConfigGenerator.renderCodexRules`
-    // emits only `allow` entries.
+    // Agents working in this repository may message each other freely (2026-10-06): a subagent,
+    // another agent session on this machine or in the cloud, or a teammate's agent. AGENTS.md and the
+    // `delegation` skill own what a message may carry; neither tool needs a prompt.
     "SendMessage": {
       "*": "allow",
     },
     "mcp__ccd_session_mgmt__send_message": {
-      "*": "ask",
+      "*": "allow",
     },
   },
   // Named argv prefixes accepted by ./agent unsandboxed. The harnesses grant one exception
