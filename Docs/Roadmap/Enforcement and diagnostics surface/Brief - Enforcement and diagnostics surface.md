@@ -39,7 +39,7 @@ Two things follow from that:
 ## 1. Enforcement gate
 
 There is no `.github/`, no CI configuration of any kind, and no non-sample Git hooks. The remote is
-`https://github.com/marcuswestin/tao-lang-2`. `./agent verify` is the entire quality bar, and it runs
+`https://github.com/tao-dev-org/tao-lang`. `./agent verify` is the entire quality bar, and it runs
 only when a human or an agent chooses to run it.
 
 That matters more here than in a single-developer repo. Agents work in concurrent worktrees,
