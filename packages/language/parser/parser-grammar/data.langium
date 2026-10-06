@@ -1,6 +1,8 @@
 grammar TaoData
 
 import "./expressions"
+import "./views"
+import "./actions"
 import "./visibility"
 import "./terminals"
 
@@ -14,7 +16,8 @@ EntityDataDeclarationBlock:
     '{' (entries+=EntityDataEntry (',' entries+=EntityDataEntry)* ','?)? '}';
 
 EntityDataEntry:
-    EntityDataField | DataIndex | DataUnique | DataDefaultOrder | DataLocalOnly | EntityCommandPolicy;
+    EntityDataField | DataIndex | DataUnique | DataDefaultOrder | DataLocalOnly | EntityCommandPolicy
+    | AssociatedFunctionDeclaration | AssociatedViewDeclaration | ActionDeclaration;
 
 EntityDataField:
     name=ID (primitive=DataPrimitiveType | boolean?='yes' '/' negativeName=ID? 'no' | typeName=ID)?
@@ -51,10 +54,10 @@ EntityQueryDeclaration:
       | (sourceName=ID 'as' name=ID | name=ID ('from' source=MemberAccessExpression)?) block=QueryBlock?);
 
 QueryBlock:
-    '{' clauses+=QueryClause* '}';
+    '{' (clauses+=QueryClause (','? clauses+=QueryClause)* ','?)? '}';
 
 QueryClause:
-    WhereClause | BooleanWhereClause | SearchClause | OrderClause | LimitClause;
+    WhereClause | BooleanWhereClause | SearchClause | OrderClause | LimitClause | PaginationClause;
 
 WhereClause:
     'where' fieldName=ID operator=QueryComparisonOperator value=Expression;
@@ -74,6 +77,9 @@ OrderClause:
 
 LimitClause:
     'limit' count=NumberLiteral;
+
+PaginationClause:
+    'paginate' pageSize=NumberLiteral;
 
 OrderDirection returns string:
     'asc' | 'desc';

@@ -433,7 +433,7 @@ Describe('removeUnusedImports', () => {
         Expect(document.parseResult.lexerErrors).toEqual([])
         Expect(document.parseResult.parserErrors).toEqual([])
         const uses = document.parseResult.value.statements.filter(AST.isUseStatement)
-        Expect(uses[0]!.importedDeclarations.every(reference => reference.ref !== undefined)).toBe(true)
+        Expect(uses[0]!.importedDeclarations.every(specifier => specifier.target.ref !== undefined)).toBe(true)
         if (example.name.includes('loop binder')) {
           const references = AST.streamAllContents(document.parseResult.value)
             .filter(AST.isMemberAccessExpression)
@@ -448,7 +448,7 @@ Describe('removeUnusedImports', () => {
         const updated = await SourceActions.removeUnusedImports(document) ?? source
         const reparsed = await parseRawDocumentAt(updated, paths['Main.tao']!)
         const imports = reparsed.parseResult.value.statements.filter(AST.isUseStatement)
-          .flatMap(statement => statement.importedDeclarations.map(reference => reference.$refText))
+          .flatMap(statement => statement.importedDeclarations.map(AST.importSourceName))
         Expect(imports.toSorted()).toEqual(example.kept)
         Expect(await SourceActions.removeUnusedImports(reparsed)).toBeUndefined()
       })

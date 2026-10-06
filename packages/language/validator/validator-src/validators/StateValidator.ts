@@ -82,6 +82,7 @@ function isPersistableType(
   }
   const nextSeen = nominal ? new Set([...seen, nominal]) : seen
   return Switch.kind(type, {
+    capability: () => false,
     primitive: type => ['boolean', 'duration', 'none', 'number', 'text', 'time'].includes(type.primitive),
     list: type => type.element === undefined || isPersistableType(type.element, nextSeen),
     item: type =>

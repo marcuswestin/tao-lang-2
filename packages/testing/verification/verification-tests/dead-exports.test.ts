@@ -26,6 +26,52 @@ function paths(source: string): string[] {
 }
 
 Describe('tao foreign binding forms', () => {
+  Test('reads arrow results and closed failure contracts without confusing them with exports', () => {
+    Expect(names('action CreateTemporaryPDF(Book) -> TemporaryFile from ./BookIO.ts')).toEqual(['CreateTemporaryPDF'])
+    Expect(names('func ToText() fails never -> text from ./Display.ts')).toEqual(['ToText'])
+    Expect(names('func Read() fails Offline, Invalid -> text from ./Read.ts')).toEqual(['Read'])
+  })
+
+  Test('binds associated implementations to their receiver export and restores outer scope', () => {
+    const source = [
+      'type Album is item with { static action Construct(Id text) -> Album from ./Bindings.ts',
+      '   action GetAssets() -> list of Asset from ./Bindings.ts',
+      '   static action Create(Name text) -> Album',
+      '      from ./Bindings.ts',
+      '}',
+      'type Name is text',
+      'action ReleaseAlbum(Value Album) from ./Bindings.ts',
+      'func Album.GetTitle() -> text from ./Bindings.ts',
+    ].join('\n')
+    Expect(names(source)).toEqual([
+      'Album_Construct',
+      'Album_GetAssets',
+      'Album_Create',
+      'ReleaseAlbum',
+      'Album_GetTitle',
+    ])
+    Expect(taoForeignBindings(source).unreadable).toEqual([])
+  })
+
+  Test('does not assign the type receiver to a declaration nested inside an associated view', () => {
+    Expect(names([
+      'type Card is text with {',
+      '   view Details() { action Save() from ./Bindings.ts }',
+      '   func ToText() from ./Bindings.ts',
+      '}',
+    ].join('\n'))).toEqual(['Save', 'Card_ToText'])
+  })
+
+  Test('tracks a multiline associated body past an inline item representation', () => {
+    Expect(names([
+      'type Card is { Caption text }',
+      'with {',
+      '   func ToText() fails never -> text from ./Card.ts',
+      '}',
+      'func Format(Card) -> text from ./Card.ts',
+    ].join('\n'))).toEqual(['Card_ToText', 'Format'])
+  })
+
   Test('reads a foreign action, including its runs-latest and failure clauses', () => {
     Expect(names('action SyncDraft(Path text, Content text) runs latest from ./Actions.ts')).toEqual(['SyncDraft'])
     Expect(names('action ApplySourceAction(Envelope text) fails Conflict "It changed." from ./Actions.ts'))
@@ -67,6 +113,14 @@ Describe('tao foreign binding forms', () => {
     Expect(names('view ProductHostBoundary() accepts content slots @files, @editor from ./Host.tsx'))
       .toEqual(['ProductHostBoundary'])
     Expect(names('view Ask(Value text) responds Answer from ./Host.tsx')).toEqual(['Ask'])
+    Expect(
+      names('view Host() accepts content slots @data(Data text), @row(Item text, Select action(text)) from ./Host.tsx'),
+    )
+      .toEqual(['Host'])
+    Expect(
+      names('view KeyedList where type T is Keyed (Items list of T) accepts slots @item(Item T) from ./LazyList.tsx'),
+    )
+      .toEqual(['KeyedList'])
   })
 
   Test('reads a nested parameter list rather than stopping at its first parenthesis', () => {

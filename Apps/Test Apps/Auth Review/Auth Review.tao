@@ -26,7 +26,7 @@ app AuthReview {
    }
    guard {
       loading -> Text("Opening account…")
-      missing -> Text("Account data is missing")
+      none -> Text("Account data is missing")
       unauthorized -> Text("You do not have access")
       error -> Context { Text(Context.Message) }
 }  }

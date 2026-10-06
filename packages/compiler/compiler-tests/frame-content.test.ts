@@ -24,18 +24,22 @@ Describe('compiler: frame content and render injection channels', () => {
       view Main() {
         render Card() [claim 2] {
           Label()
-          @actions Button() {
-            #resetSignedOut
-            on press -> { }
+          @actions: {
+            #resetSignedOut Button() {
+              on press -> { }
+            }
           }
         }
       }
       app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view Main }
     `)
 
-    Expect(compiled.code).toContain('__taoSlots?: Readonly<Record<string, React.ReactNode>>')
-    Expect(compiled.code).toContain('_ViewProps.__taoSlots?.["@actions"] ?? null')
-    Expect(compiled.code).toContain('"@actions": <_Scope.Button')
+    Expect(compiled.code).toContain('__taoSlots?: Readonly<Record<string, TR.SlotRenderer<any> | null>>')
+    Expect(compiled.code).toContain(
+      'TR.RenderSlots.select(\n                  _ViewProps.__taoSlots,\n                  "@actions"',
+    )
+    Expect(compiled.code).toContain('"@actions": (TR.RenderSlots.create<Readonly<{')
+    Expect(compiled.code).toContain('<_Scope.Button')
     Expect(compiled.code).toContain('return <_Scope.Card')
     Expect(compiled.code).toContain('layout: undefined')
     Expect(compiled.code).toContain('designSpec: TR.Design.Spec([["claim",2]])')

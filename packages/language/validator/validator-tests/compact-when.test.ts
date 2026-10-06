@@ -22,7 +22,7 @@ Describe('validator: the compact when form', () => {
          Title text,
          Final yes / Draft no
       }
-      ${compactApp('function Status(Document) returns text { return when Document.Final "Final" / Draft "Draft" }')}
+      ${compactApp('action Status(Document) -> text { return when Document.Final "Final" / Draft "Draft" }')}
     `),
   )
 
@@ -34,7 +34,7 @@ Describe('validator: the compact when form', () => {
          Title text,
          Final yes / Draft no
       }
-      ${compactApp('function Status(Document) returns text { return when Document.Final "Final" / Open "Draft" }')}
+      ${compactApp('action Status(Document) -> text { return when Document.Final "Final" / Open "Draft" }')}
     `,
       FunctionalCoreValidator.messages.compactWhenLabel('Open', 'Draft'),
     ),

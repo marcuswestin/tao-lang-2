@@ -188,14 +188,21 @@ async function projectViewImport(
   }
   const existing = file.statements.filter(AST.isUseStatement)
     .filter(use =>
-      AST.resolvedImportedDeclarations(use).some(declaration =>
-        AST.declarationNamespace(declaration) === 'value'
-        && (declaration.name === view.name
-          || (AST.isEntityDataDeclaration(declaration) && declaration.singularName === view.name))
-      ) || use.importedDeclarations.some(reference => reference.$refText === view.name && reference.ref === undefined)
+      AST.resolvedImportedBindings(use).some(binding =>
+        binding.namespace === 'value' && binding.localName === view.name
+      )
+      || use.importedDeclarations.some(specifier =>
+        AST.importLocalName(specifier) === view.name && specifier.target.ref === undefined
+      )
     )
   if (existing.length > 0) {
-    if (existing.every(use => AST.resolvedImportedDeclarations(use).includes(view))) {
+    if (
+      existing.every(use =>
+        AST.resolvedImportedBindings(use).some(binding =>
+          binding.namespace === 'value' && binding.declaration === view && binding.localName === view.name
+        )
+      )
+    ) {
       return undefined
     }
     Errors.throwUserInput(`Studio project-view import conflicts for ${view.name}.`)

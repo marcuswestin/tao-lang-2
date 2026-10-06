@@ -7,6 +7,7 @@ import { type BindingDiagnostic, resolveBindings } from './type-binding-matches'
 export type DataWriteBindingPair = {
   write: AST.DataWriteField
   field: DataFieldDefinition
+  inverse?: boolean
 }
 
 export type DataWriteBindingDiagnostic =
@@ -31,10 +32,15 @@ export function resolveDataWriteBindings(
   writes: readonly AST.DataWriteField[],
   requireAll: boolean,
 ): DataWriteBindingResult {
+  const fields = Type.dataFields(entity)
+  const canonicalLabel = (write: AST.DataWriteField): string | undefined =>
+    write.label === undefined
+      ? undefined
+      : fields.find(field => field.boolean && field.negativeName === write.label)?.name ?? write.label
   const resolution = resolveBindings<AST.DataWriteField, DataFieldDefinition>({
     candidates: writes,
-    targets: Type.dataFields(entity).filter(field => Type.dataFieldType(field).kind !== 'list'),
-    candidateLabel: write => write.label,
+    targets: fields.filter(field => Type.dataFieldType(field).kind !== 'list'),
+    candidateLabel: canonicalLabel,
     targetName: field => field.name,
     candidateType: write => Type.ofExpression(write.value),
     targetType: field => Type.dataFieldValueType(field),
@@ -63,7 +69,11 @@ export function resolveDataWriteBindings(
     unresolvedCandidatesExcuseMissing: false,
   })
   return {
-    pairs: resolution.pairs.map(([write, field]) => ({ write, field })),
+    pairs: resolution.pairs.map(([write, field]) => ({
+      write,
+      field,
+      ...(field.boolean && write.label !== undefined && write.label === field.negativeName ? { inverse: true } : {}),
+    })),
     diagnostics: resolution.diagnostics.map(dataWriteDiagnostic),
   }
 }

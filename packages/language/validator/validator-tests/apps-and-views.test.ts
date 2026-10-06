@@ -63,7 +63,7 @@ Describe('validator: apps and views', () => {
       app Workspace { id "workspace" version "1.0.0" name "Workspace"
         state PaneWidth is number = 320 (persist)
         Navigator SplitNav {
-          @pane { Content Pane Width PaneWidth Resizable true }
+          @pane { Content Pane, Width PaneWidth, Resizable true }
         }
       }
       view Pane() { render Empty() }
@@ -296,7 +296,7 @@ Describe('validator: apps and views', () => {
       app Base { id "base" version "1.0.0" name "Base"
         Navigator StackNav { Initial MainView }
       }
-      app Variant = Base with { id "variant"
+      app Variant = Base with { id "variant",
         Theme "unknown slot"
       }
       ${stubView('MainView')}

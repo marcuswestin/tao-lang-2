@@ -1,9 +1,15 @@
 import { AST } from '@parser'
 import {
   type ArgumentBindingDiagnostic,
+  type ArgumentBindingMetadata,
   type RenderInvocationPair,
   resolveArgumentBindings,
+  resolveParameterArgumentBindings,
 } from './argument-bindings'
+import type { AssociatedMethodReceiver } from './associated-methods'
+import { capabilityActionRequirements } from './associated-methods'
+import { callableSignatureOf } from './callable-signatures'
+import { declaredCallableFailureContract } from './failure-contracts'
 import {
   type NativeEventControlDiagnostic,
   type NativeEventControls,
@@ -61,15 +67,31 @@ export type ResolvedRenderInvocation = {
   eventPairs: RenderEventBindingPair[]
   implicitChange?: ImplicitChangeBinding
   eventDiagnostics: RenderEventBindingDiagnostic[]
+  parameterTypes?: ReadonlyMap<AST.ParameterDeclaration, TaoType>
+  transportTypes?: ReadonlyMap<AST.ParameterDeclaration, TaoType>
+  result?: TaoType
+  bindings?: ReturnType<typeof Type.instantiateGenericInvocation>['bindings']
+  genericDiagnostics?: ReturnType<typeof Type.instantiateGenericInvocation>['genericDiagnostics']
 }
 
 /** ResolvedActionInvocation declares the semantic shape of an action invocation. */
 export type ResolvedActionInvocation = {
   invocation: AST.DoStatement
   action?: AST.ActionDeclaration | AST.CommandDeclaration
+  associated?: AssociatedActionReceiver
+  capability?: ResolvedCapabilityActionTarget
   pairs: ActionInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
 }
+
+/** Associated action dispatch retains the authored receiver and its actual entity domain. */
+type AssociatedActionReceiver = Readonly<{
+  receiver: AssociatedMethodReceiver
+  domain: TaoType
+  owner: AST.TypeDeclaration | AST.EntityDataDeclaration
+  dispatch: 'instance' | 'static'
+  cardinality: 'one' | 'many'
+}>
 
 /**
  * ResolvedFunctionInvocation declares one call's owner-bound arguments. Its target links to a pure
@@ -81,20 +103,36 @@ export type ResolvedFunctionInvocation = {
   function?: AST.CallableDeclaration
   pairs: RenderInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
+  parameterTypes?: ReadonlyMap<AST.ParameterDeclaration, TaoType>
+  transportTypes?: ReadonlyMap<AST.ParameterDeclaration, TaoType>
+  result?: TaoType
+  genericDiagnostics?: ReturnType<typeof Type.instantiateGenericInvocation>['genericDiagnostics']
 }
 
 /** ResolvedActionTarget declares how an expression resolves as an action target. */
 export type ResolvedActionTarget =
-  | { kind: 'named'; action: AST.ActionDeclaration | AST.CommandDeclaration }
+  | { kind: 'named'; action: AST.ActionDeclaration | AST.CommandDeclaration; associated?: AssociatedActionReceiver }
+  | ResolvedCapabilityActionTarget
   | { kind: 'dynamic' }
   | { kind: 'unresolved' }
+
+type ResolvedCapabilityActionTarget = Readonly<{
+  kind: 'capability'
+  requirement: AST.CapabilityActionDeclaration
+  associated: AssociatedActionReceiver
+  signature: ReturnType<typeof callableSignatureOf>
+  result: TaoType
+}>
 
 /**
  * resolveRenderInvocation resolves a render target and type-based argument bindings. Only a view
  * declaration has parameters to bind; a nav or a parameter renders as the value it was bound to,
  * and `resolveRenderTarget` is what classifies those.
  */
-export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvocation {
+export function resolveRenderInvocation(
+  render: AST.Render,
+  metadata?: ArgumentBindingMetadata,
+): ResolvedRenderInvocation {
   const view = render.view?.ref
   if (!view || !AST.isViewDeclaration(view)) {
     return {
@@ -106,7 +144,11 @@ export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvoc
     }
   }
 
-  const bindings = resolveArgumentBindings(view, render)
+  const genericView = transparentViewTarget(view)
+  const generic = genericView.genericParameters.length > 0
+    ? Type.instantiateGenericInvocation(genericView, AST.argumentsOf(render), metadata)
+    : undefined
+  const bindings = generic ?? resolveArgumentBindings(view, render, metadata)
   const events = resolveRenderEventBindings(render, view, bindings.pairs)
   const satisfiedParameters = new Set([
     ...events.pairs.map(pair => pair.parameter),
@@ -126,7 +168,34 @@ export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvoc
     eventPairs: events.pairs,
     implicitChange: events.implicitChange,
     eventDiagnostics: events.diagnostics,
+    ...(generic
+      ? {
+        parameterTypes: generic.parameterTypes,
+        transportTypes: generic.transportTypes,
+        result: generic.result,
+        bindings: generic.bindings,
+        genericDiagnostics: generic.genericDiagnostics,
+      }
+      : {}),
   }
+}
+
+/** Only aliases without their own constraints forward the target's generic declaration. */
+function transparentViewTarget(view: AST.ViewDeclaration): AST.ViewDeclaration {
+  const seen = new Set<AST.ViewDeclaration>()
+  let current = view
+  while (current.aliasTarget) {
+    if (seen.has(current) || current.genericParameters.length > 0) {
+      return view
+    }
+    seen.add(current)
+    const target = current.aliasTarget.member.ref
+    if (!AST.isViewDeclaration(target)) {
+      return view
+    }
+    current = target
+  }
+  return current
 }
 
 function resolveRenderEventBindings(
@@ -265,6 +334,23 @@ function parameterSupportsEvent(parameter: AST.ParameterDeclaration, event: AST.
 /** resolveActionInvocation resolves a named action call and type-based argument bindings. */
 export function resolveActionInvocation(invocation: AST.DoStatement): ResolvedActionInvocation {
   const target = resolveActionTarget(invocation.action)
+  if (target.kind === 'capability') {
+    const bindings = resolveParameterArgumentBindings(
+      AST.parametersOf(target.requirement),
+      AST.argumentsOf(invocation),
+      {
+        parameterType: parameter =>
+          target.signature.inputs.find(input => input.declaration === parameter)?.type ?? Type.ofParameter(parameter),
+      },
+    )
+    return {
+      invocation,
+      capability: target,
+      associated: target.associated,
+      pairs: bindings.pairs,
+      diagnostics: bindings.diagnostics,
+    }
+  }
   if (target.kind !== 'named') {
     return {
       invocation,
@@ -277,18 +363,25 @@ export function resolveActionInvocation(invocation: AST.DoStatement): ResolvedAc
   return {
     invocation,
     action: target.action,
+    ...(target.associated ? { associated: target.associated } : {}),
     pairs: bindings.pairs,
     diagnostics: bindings.diagnostics,
   }
 }
 
 /** resolveFunctionInvocation resolves a pure function call through the shared owner binder. */
-export function resolveFunctionInvocation(invocation: AST.FunctionCallExpression): ResolvedFunctionInvocation {
+export function resolveFunctionInvocation(
+  invocation: AST.FunctionCallExpression,
+  metadata?: ArgumentBindingMetadata,
+): ResolvedFunctionInvocation {
   const fn = invocation.function.ref
   if (!fn) {
     return { invocation, pairs: [], diagnostics: [] }
   }
-  const bindings = resolveArgumentBindings(fn, invocation)
+  if (AST.isFunctionDeclaration(fn) && fn.genericParameters.length > 0) {
+    return { invocation, function: fn, ...Type.instantiateGenericInvocation(fn, AST.argumentsOf(invocation), metadata) }
+  }
+  const bindings = resolveArgumentBindings(fn, invocation, metadata)
   return {
     invocation,
     function: fn,
@@ -298,8 +391,11 @@ export function resolveFunctionInvocation(invocation: AST.FunctionCallExpression
 }
 
 /** resolveActionTarget classifies an expression used as a Tao action value. */
-export function resolveActionTarget(expression: AST.Expression | undefined): ResolvedActionTarget {
-  return resolveActionTargetWithSeenAliases(expression, new Set())
+export function resolveActionTarget(
+  expression: AST.Expression | undefined,
+  typeOfExpression: (expression: AST.Expression) => TaoType = Type.ofExpression,
+): ResolvedActionTarget {
+  return resolveActionTargetWithSeenAliases(expression, new Set(), typeOfExpression)
 }
 
 const UnresolvedActionTarget: ResolvedActionTarget = { kind: 'unresolved' }
@@ -307,6 +403,7 @@ const UnresolvedActionTarget: ResolvedActionTarget = { kind: 'unresolved' }
 function resolveActionTargetWithSeenAliases(
   expression: AST.Expression | undefined,
   seenAliases: Set<AST.AliasDeclaration>,
+  typeOfExpression: (expression: AST.Expression) => TaoType,
 ): ResolvedActionTarget {
   if (!expression) {
     return UnresolvedActionTarget
@@ -315,18 +412,133 @@ function resolveActionTargetWithSeenAliases(
     return { kind: 'dynamic' }
   }
   if (AST.isValueReference(expression)) {
-    return resolveActionTargetReference(expression, seenAliases)
+    return resolveActionTargetReference(expression, seenAliases, typeOfExpression)
   }
-  const type = Type.ofExpression(expression)
+  const associated = resolveAssociatedActionTarget(
+    expression,
+    receiver =>
+      receiver.kind === 'expression' ? typeOfExpression(receiver.expression) : associatedActionReceiverType(receiver),
+  )
+  if (associated) {
+    return associated
+  }
+  const type = typeOfExpression(expression)
   if (type.kind === 'primitive' && type.primitive === 'action') {
     return { kind: 'dynamic' }
   }
   return UnresolvedActionTarget
 }
 
+/** Select a real associated action using the consumer's context, with no dynamic type fallback. */
+export function resolveAssociatedActionTarget(
+  expression: AST.Expression,
+  receiverType: (receiver: AssociatedMethodReceiver) => TaoType = associatedActionReceiverType,
+): Extract<ResolvedActionTarget, { kind: 'named' | 'capability' }> | undefined {
+  let name: string
+  let receiver: AssociatedMethodReceiver
+  if (AST.isMemberAccessExpression(expression) && expression.shade === undefined && expression.members.length > 0) {
+    name = expression.members.at(-1)!
+    receiver = { kind: 'member-path', site: expression, members: expression.members.slice(0, -1) }
+  } else if (AST.isPostfixMemberAccess(expression)) {
+    name = expression.member
+    receiver = { kind: 'expression', expression: expression.receiver }
+  } else {
+    return undefined
+  }
+  const staticOwner = associatedStaticActionOwner(receiver)
+  const domain = staticOwner ? Type.ofDefinition(staticOwner) : receiverType(receiver)
+  const entityDomain = domain.kind === 'entity' ? domain : domain.kind === 'list' ? domain.element : undefined
+  if (entityDomain?.kind === 'entity' && AST.isEntityDataDeclaration(entityDomain.entity)) {
+    const owner = entityDomain.entity
+    const cardinality = domain.kind === 'list' ? 'many' : 'one'
+    const action = associatedEntityAction(owner, name, cardinality)
+    return action
+      ? { kind: 'named', action, associated: { receiver, domain, owner, dispatch: 'instance', cardinality } }
+      : undefined
+  }
+  const dispatch = staticOwner ? 'static' : 'instance'
+  const selected = Type.associatedActionDeclaration(domain, name, undefined, dispatch)
+  if (selected) {
+    return {
+      kind: 'named',
+      action: selected.declaration,
+      associated: { receiver, domain, owner: selected.owner, dispatch, cardinality: 'one' },
+    }
+  }
+  const required = capabilityActionRequirement(domain, name, dispatch)
+  const materialized = required ? Type.associatedCallable(required.requirement, required.owner) : undefined
+  const contract = materialized?.kind === 'ready'
+    ? Type.specializeAssociatedDescriptor(materialized.descriptor, domain)
+    : undefined
+  return required
+    ? {
+      kind: 'capability',
+      requirement: required.requirement,
+      associated: { receiver, domain, owner: required.owner, dispatch, cardinality: 'one' },
+      signature: contract?.signature ?? callableSignatureOf(
+        AST.parametersOf(required.requirement),
+        declaredCallableFailureContract(required.requirement),
+      ),
+      result: contract?.result ?? (required.requirement.returnType
+        ? Type.ofTypeExpression(required.requirement.returnType)
+        : Type.ofNone()),
+    }
+    : undefined
+}
+
+function capabilityActionRequirement(
+  receiver: TaoType,
+  name: string,
+  dispatch: 'instance' | 'static',
+): { requirement: AST.CapabilityActionDeclaration; owner: AST.TypeDeclaration } | undefined {
+  const bounds = receiver.genericParameter ? receiver.genericBounds ?? [] : [receiver]
+  for (const bound of bounds) {
+    if (bound.kind !== 'capability') {
+      continue
+    }
+    const owner = bound.declaration
+    const requirement = capabilityActionRequirements(owner).find(action =>
+      action.name === name && (!!action.static === (dispatch === 'static'))
+    )
+    if (requirement) {
+      return { requirement, owner }
+    }
+  }
+  return undefined
+}
+
+function associatedEntityAction(
+  owner: AST.EntityDataDeclaration,
+  name: string,
+  cardinality: 'one' | 'many',
+): AST.ActionDeclaration | undefined {
+  return owner.block.entries.filter(AST.isActionDeclaration).find(declaration => {
+    const declared = AST.associatedEntityActionReceiver(declaration)
+    return declaration.name === name && declared?.owner === owner && declared.cardinality === cardinality
+  })
+}
+
+function associatedStaticActionOwner(receiver: AssociatedMethodReceiver): AST.TypeDeclaration | undefined {
+  const target = receiver.kind === 'member-path'
+    ? receiver.members.length === 0 ? receiver.site.target.ref : undefined
+    : AST.isValueReference(receiver.expression)
+    ? receiver.expression.target.ref
+    : AST.isMemberAccessExpression(receiver.expression)
+    ? receiver.expression.target.ref
+    : undefined
+  return AST.isTypeDeclaration(target) ? target : undefined
+}
+
+function associatedActionReceiverType(receiver: AssociatedMethodReceiver): TaoType {
+  return receiver.kind === 'expression'
+    ? Type.ofExpression(receiver.expression)
+    : Type.atMemberPath(Type.ofReferenceRoot(receiver.site), receiver.members)
+}
+
 function resolveActionTargetReference(
   reference: AST.ValueReference,
   seenAliases: Set<AST.AliasDeclaration>,
+  typeOfExpression: (expression: AST.Expression) => TaoType,
 ): ResolvedActionTarget {
   const target = reference.target.ref
   if (!target) {
@@ -338,10 +550,12 @@ function resolveActionTargetReference(
     return { kind: 'named', action: target }
   }
   if (AST.isAliasDeclaration(target)) {
-    return resolveAliasActionTarget(target, seenAliases)
+    return resolveAliasActionTarget(target, seenAliases, typeOfExpression)
   }
   if (AST.isParameterDeclaration(target)) {
-    return parameterAcceptsAction(target) ? { kind: 'dynamic' } : UnresolvedActionTarget
+    return parameterAcceptsAction(target, () => typeOfExpression(reference))
+      ? { kind: 'dynamic' }
+      : UnresolvedActionTarget
   }
   return UnresolvedActionTarget
 }
@@ -349,17 +563,21 @@ function resolveActionTargetReference(
 function resolveAliasActionTarget(
   target: AST.AliasDeclaration,
   seenAliases: Set<AST.AliasDeclaration>,
+  typeOfExpression: (expression: AST.Expression) => TaoType,
 ): ResolvedActionTarget {
   if (seenAliases.has(target)) {
     return UnresolvedActionTarget
   }
   seenAliases.add(target)
   return AST.isExpression(target.value)
-    ? resolveActionTargetWithSeenAliases(target.value, seenAliases)
+    ? resolveActionTargetWithSeenAliases(target.value, seenAliases, typeOfExpression)
     : UnresolvedActionTarget
 }
 
-function parameterAcceptsAction(parameter: AST.ParameterDeclaration): boolean {
-  const type = Type.ofParameter(parameter)
+function parameterAcceptsAction(
+  parameter: AST.ParameterDeclaration,
+  typeOfParameter: (parameter: AST.ParameterDeclaration) => TaoType,
+): boolean {
+  const type = typeOfParameter(parameter)
   return type.kind === 'primitive' && type.primitive === 'action'
 }

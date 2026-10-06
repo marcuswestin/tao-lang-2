@@ -80,7 +80,7 @@ Describe('Studio shared fixture source', () => {
         Expect(validated.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
         const file = validated.entry.ast
         const names = file.statements.filter(AST.isUseStatement)
-          .flatMap(statement => statement.importedDeclarations.map(reference => reference.$refText))
+          .flatMap(statement => statement.importedDeclarations.map(AST.importSourceName))
         Expect(names.filter(name => name === 'Note')).toEqual(['Note'])
         Expect(names.includes('Notes')).toBe(existingImport === 'use Notes from ./Data.tao')
         const fixture = file.statements.find(AST.isFixtureDeclaration)!

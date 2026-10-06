@@ -14,7 +14,10 @@ export const ExpressionsFormatter = {
 
   /** ConfigurationConstructor formats a declaration-linked constructor and its value or block. */
   ConfigurationConstructor(f) {
-    f.noSpaceBefore('.')
+    // A leading role dot starts this expression; its parent owns the preceding argument gap.
+    if (!f.node.relative) {
+      f.noSpaceBefore('.')
+    }
     f.noSpaceAfter('.')
     f.oneSpaceBeforeProperty('block', 'value')
   },
@@ -36,6 +39,11 @@ export const ExpressionsFormatter = {
 
   CopyExpression(f) {
     f.oneSpaceAfter('copy')
+    f.oneSpaceAround('as')
+  },
+
+  /** ConversionExpression casts the value produced by its full addition expression. */
+  ConversionExpression(f) {
     f.oneSpaceAround('as')
   },
 
@@ -86,8 +94,39 @@ export const ExpressionsFormatter = {
   FunctionDeclaration(f) {
     f.visibilityOnOwnLine()
     f.oneSpaceAfter('function', 'returns')
+    f.oneSpaceAfter('func')
     f.oneSpaceBefore('returns')
-    f.noSpaceBefore('(')
+    f.oneSpaceAround('fails')
+    f.oneSpaceAround('->')
+    f.commaSpacedList()
+    if (f.node.genericParameters.length > 0) {
+      f.oneSpaceBefore('where')
+      f.oneSpaceAfter('where')
+    } else {
+      f.noSpaceBefore('(')
+    }
+  },
+
+  /** AssociatedFunctionDeclaration formats its optional bounded generic header. */
+  AssociatedFunctionDeclaration(f) {
+    f.oneSpaceAfter('static', 'func')
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
+    f.oneSpaceAround('fails')
+    f.oneSpaceAround('->')
+    f.commaSpacedList()
+    if (f.node.genericParameters.length > 0) {
+      f.oneSpaceBefore('where')
+      f.oneSpaceAfter('where')
+    } else {
+      f.noSpaceBefore('(')
+    }
+  },
+
+  /** GenericTypeParameter formats its name and conjunctive bounds. */
+  GenericTypeParameter(f) {
+    f.oneSpaceAfter('type', 'is')
+    f.oneSpaceAround('and')
   },
 
   /** FunctionBlock formats return-oriented function control flow. */
@@ -108,6 +147,13 @@ export const ExpressionsFormatter = {
 
   /** FunctionCallExpression keeps call parentheses tight and arguments comma-spaced. */
   FunctionCallExpression(f) {
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
+  },
+
+  /** MethodCallExpression keeps postfix invocation parentheses attached to their callee. */
+  MethodCallExpression(f) {
     f.noSpaceBefore('(')
     f.noSpaceAfter('(')
     f.noSpaceBefore(')')
@@ -152,6 +198,10 @@ export const ExpressionsFormatter = {
    */
   WhenExpression(f) {
     f.oneSpaceAfter('when')
+    // Without a subject, the opening brace owns the gap after `pick`.
+    if (f.node.subject) {
+      f.oneSpaceAfter('pick')
+    }
     if (f.node.otherwise?.barSyntax) {
       f.indentedLines([...f.node.branches, f.node.otherwise])
       return
@@ -224,10 +274,16 @@ export const ExpressionsFormatter = {
   },
 
   /** MemberAccessExpression has no whitespace around member dots. */
-  MemberAccessExpression() {},
+  MemberAccessExpression(f) {
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
+  },
 
   /** PostfixMemberAccess has no whitespace around its dot, so `220.ms` stays tight. */
-  PostfixMemberAccess() {},
+  PostfixMemberAccess(f) {
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
+  },
 
   /** StringLiteral is a single token with no interior formatting. */
   StringLiteral() {},

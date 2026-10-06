@@ -23,6 +23,8 @@ export type TaoActionFailureReport = Readonly<{
   arguments: readonly unknown[]
   case: string
   message: string
+  /** Older diagnostic captures have no public sentence; their message is never a UI fallback. */
+  publicMessage?: string
   retryEligible: boolean
   frames: readonly string[]
   timestamp: number
@@ -253,17 +255,24 @@ export function reportActionFailure(
   action: string,
   arguments_: readonly unknown[],
   unownedError?: unknown,
-  owned = false,
+  owned: boolean | ((failure: TaoActionFailureReport) => boolean) = false,
 ): TaoActionFailureReport {
   const failure = actionFailureReport(error, transaction, action, arguments_)
   actionHistory.push(failure)
   if (actionHistory.length > 50) {
     actionHistory.splice(0, actionHistory.length - 50)
   }
+  let accepted = false
+  try {
+    accepted = typeof owned === 'function' ? owned(failure) : owned
+  } catch (deliveryError) {
+    // A broken sink owns neither the original failure nor its own delivery failure.
+    reportUnownedFailure(deliveryError)
+  }
   for (const listener of actionFailureListeners) {
     listener(failure)
   }
-  if (actionFailureListeners.size === 0 && !owned) {
+  if (actionFailureListeners.size === 0 && !accepted) {
     reportUnownedFailure(unownedError ?? new TaoActionFailure(failure.case, failure.message))
   }
   return failure
@@ -349,6 +358,12 @@ function actionFailureReport(
   arguments_: readonly unknown[],
 ): TaoActionFailureReport {
   const failure = asActionFailure(error)
+  const exit = actionExitOf(error)
+  let original = error
+  for (let primary = actionExitOf(original); primary; primary = actionExitOf(original)) {
+    original = primary.primary
+  }
+  const publicFailure = original instanceof TaoActionFailure ? original : new TaoActionFailure('Unexpected', '')
   return Object.freeze({
     action,
     arguments: sanitize(arguments_) as readonly unknown[],
@@ -357,9 +372,16 @@ function actionFailureReport(
       ? [...(actionFailureFrames.get(error) ?? transaction.frames)]
       : [...transaction.frames],
     message: actionFailureMessage(failure, action, actionExitOf(error)?.stage),
+    publicMessage: actionFailureMessage(publicFailure, action, exit?.stage, transaction.externalEffects),
     retryEligible: !transaction.externalEffects,
     timestamp: Date.now(),
   })
+}
+
+/** A public action surface never falls back to the diagnostic message of an older capture. */
+export function actionFailurePublicMessage(failure: TaoActionFailureReport): string {
+  return failure.publicMessage
+    ?? actionFailureMessage(new TaoActionFailure('Unexpected', ''), failure.action, undefined, !failure.retryEligible)
 }
 
 /** asActionFailure reads any thrown value as an action failure; an undeclared throw is `Unexpected`. */
@@ -382,12 +404,13 @@ export function actionFailureMessage(
   failure: TaoActionFailure,
   action: string,
   stage?: TaoActionExit['stage'],
+  externalEffects = false,
 ): string {
   return failure.providerSentence
     || failure.declaredSentence
     || (stage === 'cleanup'
       ? `Couldn't finish cleanup for '${action}.'`
-      : `Couldn't finish '${action}.' Nothing was changed.`)
+      : `Couldn't finish '${action}.'${externalEffects ? '' : ' Nothing was changed.'}`)
 }
 
 function sanitize(value: unknown, seen = new WeakSet<object>()): unknown {

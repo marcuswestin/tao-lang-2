@@ -11,6 +11,8 @@ const readNetCases = ['loading', 'missing', 'unauthorized', 'error'] as const
 
 /** One exceptional read case the net handles. */
 export type TaoReadNetCase = typeof readNetCases[number]
+/** `none` is the source-facing name for a missing live entity handle. */
+type TaoReadCase = Exclude<TaoReadNetCase, 'missing'> | 'none'
 
 /** Optional facts the compiler can prove about the expression at a guard site. */
 export type TaoReadHint = Readonly<{
@@ -21,6 +23,7 @@ export type TaoReadHint = Readonly<{
 
 /** Public, provider-neutral facts passed to an exceptional read handler. */
 export type TaoReadContext = Readonly<{
+  Case: TaoReadCase
   State: TaoReadNetCase
   Message: string
   ReadKind: NonNullable<TaoReadHint['readKind']>
@@ -89,10 +92,12 @@ export function readContext(
   state: TaoReadNetCase,
   hint: TaoReadHint = {},
   facts: Readonly<Partial<Pick<TaoReadContext, 'ElapsedSeconds' | 'MissingReason' | 'UnauthorizedReason'>>> = {},
+  selectedCase: TaoReadCase = state === 'missing' ? 'none' : state,
 ): TaoReadContext {
   // TODO: Docs/Roadmap/Tao Revolution/Follow-ups - Read context producers.md tracks proven
   // elapsed time, progress, recovery, category, and retry producers. Do not invent a capability or no-op action.
   return Object.freeze({
+    Case: selectedCase,
     State: state,
     Message: readMessage(state, hint, facts),
     ReadKind: hint.readKind ?? 'unknown',
@@ -121,7 +126,7 @@ type TaoReadNetHandler = (
 ) => React.ReactNode
 
 /** An app guard: the cases it replaces. Every case it omits keeps the runtime's. */
-export type TaoReadNet = Readonly<Partial<Record<TaoReadNetCase, TaoReadNetHandler>>>
+export type TaoReadNet = Readonly<Partial<Record<TaoReadCase, TaoReadNetHandler>>>
 
 /** ReadNet freezes the handlers a compiled app guard declares. */
 export function ReadNet(handlers: TaoReadNet): TaoReadNet {
@@ -142,7 +147,8 @@ export function renderReadNet(
   context: { evaluate(): { jsValue: TaoReadContext } },
   siteProps: TaoProps | undefined,
 ): React.ReactNode {
-  const override = TaoPropsControls.appInChain(siteProps)?.readNet?.[caseName]
+  const handlers = TaoPropsControls.appInChain(siteProps)?.readNet
+  const override = handlers?.[caseName === 'missing' ? 'none' : caseName]
   if (override) {
     return override({ __tao: siteProps }, context)
   }

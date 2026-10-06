@@ -4,6 +4,7 @@ import { Assert, Switch } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { withAuthContextFactory } from './auth-context'
+import { compileArgumentForType } from './capability-projection'
 import { compileDeclarationIdentity } from './declaration-identity'
 
 type FunctionParameter = {
@@ -51,7 +52,23 @@ export const FunctionalCoreCompiler = {
 
   /** ReturnStatement returns one runtime-wrapped Tao value from the function callback. */
   ReturnStatement(statement: AST.ReturnStatement): Compiled {
-    return gen`return ${Compile.Expression(statement.value)}`
+    let owner: AST.Node | undefined = statement.$container
+    while (
+      owner && !AST.isFunctionDeclaration(owner) && !AST.isAssociatedFunctionDeclaration(owner)
+      && !AST.isAssociatedConverterDeclaration(owner)
+    ) {
+      owner = owner.$container
+    }
+    Assert(
+      owner && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner)
+        || AST.isAssociatedConverterDeclaration(owner)),
+      'Expected a function return owner.',
+    )
+    const result = AST.isAssociatedConverterDeclaration(owner)
+      ? Type.associatedConverterDescriptor(owner)?.result
+      : Type.ofFunctionReturn(owner)
+    Assert.defined(result, 'a function or converter has its declared or inferred return domain')
+    return gen`return ${compileArgumentForType(statement.value, result)}`
   },
 
   /** IfFunctionStatement preserves native callback return behavior for early exits. */
@@ -99,18 +116,18 @@ export const FunctionalCoreCompiler = {
 
   /** FunctionRuntimeParameter emits one runtime-wrapped function parameter. */
   FunctionRuntimeParameter(parameter: FunctionParameter): Compiled {
-    return gen`${functionRuntimeParameterName(parameter.index)}${
-      parameter.parameter.defaultValue === undefined ? '' : '?'
-    }: ${Compile.ParameterType(parameter.parameter)}`
+    const hasDefault = parameter.parameter.defaultValue !== undefined
+    const list = parameter.parameter.$container
+    const followedByRequired = AST.isParameterList(list)
+      && list.parameters.slice(parameter.index + 1).some(input => input.defaultValue === undefined)
+    return gen`${functionRuntimeParameterName(parameter.index)}${hasDefault && !followedByRequired ? '?' : ''}: ${
+      Compile.ParameterType(parameter.parameter)
+    }${hasDefault && followedByRequired ? gen` | undefined` : gen.noop()}`
   },
 
   /** FunctionParameterBinding exposes one positional argument through Tao lexical scope. */
   FunctionParameterBinding(parameter: FunctionParameter): Compiled {
-    const name = { name: Type.parameterName(parameter.parameter) }
-    const runtimeParameter = functionRuntimeParameterName(parameter.index)
-    return parameter.parameter.defaultValue === undefined
-      ? gen`${gen.scopeName(name)} = ${runtimeParameter}`
-      : gen`${gen.scopeName(name)} = ${runtimeParameter} ?? ${Compile.Expression(parameter.parameter.defaultValue)}`
+    return compileFunctionParameterBinding(parameter)
   },
 
   /** RenderFragmentStatement compiles one child render/control-flow fragment. */
@@ -130,26 +147,29 @@ export const FunctionalCoreCompiler = {
     })
   },
 
-  /** WhenRenderStatement evaluates one subject and renders one lazy case. */
+  /** WhenRenderStatement observes one subject and renders its matching lazy cases. */
   WhenRenderStatement(statement: AST.WhenRenderStatement, options: CodegenOptions = {}): Compiled {
     if (!statement.subject) {
-      return gen`{(() => {
+      return gen`{TR.WhenPredicatesRender([
         ${
         gen.list(statement.branches, branch => {
           Assert.defined(branch.condition, 'predicate render branch has a condition')
-          return gen`if (${
-            Compile.Expression(branch.condition)
-          }.evaluate().jsValue === true) return TR.BlockScope(_Scope, _Scope => {
+          return gen`[() => ${Compile.Expression(branch.condition)}, () => TR.BlockScope(_Scope, _Scope => {
             ${Compile.RenderBlockBody(branch.block, options)}
-          })`
+          })],`
         })
       }
-        return TR.BlockScope(_Scope, _Scope => { ${Compile.RenderBlockBody(statement.otherwise.block, options)} })
-      })()}`
+      ]${
+        statement.otherwise
+          ? gen`, () => TR.BlockScope(_Scope, _Scope => {
+        ${Compile.RenderBlockBody(statement.otherwise.block, options)}
+      })`
+          : gen.noop()
+      })}`
     }
     const availability = Type.ofExpression(statement.subject).kind === 'entity'
     return gen`
-      {TR.${availability ? 'WhenReadRender' : 'WhenCaseRender'}(${Compile.Expression(statement.subject)}, [
+      {TR.${availability ? 'WhenReadRender' : 'WhenAllRender'}(${Compile.Expression(statement.subject)}, [
         ${
       gen.list(
         statement.branches,
@@ -162,9 +182,13 @@ export const FunctionalCoreCompiler = {
           })],`,
       )
     }
-      ], () => TR.BlockScope(_Scope, _Scope => {
+      ], ${
+      statement.otherwise
+        ? gen`() => TR.BlockScope(_Scope, _Scope => {
         ${Compile.RenderBlockBody(statement.otherwise.block, options)}
-      })${availability ? gen`, _ViewProps.__tao` : gen.noop()})}
+      })`
+        : gen`undefined`
+    }${availability ? gen`, _ViewProps.__tao` : gen.noop()})}
     `
   },
 
@@ -185,6 +209,13 @@ export const FunctionalCoreCompiler = {
     remaining: readonly AST.RenderFragment[],
     options: CodegenOptions = {},
   ): Compiled {
+    const capturedParameter = guardContinuationParameter(statement)
+    const continuation = capturedParameter
+      ? gen`_TaoGuardSubject => TR.BlockScope(_Scope, _Scope => {
+        ${gen.scopeName({ name: Type.parameterName(capturedParameter) })} = _TaoGuardSubject
+        return <>${Compile.RenderBlockFragments(remaining, options)}</>
+      })`
+      : gen`() => <>${Compile.RenderBlockFragments(remaining, options)}</>`
     return gen`
       {TR.GuardRender(${Compile.Expression(statement.subject)}, [
         ${
@@ -199,9 +230,9 @@ export const FunctionalCoreCompiler = {
         })],`,
       )
     }
-      ], () => <>
-        ${Compile.RenderBlockFragments(remaining, options)}
-      </>, _ViewProps.__tao${readHint(statement.subject)})}
+      ], ${continuation}, _ViewProps.__tao${readHint(statement.subject)}${
+      capturedParameter ? gen`, true` : gen.noop()
+    })}
     `
   },
 
@@ -233,6 +264,7 @@ export const FunctionalCoreCompiler = {
 
   /** ForStatement compiles repeated rendering with an iteration-local Tao value binding. */
   ForStatement(statement: AST.ForStatement, options: CodegenOptions = {}): Compiled {
+    Assert.is(statement.block, AST.isBlock, 'render loop owns a render block')
     const selectHandler = AST.loopSelectHandlers(statement)[0]
     const cst = statement.$cstNode
     Assert.defined(cst, 'compiled loop has source coordinates')
@@ -267,14 +299,28 @@ export const FunctionalCoreCompiler = {
     Assert.defined(loop, 'validated loop select handler is a direct loop child')
     Assert.defined(block, 'validated loop select handler has an inline action block')
     return gen`${functionRuntimeParameterName(0)} => {
-      const _TaoActionContinuation = TR.ActionContinuation()
-      return TR.BlockScope(_Scope, async _Scope => {
-        ${gen.scopeName(loop)} = ${functionRuntimeParameterName(0)}
-        ${Compile.ActionBlockBody(block)}
-      })
+      return ${
+      Compile.ActionScopedBlock(
+        block,
+        gen`${gen.scopeName(loop)} = ${functionRuntimeParameterName(0)}`,
+        true,
+      )
+    }
     }`
   },
 } as const
+
+/** A projected contract can supply its defining-module default without rebinding it in the caller. */
+export function compileFunctionParameterBinding(parameter: FunctionParameter, defaultValue?: Compiled): Compiled {
+  const name = { name: Type.parameterName(parameter.parameter) }
+  const runtimeParameter = functionRuntimeParameterName(parameter.index)
+  if (parameter.parameter.defaultValue === undefined) {
+    return gen`${gen.scopeName(name)} = ${runtimeParameter}`
+  }
+  const fallback = defaultValue
+    ?? compileArgumentForType(parameter.parameter.defaultValue, Type.ofParameter(parameter.parameter))
+  return gen`${gen.scopeName(name)} = ${runtimeParameter} ?? ${fallback}`
+}
 
 /** A read net handler without a block is, by the grammar, one bare render. */
 function requiredRender(branch: AST.AppGuardBranch): AST.ViewRender {
@@ -289,12 +335,62 @@ function readHint(subject: AST.Expression): Compiled {
   }
   const target = subject.target.ref
   const type = Type.ofExpression(subject)
-  const readKind = AST.isEntityQueryDeclaration(target) ? 'query' : type.kind === 'entity' ? 'entity' : undefined
+  const entityType = entityTypeIncludingNone(type)
+  const readKind = AST.isEntityQueryDeclaration(target) ? 'query' : entityType ? 'entity' : undefined
   return readKind
     ? gen`, ${
-      gen.jsLiteral({ readKind, subjectType: type.kind === 'entity' ? Type.dataEntityName(type.entity) : undefined })
+      gen.jsLiteral({ readKind, subjectType: entityType ? Type.dataEntityName(entityType.entity) : undefined })
     }`
     : gen.noop()
+}
+
+function entityTypeIncludingNone(type: ReturnType<typeof Type.ofExpression>) {
+  if (type.kind === 'entity') {
+    return type
+  }
+  if (type.kind !== 'union' || type.members.length !== 2) {
+    return undefined
+  }
+  const entity = type.members.find(member => member.kind === 'entity')
+  const none = type.members.find(member => member.kind === 'primitive' && member.primitive === 'none')
+  return entity?.kind === 'entity' && none?.kind === 'primitive' ? entity : undefined
+}
+
+/** Only an immutable view parameter can acquire a guard's continuation-local snapshot. */
+function guardContinuationParameter(statement: AST.GuardRenderStatement): AST.ParameterDeclaration | undefined {
+  const subject = statement.subject
+  if (!AST.isValueReference(subject) || !AST.isBlock(statement.$container)) {
+    return undefined
+  }
+  const parameter = subject.target.ref
+  const owner = AST.findOwningView(statement)
+  if (
+    !AST.isParameterDeclaration(parameter) || !owner || parameter.$container?.$container !== owner
+    || parameter.copy || parameter.mutable || ASTUtils.parameterRequiresWritable(parameter)
+  ) {
+    return undefined
+  }
+  const name = Type.parameterName(parameter)
+  for (let node: AST.Node | undefined = statement.$container; node && node !== owner; node = node.$container) {
+    if (
+      AST.isBlock(node)
+      && node.statements.some(candidate =>
+        (AST.isAliasDeclaration(candidate) || AST.isEntityQueryDeclaration(candidate))
+        && Type.declarationName(candidate) === name
+      )
+    ) {
+      return undefined
+    }
+  }
+  const domain = Type.ofParameter(parameter)
+  if (domain.kind !== 'union' || !entityTypeIncludingNone(domain)) {
+    return undefined
+  }
+  const branches = ASTUtils.guardBranches(statement)
+  return (!statement.caseBlock && !statement.single)
+      || branches.filter(branch => branch.case === 'none').length === 1
+    ? parameter
+    : undefined
 }
 
 function functionRuntimeParameterName(index: number): Compiled {

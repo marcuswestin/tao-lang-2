@@ -1,10 +1,13 @@
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
+import { captureActionReceiver } from './TR-action-receivers'
 import { TestActionStubs } from './TR-action-test-stubs'
 import {
+  actionCancellationSignal,
   actionFailureCaseName,
   actionTestStubContext,
   captureActionContinuation,
+  captureActionDispatch,
   deferDetached,
   existingTransactionResource,
   markExternalEffect,
@@ -19,6 +22,7 @@ import {
   type TaoDeclaredFailure,
   transactionResource,
 } from './TR-action-transactions'
+import type { TaoEvaluable } from './TR-action-values'
 import { AgentControls } from './TR-agent'
 import { AppShell, AppSurfaceFrame } from './TR-app-shell'
 import { RuntimeAssert } from './TR-assert'
@@ -43,6 +47,7 @@ import {
   type TaoConfiguredAuth,
   type TaoDataAuthBinding,
 } from './TR-auth'
+import { createCapabilityRuntime, type TaoCapability } from './TR-capabilities'
 import { createClipboard, type TaoPasteboard } from './TR-clipboard'
 import { createElement } from './TR-create-element'
 import {
@@ -88,7 +93,7 @@ import {
   type TaoDesign,
   type TaoDesignSpec,
 } from './TR-design'
-import { runEffectOutcome, type TaoEffectContract } from './TR-effect-outcomes'
+import { runEffectOutcome, runJoinedEffectOutcome, type TaoEffectContract } from './TR-effect-outcomes'
 import {
   captureArguments,
   latestFailureCapture,
@@ -114,8 +119,10 @@ import {
   useOutlineCollection,
   useOutlineItem,
 } from './TR-interaction-outline'
+import { getJSValue, type TaoJSValue } from './TR-js-value'
 import { LayoutControls } from './TR-layout'
 import { openUrl } from './TR-linking'
+import { runMultiOutcome } from './TR-multi-outcome'
 import { installNativeAbortSupport } from './TR-native-abort'
 import { nativeAsyncCallbacks } from './TR-native-async-callbacks'
 import { nativeByteControls } from './TR-native-bytes'
@@ -154,6 +161,7 @@ import {
   testNavKind as testNavigationKind,
 } from './TR-navigation'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
+import { checkedNumericBacking } from './TR-numeric-units'
 import type {
   TaoAuthPairing,
   TaoAuthProofKind,
@@ -173,23 +181,41 @@ import {
   usePersistedState,
 } from './TR-persisted-state'
 import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from './TR-phrases'
+import { admitQuantityUnion, nativeQuantityResult } from './TR-quantity-admission'
+import { QuantityArithmetic, quantityOperand, scalarOperand } from './TR-quantity-arithmetic'
+import { factoryOfQuantityInput, quantityToText } from './TR-quantity-values'
+import { isQuantityPayload, type TaoQuantityPayload } from './TR-quantity-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue, markReactiveValue } from './TR-reactive'
 import {
+  completeRuntimeValue,
   copyValue,
   createWritableCell,
+  isRuntimeValue,
   isWritable,
   mappedWritable,
   nativeMutationLease,
   reactiveValue,
+  registerCompleteRuntimeValue,
+  registerRuntimeValue,
   type TaoRuntimeValue,
+  type TaoRuntimeValueInput,
   type TaoWritable,
+  type TaoWritableInput,
   useNativeMutationLease,
   useParameterCell,
   writablePath,
 } from './TR-reactive-values'
 import { readAvailability } from './TR-read-availability'
 import { MergeReadNet, readContext, ReadNet, renderReadNet, type TaoReadHint, type TaoReadNetCase } from './TR-read-net'
+import {
+  createSlotRenderer,
+  type RenderSlotBodyProps,
+  RenderSlotFrame,
+  selectRenderSlot,
+  type TaoSlotRenderer,
+} from './TR-render-slots'
+import { describeRenderedView, mountRenderedView, type TaoRendered } from './TR-rendered-view'
 import {
   captureRuntime,
   registerRuntimeCaptureDomain,
@@ -232,8 +258,10 @@ import {
 import { StudioSubjectHost } from './TR-studio-subject'
 import { runtimeSwitchHandler } from './TR-switch'
 import * as TRTaoProps from './TR-TaoProps'
+import { renderTextValue } from './TR-ui-render'
 import { Clock, createTicker, makeUnitControls, type TaoTicker } from './TR-units'
 import * as TRViews from './TR-views'
+import { type TaoDurationReader, wait } from './TR-wait'
 
 const warnedUnhonoredLayouts = new Set<string>()
 
@@ -285,7 +313,12 @@ class TR {
 
   /** Interpolate concatenates Tao values, rendering absence as an empty string. */
   static Interpolate(parts: readonly TR.Evaluable[]): TR.Value<string> {
-    return new RuntimeValue(parts.map(part => part.evaluate().jsValue).map(value => value ?? '').join(''))
+    return new RuntimeValue(
+      parts.map(part => {
+        const value = part.evaluate().jsValue
+        return isQuantityPayload(value) ? quantityToText(new RuntimeValue(value)) : value ?? ''
+      }).join(''),
+    )
   }
 
   /**
@@ -294,7 +327,7 @@ class TR {
    * to offer.
    */
   static Plural(count: TR.Evaluable, forms: TR.PluralForms, locale?: string): TR.Value<string> {
-    return selectPluralForm(count.evaluate().jsValue, forms, locale).evaluate()
+    return completeRuntimeValue<string>(selectPluralForm(count.evaluate().jsValue, forms, locale).evaluate())
   }
 
   /** Enum creates declaration-owned case identities and registers their stable persistence names. */
@@ -308,6 +341,22 @@ class TR {
       declaredEnumCases.add(value)
       return [caseName, new RuntimeValue(value)]
     })))
+  }
+
+  /** Native case names acquire the selected declaration's actual case identity at the boundary. */
+  static EnumFromJS(
+    cases: Readonly<Record<string, TR.Value<TR.EnumCaseIdentity>>>,
+    caseName: unknown,
+  ): TR.Value<TR.EnumCaseIdentity> {
+    const selected = typeof caseName === 'string' && Object.prototype.hasOwnProperty.call(cases, caseName)
+      ? cases[caseName]
+      : undefined
+    RuntimeAssert.input(selected, 'The native result must name a declared case of its Tao return type.')
+    RuntimeAssert(
+      declaredEnumCases.has(selected.evaluate().jsValue),
+      'a native enum return uses declared case identities',
+    )
+    return selected
   }
 
   /** IsCase tests built-in subject states, declared boolean cases, and enum identity values. */
@@ -359,7 +408,7 @@ class TR {
     otherwise: () => TR.Evaluable,
   ): TR.Value<T> {
     const matched = firstMatchedBranch(subject.evaluate().jsValue, branches)
-    return (matched ? matched.result.evaluate() : otherwise().evaluate()) as TR.Value<T>
+    return completeRuntimeValue<T>(matched ? matched.result.evaluate() : otherwise().evaluate())
   }
 
   /** WhenCaseRender evaluates one subject once and renders one matching case. */
@@ -370,6 +419,42 @@ class TR {
   ): React.ReactNode {
     const matched = firstMatchedBranch(subject.evaluate().jsValue, branches)
     return matched ? matched.result : otherwise()
+  }
+
+  /** Render when captures all matches before bodies; case keys preserve each branch's occurrence. */
+  static WhenAllRender(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<React.ReactNode>[],
+    otherwise?: () => React.ReactNode,
+  ): React.ReactNode {
+    return renderMatchedBranches(subject.evaluate().jsValue, branches, otherwise)
+  }
+
+  /** Predicate render when evaluates every condition before rendering any selected body. */
+  static WhenPredicatesRender(
+    branches: readonly (readonly [() => TR.Evaluable, () => React.ReactNode])[],
+    otherwise?: () => React.ReactNode,
+  ): React.ReactNode {
+    const selected = branches.flatMap(([condition, body], index) =>
+      condition().evaluate().jsValue === true ? [{ index, body }] : []
+    )
+    return selected.length === 0
+      ? otherwise?.()
+      : selected.map(({ index, body }) => createElement(React.Fragment, { key: index }, body()))
+  }
+
+  /** WhenAll captures one observation and every match before joining all selected action bodies. */
+  static WhenAll(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<unknown>[],
+    otherwise?: () => unknown,
+  ): unknown {
+    return runMultiOutcome(
+      () => subject.evaluate().jsValue,
+      matchSubjectCase,
+      branches.map(([caseName, body]) => [caseName, (payload: unknown) => body(TR.Value(payload))] as const),
+      otherwise,
+    )
   }
 
   /** GuardAction runs a matching handler and reports whether the enclosing block must stop. */
@@ -395,8 +480,24 @@ class TR {
     remaining: () => React.ReactNode,
     siteProps?: TR.TaoProps,
     hint?: TaoReadHint,
+  ): React.ReactNode
+  static GuardRender(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<React.ReactNode>[],
+    remaining: (capturedSubject: TR.Value<unknown>) => React.ReactNode,
+    siteProps: TR.TaoProps | undefined,
+    hint: TaoReadHint | undefined,
+    captureSubject: true,
+  ): React.ReactNode
+  static GuardRender(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<React.ReactNode>[],
+    remaining: (capturedSubject: TR.Value<unknown>) => React.ReactNode,
+    siteProps?: TR.TaoProps,
+    hint?: TaoReadHint,
+    captureSubject = false,
   ): React.ReactNode {
-    return TR.renderReadCases(subject, branches, remaining, siteProps, hint, false)
+    return TR.renderReadCases(subject, branches, remaining, siteProps, hint, false, captureSubject)
   }
 
   /** WhenReadRender keeps an ordinary `when` branch's error-message payload as text. */
@@ -412,10 +513,11 @@ class TR {
   private static renderReadCases(
     subject: TR.Evaluable,
     branches: readonly TR.CaseBranch<React.ReactNode>[],
-    remaining: () => React.ReactNode,
+    remaining: (capturedSubject: TR.Value<unknown>) => React.ReactNode,
     siteProps: TR.TaoProps | undefined,
     hint: TaoReadHint | undefined,
     legacyPayload: boolean,
+    captureSubject = false,
   ): React.ReactNode {
     const evaluated = subject.evaluate()
     const value = evaluated.jsValue
@@ -428,6 +530,8 @@ class TR {
         : undefined)
     if (availability && availability.status !== 'available') {
       const status = availability.status as TaoReadNetCase
+      const selectedCase = status === 'missing' ? 'none' : status
+      const handlerBranch = branches.find(([name]) => name === selectedCase)
       const entity = entityAvailability ? DataControls.EntityInteraction(value)?.entity : undefined
       const context = new RuntimeValue(readContext(status, {
         readKind: accountAvailability
@@ -437,21 +541,30 @@ class TR {
         subjectType: hint?.subjectType ?? entity,
       }, {
         UnauthorizedReason: availability.status === 'unauthorized' ? availability.reason : undefined,
-      }))
-      const handler = branches.find(([name]) => name === status)?.[1]
+      }, selectedCase))
       const payload = legacyPayload
         ? new RuntimeValue(
           matchSubjectCase(value, status).payload
             ?? (accountAvailability?.status === 'error' ? accountAvailability.message : undefined),
         )
         : context
-      return handler ? handler(payload) : renderReadNet(status, context, siteProps)
+      return handlerBranch ? handlerBranch[1](payload) : renderReadNet(status, context, siteProps)
+    }
+    if (!legacyPayload && value === null && hint?.readKind === 'entity') {
+      const noneBranch = branches.find(([name]) => name === 'none')
+      const context = new RuntimeValue(readContext('missing', hint, {}, 'none'))
+      return noneBranch ? noneBranch[1](context) : renderReadNet('missing', context, siteProps)
+    }
+    if (legacyPayload) {
+      return renderMatchedBranches(value, branches, remaining as () => React.ReactNode)
     }
     const matched = firstMatchedBranch(value, branches)
     if (matched) {
       return matched.result
     }
-    return remaining()
+    return legacyPayload || !captureSubject
+      ? (remaining as () => React.ReactNode)()
+      : remaining(completeRuntimeValue(evaluated))
   }
 
   /** ReadNet freezes the handlers a compiled app guard declares. */
@@ -476,16 +589,65 @@ class TR {
       }
       value = value?.[member]
     }
-    return new RuntimeValue(value === undefined ? null : value)
+    return isRuntimeValue(value) ? completeRuntimeValue(value) : new RuntimeValue(value === undefined ? null : value)
+  }
+
+  /** checkedNumericBacking checks raw native/computed numeric storage before wrapping it. */
+  static checkedNumericBacking = checkedNumericBacking
+
+  /** Distinguish checked quantity payloads at explicitly typed native union boundaries. */
+  static isQuantityPayload = isQuantityPayload
+
+  /** Admit one native quantity snapshot against the caller's explicit canonical owner set. */
+  static admitQuantityUnion = admitQuantityUnion
+  static isRuntimeValue = isRuntimeValue
+  static nativeQuantityResult = nativeQuantityResult
+  static QuantityArithmetic = QuantityArithmetic
+  static quantityOperand = quantityOperand
+  /** Trusted native Self implementations retain the receiver's exact checked concrete factory. */
+  static factoryOfQuantityInput = factoryOfQuantityInput
+  static quantityToText = quantityToText
+  static scalarOperand = scalarOperand
+
+  /** Wait joins its caller and inherits cancellation, while lexical cleanup remains shielded. */
+  static Wait<Value extends TaoEvaluable<unknown>>(
+    readDuration: TaoDurationReader<Value>,
+    duration: Value,
+  ): Promise<void> {
+    return wait(
+      readDuration,
+      duration,
+      actionCancellationSignal(),
+      (callback, milliseconds) => Clock.after(milliseconds, callback),
+    )
   }
 
   /** Function creates a Tao pure-function value. */
-  static Function(body: (...args: any[]) => TR.Value<any>): TR.Function {
+  static Function<T>(body: (...args: any[]) => TaoEvaluable<T> | TR.Function): TR.Function<T> {
     return new RuntimeFunction(body)
   }
 
-  /** Call invokes a Tao pure function with runtime-wrapped values. */
-  static Call<T>(fn: TR.Function, ...args: TR.Evaluable[]): TR.Value<T> {
+  /** Capability selects pure method witnesses while preserving the original receiver's live reads. */
+  static Capability = createCapabilityRuntime(TR.Function)
+
+  /** RenderSlots keeps body components stable while captures and placement arguments remain current. */
+  static RenderSlots = Object.freeze({ create: createSlotRenderer, select: selectRenderSlot, Frame: RenderSlotFrame })
+
+  /** Bare empty text emits no node while nonempty values keep the normal reactive Text path. */
+  static RenderText = renderTextValue
+
+  /** RenderView creates opaque content without mounting the selected associated component. */
+  static RenderView<PropsT extends object>(
+    component: React.ComponentType<PropsT>,
+    props: PropsT,
+  ): TR.Value<TaoRendered> {
+    return TR.Value(describeRenderedView(component, props))
+  }
+
+  static MountRendered = mountRenderedView
+
+  /** Call preserves raw omission holes separately from a wrapped none value. */
+  static Call<T>(fn: TR.Function<T>, ...args: (TR.Evaluable | undefined)[]): TR.Value<T> {
     return fn.invoke(...args) as TR.Value<T>
   }
 
@@ -533,6 +695,8 @@ class TR {
 
   static UseActionOwner = useActionOwner
 
+  static CaptureActionReceiver = captureActionReceiver
+
   static NativeSubscription = nativeSubscription
   static NativeAbortSupport = installNativeAbortSupport
   static NativeAssert: typeof RuntimeAssert = RuntimeAssert
@@ -558,6 +722,18 @@ class TR {
     return new RuntimeAction(body, metadata)
   }
 
+  /** BindEventAction supplies a mounted event owner without replacing the selected action. */
+  static BindEventAction<Args extends any[]>(
+    selected: { evaluate(): { jsValue: RuntimeActionValue<Args> } },
+    owner: TaoActionOwner,
+  ): TR.Action<Args>
+  static BindEventAction(selected: TR.Evaluable, owner: TaoActionOwner): TR.Action
+  static BindEventAction(selected: TR.Evaluable, owner: TaoActionOwner): TR.Action {
+    const payload = selected.evaluate().jsValue
+    RuntimeAssert.input(payload instanceof RuntimeActionValue, 'A named event handler selects a runtime action.')
+    return new RuntimeAction(payload.withOwner(owner))
+  }
+
   /** ActionContinuation captures the transaction generated async segments resume into. */
   static ActionContinuation(): TaoActionContinuation {
     return captureActionContinuation()
@@ -567,6 +743,8 @@ class TR {
   static ResumeActionContinuation(continuation: TaoActionContinuation): void {
     resumeActionContinuation(continuation)
   }
+
+  static ActionCancellationSignal = actionCancellationSignal
 
   /** ActionScope joins one lexical action block before draining its cleanup. */
   static ActionScope<T>(body: () => T | PromiseLike<T>): T | Promise<T> {
@@ -609,7 +787,10 @@ class TR {
             RuntimeAssert(declared !== undefined, 'validated foreign action test stub names a declared failure')
             throw new TaoActionFailure(stubbedCase, declared.sentence)
           }
-          return await implementation(...arguments_.map(argument => argument?.evaluate().jsValue))
+          return await implementation(...arguments_.map(argument => {
+            const value = argument?.evaluate()
+            return value && isQuantityPayload(value.jsValue) ? value : value?.jsValue
+          }))
         } catch (error) {
           if (error instanceof TaoActionFailure) {
             throw error
@@ -662,9 +843,9 @@ class TR {
 
   /** CompoundSet returns the value produced by a validated compound state update. */
   static CompoundSet<T extends number | string>(
-    state: Pick<TR.Writable<T>, 'evaluate'>,
+    state: Pick<TaoWritableInput<T>, 'evaluate'>,
     operator: TR.CompoundSetOperator,
-    value: TR.Value<T>,
+    value: TaoRuntimeValueInput<T>,
   ): TR.Value<T> {
     return new RuntimeValue(
       runtimeSwitchHandler(operator, compoundSetOperations)(
@@ -685,12 +866,15 @@ class TR {
     return action.evaluate().jsValue.invokeJoined(...args)
   }
 
-  /** DoResult awaits a foreign value without releasing the caller's transaction. */
+  /** DoResult awaits a source or foreign value without releasing the caller's transaction. */
   static async DoResult<ResultT>(
     action: { evaluate(): { jsValue: { invokeJoinedResult(...args: any[]): Promise<unknown> } } },
     ...args: any[]
   ): Promise<TR.Value<ResultT>> {
-    return TR.Value(await action.evaluate().jsValue.invokeJoinedResult(...args) as ResultT)
+    const result = await action.evaluate().jsValue.invokeJoinedResult(...args)
+    return isRuntimeValue(result)
+      ? completeRuntimeValue(result as TaoRuntimeValueInput<ResultT>)
+      : TR.Value(result as ResultT)
   }
 
   /**
@@ -709,14 +893,29 @@ class TR {
     )
   }
 
+  /** ThenDo joins canonical outcome handlers and preserves the returned Tao value. */
+  static ThenDo(
+    invoke: () => unknown,
+    contract: TaoEffectContract,
+    outcomes: readonly TR.CaseBranch<unknown>[],
+  ): unknown {
+    return runJoinedEffectOutcome(
+      invoke,
+      contract,
+      outcomes.map((
+        [outcome, body],
+      ) => [outcome, payload => body(isRuntimeValue(payload) ? completeRuntimeValue(payload) : TR.Value(payload))]),
+    )
+  }
+
   /** Set updates a Tao state value. */
-  static Set<T>(state: Pick<TR.Writable<T>, 'set'>, value: () => TR.Value<T>): void | Promise<void> {
+  static Set<T>(state: Pick<TR.Writable<T>, 'set'>, value: () => TaoRuntimeValueInput<T>): void | Promise<void> {
     return state.set(value())
   }
 
   /** Cell creates detached transaction-aware storage for a copied action input. */
   static Cell<T>(initial: { evaluate(): { jsValue: T } }): TR.Writable<T> {
-    return createWritableCell(initial.evaluate() as TR.Value<T>)
+    return createWritableCell(reactiveValue(initial.evaluate().jsValue))
   }
 
   /** Copy detaches ordinary structure while retaining entity handles and their identity. */
@@ -728,7 +927,7 @@ class TR {
 
   /** Mapped joins a supplied Tao action whenever a writable view parameter changes. */
   static Mapped<T>(
-    read: () => TR.Value<T>,
+    read: () => TaoRuntimeValueInput<T>,
     change: TR.Action<[TR.Value<T>]>,
   ): TR.Writable<T> {
     return mappedWritable(read, change.evaluate().jsValue)
@@ -744,7 +943,7 @@ class TR {
     initial: { evaluate(): { jsValue: T } },
     options: Readonly<{ copy?: boolean }> = {},
   ): TR.Writable<T> {
-    return useParameterCell(initial as TaoRuntimeValue<T>, options)
+    return useParameterCell(initial, options)
   }
 
   /** NativeMutationLease makes a callback capability that rejects after its native receiver unmounts. */
@@ -758,12 +957,12 @@ class TR {
   }
 
   /** Toggle inverts a boolean state. Validation limits this to boolean states. */
-  static Toggle(state: Pick<TR.Writable<boolean>, 'evaluate' | 'set'>): void | Promise<void> {
+  static Toggle(state: TaoWritableInput<boolean>): void | Promise<void> {
     return state.set(new RuntimeValue(!state.evaluate().jsValue))
   }
 
   /** Fail aborts the complete joined action transaction and skips the remaining caller block. */
-  static Fail(failureCase: TR.Evaluable, sentence: string): never {
+  static Fail(failureCase: TR.Evaluable | string, sentence: string): never {
     throw new TaoActionFailure(actionFailureCaseName(failureCase), sentence)
   }
 
@@ -772,10 +971,10 @@ class TR {
    * ticker or device reading — is held like any other value, and the holder re-renders while it is
    * mounted, which is what gives the value the holder's lifetime.
    */
-  static State<T>(initialValue: () => TR.Value<T>): TR.State<T> {
+  static State<T>(initialValue: () => TaoRuntimeValueInput<T>): TR.State<T> {
     const lensScope = useStudioLensScope()
     const initial = React.useRef<TR.Value<T> | undefined>(undefined)
-    initial.current ??= initialValue().evaluate()
+    initial.current ??= reactiveValue(initialValue().evaluate().jsValue)
     const [jsValue, setJsValue] = React.useState<T>(() => initial.current!.jsValue)
     const [, onSelfDrivenChange] = React.useReducer((count: number) => count + 1, 0)
     React.useEffect(
@@ -795,7 +994,7 @@ class TR {
 
   /** PersistedState creates one app-declaration-owned, device-local state store. */
   static PersistedState<T>(
-    initialValue: () => TR.Value<T>,
+    initialValue: () => TaoRuntimeValueInput<T>,
     identity: TR.DeclarationIdentity,
     name: string,
     type: import('./TR-persisted-state').TaoPersistedStateType,
@@ -1024,7 +1223,17 @@ class TR {
   } = {
     ...StudioPreview,
     DeviceHost: StudioDeviceHost,
-    Environment: StudioEnvironmentControls,
+    Environment: {
+      ...StudioEnvironmentControls,
+      Argument(value, handles) {
+        const argument = StudioEnvironmentControls.Argument(value, handles)
+        if (typeof value === 'object' && value.kind === 'action-stand-in') {
+          const standIn = argument.jsValue as { invoke(...args: unknown[]): void }
+          return new RuntimeAction((...args: unknown[]) => standIn.invoke(...args), { name: value.parameter })
+        }
+        return argument
+      },
+    },
     LensRender: StudioLensRender,
     State: StudioStateControls,
     SubjectHost: StudioSubjectHost,
@@ -1114,10 +1323,16 @@ function authActionOutcome(outcome: TaoAuthOutcome): void {
 }
 
 class RuntimeValue<T> {
-  constructor(readonly jsValue: T) {}
+  constructor(readonly jsValue: T) {
+    registerCompleteRuntimeValue(this)
+  }
 
   evaluate(): RuntimeValue<T> {
     return this
+  }
+
+  getJSValue(): TaoJSValue<T> {
+    return getJSValue(this)
   }
 }
 
@@ -1127,6 +1342,7 @@ class RuntimeReadonlyValue<T> implements TR.Value<T> {
 
   constructor(source: TR.Evaluable) {
     this.#source = source
+    registerCompleteRuntimeValue(this)
   }
 
   evaluate(): TR.Value<T> {
@@ -1136,13 +1352,23 @@ class RuntimeReadonlyValue<T> implements TR.Value<T> {
   get jsValue(): T {
     return this.evaluate().jsValue
   }
+
+  getJSValue(): TaoJSValue<T> {
+    return getJSValue(this)
+  }
 }
 
 class RuntimeAlias<Source extends TR.Evaluable> {
-  constructor(private readonly value: Source | (() => Source)) {}
+  constructor(private readonly value: Source | (() => Source)) {
+    registerRuntimeValue(this)
+  }
 
   evaluate(): TR.AliasValue<Source> {
     return (typeof this.value === 'function' ? this.value() : this.value).evaluate() as TR.AliasValue<Source>
+  }
+
+  getJSValue(): TaoJSValue<TR.AliasValue<Source>['jsValue']> {
+    return getJSValue(this)
   }
 }
 
@@ -1152,7 +1378,9 @@ class RuntimeState<T> {
     private readonly setJsValue: React.Dispatch<React.SetStateAction<T>>,
     private readonly initialValue: T,
     private readonly lensScope: TaoStudioLensScope | undefined,
-  ) {}
+  ) {
+    registerCompleteRuntimeValue(this)
+  }
 
   defaultValue(): RuntimeValue<T> {
     return new RuntimeValue(this.initialValue)
@@ -1166,11 +1394,15 @@ class RuntimeState<T> {
     return this.evaluate().jsValue
   }
 
+  getJSValue(): TaoJSValue<T> {
+    return getJSValue(this)
+  }
+
   at(path: readonly string[]): TaoWritable<unknown> {
     return writablePath(this as unknown as TaoWritable<unknown>, path)
   }
 
-  set(value: TR.Value<T>): void {
+  set(value: TaoRuntimeValueInput<T>): void {
     const nextValue = value.evaluate().jsValue
     const overlay = transactionResource(
       this,
@@ -1210,6 +1442,7 @@ class RuntimeActionValue<Args extends any[] = any[]> {
     runs?: 'latest',
     private readonly interrupt = false,
     private readonly owner?: TaoActionOwner,
+    private readonly original?: RuntimeActionValue<Args>,
   ) {
     this.#latest = runs === 'latest' ? new LatestActionInvocations<Args>() : undefined
   }
@@ -1225,61 +1458,64 @@ class RuntimeActionValue<Args extends any[] = any[]> {
   }
 
   invoke(...args: Args): void | Promise<void> {
-    const run = (latestArgs: Args) =>
-      runAction(
-        this.name,
-        latestArgs,
-        () => this.body(...latestArgs),
-        false,
-        this.interrupt,
-        undefined,
-        undefined,
-        this.owner,
-      )
-    return this.#latest?.invoke(args, run) ?? run(args)
+    return this.dispatch(args, this.owner)
   }
 
   invokeJoined(...args: Args): void | Promise<void> {
-    const run = (latestArgs: Args) =>
-      runAction(this.name, latestArgs, () => this.body(...latestArgs), true, false, undefined, undefined, this.owner)
-    return this.#latest?.invoke(args, run) ?? run(args)
+    return this.dispatch(args, this.owner, true)
   }
 
   invokeOwned(owner: TaoActionOwner, active: () => boolean, ...args: Args): void | Promise<void> {
+    return this.dispatch(args, owner, false, active)
+  }
+
+  invokeJoinedResult(...args: Args): Promise<unknown> {
+    return this.result(args, this.owner)
+  }
+
+  /** A bound view shares the original payload's scheduler and every dispatch mode. */
+  withOwner(owner: TaoActionOwner): RuntimeActionValue<Args> {
+    return new RuntimeActionValue(this.body, this.name, undefined, this.interrupt, owner, this.original ?? this)
+  }
+
+  private result(args: Args, owner?: TaoActionOwner): Promise<unknown> {
+    if (this.original) {
+      return this.original.result(args, owner)
+    }
+    RuntimeAssert.input(!this.#latest, 'An action that returns a value cannot use runs latest.')
+    return runActionResult(this.name, args, () => this.body(...args), owner)
+  }
+
+  private dispatch(
+    args: Args,
+    owner?: TaoActionOwner,
+    joined = false,
+    active: () => boolean = () => true,
+    receipt?: (receipt: TaoActionReceipt) => void,
+  ): void | Promise<void> {
+    if (this.original) {
+      return this.original.dispatch(args, owner, joined, active, receipt)
+    }
+    const dispatchCapture = captureActionDispatch(this.name, owner)
     const run = (latestArgs: Args) =>
       runAction(
         this.name,
         latestArgs,
         () => active() ? this.body(...latestArgs) : undefined,
-        false,
-        this.interrupt,
+        joined,
+        joined ? false : this.interrupt,
         undefined,
-        undefined,
+        receipt,
         owner,
+        dispatchCapture,
       )
     return this.#latest?.invoke(args, run) ?? run(args)
   }
 
-  invokeJoinedResult(...args: Args): Promise<unknown> {
-    RuntimeAssert.input(!this.#latest, 'An action that returns a value cannot use runs latest.')
-    return runActionResult(this.name, args, () => this.body(...args), this.owner)
-  }
-
   invokeReceipt(...args: Args): Promise<TaoActionReceipt> {
     return new Promise((resolve, reject) => {
-      const run = (latestArgs: Args) =>
-        runAction(
-          this.name,
-          latestArgs,
-          () => this.body(...latestArgs),
-          false,
-          this.interrupt,
-          undefined,
-          resolve,
-          this.owner,
-        )
       try {
-        const pending = this.#latest ? this.#latest.invoke(args, run) : run(args)
+        const pending = this.dispatch(args, this.owner, false, undefined, resolve)
         // A latest-only invocation can be replaced before it gets its own transaction.
         void Promise.resolve(pending).then(() => resolve({ outcome: 'abandoned' }), reject)
       } catch (error) {
@@ -1344,11 +1580,13 @@ class RuntimeAction<Args extends any[] = any[]> {
   readonly jsValue: RuntimeActionValue<Args>
 
   constructor(
-    body: (...args: Args) => unknown,
+    body: ((...args: Args) => unknown) | RuntimeActionValue<Args>,
     metadata: RuntimeActionMetadata = {},
     runs?: 'latest',
   ) {
-    this.jsValue = new RuntimeActionValue(body, metadata.name ?? 'action', runs, metadata.interrupt, metadata.owner)
+    this.jsValue = body instanceof RuntimeActionValue
+      ? body
+      : new RuntimeActionValue(body, metadata.name ?? 'action', runs, metadata.interrupt, metadata.owner)
   }
 
   evaluate(): RuntimeAction<Args> {
@@ -1356,11 +1594,12 @@ class RuntimeAction<Args extends any[] = any[]> {
   }
 }
 
-class RuntimeFunction {
-  constructor(private readonly body: (...args: any[]) => TR.Value<any>) {}
+class RuntimeFunction<T = any> {
+  constructor(private readonly body: (...args: any[]) => TaoEvaluable<T> | TR.Function) {}
 
-  invoke(...args: TR.Evaluable[]): TR.Value<any> {
-    return this.body(...args)
+  invoke(...args: (TR.Evaluable | undefined)[]): TR.Value<T> | TR.Function {
+    const result = this.body(...args)
+    return result instanceof RuntimeFunction ? result : completeRuntimeValue(result)
   }
 }
 
@@ -1491,6 +1730,7 @@ namespace TR {
     | 'refreshing'
     | 'stale'
     | 'missing'
+    | 'none'
     | 'unauthorized'
     | 'error'
     | 'true'
@@ -1498,7 +1738,11 @@ namespace TR {
   /** CaseBranch maps one source case name to a payload-aware lazy body. */
   export type CaseBranch<ResultT> = readonly [string, (payload: TR.Value<any>) => ResultT]
   /** Function declares a runtime Tao pure function. */
-  export type Function = RuntimeFunction
+  export type Function<T = any> = RuntimeFunction<T>
+  /** Capability preserves a concrete receiver behind compile-time selected structural methods. */
+  export type Capability<T = unknown> = TaoCapability<T>
+  export type SlotRenderer<Args> = TaoSlotRenderer<Args>
+  export type SlotBodyProps<Args, Environment> = RenderSlotBodyProps<Args, Environment>
   /** PluralCategory declares the CLDR plural categories a compiled phrase's forms may carry. */
   export type PluralCategory = TaoPluralCategory
   /** PluralForms is a compiled phrase's category-to-value table passed to `TR.Plural`. */
@@ -1506,7 +1750,7 @@ namespace TR {
   /** State declares a runtime Tao state wrapper. */
   export type State<T> = RuntimeState<T> | TaoWritableState<T>
   /** Writable is a state or parameter lens that may be the target of generated mutation. */
-  export type Writable<T> = Pick<TaoWritable<T>, 'evaluate' | 'set'>
+  export type Writable<T> = Pick<TaoWritable<T>, 'evaluate' | 'getJSValue' | 'set'>
   /** MemberValue is read-only by default and carries mutation methods only for writable roots. */
   export type MemberValue<T> = TR.Value<T> & Partial<TR.Writable<T>>
   /** RequiredField pairs a field a `required` trait names with the sentence the trait states. */
@@ -1515,6 +1759,11 @@ namespace TR {
   export type NativeMutationLease<T> = import('./TR-reactive-values').NativeMutationLease<T>
   /** Value declares a runtime Tao value wrapper. */
   export type Value<T> = TaoRuntimeValue<T>
+  export type Rendered = TaoRendered
+  /** QuantityPayload retains authentic opaque storage across ordinary quantity and abstract-family parameters. */
+  export type QuantityPayload = TaoQuantityPayload<string, string, object>
+  /** The compiler passes the exact selected quantity contract to native Self implementations. */
+  export type QuantityFactory = ReturnType<typeof factoryOfQuantityInput>
   /** Ticker declares the reactive value `@tao/time`'s `Interval` returns. */
   export type Ticker = TaoTicker
   /** Pasteboard declares the reactive value `@tao/device/clipboard`'s `Clipboard()` returns. */
@@ -1756,6 +2005,20 @@ function firstMatchedBranch<ResultT>(
   return undefined
 }
 
+function renderMatchedBranches(
+  value: unknown,
+  branches: readonly TR.CaseBranch<React.ReactNode>[],
+  otherwise?: () => React.ReactNode,
+): React.ReactNode {
+  const selected = branches.flatMap(([caseName, body]) => {
+    const match = matchSubjectCase(value, caseName)
+    return match.matched ? [{ caseName, body, payload: TR.Value(match.payload) }] : []
+  })
+  return selected.length === 0
+    ? otherwise?.()
+    : selected.map(({ caseName, body, payload }) => createElement(React.Fragment, { key: caseName }, body(payload)))
+}
+
 type SubjectCaseMatch = { matched: boolean; payload: unknown }
 
 function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
@@ -1764,6 +2027,9 @@ function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
   }
   const entity = DataControls.EntityAvailability(value)
   if (entity) {
+    if (caseName === 'none') {
+      return { matched: entity.status === 'missing', payload: undefined }
+    }
     if (caseName === 'error') {
       return {
         matched: entity.status === 'error',
@@ -1796,6 +2062,9 @@ function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
       matched: isCountableValue(value) && value.length === 0,
       payload: undefined,
     }
+  }
+  if (caseName === 'none') {
+    return { matched: value === null, payload: undefined }
   }
   if (caseName === 'true' || caseName === 'false') {
     return { matched: value === (caseName === 'true'), payload: undefined }

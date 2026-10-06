@@ -39,11 +39,20 @@ export function actionBlockRequiresAsync(
     if (
       AST.isAskStatement(statement) || AST.isActionResultStatement(statement)
       || AST.isGuardActionStatement(statement) || AST.isIfActionStatement(statement)
-      || AST.isWhenDoStatement(statement)
+      || AST.isWhenDoStatement(statement) || AST.isWhenActionStatement(statement)
     ) {
       return true
     }
-    return AST.isDoStatement(statement) && actionInvocationRequiresAsync(statement, seen)
+    if (AST.isDeferStatement(statement)) {
+      return statement.block
+        ? actionBlockRequiresAsync(statement.block, seen)
+        : statement.invocation === undefined || actionInvocationRequiresAsync(statement.invocation, seen)
+    }
+    if (AST.isForStatement(statement)) {
+      return AST.isActionBlock(statement.block) && actionBlockRequiresAsync(statement.block, seen)
+    }
+    return AST.isDoStatement(statement)
+      && (statement.then || actionInvocationRequiresAsync(statement, seen))
   }) ?? false
 }
 
@@ -53,7 +62,7 @@ export function actionInvocationRequiresAsync(
   seen: ReadonlySet<AST.ActionDeclaration> = new Set(),
 ): boolean {
   const action = ASTUtils.resolveActionInvocation(invocation).action
-  if (!action) {
+  if (!action || AST.isCapabilityActionDeclaration(action)) {
     return true
   }
   // A command runs the one action its `do` clause names, so it needs whatever that action needs.
@@ -116,6 +125,13 @@ export function actionBlockInterruptsAsk(
       return actionInvocationInterruptsAsk(statement.invocation, seen)
         || statement.outcomes.some(outcome => actionBlockInterruptsAsk(outcome.block, seen))
     }
+    if (AST.isWhenActionStatement(statement)) {
+      return statement.branches.some(branch => actionBlockInterruptsAsk(branch.block, seen))
+        || (statement.otherwise !== undefined && actionBlockInterruptsAsk(statement.otherwise.block, seen))
+    }
+    if (AST.isForStatement(statement)) {
+      return AST.isActionBlock(statement.block) && actionBlockInterruptsAsk(statement.block, seen)
+    }
     return false
   }) ?? false
 }
@@ -125,6 +141,9 @@ function actionInvocationInterruptsAsk(
   seen: ReadonlySet<AST.ActionDeclaration>,
 ): boolean {
   const action = ASTUtils.resolveActionInvocation(invocation).action
+  if (AST.isCapabilityActionDeclaration(action)) {
+    return false
+  }
   const target = AST.isCommandDeclaration(action) ? commandActionTarget(action) : action
   if (!target) {
     return false

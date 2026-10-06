@@ -23,7 +23,9 @@ export const StudioScenarioRelocation = {
       const path = rebasedImport(use, document.uri.fsPath, targetPath, request.projectRoot)
       return path === use.importPath ? [] : [{
         end: use.$cstNode!.end,
-        replacement: `use ${use.importedDeclarations.map(reference => reference.$refText).join(', ')} from ${path}`,
+        replacement: `use ${
+          use.all ? 'all' : use.importedDeclarations.map(AST.importSpecifierText).toSorted().join(', ')
+        } from ${path}`,
         start: use.$cstNode!.offset,
       }]
     })
@@ -46,18 +48,25 @@ export const StudioScenarioRelocation = {
           )
         ),
     )
-    const imports = new Map<string, string | undefined>([[name, targetPackage]])
+    const imports = new Map<string, { path: string | undefined; sourceName: string; specifier: string }>([
+      [name, { path: targetPackage, sourceName: name, specifier: name }],
+    ])
     for (const use of file.statements.filter(AST.isUseStatement)) {
-      for (const reference of use.importedDeclarations) {
-        if (reference.ref !== undefined && referenced.has(reference.ref)) {
+      for (const specifier of use.importedDeclarations) {
+        if (specifier.target.ref !== undefined && referenced.has(specifier.target.ref)) {
+          const localName = AST.importLocalName(specifier)
           imports.set(
-            reference.$refText,
-            rebasedImport(
-              use,
-              document.uri.fsPath,
-              scenariosDocument.uri.fsPath,
-              request.projectRoot,
-            ),
+            localName,
+            {
+              path: rebasedImport(
+                use,
+                document.uri.fsPath,
+                scenariosDocument.uri.fsPath,
+                request.projectRoot,
+              ),
+              sourceName: AST.importSourceName(specifier),
+              specifier: AST.importSpecifierText(specifier),
+            },
           )
         }
       }
@@ -68,28 +77,35 @@ export const StudioScenarioRelocation = {
           'visibility' in declaration && declaration.visibility === 'public',
           `Cannot relocate scenarios that depend on private declaration ${declaration.name}.`,
         )
-        imports.set(declaration.name, targetPackage)
+        imports.set(declaration.name, {
+          path: targetPackage,
+          sourceName: declaration.name,
+          specifier: declaration.name,
+        })
       }
     }
     const existingUses = destination.statements.filter(AST.isUseStatement)
     const additions: string[] = []
-    for (const [imported, path] of imports) {
+    for (const [localName, imported] of imports) {
       Assert.input(
-        !destination.statements.some(statement => AST.isDeclaration(statement) && statement.name === imported),
-        `Scenarios.tao already declares ${imported}; its scenario import would conflict.`,
+        !destination.statements.some(statement => AST.isDeclaration(statement) && statement.name === localName),
+        `Scenarios.tao already declares ${localName}; its scenario import would conflict.`,
       )
-      const matches = existingUses.filter(use =>
-        use.importedDeclarations.some(reference => reference.$refText === imported)
+      const matches = existingUses.flatMap(use =>
+        use.importedDeclarations
+          .filter(specifier => AST.importLocalName(specifier) === localName)
+          .map(specifier => ({ specifier, use }))
       )
       Assert.input(
-        matches.every(use =>
-          importIdentity(use.importPath, scenariosDocument.uri.fsPath, request.projectRoot)
-            === importIdentity(path, scenariosDocument.uri.fsPath, request.projectRoot)
+        matches.every(match =>
+          AST.importSourceName(match.specifier) === imported.sourceName
+          && importIdentity(match.use.importPath, scenariosDocument.uri.fsPath, request.projectRoot)
+            === importIdentity(imported.path, scenariosDocument.uri.fsPath, request.projectRoot)
         ),
-        `Scenarios.tao already imports ${imported} from another source.`,
+        `Scenarios.tao already imports ${localName} from another source.`,
       )
       if (matches.length === 0) {
-        additions.push(`use ${imported}${path === undefined ? '' : ` from ${path}`}`)
+        additions.push(`use ${imported.specifier}${imported.path === undefined ? '' : ` from ${imported.path}`}`)
       }
     }
     for (const group of groups) {

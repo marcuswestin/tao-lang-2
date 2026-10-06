@@ -71,7 +71,10 @@ Describe('parser: auth data syntax', () => {
     Expect(matches[0]!.branches[0]!.block.statements[0]!.$type).toBe('WhenRenderStatement')
     Expect(matches[2]!.subject).toBeUndefined()
     Expect(matches[2]!.branches[0]!.condition?.$type).toBe('ValueReference')
-    Expect(matches[2]!.otherwise.block.statements).toHaveLength(2)
+    const predicateWhen = matches[2]
+    Expect.Is(predicateWhen, AST.isWhenRenderStatement)
+    Expect.Is(predicateWhen.otherwise, AST.isWhenRenderOtherwise)
+    Expect(predicateWhen.otherwise.block.statements).toHaveLength(2)
     const effect = AST.streamAllContents(result.entry.ast).find(AST.isWhenDoStatement)!
     Expect(effect.outcomes.map(outcome => outcome.case)).toEqual(['saved', 'error'])
     Expect(effect.outcomes[0]!.block.statements[0]!.$type).toBe('WhenDoStatement')

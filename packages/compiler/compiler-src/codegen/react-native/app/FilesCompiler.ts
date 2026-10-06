@@ -2,8 +2,10 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { hasAssociatedWitnessPublication } from './AssociatedMethodsCompiler'
 import { isRuntimeConfigurableDeclaration } from './ConfigurationCompiler'
 import { activeFixtureStores } from './data-store-context'
+import { createSlotBodyOptions, emitSlotBodyHoists, slotBodyRows } from './render-slot-hoists'
 
 type TaoFileCompileOptions = CodegenOptions & {
   bridgeTypes?: string
@@ -21,7 +23,12 @@ type TaoFileCompileOptions = CodegenOptions & {
 export const FilesCompiler = {
   /** TaoFile compiles a parsed Tao file into a default React component module. */
   TaoFile(taoFile: AST.TaoFile, opts: TaoFileCompileOptions = {}): Compiled {
+    const options = createSlotBodyOptions(opts)
     const statements = opts.selectedStatements ?? taoFile.statements
+    const content = gen.list(inDeclarationOrder(statements), statement => Compile.Statement(statement, options), {
+      newLines: 2,
+    })
+    const slotBodies = slotBodyRows(options)
     const configurationTypes = opts.configurationTypes ?? ''
     const bridgeTypes = opts.bridgeTypes ?? ''
     const importLines = opts.importLines?.join('\n') ?? ''
@@ -34,10 +41,16 @@ export const FilesCompiler = {
     const moduleCommands = statements.filter(AST.isCommandDeclaration)
     const dataEntities = opts.dataEntities ?? statements.filter(AST.isEntityDataDeclaration)
     const hasRuntimeStatements = statements.some(statement =>
-      AST.isEmittingRuntimeBinding(statement)
-      && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement))
+      ((AST.isTypeDeclaration(statement) || AST.isPrimitiveDeclaration(statement))
+        && hasAssociatedWitnessPublication(statement))
+      || (AST.isEmittingRuntimeBinding(statement)
+        && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement)))
     )
-    if (!hasRuntimeStatements && !importLines && !scopeBindings && !exportLines && !bridgeTypes) {
+    const emitsDataCatalog = opts.emitDataCatalog ?? dataEntities.length > 0
+    const needsRuntimePrelude = hasRuntimeStatements || emitsDataCatalog || slotBodies.length > 0
+      || Boolean(scopeBindings || viewRegistrations || exportLines)
+    const typesUseRuntime = configurationTypes.includes('TR.') || bridgeTypes.includes('TR.')
+    if (!needsRuntimePrelude && !importLines && !bridgeTypes && !configurationTypes) {
       return gen`export {}`
     }
     const sourcePath = AST.getDocument(taoFile).uri.fsPath
@@ -49,9 +62,15 @@ export const FilesCompiler = {
     `
     // Module-scope hook aliases let Fast Refresh resolve them without forcing an app remount.
     return gen`
-      import React from 'react'
-      void React
-      import TR from '@runtime/TR'
+      ${
+      needsRuntimePrelude
+        ? gen`import React from 'react'
+          void React
+          import TR from '@runtime/TR'`
+        : typesUseRuntime
+        ? gen`import type TR from '@runtime/TR'`
+        : gen.noop()
+    }
 
       ${gen.textLines(importLines)}
 
@@ -75,18 +94,19 @@ export const FilesCompiler = {
         : gen.noop()
     }
 
-      const _Scope: any = {}
+      ${needsRuntimePrelude ? gen`const _Scope: any = {}` : gen.noop()}
       ${gen.textLines(scopeBindings)}
       ${gen.textLines(viewRegistrations)}
 
       ${
-      (opts.emitDataCatalog ?? dataEntities.length > 0)
+      emitsDataCatalog
         ? Compile.DataCatalog(dataEntities, opts.dataAccess)
         : gen.noop()
     }
       ${Compile.OutlineTable(taoFile, statements)}
 
-      ${gen.list(inDeclarationOrder(statements), statement => Compile.Statement(statement, opts), { newLines: 2 })}
+      ${emitSlotBodyHoists(slotBodies)}
+      ${content}
       ${
       moduleCommands.length === 0
         ? gen.noop()
@@ -106,8 +126,12 @@ export const FilesCompiler = {
  * moving a base ahead of them could make its eager configuration read an uninitialized value.
  */
 function inDeclarationOrder(statements: readonly AST.Statement[]): AST.Statement[] {
-  const types = statements.filter(isRuntimeConfigurableDeclaration)
-  const rest = statements.filter(statement => !isRuntimeConfigurableDeclaration(statement))
+  const reusableType = (statement: AST.Statement) =>
+    isRuntimeConfigurableDeclaration(statement)
+    || ((AST.isTypeDeclaration(statement) || AST.isPrimitiveDeclaration(statement))
+      && hasAssociatedWitnessPublication(statement))
+  const types = statements.filter(reusableType)
+  const rest = statements.filter(statement => !reusableType(statement))
   const apps = new Set(rest.filter(AST.isAppValueDeclaration))
   const emitted = new Set<AST.AppValueDeclaration>()
   const waiting: AST.AppValueDeclaration[] = []

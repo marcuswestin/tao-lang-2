@@ -23,42 +23,61 @@ description: >-
 - `action Name(...) { ... }`, `command Name(...) { ... }`, `function Name(...) { ... }`, `let`,
   `state`, `query`, and `type Name is Base with { ... }` are also implemented.
 
-Every view, action, and function declaration uses parentheses, including an empty `()`.
+Invocable parameters use parentheses. Argument-free views may omit them in declarations and
+render placement; actions/functions retain invocation parentheses.
 
 ## Properties, children, and slots
 
-Capitalized `Name Value` entries fill properties owned by the receiving declaration. Unnamed render
-expressions are children. A view accepts unnamed children only when it places `@@content`. It offers
-an optional named slot by declaring `@name = empty`; callers fill it once with `@name View(...)`.
+Capitalized `Name Value` entries fill properties owned by the receiving declaration. Item/write
+fields are comma-separated. Unnamed render expressions are children; `@@content` places unnamed
+content. Named slots use `@name: Default`, parameterized slots use `@name(Types): Renderer`, and
+callers fill them with `@name: Content` or `@name Binders -> Content`. Placements may repeat;
+`@name: @other` forwards a compatible renderer. Arguments and styles precede the render body.
 
 ```tao SkillSyntax.tao
 use Col, Text from @tao/ui
 
 view SkillCard(Title text) {
-   @actions = empty
-   render Col() [gap 8] {
-      Text(Title)
+   @actions: empty
+   render Col [gap 8] {
+      Title
       @@content
       @actions
 }  }
 
-view SkillSyntaxExample() {
+view SkillSyntaxExample {
    render SkillCard("Syntax") {
-      Text("Unnamed child")
-      @actions Text("Named slot")
+      "Unnamed child"
+      @actions: "Named slot"
 }  }
 ```
 
 ## Names and expressions
 
-- Import with `use X from ./Feature`, `use X, Y from @tao/ui`, or bare `use X` in one package.
-- Calls bind `Name: Value` labels or uniquely matching unlabeled types; multiple arguments use commas.
-- Values include text, numbers, booleans, `none`, `now`, durations such as `250.ms`, homogeneous
-  lists, members, calls, and configured values.
+- Import with `use X from ./Feature`, `use X, Y from @tao/ui`, `use all from @tao/ui`, or bare `use X`
+  in one package. Import aliases preserve declaration identity.
+- Calls bind roles/types independently of argument order; explicit labels remain supported.
+  `Subtract(Right 2, Left 5)` constructs signature roles; `.Right 2` forces signature lookup when
+  necessary. `PersonName.GivenName` projects its signature type. Ambiguous matches are errors.
+- `type Child is Parent` preserves nominal ancestry. Upward admission is implicit; narrowing and
+  sibling conversion require explicit construction/conversion. `as` binds tighter than comparison.
+- `can` is structural: compatible associated methods satisfy it without an adoption declaration.
+  `Self` retains the concrete domain; generic constraints use `where type T is Capability`.
+- Function results may be inferred; `-> Type` restricts them. `fails never`, `fails X, Y` or an open
+  contract describe failure bounds. Functions/converters cannot invoke actions, perform I/O or suspend.
+- Values include text, numbers, yes/no, `none`, lists, members, calls and configured values. Signed
+  quantities use lowercase postfix units, such as `-2 seconds` or `2 Duration.seconds`.
 - Strings interpolate full scalar expressions: `"{ Count } items"`.
 - Operators include arithmetic, comparisons, `==`, `!=`, `and`, `or`, and `Value is Case` or
   `Value is empty`.
-- Use one-sided `if`, exhaustive subject `when`, block-scoped `guard`, and `loop Items / Item`.
+- Use one-sided `if`, snapshot multi-match `when`, single-result `pick`, block-scoped `guard`, and
+  `loop Items / Item`. `otherwise` is the fallback. A matched guard stops its enclosing block.
+- Bare text values render through ui and omit a node when empty. Quoted text is render sugar;
+  explicit `Text("")` retains a node. Types/entities can supply an associated `view Render()`.
+- Event handlers use `on press -> do Commit()` or a block/control statement. Action calls join their
+  caller; `then { done Result -> ... }` handles completion and named/error branches handle failures.
+  `async` starts detached owned work. `defer DeleteTemporaryFile(File)` registers joined LIFO cleanup.
+- `#tag accessible label "Description"` annotates the following render; omit the tag when unnecessary.
 - `//` starts a line comment; `/* ... */` is an inline or block comment.
 
 Layout or design entries may end in implemented conditions: light/dark scheme, `when pressed`,

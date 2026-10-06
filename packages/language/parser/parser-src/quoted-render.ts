@@ -20,8 +20,10 @@ export function quotedTextImport(): AST.UseStatement {
 }
 
 /** createQuotedRenderParser preserves source CST while lowering quotations before any linking. */
-export function createQuotedRenderParser(services: Langium.LangiumCoreServices) {
-  const parser = Langium.createLangiumParser(services)
+export function createQuotedRenderParser(
+  services: Langium.LangiumCoreServices,
+  parser = Langium.createLangiumParser(services),
+) {
   const parse = parser.parse.bind(parser)
   parser.parse = <T extends Langium.AstNode>(source: string, options?: Parameters<typeof parser.parse>[1]) => {
     const result = parse<T>(source, options)

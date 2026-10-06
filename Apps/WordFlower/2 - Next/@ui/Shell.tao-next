@@ -36,7 +36,7 @@ scene Settings() {
             Collapsible() {
                TextMultiline("Build { BuildStamp }") [body] // a typed injected value, not a render
             }
-            @actions FormButton("Reset to signed out") [buttonDanger] {
+            @actions: FormButton("Reset to signed out") [buttonDanger] {
                #resetSignedOut
                on press -> { replace SignedOutNav in app }
 }  }  }  }  }

@@ -488,7 +488,8 @@ function taoLanguageModule(packages: PackageResolver) {
     parser: {
       // Production metadata owns runtime lookahead policy; grammar generation still validates
       // separately. Reserved payload/fill alternatives must not print into worker JSON streams.
-      LangiumParser: (services: Langium.LangiumCoreServices) => createQuotedRenderParser(services),
+      LangiumParser: (services: Langium.LangiumCoreServices) =>
+        createQuotedRenderParser(services, new NumericContinuations(services).createParser()),
       LexerErrorMessageProvider: () => new TaoLexerErrorMessageProvider(),
       ParserErrorMessageProvider: () => new TaoParserErrorMessageProvider(),
       TokenBuilder: () => new TaoTokenBuilder(),
@@ -502,6 +503,487 @@ function taoLanguageModule(packages: PackageResolver) {
       DocumentValidator: (services: Langium.LangiumCoreServices) => new TaoDocumentValidator(services),
     },
   }
+}
+
+type GrammarFrame = { name: string; offset: number; role?: string }
+type GrammarParser = InstanceType<typeof Langium.LangiumParser>
+type NumericContinuation = { when: number; input: number }
+type ContinuationProbe = {
+  forced: NumericContinuation
+  dependencies: Map<string, NumericContinuation>
+}
+
+/** NumericContinuations resolves suffix choices by complete syntax, never by linked unit names. */
+class NumericContinuations {
+  private source = ''
+  private decisions = new Map<string, boolean>()
+  private probe?: ContinuationProbe
+  private probeParser?: NumericContinuationParser
+  private lexed?: LexReport
+
+  constructor(private readonly services: Langium.LangiumCoreServices) {}
+
+  createParser(probe = false): NumericContinuationParser {
+    const sourceLexer = this.services.parser.Lexer
+    const lexer: typeof sourceLexer = {
+      definition: sourceLexer.definition,
+      tokenize: (source, options) => {
+        if (probe) {
+          return this.probeTokens()
+        }
+        const result = sourceLexer.tokenize(source, options)
+        // Langium consumes hidden-token arrays after parsing. Retain a separate snapshot for probes.
+        this.lexed = { ...result, tokens: result.tokens.slice(), hidden: result.hidden.slice() }
+        return result
+      },
+    }
+    // Preserve lazy service resolution; spreading the service container resolves AsyncParser
+    // while its LangiumParser is still being constructed.
+    const parserServices = new Proxy(this.services.parser, {
+      get: (target, key) =>
+        key === 'Lexer' ? lexer : key === 'ParserConfig' && probe
+          ? { ...target.ParserConfig, recoveryEnabled: false }
+          : Reflect.get(target, key),
+    })
+    const services = new Proxy(this.services, {
+      get: (target, key) => key === 'parser' ? parserServices : Reflect.get(target, key),
+    })
+    const parser = new NumericContinuationParser(services, this, probe)
+    Langium.createParser(services.Grammar, parser, services.parser.Lexer.definition)
+    parser.finalize()
+    return parser
+  }
+
+  begin(source: string): void {
+    this.source = source
+    this.decisions.clear()
+    this.lexed = undefined
+  }
+
+  allow(candidate: NumericContinuation): boolean {
+    const key = this.key(candidate)
+    if (this.probe) {
+      if (candidate.when === this.probe.forced.when && candidate.input <= this.probe.forced.input) {
+        return true
+      }
+      const known = this.decisions.get(key)
+      if (known !== undefined) {
+        return known
+      }
+      this.probe.dependencies.set(key, candidate)
+      return true
+    }
+    const known = this.decisions.get(key)
+    if (known !== undefined) {
+      return known
+    }
+    this.probeParser ??= this.createParser(true)
+    const pending = [candidate]
+    while (pending.length > 0) {
+      const current = pending[pending.length - 1]!
+      const context: ContinuationProbe = { forced: current, dependencies: new Map() }
+      this.probe = context
+      let complete = false
+      try {
+        this.probeParser.baseOffset = current.when
+        const parsed = this.probeParser.parse<AST.WhenExpression>(this.source.slice(current.when), {
+          rule: 'WhenExpression',
+        })
+        const node = parsed.value
+        const end = node.$cstNode?.end
+        complete = AST.isWhenExpression(node) && !!node.subject
+          && (!!node.positive || !!node.otherwise)
+          && parsed.lexerErrors.every(error => end !== undefined && error.offset >= end)
+          && parsed.parserErrors.every(error =>
+            error.name === 'NotAllInputParsedException' && end !== undefined && error.token.startOffset >= end
+          )
+      } finally {
+        this.probe = undefined
+      }
+      const dependencies = [...context.dependencies.values()]
+        .filter(dependency => !this.decisions.has(this.key(dependency)))
+        .sort((left, right) => left.input - right.input)
+      if (dependencies.length > 0) {
+        pending.push(dependencies[dependencies.length - 1]!)
+      } else {
+        this.decisions.set(this.key(current), complete)
+        pending.pop()
+      }
+    }
+    return this.decisions.get(key)!
+  }
+
+  private key(candidate: NumericContinuation): string {
+    return `${candidate.when}:${candidate.input}:subject`
+  }
+
+  private probeTokens(): LexReport {
+    Assert.defined(this.probe, 'a continuation probe has its enclosing syntax context')
+    Assert.defined(this.lexed, 'continuation probes reuse the production lexer tokens')
+    const start = this.probe.forced.when
+    const rebase = (token: LexReport['tokens'][number]) => ({
+      ...token,
+      startOffset: token.startOffset - start,
+      endOffset: token.endOffset === undefined ? undefined : token.endOffset - start,
+    })
+    return {
+      tokens: this.lexed.tokens.filter(token => token.startOffset >= start).map(rebase),
+      hidden: this.lexed.hidden.filter(token => token.startOffset >= start).map(rebase),
+      errors: this.lexed.errors.filter(error => error.offset >= start).map(error => ({
+        ...error,
+        offset: error.offset - start,
+      })),
+    }
+  }
+}
+
+/** NumericContinuationParser attaches grammar-role gates before parser self-analysis. */
+class NumericContinuationParser extends Langium.LangiumParser {
+  baseOffset = 0
+  private frames: GrammarFrame[] = []
+  private invokedRole?: string
+  private readonly servicesGrammar: Langium.LangiumCoreServices['Grammar']
+
+  constructor(
+    services: Langium.LangiumCoreServices,
+    private readonly continuations: NumericContinuations,
+    private readonly probing: boolean,
+  ) {
+    super(services)
+    this.servicesGrammar = services.Grammar
+  }
+
+  override parse<T extends Langium.AstNode>(source: string, options?: Parameters<GrammarParser['parse']>[1]) {
+    if (!this.probing) {
+      this.baseOffset = 0
+      this.continuations.begin(source)
+    }
+    return super.parse<T>(source, options)
+  }
+
+  override rule(...[rule, implementation]: Parameters<GrammarParser['rule']>) {
+    return super.rule(rule, args => {
+      this.frames.push({
+        name: rule.name,
+        offset: this.isRecording() ? 0 : this.lookahead(1).startOffset + this.baseOffset,
+        role: this.invokedRole,
+      })
+      try {
+        return implementation(args)
+      } finally {
+        this.frames.pop()
+      }
+    })
+  }
+
+  override subrule(...args: Parameters<GrammarParser['subrule']>): void {
+    let feature: Langium.AstNode | undefined = args[3]
+    while (feature && !Langium.GrammarAST.isAssignment(feature) && !Langium.GrammarAST.isParserRule(feature)) {
+      feature = feature.$container
+    }
+    const previous = this.invokedRole
+    this.invokedRole = Langium.GrammarAST.isAssignment(feature) ? feature.feature : undefined
+    try {
+      super.subrule(...args)
+    } finally {
+      this.invokedRole = previous
+    }
+  }
+
+  override alternatives(...[index, choices]: Parameters<GrammarParser['alternatives']>): void {
+    const name = this.frames[this.frames.length - 1]?.name
+    if (name === 'PrimaryExpression' || name === 'DeclarationSlotPrimaryExpression') {
+      const alternative = this.continuationRule(name)?.definition
+      if (Langium.GrammarAST.isAlternatives(alternative)) {
+        const constructor = alternative.elements.findIndex(element =>
+          Langium.GrammarAST.isRuleCall(element) && element.rule.ref?.name === 'ConfigurationConstructor'
+        )
+        choices = choices.map((choice, position) =>
+          position === constructor
+            ? {
+              ...choice,
+              GATE: () =>
+                (!choice.GATE || choice.GATE())
+                && (name !== 'PrimaryExpression' || this.allowAppConstructorInput())
+                && this.allowDeclarationSlotConstructorInput(),
+            }
+            : choice
+        )
+      }
+    }
+    if (name === 'ViewStatement') {
+      const rule = this.continuationRule(name)
+      const alternative = rule?.definition
+      if (Langium.GrammarAST.isAlternatives(alternative)) {
+        const declaration = alternative.elements.findIndex(element =>
+          Langium.GrammarAST.isRuleCall(element) && element.rule.ref?.name === 'RenderSlotDeclaration'
+        )
+        choices = choices.map((choice, position) =>
+          position === declaration
+            ? { ...choice, GATE: () => (!choice.GATE || choice.GATE()) && this.startsSlotDeclaration() }
+            : choice
+        )
+      }
+    }
+    if (name === 'SlotInlineRender') {
+      choices = choices.map((choice, position) =>
+        position === 1
+          ? { ...choice, GATE: () => (!choice.GATE || choice.GATE()) && this.startsSlotInlineRender() }
+          : choice
+      )
+    }
+    const rules = [
+      'NumericUnitExpression',
+      'DeclarationSlotNumericUnitExpression',
+      'WhenSubjectNumericUnitExpression',
+      'ConfigurationValue',
+      'NonIdentifierConstructorEntryValue',
+    ]
+    if (name && rules.includes(name)) {
+      const rule = this.continuationRule(name)
+      const alternative = rule?.definition
+      if (Langium.GrammarAST.isAlternatives(alternative)) {
+        const suffix = alternative.elements.findIndex(element =>
+          Langium.GrammarAST.isRuleCall(element) && element.rule.ref?.name === 'RequiredNumericUnitConstruction'
+        )
+        if (suffix >= 0) {
+          choices = choices.map((choice, position) =>
+            position === suffix
+              ? { ...choice, GATE: () => (!choice.GATE || choice.GATE()) && this.allowSuffix() }
+              : choice
+          )
+        }
+      }
+    }
+    super.alternatives(index, choices)
+  }
+
+  override many(...[index, callback]: Parameters<GrammarParser['many']>): void {
+    if (this.frames[this.frames.length - 1]?.name === 'ConfigurationValues') {
+      const gate = callback.GATE
+      callback = { ...callback, GATE: () => (!gate || gate()) && !this.commaStartsDirective() }
+    }
+    super.many(index, callback)
+  }
+
+  override optional(...[index, callback]: Parameters<GrammarParser['optional']>): void {
+    if (this.frames[this.frames.length - 1]?.name === 'ConfigurationBlock') {
+      const gate = callback.GATE
+      callback = { ...callback, GATE: () => (!gate || gate()) && !this.startsNamedDirective(1) }
+    }
+    super.optional(index, callback)
+  }
+
+  private commaStartsDirective(): boolean {
+    if (this.isRecording() || this.lookahead(1).image !== ',') {
+      return false
+    }
+    return this.startsNamedDirective(2)
+  }
+
+  /** A declaration's next reference-block fill cannot be the current constructor's scalar input. */
+  private allowDeclarationSlotConstructorInput(): boolean {
+    if (this.isRecording()) {
+      return true
+    }
+    const slot = this.frames.findLastIndex(frame => frame.name === 'DeclarationSlotExpression')
+    if (
+      slot < 0
+      || this.frames.slice(slot + 1).some(frame =>
+        frame.name === 'ActionBlock' || frame.name === 'AtomicActionBlock'
+        || frame.name === 'FunctionBlock' || frame.name === 'Block'
+      )
+    ) {
+      return true
+    }
+    let payload = this.lookahead(1).image === '.' ? 3 : 2
+    while (this.lookahead(payload).image === '.' && isIdentifierToken(this.lookahead(payload + 1))) {
+      payload += 2
+    }
+    if (!isIdentifierToken(this.lookahead(payload))) {
+      return true
+    }
+    return this.lookahead(payload + 1).image !== '{'
+  }
+
+  /** App properties separate adjacent identifier pairs; grouping retains constructor intent. */
+  private allowAppConstructorInput(): boolean {
+    if (this.isRecording()) {
+      return true
+    }
+    const property = this.frames.findLastIndex(frame => frame.name === 'AppProperty')
+    const expression = this.frames[property + 1]
+    const nested = this.frames.slice(property + 2)
+    if (
+      property < 0 || expression?.name !== 'Expression' || expression.role !== 'value'
+      || nested.some(frame => frame.name === 'Expression')
+      || nested.filter(frame => frame.name === 'PrimaryExpression').length !== 1
+      || nested.some(frame => frame.role === 'right' || frame.role === 'operand')
+      || !isIdentifierToken(this.lookahead(1))
+    ) {
+      return true
+    }
+    let payload = 2
+    while (this.lookahead(payload).image === '.' && isIdentifierToken(this.lookahead(payload + 1))) {
+      payload += 2
+    }
+    return !isIdentifierToken(this.lookahead(payload)) || this.lookahead(payload + 1).image === '.'
+  }
+
+  private startsNamedDirective(start: number): boolean {
+    if (this.isRecording() || !isIdentifierToken(this.lookahead(start))) {
+      return false
+    }
+    let cursor = start + 1
+    while (this.lookahead(cursor).image === '.' && isIdentifierToken(this.lookahead(cursor + 1))) {
+      cursor += 2
+    }
+    return this.lookahead(cursor).image === '{'
+      || (isIdentifierToken(this.lookahead(cursor)) && this.lookahead(cursor + 1).image === '{')
+  }
+
+  private startsSlotDeclaration(): boolean {
+    if (this.isRecording()) {
+      return true
+    }
+    if (!this.lookahead(1).image.startsWith('@')) {
+      return false
+    }
+    let cursor = 2
+    if (this.lookahead(cursor).image === '(') {
+      let depth = 0
+      do {
+        const token = this.lookahead(cursor++)
+        if (token.image === '(') {
+          depth++
+        }
+        if (token.image === ')') {
+          depth--
+        }
+        if (!Number.isFinite(token.startOffset)) {
+          return true
+        }
+      } while (depth > 0)
+    }
+    return this.lookahead(cursor).image === ':' || this.lookahead(cursor).image === '='
+  }
+
+  private startsSlotInlineRender(): boolean {
+    if (this.isRecording()) {
+      return true
+    }
+    return isIdentifierToken(this.lookahead(1))
+      && ['(', '[', '{'].includes(this.lookahead(2).image)
+  }
+
+  private continuationRule(name: string) {
+    return this.grammarRules.find(rule => rule.name === name)
+  }
+
+  private get grammarRules() {
+    return this.servicesGrammar.rules.filter(Langium.GrammarAST.isParserRule)
+  }
+
+  private lookahead(index: number): LexReport['tokens'][number] {
+    // Langium exposes its Chevrotain wrapper to parser subclasses; its documented LA method is
+    // protected on that wrapper, so keep the extension boundary in this one narrow adapter.
+    const wrapper = this.wrapper as unknown as { LA(index: number): LexReport['tokens'][number] }
+    return wrapper.LA(index)
+  }
+
+  private allowSuffix(): boolean {
+    if (this.isRecording()) {
+      return true
+    }
+    let cursor = 1
+    let token = this.lookahead(cursor)
+    if (token.image === '(') {
+      let depth = 0
+      do {
+        token = this.lookahead(cursor++)
+        if (token.image === '(') {
+          depth++
+        }
+        if (token.image === ')') {
+          depth--
+        }
+        if (!Number.isFinite(token.startOffset)) {
+          return true
+        }
+      } while (depth > 0)
+    } else {
+      if (token.image === '-') {
+        cursor++
+      }
+      if (this.lookahead(cursor).tokenType.name !== 'NUMBER') {
+        return true
+      }
+      cursor++
+    }
+    if (!isIdentifierToken(this.lookahead(cursor))) {
+      return true
+    }
+    let unit = this.lookahead(cursor)
+    cursor++
+    while (this.lookahead(cursor).image === '.' && isIdentifierToken(this.lookahead(cursor + 1))) {
+      unit = this.lookahead(cursor + 1)
+      cursor += 2
+    }
+    if (unit.tokenType.name !== 'NUMERIC_UNIT_ID') {
+      return false
+    }
+    const label = this.frames.findLastIndex(frame => frame.name === 'RenderAccessibilityStatement')
+    const value = label >= 0 ? this.frames[label + 1] : undefined
+    if (
+      value?.name === 'Expression' && value.role === 'value'
+      && !this.frames.slice(label + 2).some(frame =>
+        [
+          'PrimaryExpression',
+          'NumericUnitConstructionInput',
+          'WhenExpression',
+          'FunctionCallExpression',
+          'MemberMethodCallExpression',
+          'ActionExpression',
+        ].includes(frame.name)
+      ) && this.lookahead(cursor).image === '('
+    ) {
+      // The direct label ends before the next ordinary view invocation.
+      return false
+    }
+    const entry = this.frames.findLastIndex(frame => frame.name === 'ConfigurationValueEntry')
+    if (
+      entry >= 0
+      && !this.frames.slice(entry + 1).some(frame =>
+        [
+          'PrimaryExpression',
+          'WhenExpression',
+          'FunctionCallExpression',
+          'MemberMethodCallExpression',
+          'ActionExpression',
+        ]
+          .includes(frame.name)
+      ) && (this.lookahead(cursor).image === '{'
+        || (isIdentifierToken(this.lookahead(cursor)) && this.lookahead(cursor + 1).image === '{'))
+    ) {
+      return false
+    }
+    const when = this.frames.findLastIndex(frame => frame.name === 'WhenExpression')
+    const header = when >= 0 ? this.frames[when + 1] : undefined
+    if (
+      header?.name === 'WhenSubjectExpression' && header.role === 'subject'
+      && !this.frames.slice(when + 2).some(frame => frame.name === 'WhenSubjectPrimaryExpression')
+    ) {
+      return this.continuations.allow({
+        when: this.frames[when]!.offset,
+        input: this.lookahead(1).startOffset + this.baseOffset,
+      })
+    }
+    return true
+  }
+}
+
+function isIdentifierToken(token: LexReport['tokens'][number]): boolean {
+  return token.tokenType.name === 'ID' || token.tokenType.name === 'NUMERIC_UNIT_ID'
 }
 
 type ParserLspModule = {
@@ -950,7 +1432,13 @@ async function loadReferencedDocuments(
       clearRequirementAliases: false,
     }),
   ]])
-  if (AST.streamAllContents(ast).some(AST.isQuotedRender)) {
+  // A bare rendered value may need standard Text after linking, without an authored UI import.
+  if (
+    AST.streamAllContents(ast).some(node =>
+      AST.isQuotedRender(node) || AST.isViewRender(node)
+      || (AST.isRenderStatement(node) && node.injection === undefined)
+    )
+  ) {
     await addCandidates(
       'quoted-render',
       await context.packages.candidateFilePaths(quotedTextImport(), {

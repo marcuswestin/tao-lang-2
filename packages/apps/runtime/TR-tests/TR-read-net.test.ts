@@ -75,10 +75,127 @@ Describe('TR read net', () => {
   Test('lets a case the guard names win over the net', () => {
     const { note } = storedNote()
     TR.Data.Delete(TR.Value(note))
-    const net = siteProps({ missing: () => 'App gone' })
+    let observedContext: unknown
+    const net = siteProps({
+      none: (_, context) => {
+        observedContext = context.evaluate().jsValue
+        return 'App gone'
+      },
+    })
 
-    Expect(TR.GuardRender(TR.Value(note), [['missing', () => 'Site gone']], () => 'Editor', net)).toBe('Site gone')
+    Expect(TR.GuardRender(TR.Value(note), [['none', () => 'Site gone']], () => 'Editor', net)).toBe('Site gone')
     Expect(TR.GuardRender(TR.Value(note), [['loading', () => 'Site loading']], () => 'Editor', net)).toBe('App gone')
+    Expect(observedContext).toMatchObject({ Case: 'none', State: 'missing' })
+  })
+
+  Test('ignores legacy missing handlers and branches while internal absence keeps the runtime fallback', () => {
+    const { note } = storedNote()
+    TR.Data.Delete(TR.Value(note))
+    let legacyCalls = 0
+    const handlers = {
+      loading: () => 'App loading',
+      missing: () => {
+        legacyCalls += 1
+        return 'Legacy app missing'
+      },
+    }
+    const props = siteProps(TR.ReadNet(handlers))
+    const rendered = TR.GuardRender(
+      TR.Value(note),
+      [['missing', () => {
+        legacyCalls += 1
+        return 'Legacy local missing'
+      }]],
+      () => 'Editor',
+      props,
+    )
+    Expect(runtimeText(rendered)).toEqual(['This note could not be found.'])
+    Expect(legacyCalls).toBe(0)
+    Expect(readContext('missing')).toMatchObject({
+      Case: 'none',
+      State: 'missing',
+      Message: 'This item could not be found.',
+    })
+  })
+
+  Test('matches none for nullable values and missing entity availability', () => {
+    const { note } = storedNote()
+    TR.Data.Delete(TR.Value(note))
+
+    Expect(
+      TR.WhenCase(TR.Value(null), [['none', () => TR.Value('No value')]], () => TR.Value('Other')).evaluate()
+        .jsValue,
+    )
+      .toBe('No value')
+    Expect(TR.GuardRender(TR.Value(note), [['none', () => 'Gone']], () => 'Editor')).toBe('Gone')
+    Expect(TR.GuardRender(TR.Value(null), [['none', () => 'No entity']], () => 'Editor')).toBe('No entity')
+  })
+
+  Test('routes missing entity availability to app none with the public case in context', () => {
+    const { note } = storedNote()
+    TR.Data.Delete(TR.Value(note))
+    const observed: unknown[] = []
+    const net = siteProps({
+      none: (_, context) => {
+        observed.push(context.evaluate().jsValue)
+        return 'App none'
+      },
+    })
+    const local = TR.GuardRender(
+      TR.Value(note),
+      [['none', context => {
+        observed.push(context.evaluate().jsValue)
+        return 'Local none'
+      }]],
+      () => 'Editor',
+      net,
+    )
+    const app = TR.GuardRender(TR.Value(note), [], () => 'Editor', net)
+
+    Expect(local).toBe('Local none')
+    Expect(app).toBe('App none')
+    Expect(observed).toHaveLength(2)
+    for (const context of observed as Array<Record<string, unknown>>) {
+      Expect(context).toMatchObject({ Case: 'none', State: 'missing' })
+    }
+
+    const { note: available, schema } = storedNote()
+    schema.setStatus('unauthorized', '')
+    Expect(runtimeText(TR.GuardRender(TR.Value(available), [], () => 'Editor', net))).toEqual([
+      "You don't have access to this note.",
+    ])
+  })
+
+  Test('gives nullable entity none handlers a safe read context', () => {
+    const hint = { readKind: 'entity' as const, subjectType: 'Note' }
+    let localContext: unknown
+    let appContext: unknown
+    const local = TR.GuardRender(
+      TR.Value(null),
+      [['none', context => {
+        const value = context.evaluate().jsValue
+        localContext = value
+        return value.Message
+      }]],
+      () => 'Editor',
+      undefined,
+      hint,
+    )
+    const net = siteProps({
+      none: (_, context) => {
+        const value = context.evaluate().jsValue
+        appContext = value
+        return value.Message
+      },
+    })
+    const app = TR.GuardRender(TR.Value(null), [], () => 'Editor', net, hint)
+    const fallback = runtimeText(TR.GuardRender(TR.Value(null), [], () => 'Editor', undefined, hint))
+
+    Expect(local).toBe('This note could not be found.')
+    Expect(localContext).toMatchObject({ Case: 'none', State: 'missing', Message: 'This note could not be found.' })
+    Expect(app).toBe('This note could not be found.')
+    Expect(appContext).toMatchObject({ Case: 'none', State: 'missing', Message: 'This note could not be found.' })
+    Expect(fallback).toEqual(['This note could not be found.'])
   })
 
   Test('passes one safe context to local and app handlers without exposing provider diagnostics', () => {
@@ -149,7 +266,11 @@ Describe('TR read net', () => {
   })
 
   Test('merges inherited read-net cases and lets the variant replace one case', () => {
-    const base = TR.ReadNet({ loading: () => 'Inherited loading', error: () => 'Inherited error' })
+    const base = TR.ReadNet({
+      loading: () => 'Inherited loading',
+      none: () => 'Inherited none',
+      error: () => 'Inherited error',
+    })
     const own = TR.ReadNet({ loading: () => 'Own loading' })
     const merged = TR.MergeReadNet(base, own)
     const props = siteProps(merged)
@@ -161,6 +282,12 @@ Describe('TR read net', () => {
         'Inherited error',
       )
     Expect(Object.isFrozen(merged)).toBe(true)
+    const { note } = storedNote()
+    TR.Data.Delete(TR.Value(note))
+    Expect(TR.GuardRender(TR.Value(note), [], () => 'Editor', props)).toBe('Inherited none')
+    const replaced = TR.MergeReadNet(merged, TR.ReadNet({ none: () => 'Own none' }))
+    Expect(TR.GuardRender(TR.Value(note), [], () => 'Editor', siteProps(replaced))).toBe('Own none')
+    Expect(TR.GuardRender(TR.Value(note), [], () => 'Editor', props)).toBe('Inherited none')
   })
 
   Test('uses a proven site hint and keeps cached refresh and stale rows as content', () => {
@@ -204,6 +331,7 @@ Describe('TR read net', () => {
     })
     Expect(context.Message).toBe('Could not resolve the link to this note.')
     Expect(context.MissingReason).toBe('unresolved-reference')
+    Expect(context).toMatchObject({ Case: 'none', State: 'missing', ReadKind: 'reference' })
   })
 
   Test("renders the app's guard where it replaces a case, and the runtime's where it does not", () => {
