@@ -73,6 +73,10 @@ export const JUST_COMMANDS = [
   'simplify-audit',
   'standalone-cli-build',
   'stop',
+  // GitHub merges move only the remote's main; this brings local main forward, never forcing. The
+  // landing commands call it on the host; on its own it is sandboxed, and a checkout the sandbox
+  // cannot write is left behind with a warning rather than needing a host operation.
+  'sync-main',
   // The browser and native UI lanes are final validation like any other gate, and AGENTS.md
   // requires them before a branch that touches Studio is called ready. They stayed reachable only
   // as `just` recipes, which left the one instruction an agent follows split across two spellings.

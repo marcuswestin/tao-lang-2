@@ -60,6 +60,13 @@ Describe('verify-complement', () => {
     Expect(VerifyComplement.plan(FULL_LANE, "  CI_HOST_GATES: 'studio-smoke,studio-canary'\n").host).toEqual([])
   })
 
+  Test('leaves a gate hosted Verify runs on Linux to Verify', () => {
+    Expect(VerifyComplement.isHostGate('studio-dialog-browser')).toBe(false)
+    const plan = VerifyComplement.plan([...FULL_LANE, 'studio-dialog-browser'], '')
+    Expect(plan.host).toEqual(['studio-smoke', 'studio-canary'])
+    Expect(plan.gates).not.toContain('studio-dialog-browser')
+  })
+
   Test('the real full lane and workflow leave a non-empty complement of host gates only', async () => {
     const plan = await VerifyComplement.readPlan(await justVariable('VERIFY_FULL_GATES'), Repo.getRoot())
     Expect(plan.host.length).toBeGreaterThan(0)

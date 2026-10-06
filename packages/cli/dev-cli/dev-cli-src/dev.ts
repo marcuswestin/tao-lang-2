@@ -30,6 +30,7 @@ import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { MergeRecovery } from './git/MergeRecovery'
+import { SyncLocalMainCommand } from './git/SyncLocalMain'
 import { CancelVerifyCommand } from './pr/CancelVerify'
 import { CiTimingsCommand } from './pr/CiTimingsCommand'
 import { LandFixCommand } from './pr/LandFixCommand'
@@ -66,6 +67,7 @@ type GatesCommandOptions = {
    */
   cache?: boolean
   greenTree?: string[]
+  hostedLinux?: boolean
   jobs?: string
   json?: string
   lane?: string
@@ -480,6 +482,10 @@ await runWithCommands(commands => {
     )
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
     .option(
+      '--hosted-linux',
+      'With --skip-unsandboxed on a hosted Verify Linux runner: keep the unsandboxed gates proved there.',
+    )
+    .option(
       '--ci-host-gates <names>',
       'verify-full-ci only: run these comma-separated host gates and the prepare nodes they read; empty runs none.',
     )
@@ -507,8 +513,13 @@ await runWithCommands(commands => {
         // the host gates still pending are reported, so a summary never looks fuller than it is.
         const admission = hostedCi ? CiGateAdmission.select(gates, options.ciHostGates ?? '') : undefined
         const lane = admission === undefined ? gates : admission.gates
+        if (options.hostedLinux === true && (options.skipUnsandboxed !== true || Platform.hostPlatform !== 'linux')) {
+          Errors.throwUserInput(
+            '--hosted-linux is for a hosted Verify Linux runner and goes with --skip-unsandboxed; a local lane keeps those gates in the complement.',
+          )
+        }
         const runnable = options.skipUnsandboxed === true
-          ? lane.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
+          ? lane.filter(name => !GateCatalog.skippedUnsandboxed(name, { hostedLinux: options.hostedLinux }))
           : lane
         UiVisibility.preflightGates(runnable, options.showStudio)
         // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
@@ -545,6 +556,7 @@ await runWithCommands(commands => {
               ? undefined
               : { lanes: options.greenTree, noCache: options.cache === false, sharedRoot: GreenTree.sharedRoot() },
             hostPlatform: Platform.hostPlatform,
+            hostedLinux: options.hostedLinux === true,
             jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
             jsonPath: options.json,
             lane: options.lane,
@@ -646,7 +658,7 @@ await runWithCommands(commands => {
     })
 
   commands
-    .command('sync-main')
+    .command('my-sync')
     .description('Fast-forward main, move the mirrors that follow it, and merge it into this branch.')
     .action(async () => {
       try {
@@ -972,6 +984,15 @@ await runWithCommands(commands => {
     )
     .action(async () => {
       await runExitCommand(async () => (await LandFixCommand.run()).exitCode)
+    })
+
+  commands
+    .command('sync-main')
+    .description(
+      'Fast-forward local main to fetched origin/main: the ref alone when no worktree has main, a clean checkout of it with merge --ff-only, and clean main mirrors; never forces, never touches a dirty checkout.',
+    )
+    .action(async () => {
+      await runExitCommand(async () => (await SyncLocalMainCommand.run()) === 'diverged' ? 1 : 0)
     })
 
   commands
