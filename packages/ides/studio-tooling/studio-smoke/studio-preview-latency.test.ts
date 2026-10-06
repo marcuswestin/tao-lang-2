@@ -11,6 +11,7 @@ import {
   VerificationTimeouts,
 } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
+import SourceActions from '@source-actions'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
 import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
@@ -52,6 +53,8 @@ scenarios MainView "states" {
 `
 
 type EditSample = {
+  deliveredAt?: number
+  deliveryRevision?: number
   domAt: number
   edit: number
   frameLoads: number
@@ -65,9 +68,24 @@ type EditSample = {
 }
 
 const probeScript = `(() => {
+  window.__taoLatencyPaintReports = []
+  window.__taoLatencyCaptures = {}
+  window.addEventListener('message', event => {
+    if (!['preview-painted', 'preview-runtime-captured', 'preview-runtime-capture-failed'].includes(event.data?.type)) return
+    const frame = [...document.querySelectorAll('iframe')].find(frame => frame.contentWindow === event.source)
+    if (frame && new URL(frame.src).origin === event.origin) {
+      if (event.data.type === 'preview-painted') window.__taoLatencyPaintReports.push(event.data)
+      else window.__taoLatencyCaptures[event.data.requestId] = event.data
+    }
+  })
   if (!location.search.includes('taoStudioPreviewInstanceId=')) return
   const now = () => performance.timeOrigin + performance.now()
-  const probe = window.__taoLatencyProbe = { hmr: [], other: [], painted: {}, seen: {}, watch: [] }
+  const probe = window.__taoLatencyProbe = { deliveries: [], hmr: [], other: [], painted: {}, seen: {}, watch: [] }
+  window.addEventListener('message', event => {
+    if (event.source === window.parent && event.data?.type === 'design-padding') {
+      probe.deliveries.push({ at: now(), padding: event.data.padding, revision: event.data.revision })
+    }
+  })
   const NativeSocket = window.WebSocket
   function ProbedSocket(...args) {
     const socket = new NativeSocket(...args)
@@ -162,6 +180,8 @@ scenarios LatencyProbe "latency" {
 const paddingLengthProbe = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_PADDING_LENGTH'] === 'true'
 const revertProbe = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_REVERT'] === 'true'
 const recoveryProbe = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_RECOVERY'] === 'true'
+const rapidSaveProbe = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_RAPID_SAVES'] === 'true'
+const retainedStateProbe = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_RETAINED_STATE'] === 'true'
 const paddingValue = (edit: number) =>
   revertProbe && edit % 2 === 0
     ? 12
@@ -222,12 +242,12 @@ const latencyProjects: readonly LatencyProject[] = [
   },
 ]
 
-const selectedMode = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_PUBLICATION']
+const selectedMode = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_PUBLICATION'] || undefined
 Assert.input(
   selectedMode === undefined || selectedMode === 'on' || selectedMode === 'off',
   'Select publication on or off for a diagnostic comparison.',
 )
-const selectedCase = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_CASE']
+const selectedCase = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_CASE'] || undefined
 Assert.input(
   selectedCase === undefined || latencyProjects.some(project => project.name === selectedCase),
   'Select an existing Studio latency case.',
@@ -235,9 +255,15 @@ Assert.input(
 Assert.input(
   Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PERFORMANCE'] !== 'true'
     || (selectedCase === undefined && selectedMode === undefined && !paddingLengthProbe
-      && !revertProbe && !recoveryProbe && !wholeAppProbe && saveGapMs === 500
-      && Platform.runtimeProcess.env['TAO_STUDIO_DESIGN_DELIVERY'] !== 'true'
+      && !revertProbe && !recoveryProbe && !rapidSaveProbe && !retainedStateProbe
+      && !wholeAppProbe && saveGapMs === 500
+      && Platform.runtimeProcess.env['TAO_STUDIO_DESIGN_DELIVERY'] === 'false'
       && Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_SINGLE_CELL'] !== 'true'
+      && Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_ACTIVATE_DURING_OVERLAY'] !== 'true'
+      && Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_REQUIRE_FULL_OVERLAP'] !== 'true'
+      && Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] !== 'true'
+      && Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] !== 'true'
+      && (Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_NODE_ENV'] ?? 'development') === 'development'
       && Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_TWO_FILE_BURST'] !== 'true'),
   'Performance qualification runs every Studio latency case.',
 )
@@ -251,13 +277,15 @@ for (const project of latencyProjects.filter(project => selectedCase === undefin
 
 async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Promise<void> {
   const designDeliveryProbe = mode === 'off' && project.expectedStyle !== undefined
-    && Platform.runtimeProcess.env['TAO_STUDIO_DESIGN_DELIVERY'] === 'true'
+    && Platform.runtimeProcess.env['TAO_STUDIO_DESIGN_DELIVERY'] !== 'false'
   const projectRoot = await mkTestDir(`tao-studio-latency-${mode}-`)
   let browser: StudioCdp | undefined
   let studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
+  const samples: EditSample[] = []
   try {
     const sourcePath = await project.setup(projectRoot)
     studio = await startStudioSmokeLaunch({ appName: project.appName, previewPublication: mode, projectRoot })
+    const activeStudio = studio
     Assert.defined(studio.readiness.previewUrl, 'the browser Studio launch advertises its Metro preview URL')
     browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
     await browser.addInitScript(probeScript)
@@ -348,6 +376,34 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       { intervalMs: 250, timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity },
     )
     Assert.defined(settled, `the ${project.name} preview cells stop loading`)
+    const captureRetainedState = async (requestId: string): Promise<unknown[]> => {
+      await browser!.evaluate(`(async () => {
+        const protocol = await (await fetch(${
+        JSON.stringify(activeStudio.readiness.sessionUrl)
+      } + '/api/protocol')).json()
+        const target = document.querySelector(${frame})
+        target.contentWindow.postMessage({
+          channel: 'tao-studio', protocolVersion: 1, type: 'capture-runtime', requestId: ${JSON.stringify(requestId)},
+          identity: { ...protocol.identity, previewInstanceId: new URL(target.src).searchParams.get('taoStudioPreviewInstanceId') }
+        }, new URL(target.src).origin)
+      })()`)
+      await browser!.waitFor(`window.__taoLatencyCaptures[${JSON.stringify(requestId)}] !== undefined`, {
+        timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity,
+      })
+      const reply = await browser!.evaluate<{ type: string; error?: unknown; domains?: unknown[] }>(`(() => {
+        const reply = window.__taoLatencyCaptures[${JSON.stringify(requestId)}]
+        return { type: reply.type, error: reply.error,
+          domains: reply.capture?.domains.filter(item => ['data', 'navigation', 'persisted-state'].includes(item.domain)) }
+      })()`)
+      if (reply.type !== 'preview-runtime-captured' || reply.domains === undefined) {
+        Errors.throwHostEnvironment(`The preview could not capture retained state: ${Errors.messageOf(reply.error)}`)
+      }
+      return reply.domains
+    }
+    const retainedBefore = retainedStateProbe ? await captureRetainedState('speed-retained-before') : undefined
+    if (retainedBefore !== undefined) {
+      Expect(retainedBefore.length).toBeGreaterThan(0)
+    }
     await browser.evaluate(`(() => {
         const now = () => performance.timeOrigin + performance.now()
         window.__taoLatencyLoads = 0
@@ -396,8 +452,8 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         ),
       ).toBe(true)
     }
-    const samples: EditSample[] = []
     let lastPaintedRevision = 0
+    let finalEdit = EDITS_PER_MODE
     for (let edit = 1; edit <= EDITS_PER_MODE; edit += 1) {
       // Each marker is longer than the last, as most real edits change a file's length and so move
       // every source range after them.
@@ -407,6 +463,27 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         world: 'page',
       })
       let diskSaveAt: number | undefined
+      if (edit === 4 && Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_REQUIRE_FULL_OVERLAP'] === 'true') {
+        Assert.input(project.name === 'HNReader editor padding', 'Full-work overlap uses the HNReader design fixture.')
+        Assert.input(
+          Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true',
+          'Full-work overlap requires tracing.',
+        )
+        const triggerAt = Date.now()
+        const companionPath = FS.resolvePath('Feed.tao', projectRoot)
+        await FS.writeText(companionPath, await FS.readText(companionPath) + '\n// Full-work overlap probe\n')
+        const started = await Time.pollUntil(async () => {
+          return activeStudio.output().split('\n').some(line => {
+            const match = /\{"type":"studio-preview-trace"[^\n]*\}/u.exec(line)?.[0]
+            if (match === undefined) {
+              return false
+            }
+            const entry = JSON.parse(match) as { at: number; event: string; previewFirst?: boolean }
+            return entry.at >= triggerAt && entry.event === 'attempt-start' && entry.previewFirst === false
+          }) || undefined
+        }, { intervalMs: 20, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
+        Assert.defined(started, 'a real authoritative attempt begins before the overlapping editor save')
+      }
       if (project.edit === 'editor') {
         await browser.click('.cm-content')
         await browser.pressShortcut('a')
@@ -471,11 +548,34 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       }
       const saveAt = diskSaveAt ?? await browser.evaluate<number>('window.__taoLatencySaveAt')
       const probe = await browser.evaluateInFrame<{
+        deliveries: { at: number; padding: number; revision: number }[]
         hmr: { at: number; type: string }[]
         painted: Record<string, number>
         seen: Record<string, number>
       }>(previewUrl, 'window.__taoLatencyProbe', { world: 'page' })
+      const delivery = probe.deliveries.find(message => message.at >= saveAt && message.at <= probe.seen[marker]!)
+      if (delivery !== undefined) {
+        // The layout probe and the runtime acknowledgement use independent animation-frame
+        // callbacks. Wait for that receipt without changing the already captured paint time.
+        await browser.waitFor(
+          `window.__taoLatencyPaintReports.some(message =>
+            message.paintRevision === ${JSON.stringify(delivery.revision)}
+            && message.identity.previewInstanceId === ${
+            JSON.stringify(new URL(previewUrl).searchParams.get('taoStudioPreviewInstanceId'))
+          })`,
+          { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
+        )
+      }
+      const deliveryAccepted = delivery !== undefined && await browser.evaluate<boolean>(
+        `window.__taoLatencyPaintReports.some(message => message.painted === true
+          && message.paintRevision === ${JSON.stringify(delivery?.revision)}
+          && message.identity.previewInstanceId === ${
+          JSON.stringify(new URL(previewUrl).searchParams.get('taoStudioPreviewInstanceId'))
+        })`,
+      )
       samples.push({
+        deliveredAt: deliveryAccepted ? delivery?.at : undefined,
+        deliveryRevision: deliveryAccepted ? delivery?.revision : undefined,
         domAt: probe.seen[marker]!,
         edit,
         frameLoads: await browser.evaluate<number>('window.__taoLatencyLoads'),
@@ -483,13 +583,13 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         loadAverage: Platform.loadAverage(),
         mode,
         paintAt: probe.painted[marker],
-        publishedAt: designDeliveryProbe
+        publishedAt: deliveryAccepted
           ? undefined
           : await newestModification(generatedRoot),
         saveAt,
         sourceWrittenAt: await FS.modifiedTimeMs(sourcePath),
       })
-      if (Platform.runtimeProcess.env['TAO_STUDIO_EXPERIMENT_FULL_PASS'] === 'after-paint') {
+      if (Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_FIRST'] !== 'false') {
         await browser.waitFor(
           `(async () => {
           const protocol = await (await fetch(${JSON.stringify(studio.readiness.sessionUrl)} + '/api/protocol')).json()
@@ -497,23 +597,44 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         })()`,
           { timeoutMs: 30_000 },
         )
-        const paintSignal = await browser.evaluate<{ accepted: boolean; revision: number }>(`(async () => {
+        const paintSignal = await browser.evaluate<{ revision: number }>(`(async () => {
           const base = ${JSON.stringify(studio.readiness.sessionUrl)}
           const protocol = await (await fetch(base + '/api/protocol')).json()
           const revision = ${JSON.stringify(designDeliveryProbe)}
             ? protocol.compile.compileRevision : (protocol.compile.publishedRevision ?? protocol.compile.compileRevision)
-          if (${
-          JSON.stringify(Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_BROWSER_SCHEDULER'] === 'true')
-        }) return { accepted: true, revision }
-          const response = await fetch(base + '/api/preview/experimental-paint', {
-            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ revision })
-          })
-          return { ...(await response.json()), revision }
+          return { revision }
         })()`)
-        Expect(paintSignal.accepted).toBe(true)
         lastPaintedRevision = paintSignal.revision
       }
       await Time.sleep(saveGapMs)
+    }
+    if (rapidSaveProbe) {
+      Assert.input(
+        project.edit === 'editor' && project.expectedStyle !== undefined,
+        'Rapid saves use the design editor.',
+      )
+      finalEdit += 4
+      const marker = `Edit${finalEdit}rapid`
+      await browser.evaluateInFrame(
+        previewUrl,
+        `window.__taoLatencyProbe.watch.push(${JSON.stringify(project.expectedStyle(finalEdit, marker))})`,
+        { world: 'page' },
+      )
+      for (let edit = EDITS_PER_MODE + 1; edit <= finalEdit; edit += 1) {
+        await browser.click('.cm-content')
+        await browser.pressShortcut('a')
+        await browser.insertText(project.sourceFor(`Edit${edit}rapid`))
+        await browser.pressShortcut('s')
+      }
+      const rapidPaint = await Time.pollUntil(async () =>
+        await browser!.evaluateInFrame<boolean>(
+          previewUrl,
+          `window.__taoLatencyProbe?.painted[${JSON.stringify(marker)}] !== undefined`,
+          { world: 'page' },
+        ) || undefined, { intervalMs: 50, timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity })
+      Assert.defined(rapidPaint, 'the final rapid editor save reaches computed padding and paint')
+      Expect(await FS.readText(sourcePath)).toBe(project.sourceFor(marker))
+      Expect(await browser.evaluate<number>('window.__taoLatencyLoads')).toBe(0)
     }
     const activateDuringOverlay = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_ACTIVATE_DURING_OVERLAY'] === 'true'
     if (activateDuringOverlay) {
@@ -532,7 +653,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
           `document.querySelector(${JSON.stringify(nextCell.selector)})?.src ?? ''`,
         ) || undefined, { intervalMs: 50, timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity })
       Assert.defined(freshUrl, 'newly activated design preview receives its authoritative URL')
-      const finalStyle = project.expectedStyle(EDITS_PER_MODE, 'final')
+      const finalStyle = project.expectedStyle(finalEdit, 'final')
       await browser.waitForInFrame(
         freshUrl,
         `[...document.querySelectorAll('[data-tao-studio]')].some(node =>
@@ -543,6 +664,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       Expect(await browser.evaluate<number>('window.__taoLatencyLoads')).toBe(0)
     }
     if (lastPaintedRevision > 0) {
+      const lastDeliveryRevision = Math.max(0, ...samples.map(sample => sample.deliveryRevision ?? 0))
       const finalSourcePath = FS.relativePath(projectRoot, sourcePath)
       const finalSourceVersion = await browser.evaluate<string>(`(async () => {
         const protocol = await (await fetch(${JSON.stringify(studio.readiness.sessionUrl)} + '/api/protocol')).json()
@@ -551,16 +673,18 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       await browser.waitFor(
         `(async () => {
         const protocol = await (await fetch(${JSON.stringify(studio.readiness.sessionUrl)} + '/api/protocol')).json()
-        return protocol.compile.compileRevision ${designDeliveryProbe ? '>=' : '>'} ${lastPaintedRevision}
+        return protocol.compile.compileRevision >= ${lastPaintedRevision}
           && protocol.compile.status === 'compiled'
-          && protocol.previewManifest.compileRevision >= ${lastPaintedRevision}
+          && (${lastDeliveryRevision} === 0 || (
+            protocol.compile.compileRevision > ${lastDeliveryRevision}
+            && protocol.previewManifest.compileRevision > ${lastDeliveryRevision}))
           && protocol.previewManifest.sourceVersions[${JSON.stringify(sourcePath)}] === ${
           JSON.stringify(finalSourceVersion)
         }
       })()`,
         { timeoutMs: 30_000 },
       )
-      const finalPadding = project.expectedStyle?.(EDITS_PER_MODE, 'final')
+      const finalPadding = project.expectedStyle?.(finalEdit, 'final')
       if (finalPadding !== undefined) {
         const retained = await browser.evaluateInFrame<boolean>(
           previewUrl,
@@ -574,7 +698,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     }
     if (Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_TWO_FILE_BURST'] === 'true') {
       Assert.input(project.name === 'HNReader editor padding', 'Two-file diagnostic uses the HNReader design fixture.')
-      const burst = await browser.evaluate<{ saved: boolean[]; revision: number }>(`(async () => {
+      const burst = await browser.evaluate<{ saved: boolean[]; sourceVersion: string }>(`(async () => {
         const base = ${JSON.stringify(studio.readiness.sessionUrl)}
         const read = async path => await (await fetch(base + '/api/file?path=' + encodeURIComponent(path))).json()
         const [design, feed] = await Promise.all([read('Design.tao'), read('Feed.tao')])
@@ -588,8 +712,8 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         ])
         const current = await read('Design.tao')
         const following = await write(current, ${JSON.stringify(project.sourceFor('Edit10x'))}, 'speed-burst-following')
-        const protocol = await (await fetch(base + '/api/protocol')).json()
-        return { saved: [...results, following].map(result => result.saved), revision: protocol.compile.compileRevision }
+        const final = await read('Design.tao')
+        return { saved: [...results, following].map(result => result.saved), sourceVersion: final.sourceVersion }
       })()`)
       Expect(burst.saved).toEqual([true, true, true])
       const final = project.expectedStyle!(10, 'burst-final')
@@ -603,7 +727,10 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       await browser.waitFor(
         `(async () => {
         const protocol = await (await fetch(${JSON.stringify(studio.readiness.sessionUrl)} + '/api/protocol')).json()
-        return protocol.compile.status === 'compiled' && protocol.compile.compileRevision > ${burst.revision}
+        return protocol.compile.status === 'compiled'
+          && protocol.previewManifest.sourceVersions[${JSON.stringify(sourcePath)}] === ${
+          JSON.stringify(burst.sourceVersion)
+        }
       })()`,
         { timeoutMs: 30_000 },
       )
@@ -613,7 +740,30 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       const entry = /\{"type":"studio-(?:preview|save)-trace"[^\n]*\}/u.exec(line)?.[0]
       return entry === undefined ? [] : [JSON.parse(entry) as SaveTraceEvent]
     })
+    const authoritative = await browser.evaluate<{
+      completion: { status: string }
+      manifest: { compileRevision: number; sourceVersions: Record<string, string> }
+    }>(`(async () => {
+      const protocol = await (await fetch(${JSON.stringify(studio.readiness.sessionUrl)} + '/api/protocol')).json()
+      return { completion: protocol.compile, manifest: {
+        compileRevision: protocol.previewManifest.compileRevision,
+        sourceVersions: protocol.previewManifest.sourceVersions,
+      } }
+    })()`)
+    const finalSource = { path: sourcePath, version: SourceActions.studioSourceVersion(await FS.readText(sourcePath)) }
+    Expect(authoritative.completion.status).toBe('compiled')
+    Expect(authoritative.manifest.sourceVersions[sourcePath]).toBe(finalSource.version)
+    const retainedAfter = retainedStateProbe ? await captureRetainedState('speed-retained-after') : undefined
+    if (retainedAfter !== undefined) {
+      Expect(retainedAfter).toEqual(retainedBefore)
+    }
     const evidence = {
+      screenshot: await browser.captureScreenshot(`latency-${project.name.replaceAll(' ', '-')}-${mode}-final`),
+      authoritativeCompletion: authoritative.completion,
+      authoritativeManifest: authoritative.manifest,
+      finalSource,
+      retainedState: retainedBefore === undefined ? undefined : { before: retainedBefore, after: retainedAfter },
+      rapidSaves: rapidSaveProbe ? { finalEdit, finalSource } : undefined,
       runtimeSettings: await browser.evaluateInFrame<unknown>(
         previewUrl,
         "({ development: typeof __DEV__ !== 'undefined' ? __DEV__ : null, scripts: [...document.scripts].map(script => script.src).filter(Boolean) })",
@@ -641,6 +791,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         return entry === undefined ? [] : [JSON.parse(entry) as unknown]
       }),
     }
+    await reportSamples(`${project.name} publication-${mode}`, samples, evidence)
     if (Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_REQUIRE_FULL_OVERLAP'] === 'true') {
       Assert.input(
         Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true',
@@ -650,7 +801,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       const overlapping = samples.filter(sample =>
         fullAttempts.some(attempt => {
           const completed = previewTrace.find(event =>
-            event.event === 'published' && event.revision === attempt.revision
+            (event.event === 'published' || event.event === 'attempt-failed') && event.revision === attempt.revision
           )
           return attempt.at <= sample.saveAt && completed !== undefined && completed.at > sample.saveAt
         })
@@ -681,8 +832,9 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     ) {
       const deliveries = evidence.previewTrace.filter(event =>
         typeof event === 'object' && event !== null && 'event' in event && event.event === 'design-delivered'
+        && event.at >= samples[0]!.saveAt && event.at <= samples.at(-1)!.paintAt!
       ).length
-      if (saveGapMs >= 1_000) {
+      if (saveGapMs >= 1_000 || Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_REQUIRE_FULL_OVERLAP'] === 'true') {
         // Full work may consume a later source before its queued fast request. Measure that race
         // without demanding every update use the diagnostic overlay.
         if (Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true') {
@@ -699,7 +851,6 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         ).toBe(true)
       }
     }
-    await reportSamples(`${project.name} publication-${mode}`, samples, evidence)
     Expect(samples.at(-1)!.frameLoads).toBe(0)
     if (!activateDuringOverlay) {
       Expect(evidence.cellLoads).toEqual([])
@@ -710,9 +861,18 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     if (studio !== undefined) {
       const failureRoot = FS.resolvePath('.artifacts/tests/studio-smoke/preview-latency', Repo.getRoot())
       await FS.mkdir(failureRoot)
-      const log = FS.resolvePath(`failed-${Date.now()}.log`, failureRoot)
+      const failure = FS.resolvePath(`failed-${Date.now()}`, failureRoot)
+      const log = `${failure}.log`
       await FS.writeText(log, studio.output())
+      await FS.writeJson(`${failure}.json`, {
+        label: `${project.name} publication-${mode}`,
+        error: Errors.messageOf(error),
+        samples,
+        browserEvents: browser?.browserEvents(),
+        screenshot: await browser?.captureScreenshot('latency-failed').catch(() => undefined),
+      })
       HCI.writeLine(`Studio latency failure subprocess log: ${log}`)
+      HCI.writeLine(`Studio latency failure samples: ${failure}.json`)
     }
     throw error
   } finally {
@@ -748,6 +908,12 @@ async function reportSamples(
   label: string,
   samples: readonly EditSample[],
   evidence: {
+    screenshot: string
+    authoritativeCompletion: unknown
+    authoritativeManifest: unknown
+    finalSource: unknown
+    retainedState?: unknown
+    rapidSaves?: unknown
     runtimeSettings: unknown
     browserEvents: ReturnType<StudioCdp['browserEvents']>
     cellLoads: unknown[]
@@ -767,6 +933,10 @@ async function reportSamples(
     loadAverage: sample.loadAverage,
     saveToSource: span(sample.saveAt, sample.sourceWrittenAt),
     sourceToPublished: span(sample.sourceWrittenAt, sample.publishedAt),
+    sourceToDelivery: span(sample.sourceWrittenAt, sample.deliveredAt),
+    deliveryRevision: sample.deliveryRevision,
+    deliveryToDom: span(sample.deliveredAt, sample.domAt),
+    sourceToPaint: span(sample.sourceWrittenAt, sample.paintAt),
     publishedToHmr: span(sample.publishedAt, sample.hmrAt),
     hmrToDom: span(sample.hmrAt, sample.domAt),
     domToPaint: span(sample.domAt, sample.paintAt),
@@ -774,7 +944,17 @@ async function reportSamples(
   }))
   const warm = rows.slice(1)
   const summary = Object.fromEntries(
-    (['saveToSource', 'sourceToPublished', 'publishedToHmr', 'hmrToDom', 'domToPaint', 'total'] as const).map(
+    ([
+      'saveToSource',
+      'sourceToPublished',
+      'sourceToDelivery',
+      'deliveryToDom',
+      'sourceToPaint',
+      'publishedToHmr',
+      'hmrToDom',
+      'domToPaint',
+      'total',
+    ] as const).map(
       key => {
         const values = warm.map(row => row[key]).filter((value): value is number => value !== undefined)
         return [key, { p50: percentile(values, 0.5), p95: percentile(values, 0.95) }]

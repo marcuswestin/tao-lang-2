@@ -2,7 +2,7 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { type LaneInspection, type MachineLane, MachineLanes } from '@verification/MachineLanes'
 
 type Observation = { at: string; available: boolean; loadAverage: number; activePeers: string[] }
-type StageResult = { name: 'language' | 'studio-preview'; exitCode: number }
+type StageResult = { name: 'language' | 'studio-preview' | 'studio-direct-padding'; exitCode: number }
 type PerformanceCheckReport = {
   status: 'passed' | 'failed' | 'inconclusive'
   artifactRoot: string
@@ -21,6 +21,7 @@ type Dependencies = {
   runLanguage: (env: Record<string, string>) => Promise<number>
   runStudio: (runId: string, env: Record<string, string>) => Promise<number>
   qualifyStudio: (artifactRoot: string) => Promise<number>
+  qualifyDirectStudio: (artifactRoot: string) => Promise<number>
   writeReport: (report: PerformanceCheckReport) => Promise<void>
   log: (message: string) => void
 }
@@ -85,6 +86,11 @@ const defaults: Dependencies = {
       StudioPreviewPerformance.ceilings,
       StudioPreviewPerformance.sourceCeilings,
     )
+    return breaches.length === 0 ? 0 : 1
+  },
+  qualifyDirectStudio: async artifactRoot => {
+    const { StudioPreviewPerformance } = await import('@studio-tooling/StudioPreviewPerformance')
+    const breaches = await StudioPreviewPerformance.evaluateDirectArtifacts(artifactRoot)
     return breaches.length === 0 ? 0 : 1
   },
   writeReport: async report => {
@@ -156,13 +162,35 @@ async function run(dependencies: Dependencies = defaults): Promise<number> {
         stopMonitor = dependencies.monitor(async () => await sample())
         const env = {
           [MachineLanes.LANE_ID_ENV_KEY]: lane.id!,
+          TAO_STUDIO_SMOKE_NODE_ENV: 'development',
+          TAO_STUDIO_PREVIEW_FIRST: 'true',
+          TAO_STUDIO_PREVIEW_TRACE: 'false',
+          TAO_STUDIO_PREVIEW_PROFILE: 'false',
           TAO_STUDIO_PREVIEW_PERFORMANCE: 'true',
+          TAO_STUDIO_LATENCY_CASE: '',
+          TAO_STUDIO_LATENCY_PUBLICATION: '',
+          TAO_STUDIO_LATENCY_SAVE_GAP_MS: '500',
+          TAO_STUDIO_LATENCY_PADDING_LENGTH: 'false',
+          TAO_STUDIO_LATENCY_REVERT: 'false',
+          TAO_STUDIO_LATENCY_RECOVERY: 'false',
+          TAO_STUDIO_LATENCY_RAPID_SAVES: 'false',
+          TAO_STUDIO_LATENCY_RETAINED_STATE: 'false',
+          TAO_STUDIO_LATENCY_WHOLE_APP: 'false',
+          TAO_STUDIO_LATENCY_SINGLE_CELL: 'false',
+          TAO_STUDIO_LATENCY_TWO_FILE_BURST: 'false',
+          TAO_STUDIO_LATENCY_ACTIVATE_DURING_OVERLAY: 'false',
+          TAO_STUDIO_LATENCY_REQUIRE_FULL_OVERLAP: 'false',
+          TAO_STUDIO_LATENCY_BROWSER_SCHEDULER: 'false',
+          TAO_STUDIO_FAST_HMR: 'true',
+          TAO_STUDIO_FAST_FILE_MAP: 'true',
+          // Keep all six compiler/HMR cases and their independent publication ceilings.
+          TAO_STUDIO_DESIGN_DELIVERY: 'false',
           TAO_STUDIO_PREVIEW_PERFORMANCE_ARTIFACT_ROOT: report.artifactRoot,
         }
         dependencies.log('performance-check: measuring language services')
         report.stages.push({ name: 'language', exitCode: await dependencies.runLanguage(env) })
         await sample()
-        if (report.reasons.length === 0) {
+        if (report.reasons.length === 0 && report.stages.every(stage => stage.exitCode === 0)) {
           dependencies.log('performance-check: measuring real Studio preview interactions')
           const studioExit = await dependencies.runStudio(runId, env)
           const qualificationExit = studioExit === 0
@@ -170,6 +198,24 @@ async function run(dependencies: Dependencies = defaults): Promise<number> {
             : studioExit
           report.stages.push({ name: 'studio-preview', exitCode: qualificationExit })
           await sample()
+          if (report.reasons.length === 0 && report.stages.every(stage => stage.exitCode === 0)) {
+            const directArtifactRoot = FS.resolvePath('direct-padding', report.artifactRoot)
+            const directEnv = {
+              ...env,
+              TAO_STUDIO_PREVIEW_PERFORMANCE: 'false',
+              TAO_STUDIO_LATENCY_CASE: 'HNReader editor padding',
+              TAO_STUDIO_LATENCY_PUBLICATION: 'off',
+              TAO_STUDIO_DESIGN_DELIVERY: '',
+              TAO_STUDIO_PREVIEW_PERFORMANCE_ARTIFACT_ROOT: directArtifactRoot,
+            }
+            dependencies.log('performance-check: qualifying publication-off direct Studio padding edits')
+            const directStudioExit = await dependencies.runStudio(`${runId}-direct-padding`, directEnv)
+            const directQualificationExit = directStudioExit === 0
+              ? await dependencies.qualifyDirectStudio(directArtifactRoot)
+              : directStudioExit
+            report.stages.push({ name: 'studio-direct-padding', exitCode: directQualificationExit })
+            await sample()
+          }
         }
       }
     }
@@ -194,9 +240,11 @@ async function run(dependencies: Dependencies = defaults): Promise<number> {
       }
     }
   }
-  report.status = report.reasons.length > 0 || report.stages.length !== 2
+  report.status = report.reasons.length > 0
     ? 'inconclusive'
     : report.stages.some(stage => stage.exitCode !== 0)
+        || !report.stages.some(stage => stage.name === 'studio-preview')
+        || !report.stages.some(stage => stage.name === 'studio-direct-padding')
     ? 'failed'
     : 'passed'
   await dependencies.writeReport(report)
