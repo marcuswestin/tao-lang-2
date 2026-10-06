@@ -1,0 +1,201 @@
+name: Linux browser gates
+
+# An experiment, not a verdict: whether the browser-backed Studio gates run on a hosted Linux runner
+# with the same bootstrap as a `Verify` partition. Each job restores Verify's caches (never saves
+# under its keys), runs one gate through the `verify-full-ci` lane so the run records a normal gate
+# summary, and prints the setup cost a Linux GUI-capable partition would add.
+#
+# Runs on pushes to the experiment branch, so it can be measured before anything lands.
+
+on:
+  push:
+    branches: ['feat/studio-ci-env-and-changeset']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-browser-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TAO_GREEN_STORE: /home/runner/tao-green
+  BUN_INSTALL_CACHE_DIR: /home/runner/tao-cache/bun
+  NODE_MODULES_PATHS: |
+    node_modules
+    packages/*/node_modules
+    packages/*/*/node_modules
+    packages/apps/providers/*/node_modules
+    Apps/Hosted CRUD/node_modules
+    !node_modules/.bun/jazz-rn-android@*/node_modules/jazz-rn-android/android
+    !node_modules/.bun/jazz-rn-ios@*/node_modules/jazz-rn-ios/*.xcframework
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.darwin-*.node
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.win32-*.node
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.linux-arm64-*.node
+
+jobs:
+  gate:
+    name: ${{ matrix.gate }} (${{ matrix.display }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # Chrome launches `--headless=new`; run 37498890787 passed the dialog gate with and without
+        # a virtual display. Run 37499414529 ran all seven headless: six passed, and
+        # studio-proof-real-app failed three of four tests twice. Its diagnostics show Metro in CI
+        # mode ("reloads are disabled. Remove CI=true") and React Native DevTools aborting on its
+        # SUID sandbox helper; each variant below removes one of the two.
+        #   ci-false: the gate step runs with CI=false.
+        #   userns:   unprivileged user namespaces re-enabled, so DevTools' Chrome needs no SUID helper.
+        # This run keeps the job-level CI=true GitHub sets and no override, to prove the Studio
+        # preview's Metro now leaves CI mode on its own.
+        include:
+          - gate: studio-proof-real-app
+            display: ci-true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record the job start
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Restore the installed node_modules
+        id: node-modules
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.NODE_MODULES_PATHS }}
+          key: tao-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'devenv.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'packages/apps/providers/*/package.json', 'Apps/Hosted CRUD/package.json') }}
+
+      - name: Restore Bun's download cache
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/tao-cache/bun
+          key: tao-bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            tao-bun-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Prepare /nix for the Nix store cache
+        run: sudo install -d -o "$(id -u)" -g "$(id -g)" /nix
+
+      - name: Restore the Nix store and locked toolchain
+        id: nix-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /nix
+            ~/.nix-profile
+            ~/.local/state/nix
+            ${{ github.workspace }}/.devenv/portable-generations
+          key: tao-nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'packages/cli/dev-cli/dev-cli-src/environment/nix-bootstrap.sh', 'packages/cli/dev-cli/dev-cli-src/environment/portable-profile.nix', 'packages/cli/dev-cli/dev-cli-src/environment/toolchain-packages.nix') }}
+
+      - name: Restore the generated native bindings
+        uses: actions/cache/restore@v4
+        with:
+          path: packages/apps/stdlib/.tao-ts/native-bindings
+          key: tao-native-bindings-${{ runner.os }}-${{ hashFiles('bun.lock', 'packages/apps/native-bindings/native-bindings-src/**', 'packages/apps/stdlib/@tao/device/**') }}
+          restore-keys: |
+            tao-native-bindings-${{ runner.os }}-
+
+      - name: Bootstrap Nix, the pinned toolchain, and Tao setup
+        run: ./.config/bootstrap-tao-dev-env --install-nix --verify-setup
+
+      - name: Record the end of a plain partition's setup
+        run: |
+          echo "SETUP_END=$(date +%s)" >> "$GITHUB_ENV"
+          echo "Cache hits: node_modules=${{ steps.node-modules.outputs.cache-hit }} nix=${{ steps.nix-cache.outputs.cache-hit }}"
+
+      # The cost a GUI-capable partition adds beyond a plain one, measured on its own.
+      - name: Probe the browser and display tools
+        run: |
+          start=$(date +%s)
+          for tool in google-chrome google-chrome-stable chromium chromium-browser xvfb-run Xvfb; do
+            printf '%-22s %s\n' "$tool" "$(command -v "$tool" || echo missing)"
+          done
+          google-chrome --version || true
+          echo "CHROME_BIN=${CHROME_BIN:-unset} CHROME_PATH=${CHROME_PATH:-unset}"
+          echo "id: $(id)"
+          echo "kernel.apparmor_restrict_unprivileged_userns=$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || echo n/a)"
+          ls -l /opt/google/chrome/chrome-sandbox 2>/dev/null || echo 'no chrome-sandbox helper'
+          echo "PROBE_SECONDS=$(( $(date +%s) - start ))"
+
+      - name: Install the display server if it is missing
+        if: matrix.display == 'xvfb'
+        run: |
+          start=$(date +%s)
+          if ! command -v xvfb-run >/dev/null; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q xvfb
+          fi
+          echo "APT_SECONDS=$(( $(date +%s) - start ))"
+
+      - name: Re-enable unprivileged user namespaces
+        if: matrix.display == 'userns'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Locate Watchman in the profile
+        run: |
+          .devenv/profile/bin/watchman --version || true
+          ls -l .devenv/profile/bin/watchman || true
+
+      - name: Seed the plan with the committed durations
+        run: |
+          mkdir -p .artifacts/timings .artifacts/testing
+          cp .github/verify/durations.json .artifacts/timings/durations.json
+          cp .github/verify/ledger.json .artifacts/testing/ledger.json
+
+      - name: Run ${{ matrix.gate }}
+        env:
+          GATE: ${{ matrix.gate }}
+          DISPLAY_MODE: ${{ matrix.display }}
+        run: |
+          start=$(date +%s)
+          status=0
+          echo "CI=${CI:-unset}"
+          ./agent unsandboxed verify-full-ci --ci-host-gates "$GATE" || status=$?
+          echo "GATE_STEP_SECONDS=$(( $(date +%s) - start ))"
+          exit $status
+
+      - name: Report timings
+        if: always()
+        env:
+          GATE: ${{ matrix.gate }}
+          DISPLAY_MODE: ${{ matrix.display }}
+        run: |
+          now=$(date +%s)
+          summary=.artifacts/logs/verify-full-ci/latest/summary.json
+          {
+            echo "### $GATE ($DISPLAY_MODE)"
+            echo "setup seconds: $(( ${SETUP_END:-$now} - JOB_START )); job seconds so far: $(( now - JOB_START ))"
+            if [ -e "$summary" ]; then
+              echo '```'
+              jq -r '.gates[] | "\(.name) \(.status) \((.elapsedMs // .durationMs // 0) / 1000)s"' "$summary" || cat "$summary"
+              echo '```'
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect the run's summary and logs
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/gate-logs"
+          latest=.artifacts/logs/verify-full-ci/latest
+          if [ -e "$latest" ]; then
+            cp -RL "$latest/." "$RUNNER_TEMP/gate-logs/"
+          fi
+          # The smoke tree holds each launch project's installed node_modules (3.3 GB for the real-app
+          # gate), which made the upload outlast the gate; keep only what explains a failure.
+          if [ "$JOB_STATUS" != success ] && [ -d .artifacts/tests/studio-smoke ]; then
+            rsync -a --prune-empty-dirs --exclude node_modules .artifacts/tests/studio-smoke/ "$RUNNER_TEMP/gate-logs/studio-smoke/" || true
+          fi
+
+      - name: Upload the run's summary and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.gate }}-${{ matrix.display }}
+          path: ${{ runner.temp }}/gate-logs
+          if-no-files-found: warn
+          retention-days: 7
