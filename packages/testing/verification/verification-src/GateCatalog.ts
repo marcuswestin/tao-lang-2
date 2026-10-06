@@ -634,6 +634,16 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       },
     ],
     [
+      'studio-metro-refresh',
+      {
+        ...studioSmoke(
+          'studio-metro-refresh',
+          'packages/ides/studio-tooling/studio-smoke/studio-metro-refresh.test.ts',
+        ),
+        runsOnHostedLinux: true,
+      },
+    ],
+    [
       'studio-agent-browser',
       studioSmoke('studio-agent-browser', 'packages/ides/studio-tooling/studio-smoke/studio-agent-browser.test.ts'),
     ],
