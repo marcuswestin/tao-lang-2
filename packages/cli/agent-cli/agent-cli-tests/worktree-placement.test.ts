@@ -20,6 +20,52 @@ async function branchOf(worktree: string): Promise<string> {
   return (await git(worktree, 'rev-parse', '--abbrev-ref', 'HEAD')).stdout.trim()
 }
 
+async function headOf(worktree: string, ref = 'HEAD'): Promise<string> {
+  return (await git(worktree, 'rev-parse', ref)).stdout.trim()
+}
+
+/**
+ * withOrigin gives `primary` a bare `origin` whose `main` then gains a commit the primary has not
+ * fetched, the state a GitHub merge leaves behind. It returns that commit and the stale
+ * `origin/main` the primary still holds.
+ */
+async function withOrigin(primary: string, parent: string): Promise<{ fresh: string; stale: string }> {
+  const origin = FS.resolvePath('origin.git', parent)
+  await git(parent, 'clone', '--quiet', '--bare', primary, origin)
+  await git(primary, 'remote', 'add', 'origin', origin)
+  await git(primary, 'fetch', '--quiet', 'origin')
+  await git(primary, 'remote', 'set-head', 'origin', 'main')
+  const other = FS.resolvePath('other', parent)
+  await git(parent, 'clone', '--quiet', origin, other)
+  await FS.writeText(FS.resolvePath('merged.md', other), 'merged on the remote\n')
+  await git(other, 'add', 'merged.md')
+  await git(other, 'commit', '--quiet', '--no-verify', '-m', 'merged on the remote')
+  await git(other, 'push', '--quiet', 'origin', 'main')
+  return { fresh: await headOf(other), stale: await headOf(primary, 'origin/main') }
+}
+
+/**
+ * bashFallback runs the hook's Bash fallback in `primary` with no Bun on PATH. The wrapper finds the
+ * script from the checkout it runs in, so the fixture carries a copy; the copy stays untracked, so
+ * the fixture's own commits do not include it.
+ */
+async function bashFallback(
+  primary: string,
+): Promise<(args: string[], payload: object, cwd?: string) => Promise<CLI.CommandResult>> {
+  const script = 'packages/cli/agent-cli/agent-cli-src/cli/agent-worktree.zsh'
+  await FS.mkdir(FS.dirname(FS.resolvePath(script, primary)))
+  await FS.copyFile(FS.resolvePath(script, Repo.getRoot()), FS.resolvePath(script, primary))
+  const copied = FS.resolvePath(script, primary)
+  Expect((await FS.readText(copied)).split('\n')[0]).toBe('#!/bin/bash')
+  return (args, payload, cwd = primary) =>
+    CLI.run('/bin/bash', {
+      args: [copied, ...args],
+      cwd,
+      env: { HOME: Platform.runtimeProcess.env['HOME'] ?? '', PATH: '/usr/bin:/bin' },
+      stdin: JSON.stringify(payload),
+    })
+}
+
 Describe('worktree placement', () => {
   Test('creates a worktree beside the checkout, on its own branch, and reuses it by name', async () => {
     await withCheckout(async (primary, parent) => {
@@ -50,6 +96,32 @@ Describe('worktree placement', () => {
 
       Expect(created).toBe(FS.resolvePath('.claude/worktrees/fallback', primary))
       Expect(logged.join('\n')).toContain('could not place it beside the checkout')
+    })
+  })
+
+  Test('fetches the remote default branch before branching a new worktree from it', async () => {
+    await withCheckout(async (primary, parent) => {
+      const { fresh, stale } = await withOrigin(primary, parent)
+      Expect(fresh).not.toBe(stale)
+
+      const created = await createWorktree({ cwd: primary, name: 'fresh' })
+
+      Expect(await headOf(created)).toBe(fresh)
+      Expect(await headOf(primary, 'origin/main')).toBe(fresh)
+    })
+  })
+
+  Test('branches from the last fetched remote branch, and says so, when the fetch fails', async () => {
+    await withCheckout(async (primary, parent) => {
+      const { stale } = await withOrigin(primary, parent)
+      await git(primary, 'remote', 'set-url', 'origin', FS.resolvePath('gone.git', parent))
+      const logged: string[] = []
+
+      const created = await createWorktree({ cwd: primary, name: 'offline' }, { log: line => logged.push(line) })
+
+      Expect(await headOf(created)).toBe(stale)
+      Expect(logged.join('\n')).toContain('could not fetch origin/main')
+      Expect(logged.join('\n')).toContain('branching from the last fetched origin/main')
     })
   })
 
@@ -102,21 +174,21 @@ Describe('worktree placement', () => {
     })
   })
 
+  Test('Bash fallback fetches the remote default branch before branching from it', async () => {
+    await withCheckout(async (primary, parent) => {
+      const run = await bashFallback(primary)
+      const { fresh } = await withOrigin(primary, parent)
+
+      const result = await run(['create'], { name: 'fresh' })
+
+      Expect(result.exitCode).toBe(0)
+      Expect(await headOf(FS.resolvePath('.claude/worktrees/fresh', primary))).toBe(fresh)
+    })
+  })
+
   Test('Bash fallback creates, reuses and removes worktrees without Bun', async () => {
     await withCheckout(async primary => {
-      // The wrapper finds the script from the checkout it runs in, so the fixture carries a copy.
-      const script = 'packages/cli/agent-cli/agent-cli-src/cli/agent-worktree.zsh'
-      await FS.mkdir(FS.dirname(FS.resolvePath(script, primary)))
-      await FS.copyFile(FS.resolvePath(script, Repo.getRoot()), FS.resolvePath(script, primary))
-      const copied = FS.resolvePath(script, primary)
-      Expect((await FS.readText(copied)).split('\n')[0]).toBe('#!/bin/bash')
-      const run = (args: string[], payload: object, cwd = primary) =>
-        CLI.run('/bin/bash', {
-          args: [copied, ...args],
-          cwd,
-          env: { HOME: Platform.runtimeProcess.env['HOME'] ?? '', PATH: '/usr/bin:/bin' },
-          stdin: JSON.stringify(payload),
-        })
+      const run = await bashFallback(primary)
       const result = await run(['create'], { name: 'no-bun' })
 
       Expect(result.exitCode).toBe(0)
