@@ -1,0 +1,50 @@
+{
+  "id": "20261006173337143-53bc16b8-a337-48cc-b75b-92106f4ad3e9",
+  "runId": "20261006173228989-5fb7f13c-8705-44df-b55e-749ddea89064",
+  "createdAt": "2026-10-06T17:33:37.142Z",
+  "recordedAt": "2026-10-06T17:33:37.142Z",
+  "commit": "8d6e3ac40ac11e6fb32acb3b9652afccfa10fbda",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/tutorial-first-hour/browser/browser.json",
+      "Docs/QA/evidence/tutorial-first-hour/browser/browser.log",
+      "Docs/QA/evidence/tutorial-first-hour/browser/run.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/61f63a185b453faa2badedbf1c35701445938ae086e3aba607ff7306066a9818.json"
+  },
+  "surfaceId": "source:tutorial-replay",
+  "dimension": "functional",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "browser-preview",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/browser/browser.json",
+      "sha256": "da33fcbf9da74061ed0a340041783bb7059b1c08bd99b5ebf7ae12e6dbb0e447"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/browser/browser.log",
+      "sha256": "a09962eac1d16dbc9b22682f8bda212fe5e71f721873db14f59d78cf1c36a857"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/browser/run.json",
+      "sha256": "8ad182c84ef339d07e8b473b867230fe6d97169d57a82dc4afbbfd00588ed367"
+    }
+  ],
+  "notes": "Final extracted tutorial app passes all three production-runtime browser journeys: title/author edits, actual local storage writes and reload persistence, finish/remove, destinations, unavailable storage and Retry preserving saved data, phone/desktop/dark/long-list layouts. All seven screenshots inspected; negative storage-write and Retry controls fail before restored replay passes. Development evidence only.",
+  "sourceHash": "fad7480be7c1e76be5c333eec9c4cb2cd898c7d8af5db71605c77fc99478d1f1",
+  "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+  "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
+}

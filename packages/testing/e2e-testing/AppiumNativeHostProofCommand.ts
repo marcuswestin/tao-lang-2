@@ -50,6 +50,9 @@ export async function runAppiumNativeHostProofCommand(
   const driver = platform === 'ios' ? 'xcuitest' : 'uiautomator2'
   const targetLease = await acquireTargetLease(platform, request.device, preparation.appId, context.runId)
   let server: AppiumServer | undefined
+  let serverStartupAttempted = false
+  let serverStartupCleanupProved = false
+  let driverCreationAttempted = false
   let proof: AppiumProof | undefined
   let proofFailure: unknown
   let lifecycleProved = false
@@ -66,17 +69,22 @@ export async function runAppiumNativeHostProofCommand(
         runId: context.runId,
       })
     }
+    serverStartupAttempted = true
     server = await startMobileAppiumServer({
       artifactRoot: context.artifactRoot,
       driver,
       environment: context.environment,
       runId: context.runId,
+      onStartupCleanup: proved => {
+        serverStartupCleanupProved = proved
+      },
     })
     await FS.writeText(FS.resolvePath('appium/server.url.txt', context.artifactRoot), `${server.url}\n`)
     const client = createAppiumWebDriverClient(createAppiumHttpTransport({ serverUrl: server.url }))
     let mobileSession: AppiumSession | undefined
     const factory: typeof client = {
       async createSession(capabilities) {
+        driverCreationAttempted = true
         mobileSession = await client.createSession(capabilities)
         return mobileSession
       },
@@ -156,8 +164,9 @@ export async function runAppiumNativeHostProofCommand(
   } finally {
     cleanupFailures = await cleanupAppiumNativeHostProof({
       artifactRoot: context.artifactRoot,
-      releaseTargetLease: shouldReleaseAppiumTargetLease(proof),
+      releaseTargetLease: !driverCreationAttempted || shouldReleaseAppiumTargetLease(proof),
       server,
+      serverShutdownProved: !serverStartupAttempted || serverStartupCleanupProved,
       targetLease,
       uninstall: async () => await uninstall(platform, request.device, preparation.appId, context.environment),
     })
@@ -269,13 +278,15 @@ type AppiumFault = Readonly<{ expectedAssertion: AppiumFaultAssertion; kind: str
 export function shouldReleaseAppiumTargetLease(
   proof: Readonly<{ cleanupFailure?: unknown; retainsTargetLease?: true }> | undefined,
 ): boolean {
-  return proof?.cleanupFailure === undefined && proof?.retainsTargetLease !== true
+  return proof !== undefined && proof.cleanupFailure === undefined && proof.retainsTargetLease !== true
 }
 
 export type AppiumNativeHostProofCleanupOptions = Readonly<{
   artifactRoot: string
   releaseTargetLease?: boolean
   server?: Pick<AppiumServer, 'close' | 'logs'>
+  /** Also carries cleanup proof when startup threw before returning a server handle. */
+  serverShutdownProved?: boolean
   targetLease: Pick<MachineResourceLease, 'release'>
   uninstall: () => Promise<void>
 }>
@@ -285,15 +296,30 @@ export async function cleanupAppiumNativeHostProof(
   options: AppiumNativeHostProofCleanupOptions,
 ): Promise<readonly AppiumCleanupFailure[]> {
   const failures: AppiumCleanupFailure[] = []
+  let serverClosed = options.serverShutdownProved ?? options.server === undefined
   if (options.server !== undefined) {
     await captureCleanupFailure(failures, 'write Appium server log', async () => {
       await FS.writeText(FS.resolvePath('appium/server.log', options.artifactRoot), options.server!.logs())
     })
-    await captureCleanupFailure(failures, 'close Appium server', async () => await options.server!.close())
+    serverClosed = await captureCleanupFailure(
+      failures,
+      'close Appium server',
+      async () => await options.server!.close(),
+    )
   }
   await captureCleanupFailure(failures, 'uninstall isolated application', options.uninstall)
-  if (options.releaseTargetLease !== false) {
+  if (options.releaseTargetLease !== false && serverClosed) {
     await captureCleanupFailure(failures, 'release host target lease', async () => await options.targetLease.release())
+  } else {
+    failures.push({
+      operation: 'retain host target lease',
+      error: new Errors.HostEnvironmentError(
+        'Appium driver or server shutdown is unproved; the target fence remains retained.',
+        {
+          details: { retainsTargetLease: true },
+        },
+      ),
+    })
   }
   return failures
 }
@@ -302,11 +328,13 @@ async function captureCleanupFailure(
   failures: AppiumCleanupFailure[],
   operation: string,
   cleanup: () => Promise<void>,
-): Promise<void> {
+): Promise<boolean> {
   try {
     await cleanup()
+    return true
   } catch (error) {
     failures.push({ error, operation })
+    return false
   }
 }
 
@@ -318,6 +346,9 @@ function cleanupFailureDetails(failures: readonly AppiumCleanupFailure[]): Reado
         message: Errors.messageOf(failure.error),
         operation: failure.operation,
       })),
+      ...(failures.some(failure => failure.operation === 'retain host target lease')
+        ? { retainsTargetLease: true }
+        : {}),
     }
 }
 

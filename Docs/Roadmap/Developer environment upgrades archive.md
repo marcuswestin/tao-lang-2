@@ -109,6 +109,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-MANAGED-WORKTREE-TOOL-CACHE-WRITES — Managed worktree tool cache writes](<Developer environment upgrades/Archive/DEVENV-MANAGED-WORKTREE-TOOL-CACHE-WRITES.md>) — Resolved
 - [DEVENV-MERGE-RECOVERY-TEST-TIMES-OUT-UNDER-COMPLETE-VERIFY — Merge recovery test times out under complete verification](<Developer environment upgrades/Archive/DEVENV-MERGE-RECOVERY-TEST-TIMES-OUT-UNDER-COMPLETE-VERIFY.md>) — Resolved
 - [DEVENV-MUTATION-FAILURES-CAN-BE-TOLERATED-AS-FLAKES — Mutation failures can be tolerated as flakes](<Developer environment upgrades/Archive/DEVENV-MUTATION-FAILURES-CAN-BE-TOLERATED-AS-FLAKES.md>) — Resolved
+- [DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME — Native session timestamps use monotonic time](<Developer environment upgrades/Archive/DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME.md>) — Resolved
 - [DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS — Nested Tao journeys run in overlapping shards](<Developer environment upgrades/Archive/DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS.md>) — Resolved
 - [DEVENV-NODE-WORKER-TEARDOWN-LOADS-BUN-FFI — Node worker teardown loads Bun-only process inspection](<Developer environment upgrades/Archive/DEVENV-NODE-WORKER-TEARDOWN-LOADS-BUN-FFI.md>) — Resolved
 - [DEVENV-NONAUTH-FIXTURES-AUTOLINK-CLERK-SWIFT-PACKAGES — Non-auth fixtures autolink Clerk Swift packages](<Developer environment upgrades/Archive/DEVENV-NONAUTH-FIXTURES-AUTOLINK-CLERK-SWIFT-PACKAGES.md>) — Resolved
@@ -118,6 +119,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-PARSER-STAGING-USES-WORKTREE-DIRECTORIES — Parser staging uses worktree directories](<Developer environment upgrades/Archive/DEVENV-PARSER-STAGING-USES-WORKTREE-DIRECTORIES.md>) — Resolved
 - [DEVENV-PORT-REACQUISITION-ASSERTION-FAILS-INTERMITTENTLY — Port reacquisition assertion fails intermittently](<Developer environment upgrades/Archive/DEVENV-PORT-REACQUISITION-ASSERTION-FAILS-INTERMITTENTLY.md>) — Resolved
 - [DEVENV-PORT-REUSE-ASSERTION-FAILS-DURING-CONCURRENT-VERIFICATION — Port reuse assertion fails during concurrent verification](<Developer environment upgrades/Archive/DEVENV-PORT-REUSE-ASSERTION-FAILS-DURING-CONCURRENT-VERIFICATION.md>) — Resolved
+- [DEVENV-QA-TUTORIAL-REPLAY-BUFFERS-PROGRESS — QA tutorial replay buffers progress](<Developer environment upgrades/Archive/DEVENV-QA-TUTORIAL-REPLAY-BUFFERS-PROGRESS.md>) — Resolved
 - [DEVENV-RESERVED-PORT-CLIENT-CLOSE-TIMES-OUT — Reserved port client close can time out during broad tests](<Developer environment upgrades/Archive/DEVENV-RESERVED-PORT-CLIENT-CLOSE-TIMES-OUT.md>) — Resolved
 - [DEVENV-REVIEWED-COMMITS-BLOCKED-BY-GIT-METADATA-DENIAL — Reviewed commits blocked by Git metadata denial](<Developer environment upgrades/Archive/DEVENV-REVIEWED-COMMITS-BLOCKED-BY-GIT-METADATA-DENIAL.md>) — Resolved
 - [DEVENV-SANDBOXED-BRANCH-CHECKOUT-STOPS-HALF-SWITCHED — Sandboxed branch checkout stops half-switched](<Developer environment upgrades/Archive/DEVENV-SANDBOXED-BRANCH-CHECKOUT-STOPS-HALF-SWITCHED.md>) — Resolved

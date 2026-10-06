@@ -92,19 +92,84 @@ Describe('Docs tutorials', () => {
     }
   }, 60_000)
 
-  Test('the finished Your First Tao App app passes the behavior test the tutorial ends with', async () => {
-    const blocks = tutorialBlocks(await FS.readText(Repo.resolvePath(FIRST_APP_TUTORIAL)))
+  Test('Your First Tao App runs its final journey, edits a title, and recovers from CLI failures', async () => {
+    const tutorial = await FS.readText(Repo.resolvePath(FIRST_APP_TUTORIAL))
+    const blocks = tutorialBlocks(tutorial)
     const root = await mkTestDir('tao-tutorial-app-')
     try {
-      const directory = FS.resolvePath('reading-list', root)
-      await FS.writeText(FS.resolvePath('.tao/.gitkeep', directory), '')
-      await FS.writeText(FS.resolvePath('ReadingList.tao', directory), finishedFile(blocks))
+      const marker = /^mkdir -p ([\w/.-]+)\n/mu.exec(tutorial)?.[1]
+      const entry = /^\.\/tao check ([\w/.-]+)\n/mu.exec(tutorial)?.[1]
+      Assert.defined(marker, 'The tutorial must tell readers how to mark their project root.')
+      Assert.defined(entry, 'The tutorial must name the first source file to check.')
+      const file = FS.resolvePath(entry, root)
+      const directory = FS.dirname(file)
+      Expect(FS.pathIsWithin(file, root)).toBe(true)
+      Expect(FS.resolvePath(marker, root)).toBe(FS.resolvePath('.tao', directory))
+      await FS.writeText(FS.resolvePath(`${marker}/.gitkeep`, root), '')
+      const first = blocks.find(block => block.directives.includes('program'))
+      Assert.defined(first, 'The tutorial needs its first program snippet.')
+      await FS.writeText(file, first.source)
+      const firstCheck = await withTaoHome(root, () => runTaoCliForTest(['check', file]))
+      Expect(firstCheck.exitCode).toBe(0)
+      const finished = finishedFile(blocks)
+      await FS.writeText(file, finished)
+      const finalRun = await withTaoHome(root, () => runTaoCliForTest(['test', directory]))
+      Expect(`${finalRun.stdout}${finalRun.stderr}`).toContain('Tests:       1 passed, 1 total')
+      Expect(finalRun.exitCode).toBe(0)
+
+      const titleEdit = finished.replace(
+        '      enter "Ursula K. Le Guin" into #author\n      press #save\n      expect checkbox #finished unchecked',
+        '      enter "Ursula K. Le Guin" into #author\n'
+          + '      press #save\n'
+          + '      enter "The Dispossessed, revised" into #title\n'
+          + '      press #save\n'
+          + '      expect navigation title "The Dispossessed, revised"\n'
+          + '      expect checkbox #finished unchecked',
+      )
+      Expect(titleEdit).not.toBe(finished)
+      const listTitleEdit = titleEdit.replace(
+        '      back\n      expect {\n         text "Reading: 0"',
+        '      back\n'
+          + '      expect text "The Dispossessed, revised"\n'
+          + '      expect {\n         text "Reading: 0"',
+      )
+      Expect(listTitleEdit).not.toBe(titleEdit)
+      const editedTitle = listTitleEdit.replace(
+        '         press "The Dispossessed"\n      }\n      press #remove',
+        '         press "The Dispossessed, revised"\n      }\n      press #remove',
+      )
+      Expect(editedTitle).not.toBe(listTitleEdit)
+      await FS.writeText(file, editedTitle)
 
       const run = await withTaoHome(root, () => runTaoCliForTest(['test', directory]))
 
       const output = `${run.stdout}${run.stderr}`
       Expect(output).toContain('Tests:       1 passed, 1 total')
       Expect(run.exitCode).toBe(0)
+
+      const failing = editedTitle.replace('         text "Reading: 1"', '         text "Reading: 2"')
+      Expect(failing).not.toBe(editedTitle)
+      await FS.writeText(file, failing)
+      const deliberateFailure = await withTaoHome(root, () => runTaoCliForTest(['test', directory]))
+      const failureOutput = `${deliberateFailure.stdout}${deliberateFailure.stderr}`
+      Expect(deliberateFailure.exitCode).not.toBe(0)
+      Expect(failureOutput).toContain('Reading: 2')
+
+      await FS.writeText(file, editedTitle)
+      const recovered = await withTaoHome(root, () => runTaoCliForTest(['test', directory]))
+      Expect(recovered.exitCode).toBe(0)
+      Expect(`${recovered.stdout}${recovered.stderr}`).toContain('Tests:       1 passed, 1 total')
+
+      const invalidSource = editedTitle.replace('scene BookList() {', 'scene BookList( {')
+      Expect(invalidSource).not.toBe(editedTitle)
+      await FS.writeText(file, invalidSource)
+      const invalid = await withTaoHome(root, () => runTaoCliForTest(['check', file]))
+      Expect(invalid.exitCode).not.toBe(0)
+      Expect(`${invalid.stdout}${invalid.stderr}`).toContain('BookList')
+
+      await FS.writeText(file, editedTitle)
+      const sourceRecovered = await withTaoHome(root, () => runTaoCliForTest(['check', file]))
+      Expect(sourceRecovered.exitCode).toBe(0)
     } finally {
       await FS.remove(root)
     }

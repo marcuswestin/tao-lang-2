@@ -4030,6 +4030,14 @@
       "samples": 1,
       "source": "wall"
     },
+    "studio-metro-refresh": {
+      "emaMs": 80200,
+      "lastMs": 80800,
+      "lastRunAt": "2026-10-06T18:39:40Z",
+      "lastWallMs": 80800,
+      "samples": 2,
+      "source": "wall"
+    },
     "studio-network-simulation": {
       "emaMs": 51079,
       "lastMs": 51293,
