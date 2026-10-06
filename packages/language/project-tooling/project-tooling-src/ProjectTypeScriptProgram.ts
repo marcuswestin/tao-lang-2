@@ -1,5 +1,6 @@
 import { FS, HCI, Platform, Switch, Time } from '@shared'
 import * as ts from 'typescript'
+import { useInstalledTypeScriptLibrary } from './ProjectTypeScriptLibrary'
 
 /** Declaration views are reader-local; their originating implementation bytes stay on disk. */
 export type ProjectTypeScriptDeclarationViews = ReadonlyMap<string, string>
@@ -12,6 +13,7 @@ export function createProjectTypeScriptProgram(
   sources: ReadonlyMap<string, string> = new Map(),
 ): ts.Program {
   const host = engine.createCompilerHost(options)
+  useInstalledTypeScriptLibrary(engine, host)
   const getSourceFile = host.getSourceFile.bind(host)
   const readFile = host.readFile.bind(host)
   const fileExists = host.fileExists.bind(host)
@@ -110,6 +112,7 @@ export class ProjectTypeScriptProgramSession {
     const observations = new Map<string, Observation>()
     const entry = { key, program: undefined as unknown as ts.Program, observations, valid: true }
     const host = ts.createCompilerHost(options)
+    useInstalledTypeScriptLibrary(ts, host)
     const watch = <T extends Observation['value']>(
       kind: Observation['kind'],
       args: readonly unknown[],
