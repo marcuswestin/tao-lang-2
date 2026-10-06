@@ -372,6 +372,15 @@ function startCommand(
     )
     : []
 
+  const releaseOwnership = () => {
+    if (ownershipTimer !== undefined) {
+      clearInterval(ownershipTimer)
+    }
+    for (const unsubscribe of unsubscribeSignals) {
+      unsubscribe()
+    }
+  }
+
   const clearBounds = () => {
     if (idleTimer !== undefined) {
       clearTimeout(idleTimer)
@@ -500,6 +509,20 @@ function startCommand(
     releaseCompletion = Platform.onChildProcessClose(child, (exitCode, signal) => {
       closed = true
       clearBounds()
+      const finishClose = () => {
+        if (escalation !== undefined) {
+          clearTimeout(escalation)
+          escalation = undefined
+        }
+        releaseOwnership()
+        resolve(closeResultFor(exitCode, signal))
+      }
+      // Ordinary closed commands have no ownership work to join. Preserve their synchronous
+      // completion path so the settled caller promise does not retain an async child context.
+      if ((trackedDescendants?.length ?? 0) === 0 && !groupNeedsCleanup && inspectionError === undefined) {
+        finishClose()
+        return
+      }
       // A descendant can close its pipes and ignore SIGTERM. Keep escalation alive until its
       // exact identity is gone, even though the direct child's close already arrived.
       const waitForOwnedExit = async () => {
@@ -547,19 +570,9 @@ function startCommand(
         } else {
           HCI.writeError(diagnostic)
         }
-      }).then(() => {
-        if (escalation !== undefined) {
-          clearTimeout(escalation)
-          escalation = undefined
-        }
-        resolve(closeResultFor(exitCode, signal))
-      }, reject).finally(() => {
-        if (ownershipTimer !== undefined) {
-          clearInterval(ownershipTimer)
-        }
-        for (const unsubscribe of unsubscribeSignals) {
-          unsubscribe()
-        }
+      }).then(finishClose, error => {
+        releaseOwnership()
+        reject(error)
       })
     })
   })
@@ -570,12 +583,7 @@ function startCommand(
     cwd: spec.cwd,
     dispose: () => {
       releaseCompletion()
-      if (ownershipTimer !== undefined) {
-        clearInterval(ownershipTimer)
-      }
-      for (const unsubscribe of unsubscribeSignals) {
-        unsubscribe()
-      }
+      releaseOwnership()
       child.stdin?.destroy()
       child.stdout?.destroy()
       child.stderr?.destroy()

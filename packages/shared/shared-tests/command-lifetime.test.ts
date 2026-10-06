@@ -12,19 +12,24 @@ Describe('command lifetime', () => {
     return JSON.parse(result.stdout)
   }
 
-  Test('joins exit with closed pipes when aggregate close is missing, then releases the child', async () => {
-    Expect(await probe('close')).toEqual({
-      pipesClosed: true,
-      controlCollected: true,
-      exitDelivered: true,
-      pendingAfterExit: true,
-      pendingBeforeAggregate: false,
-      retainedAfterExit: true,
-      outputPreserved: true,
-      pendingBeforeDelivery: true,
-      released: true,
-    })
-  })
+  for (const mode of ['close', 'supervised']) {
+    Test(
+      `joins exit with closed pipes when aggregate close is missing, then releases the child (${mode})`,
+      async () => {
+        Expect(await probe(mode)).toEqual({
+          pipesClosed: true,
+          controlCollected: true,
+          exitDelivered: true,
+          pendingAfterExit: true,
+          pendingBeforeAggregate: false,
+          retainedAfterExit: true,
+          outputPreserved: true,
+          pendingBeforeDelivery: true,
+          released: true,
+        })
+      },
+    )
+  }
 
   Test('keeps auxiliary descriptors on the native aggregate close contract', async () => {
     const result = await probe('aux')
