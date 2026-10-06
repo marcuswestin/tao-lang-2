@@ -155,12 +155,12 @@ use ${names.app}AuthNavigator from ./Auth`
     : 'use Local from @tao/data/providers/local'
   const connection = firebase
     ? `   Auth FirebaseAuth {
-      ApiKey "REPLACE_WITH_FIREBASE_API_KEY"
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY",
       ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID"
    }
    Datasource Firebase {
-      ApiKey "REPLACE_WITH_FIREBASE_API_KEY"
-      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID"
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY",
+      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID",
       StorageKey ${taoString(plan.id)}
    }`
     : `   Datasource Local {
@@ -199,7 +199,9 @@ ${fields}
   return `// The data catalog. Every entity the app stores is declared here, so what a row contains is
 // readable on one page.
 
-${firebase ? 'package\ndata Accounts / Account {\n   DisplayName text,\n}\n\n' : ''}${entities.join('\n\n')}
+${firebase ? 'package\ndata Accounts / Account {\n   DisplayName text (default ""),\n}\n\n' : ''}${
+    entities.join('\n\n')
+  }
 `
 }
 
@@ -263,7 +265,7 @@ ${plan.entities.length === 1 ? '' : `   state Active = ${taoString(plan.entities
             }
             when Account {
                loading -> Text("Opening account…")
-               missing -> Text("Account data is missing")
+               none -> Text("Account data is missing")
                unauthorized -> Text("You do not have access")
                error -> Text("Account data could not be loaded")
                otherwise -> {
@@ -315,17 +317,25 @@ ${validationButton}   }
 function firebaseReadme(plan: CreationPlan, validationTools: boolean): string {
   return `# ${plan.name}
 
-This app stores each signed-in account's data in a private Firebase store. Set up a Firebase
-project with Email/Password sign-in and Firestore before running the app.
+This app stores each signed-in account's data in a private Firebase store.
 
 From this project directory:
 
-1. Run \`tao connect firebase .\` to save the public connection settings locally in
-   \`.tao/local/connections.json\`. The checked-in placeholders in \`App.tao\` are overridden locally.
-2. Run \`tao firebase generate . --app ${appIdentifier(plan.name)} --output .tao/firebase-backend\`.
-   Review and combine those rules with any existing rules in that Firebase project before deploying:
-   a Firestore rules deployment replaces the project's current rules. Generation does not deploy.
-3. Run \`tao run . --app ${appIdentifier(plan.name)}\` and sign in or create an account.
+1. Run \`tao connect firebase --app ${appIdentifier(plan.name)}\`. Complete Google sign-in locally if
+   requested, select your existing Firebase project, and review the proposed setup. Tao retrieves
+   the public app config, enables Email/Password sign-in, and configures the default Firestore
+   database and the app's private rules. Public settings are saved in \`.tao/local/connections.json\`;
+   the checked-in placeholders in \`App.tao\` are overridden locally.
+2. Run \`tao run . --app ${appIdentifier(plan.name)}\` and sign in or create an account.
+
+For Console setup instead, run \`tao connect firebase --manual\` and follow its direct project links.
+To generate deployment files without deploying, run
+\`tao firebase generate --app ${appIdentifier(plan.name)} --output .tao/firebase-backend\`.
+The command creates the local \`.tao/firebase-backend\` folder with \`firestore.rules\`,
+\`firestore.indexes.json\`, and \`firebase.json\`; no separate backend server is needed.
+Review existing project rules before deployment. If API setup stops for unfamiliar rules,
+review its downloaded current rules and generated candidate, then rerun with \`--rules\` and
+that reviewed combined file. Keep rules for other apps using the same Firebase project.
 
 Run \`tao test .\` for the local Memory/TestAuth journeys. They do not contact Firebase.
 ${
@@ -398,8 +408,8 @@ nav ${names.navigator} = StackNav {
   ).join('\n\n')
   const tabs = plan.entities.map((entity, index) =>
     `   ${tabKey(entity)} {
-      Label ${taoString(humanize(entity.plural))}
-      Icon ${taoString(TAB_ICONS[index % TAB_ICONS.length]!)}
+      Label ${taoString(humanize(entity.plural))},
+      Icon ${taoString(TAB_ICONS[index % TAB_ICONS.length]!)},
       Content ${stackNav(entity)}
    }`
   ).join('\n')
@@ -411,8 +421,8 @@ ${stacks}
 
 folder
 nav ${names.navigator} = SelectionNav {
-   Initial ${tabKey(plan.entities[0]!)}
-   Display "automatic"
+   Initial ${tabKey(plan.entities[0]!)},
+   Display "automatic",
 ${tabs}
 }
 `
@@ -613,7 +623,7 @@ ${draftStates.join('\n')}
    action Save${singular}() {
       check ${title.name}Draft is not empty
       update ${singular} {
-${saveUpdates.join('\n')}
+${saveUpdates.join(',\n')}
       }
    }
 ${flagActions.map(action => `${action}\n`).join('')}   action Delete${singular}() {
@@ -628,11 +638,12 @@ ${flagActions.map(action => `${action}\n`).join('')}   action Delete${singular}(
    }
    Toolbar { Save${singular}Command }
    render ScrollView() [screen] {
-      Col() [column, panel] {
+      Col() [column] {
+         Col() [panel] {
          Text(${taoString(humanize(singular).toUpperCase())}) [eyebrow]
          guard ${singular} {
             loading -> { Spinner() }
-            missing -> { TextMultiline(${taoString(`This ${singularWords} no longer exists.`)}) [body] }
+            none -> { TextMultiline(${taoString(`This ${singularWords} no longer exists.`)}) [body] }
             error -> Context { TextMultiline(${
     taoString(`The ${singularWords} could not be loaded: { Context.Message }`)
   }) [body] }
@@ -648,6 +659,7 @@ ${detailInputs.join('\n')}${detailNumbers.join('')}${detailFlags.join('\n')}
          FormButton(${taoString(`Delete ${singularWords}`)}) [buttonDanger] {
             on press Delete${singular}
          }
+         }
       }
    }
 }
@@ -661,7 +673,7 @@ function scenariosFile(plan: CreationPlan, names: ProjectNames): string {
   const bindings = plan.entities.flatMap(entity => {
     const handles = names.handles.get(entity.plural) ?? []
     return (plan.samples[entity.plural] ?? []).map((row, index) => {
-      const fields = fixtureFields(entity, row).map(field => `      ${field}`).join('\n')
+      const fields = fixtureFields(entity, row).map(field => `      ${field}`).join(',\n')
       return `   ${handles[index]!} = create ${entity.singular} {
 ${fields}
    }`

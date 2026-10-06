@@ -9,6 +9,17 @@ function unitApp(declarations: string): string {
 
 Describe('validator: unit values', () => {
   Test(
+    'keeps inherited associated calls after a numeric unit reading out of legacy unit validation',
+    accepts(unitApp(`
+      abstract type Scalar is numeric with {
+        func ToText() fails never -> text { return "quantity" }
+      }
+      type Span is Scalar with { units { seconds 1 (default), minutes 60 } }
+      func Read(Value Span) -> text { return Value.seconds().ToText() }
+    `)),
+  )
+
+  Test(
     'accepts building, reading back, and converting durations of one family',
     accepts(unitApp(`
       function Round(Wait duration) returns number { return Wait.s }

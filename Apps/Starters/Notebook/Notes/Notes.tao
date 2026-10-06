@@ -77,7 +77,7 @@ scene NoteDetail(Note) {
    action SaveNote() {
       check TitleDraft is not empty
       update Note {
-         Title: TitleDraft
+         Title: TitleDraft,
          Body: BodyDraft
    }  }
    action SetPinned(Value boolean) {
@@ -96,35 +96,36 @@ scene NoteDetail(Note) {
    }
    Toolbar { SaveNoteCommand }
    render ScrollView() [screen] {
-      Col() [column, panel] {
-         Text("NOTE") [eyebrow]
-         guard Note {
-            loading -> { Spinner() }
-            missing -> { TextMultiline("This note no longer exists.") [body] }
-            error -> Context { TextMultiline("The note could not be loaded: { Context.Message }") [body] }
-         }
+      Col() [column] {
+         Col() [panel] {
+            Text("NOTE") [eyebrow]
+            guard Note {
+               loading -> { Spinner() }
+               none -> { TextMultiline("This note no longer exists.") [body] }
+               error -> Context { TextMultiline("The note could not be loaded: { Context.Message }") [body] }
+            }
 
-         #noteTitleDraft
-         TextInput(Value: TitleDraft, Label: "Title", Placeholder: "Title") {
-            on submit SaveNote
-         }
+            #noteTitleDraft
+            TextInput(Value: TitleDraft, Label: "Title", Placeholder: "Title") {
+               on submit SaveNote
+            }
 
-         #noteBodyDraft
-         TextInput(Value: BodyDraft, Label: "Body", Placeholder: "Body") {
-            on submit SaveNote
-         }
+            #noteBodyDraft
+            TextInput(Value: BodyDraft, Label: "Body", Placeholder: "Body") {
+               on submit SaveNote
+            }
 
-         #notePinned
-         Checkbox(Value: Note.Pinned is Pinned, Label: "Pinned") {
-            on change SetPinned
-         }
+            #notePinned
+            Checkbox(Value: Note.Pinned is Pinned, Label: "Pinned") {
+               on change SetPinned
+            }
 
-         #saveNote
-         FormButton("Save note", Disabled: TitleDraft is empty) {
-            on press SaveNote
-         }
+            #saveNote
+            FormButton("Save note", Disabled: TitleDraft is empty) {
+               on press SaveNote
+            }
 
-         #deleteNote
-         FormButton("Delete note") [buttonDanger] {
-            on press DeleteNote
-}  }  }  }
+            #deleteNote
+            FormButton("Delete note") [buttonDanger] {
+               on press DeleteNote
+}  }  }  }  }

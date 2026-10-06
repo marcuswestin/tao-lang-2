@@ -1,3 +1,4 @@
+import TR from '@runtime/TR'
 import { warnContainedFailure } from '@runtime/TR-errors'
 import { installNativeAbortSupport } from '@runtime/TR-native-abort'
 import { registerRootComponent, requireOptionalNativeModule } from 'expo'
@@ -11,6 +12,22 @@ const generatedApp = require('./_gen_tao-app/App') as { default: ComponentType }
 const identity = require('./_gen_tao-app/ManagedLoopIdentity').default as unknown
 function DevelopmentRoot() {
   const prepareManagedRuntime = useMemo(createManagedRuntimePreparation, [])
+  useEffect(() => {
+    if (__DEV__ && (Platform.OS === 'ios' || Platform.OS === 'android')) {
+      const nativeMenu = requireOptionalNativeModule<{ openMenu?: () => void | Promise<void> }>('ExpoDevMenu')
+      if (typeof nativeMenu?.openMenu === 'function') {
+        TR.Dev.setHostDeveloperTools({
+          label: 'Expo developer tools',
+          open: () => {
+            void Promise.resolve().then(() => nativeMenu.openMenu?.()).catch(error => {
+              warnContainedFailure('Could not open Expo developer tools.', error)
+            })
+          },
+        })
+      }
+    }
+    return () => TR.Dev.setHostDeveloperTools(undefined)
+  }, [])
   useEffect(() => {
     void prepareManagedRuntime({
       development: __DEV__,

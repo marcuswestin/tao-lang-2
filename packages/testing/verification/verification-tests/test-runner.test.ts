@@ -262,7 +262,7 @@ Describe('test runner suite registry', () => {
     }
   })
 
-  Test('keeps automatic recorded-duration sharding for the ordinary named-cohort remainder', () => {
+  Test('estimates the remainder without charging it for extracted cohort work', () => {
     const ordinaryFiles = ['ordinary.test.ts', 'a.test.ts', 'b.test.ts', 'c.test.ts']
     const buildProcess: SelectedSuite['buildProcess'] = (_name, files) => ({ args: [], command: 'true', files })
     const plan = TestNodes.build({
@@ -293,11 +293,54 @@ Describe('test runner suite registry', () => {
       'language/project-tooling:receipt-host',
       'language/project-tooling:receipt-races',
       'language/project-tooling#1',
-      'language/project-tooling#2',
     ])
+    Expect(plan.plans[0]?.shards).toHaveLength(1)
     Expect(plan.plans[0]?.shards.flat().toSorted()).toEqual(ordinaryFiles.toSorted())
     Expect(plan.states.flatMap(state => state.selectedTestFiles ?? []).toSorted())
       .toEqual([...NATIVE_PROJECT_TEST_FILES, ...PROJECT_RECEIPT_TESTS, ...ordinaryFiles].toSorted())
+  })
+
+  Test('weights current membership instead of a stale exact node sample', () => {
+    const files = ['heavy.test.ts', 'light.test.ts', 'other.test.ts']
+    const buildProcess: SelectedSuite['buildProcess'] = (_name, selected) => ({
+      args: [],
+      command: 'true',
+      files: selected,
+    })
+    const plan = TestNodes.build({
+      ...NO_HISTORY,
+      selected: [{
+        buildProcess,
+        estimationUnits: files,
+        files: files.slice(0, 2),
+        name: 'shared',
+        unitCostMs: new Map([[files[0]!, 8_000], [files[1]!, 1_000], [files[2]!, 1_000]]),
+      }],
+      timings: {
+        nodes: {
+          shared: {
+            emaMs: 20_600,
+            lastMs: 20_600,
+            lastRunAt: '2026-01-01T00:00:00.000Z',
+            samples: 1,
+            source: 'wall',
+          },
+          'shared#1': {
+            emaMs: 100,
+            lastMs: 100,
+            lastRunAt: '2026-01-01T00:00:00.000Z',
+            samples: 10,
+            source: 'wall',
+          },
+        },
+        version: 1,
+      },
+    })
+
+    // The heavy and light files own 90% of the suite's variable work. Each dynamic shard uses its
+    // current membership despite old #1/#2 samples carrying unrelated costs.
+    Expect(plan.states.map(state => state.expectedMs)).toEqual([16_600, 2_600])
+    Expect(plan.states.map(state => state.node.timeoutMs)).toEqual([1_200_000, 1_200_000])
   })
 
   Test('reconstructs cohort timing and ledger summaries only under the complete parent suite', async () => {
@@ -521,6 +564,56 @@ Describe('test runner suite registry', () => {
     Expect(wordFlower).toBeGreaterThan(
       (await FS.readText(Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao'))).length,
     )
+  })
+
+  Test('estimates Tao app and ancestor selections against the complete source-size inventory', async () => {
+    const { byName } = await discover()
+    const fullSuite = byName.get('tao-apps')!
+    const costs = fullSuite.unitCostMs!
+    const units = fullSuite.estimationUnits!
+    const totalCost = [...costs.values()].reduce((sum, cost) => sum + cost, 0)
+    const app = 'Apps/Test Apps/Navigation'
+    const appCost = costs.get(app)!
+    const ancestor = 'Apps/Test Apps'
+    const ancestorCost = [...costs]
+      .filter(([unit]) => unit.startsWith(`${ancestor}/`))
+      .reduce((sum, [, cost]) => sum + cost, 0)
+    const suiteMs = 100_000
+    const fixedMs = 800
+    const scopes = [
+      { files: [app], variableShare: appCost / totalCost },
+      { files: [ancestor], variableShare: ancestorCost / totalCost },
+      { files: ['Apps'], variableShare: 1 },
+    ]
+
+    for (const scope of scopes) {
+      const { selected } = await discover({
+        files: new Map([['tao-apps', scope.files]]),
+        suites: new Set(['tao-apps']),
+      })
+      const suite = selected[0]!
+      Expect(suite.unitCostMs).toEqual(costs)
+      Expect(suite.estimationUnits).toEqual(units)
+      const plan = TestNodes.build({
+        ...NO_HISTORY,
+        selected: [suite],
+        timings: {
+          nodes: {
+            'tao-apps': {
+              emaMs: suiteMs,
+              lastMs: suiteMs,
+              lastRunAt: '2026-01-01T00:00:00.000Z',
+              samples: 1,
+              source: 'wall',
+            },
+          },
+          version: 1,
+        },
+      })
+      const expected = fixedMs + (suiteMs - fixedMs) * scope.variableShare
+      Expect(plan.states).toHaveLength(1)
+      Expect(plan.states[0]?.expectedMs).toBe(Math.round(expected))
+    }
   })
 
   // `ide-extension` is tuned `--concurrent` and stays shardable; `shared` is neither. A
@@ -977,6 +1070,17 @@ Describe('test runner suite registry', () => {
         'packages/apps/expo-host/expo-host-tests/navigation-e2e.jest-test.tsx',
       )).suite,
     ).toBe('runtime-jest')
+  })
+
+  Test('keeps collect-all requests out of the broad fail-fast machine lane', () => {
+    Expect(TestRunner.laneForFailurePolicy('dev-test', { failurePolicy: 'collect-all' }))
+      .toBe('dev-test-targeted')
+    Expect(TestRunner.laneForFailurePolicy('dev-test', { failurePolicy: 'fail-fast' }))
+      .toBe('dev-test')
+    Expect(TestRunner.laneForFailurePolicy('dev-test-mutation', {
+      evidenceMode: 'mutation',
+      failurePolicy: 'collect-all',
+    })).toBe('dev-test-mutation')
   })
 
   Test('an exact-file subset does not teach the full-suite timing estimate', async () => {

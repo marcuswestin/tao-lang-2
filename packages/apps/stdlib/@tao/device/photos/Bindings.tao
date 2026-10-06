@@ -69,7 +69,20 @@ type SortDescriptor is {
 // Source: expo-media-library/build/index.d.ts:15:1
 // Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:15:1
 public
-type Album is item
+type Album is item with { action Add(Assets AlbumAddAssets) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   static action Construct(Id text) returns Album from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   static action Create(Name text, AssetsRefs AlbumCreateAssetsRefs, MoveAssets boolean? default none) returns Album from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action Delete() from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   static action Get(Title text) returns Album? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   static action GetAll() returns list of Album from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetAssets() returns list of Asset from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetTitle() returns text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action IdGet() returns text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action IdSet(Value text) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action RemoveAssets(Assets list of Asset) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   static action StaticDelete(Albums list of Album, DeleteAssets boolean? default none) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action ReleaseReference() from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+}
 
 // Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:15:1
 public
@@ -78,7 +91,33 @@ action ReleaseAlbum(Value Album) from ../../../.tao-ts/native-bindings/photos/Bi
 // Source: expo-media-library/build/index.d.ts:9:1
 // Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:9:1
 public
-type Asset is item
+type Asset is item with { static action Construct(Id text) returns Asset from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   static action Create(FilePath text, Album Album? default none) returns Asset from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action Delete() from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetAlbums() returns list of Album from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetCreationTime() returns number? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetDuration() returns number? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetExif() returns list of AssetGetExifResultEntry from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetFavorite() returns boolean from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetFilename() returns text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetHeight() returns number from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetInfo() returns AssetInfo from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetIsInCloud() returns boolean from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetLivePhotoVideoUri() returns text? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetLocation() returns Location? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetMediaSubtypes() returns list of MediaSubtype from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetMediaType() returns MediaType from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetModificationTime() returns number? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetOrientation() returns number? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetShape() returns Shape? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetUri() returns text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action GetWidth() returns number from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action IdGet() returns text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action IdSet(Value text) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action SetFavorite(IsFavorite boolean) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   static action StaticDelete(Assets list of Asset) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action ReleaseReference() from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+}
 
 // Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:9:1
 public
@@ -87,7 +126,33 @@ action ReleaseAsset(Value Asset) from ../../../.tao-ts/native-bindings/photos/Bi
 // Source: expo-media-library/build/index.d.ts:7:1
 // Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:7:1
 public
-type Query is item
+type Query is item with { action Album(Album Album) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   static action Construct() returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action EqForAssetFieldCREATIONTIME(Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action EqForAssetFieldDURATION(Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action EqForAssetFieldHEIGHT(Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action EqForAssetFieldISFAVORITE(Value boolean) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action EqForAssetFieldMEDIATYPE(Value MediaType) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action EqForAssetFieldMODIFICATIONTIME(Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action EqForAssetFieldWIDTH(Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action Exe() returns list of Asset from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action ExeForMetadata() returns list of AssetMetadata from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action Gt(Field AssetField, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action Gte(Field AssetField, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action Limit(Limit number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action Lt(Field AssetField, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action Lte(Field AssetField, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action Offset(Offset number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action OrderBy(SortDescriptors QueryOrderBySortDescriptors) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action WithinForAssetFieldCREATIONTIME(Value list of number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action WithinForAssetFieldDURATION(Value list of number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action WithinForAssetFieldHEIGHT(Value list of number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action WithinForAssetFieldISFAVORITE(Value list of boolean) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action WithinForAssetFieldMEDIATYPE(Value list of MediaType) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action WithinForAssetFieldMODIFICATIONTIME(Value list of number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action WithinForAssetFieldWIDTH(Value list of number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+   action ReleaseReference() from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+}
 
 // Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:7:1
 public

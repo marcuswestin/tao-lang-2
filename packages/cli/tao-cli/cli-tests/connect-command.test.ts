@@ -15,6 +15,7 @@ function scripted(text: string[], paste = '', secret = '') {
   return {
     terminal,
     options: {
+      manual: true,
       interactive: true,
       output: terminal.output,
       prompts: {
@@ -258,6 +259,41 @@ Describe('tao connect', () => {
     }
   })
 
+  Test('explains where to get Firebase config before requesting a paste in either project flow', async () => {
+    for (const pilot of [false, true]) {
+      const root = await mkConnectProject('tao-connect-firebase-instructions-')
+      try {
+        if (pilot) {
+          await writePilotRules(root)
+        }
+        const { terminal, options } = scripted([])
+        let prompted = false
+        await runTaoConnect('firebase', root, {
+          ...options,
+          prompts: {
+            ...options.prompts,
+            paste: async () => {
+              prompted = true
+              const beforeInput = terminal.outputText()
+              Expect(beforeInput).toContain('https://console.firebase.google.com/')
+              Expect(beforeInput).toContain('gear icon in the left sidebar, then General')
+              Expect(beforeInput).toContain('select an existing Web app')
+              Expect(beforeInput).toContain('SDK setup and configuration > Config')
+              Expect(beforeInput).toContain('If no Web app appears')
+              Expect(beforeInput).toContain('including its braces')
+              Expect(beforeInput).toContain('Press Enter after pasting')
+              Expect(beforeInput).toContain('Type manual to enter fields separately')
+              return '{ projectId: "guide-project", apiKey: "public-api-key", appId: "web-app-id", authDomain: "guide-project.firebaseapp.com" }'
+            },
+          },
+        })
+        Expect(prompted).toBe(true)
+      } finally {
+        await FS.remove(root)
+      }
+    }
+  })
+
   Test('stores Firebase web config without disturbing existing private credentials', async () => {
     const root = await mkConnectProject('tao-connect-firebase-')
     try {
@@ -301,10 +337,23 @@ Describe('tao connect', () => {
       Expect(terminal.outputText()).toContain('public firebaseConfig')
       Expect(terminal.outputText()).toContain('Continue to console')
       Expect(terminal.outputText()).toContain('SDK setup and configuration > Config')
-      Expect(terminal.outputText()).toContain('Paste the public firebaseConfig')
+      Expect(terminal.outputText()).toContain('paste the public firebaseConfig')
       Expect(terminal.outputText()).toContain('No service-account JSON is needed')
       Expect(terminal.outputText()).toContain('cloud Auth, Firestore, and rules were not configured or checked')
       Expect(terminal.outputText()).toContain('tao firebase generate')
+      Expect(terminal.outputText()).toContain(
+        'https://console.firebase.google.com/project/firebase-project/authentication/providers',
+      )
+      Expect(terminal.outputText()).toContain('Sign-in method')
+      Expect(terminal.outputText()).toContain('Email/Password')
+      Expect(terminal.outputText()).toContain('https://console.firebase.google.com/project/firebase-project/firestore')
+      Expect(terminal.outputText()).toContain('click Rules')
+      Expect(terminal.outputText()).toContain('tao firebase generate --output .tao/firebase-backend')
+      Expect(terminal.outputText()).toContain('no separate backend server')
+      Expect(terminal.outputText()).not.toContain('<backend-directory>')
+      Expect(terminal.outputText()).not.toContain('Project Overview')
+      Expect(terminal.outputText()).toContain('Select the (default) database')
+      Expect(terminal.outputText()).toContain('preserve rules for any other apps')
     } finally {
       await FS.remove(root)
     }
@@ -393,7 +442,132 @@ Describe('tao connect', () => {
     }
   })
 
-  Test('does not run pilot cloud setup for an ordinary Tao project', async () => {
+  Test('connects an ordinary compiled Firebase app through the API by default without a config paste', async () => {
+    const root = await mkConnectProject('tao-connect-firebase-app-api-')
+    try {
+      await ProjectIdentity.ensure(root)
+      await FS.writeText(
+        FS.resolvePath('App.tao', root),
+        `use Text from @tao/ui
+use FirebaseAuth from @tao/auth/firebase
+use Firebase from @tao/data/providers/firebase
+app Hosted {
+   id "firebase-connect"
+   version "1.0.0"
+   name "Firebase connect"
+   Auth FirebaseAuth { ApiKey "REPLACE_WITH_FIREBASE_API_KEY", ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID" }
+   Datasource Firebase { ApiKey "REPLACE_WITH_FIREBASE_API_KEY", ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID" }
+   view Main
+}
+view Main() { render Text("Hosted") }
+data Accounts / Account { DisplayName text }
+data Notes / Note { Body text }
+`,
+      )
+      const saved = { projectId: 'firebase-project', appId: 'web-app-id', apiKey: 'old-public-key' }
+      await FS.writeJson(FS.resolvePath('.tao/local/connections.json', root), {
+        firebase: saved,
+        other: { keep: true },
+      })
+      const calls: string[][] = []
+      let deployed = false
+      let pastes = 0
+      const terminal = fakeTerminal()
+      await runTaoConnect('firebase', root, {
+        interactive: true,
+        output: terminal.output,
+        prompts: {
+          text: async () => '',
+          paste: async () => {
+            pastes++
+            return ''
+          },
+          secret: async () => '',
+          choice: async (_message, choices, defaultValue) =>
+            choices.find(choice => /^(Apply|Deploy|Continue)/u.test(choice.label))?.value ?? defaultValue
+              ?? choices[0]!.value,
+        },
+        firebaseRunner: async args => {
+          calls.push([...args])
+          let result: unknown
+          if (args[0] === 'login:list') {
+            result = [{ user: { email: 'developer@example.test' } }]
+          } else if (args[0] === 'projects:list') {
+            result = [{ projectId: 'firebase-project', displayName: 'Existing' }]
+          } else if (args[0] === 'apps:list') {
+            result = [{ appId: 'web-app-id', displayName: 'Existing app' }]
+          } else if (args[0] === 'apps:sdkconfig') {
+            result = {
+              sdkConfig: {
+                projectId: 'firebase-project',
+                appId: 'web-app-id',
+                apiKey: 'new-public-key',
+                authDomain: 'firebase-project.firebaseapp.com',
+              },
+            }
+          } else if (args[0] === 'deploy') {
+            deployed = true
+            result = { name: 'done' }
+          } else {
+            return {
+              exitCode: 1,
+              stdout: JSON.stringify({ status: 'error', error: 'Unexpected test command' }),
+              stderr: '',
+            }
+          }
+          return { exitCode: 0, stdout: JSON.stringify({ status: 'success', result }), stderr: '' }
+        },
+        firebaseInspector: async ({ cwd, account, projectId }) => {
+          Expect(account).toBe('developer@example.test')
+          Expect(projectId).toBe('firebase-project')
+          return {
+            database: {
+              name: 'projects/firebase-project/databases/(default)',
+              type: 'FIRESTORE_NATIVE',
+              databaseEdition: 'STANDARD',
+              locationId: 'nam5',
+            },
+            auth: { emailPasswordEnabled: deployed, preserved: { authorizedDomains: ['localhost'] } },
+            rules: {
+              releaseName: 'projects/firebase-project/releases/cloud.firestore',
+              rulesetName: deployed ? 'rulesets/after' : 'rulesets/before',
+              source: deployed
+                ? await FS.readText(FS.resolvePath('firestore.rules', cwd))
+                : "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} { allow read, write: if false; }\n  }\n}\n",
+            },
+          }
+        },
+      })
+      Expect(pastes).toBe(0)
+      Expect(deployed).toBe(true)
+      Expect(calls.some(call => call[0] === 'projects:create' || call[0] === 'apps:create')).toBe(false)
+      Expect(calls.filter(call => call[0] === 'deploy')).toHaveLength(1)
+      Expect(calls.find(call => call[0] === 'deploy')).not.toContain('firestore:indexes')
+      Expect(await FS.readJson(FS.resolvePath('.tao/local/connections.json', root))).toEqual({
+        firebase: {
+          projectId: 'firebase-project',
+          appId: 'web-app-id',
+          apiKey: 'new-public-key',
+          authDomain: 'firebase-project.firebaseapp.com',
+        },
+        other: { keep: true },
+      })
+      Expect(await FS.readText(FS.resolvePath('.tao/cache/firebase-connect/firestore.rules', root))).toContain(
+        'match /Note/{id}',
+      )
+      Expect(await FS.exists(FS.resolvePath('tao.connections.json', root))).toBe(false)
+      Expect(terminal.outputText()).toContain(
+        `Firebase connect completed.\nTo run the app:\n    ./tao run ${
+          FS.relativePath(FS.resolvePath('.'), root)
+        } --app Hosted`,
+      )
+      Expect(terminal.outputText()).not.toContain('Get your Firebase config')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('validates ordinary Tao source before making cloud requests', async () => {
     const root = await mkConnectProject('tao-connect-firebase-ordinary-')
     try {
       await FS.writeJson(FS.resolvePath('package.json', root), { name: 'ordinary-tao-app' })
@@ -401,11 +575,12 @@ Describe('tao connect', () => {
       const calls: string[] = []
       await Expect(runTaoConnect('firebase', root, {
         ...scripted([]).options,
+        manual: false,
         firebaseRunner: async args => {
           calls.push(args[0] ?? '')
           return { exitCode: 0, stdout: '', stderr: '' }
         },
-      })).rejects.toThrow('Paste a Firebase web app config or type manual')
+      })).rejects.toThrow('No Tao app was found')
       Expect(calls).toEqual([])
       Expect(await FS.exists(FS.resolvePath('.tao/local/connections.json', root))).toBe(false)
     } finally {
@@ -450,7 +625,7 @@ Describe('tao connect', () => {
     }
   })
 
-  Test('creates a fresh Firebase project, web app, database, auth and rules by default', async () => {
+  Test('creates a Firebase backend after explicit resource choices and verifies a retried deployment', async () => {
     const root = await mkConnectProject('tao-connect-firebase-auto-')
     try {
       await writePilotRules(root, "rules_version = '2';\n")
@@ -509,22 +684,73 @@ Describe('tao connect', () => {
         return { exitCode: 0, stdout: JSON.stringify({ status: 'success', result }), stderr: '' }
       }
       const questions: string[] = []
+      let proposedId = ''
       const { terminal, options } = scripted([])
       const prompts = {
         ...options.prompts,
-        text: async (message: string) => {
+        text: async (message: string, defaultValue?: string) => {
           questions.push(message)
+          proposedId = defaultValue ?? ''
           return ''
+        },
+        choice: async (
+          message: string,
+          choices: readonly { value: string; label: string }[],
+          defaultValue?: string,
+        ) => {
+          if (message === 'Choose the Firebase project') {
+            return '__create__'
+          }
+          if (message === 'Choose the permanent Firestore location') {
+            Expect(terminal.outputText()).toContain('storage location is permanent')
+            Expect(terminal.outputText()).toContain('https://firebase.google.com/docs/firestore/locations')
+          }
+          if (
+            message.startsWith('Create Firebase project') || message.startsWith('Register')
+            || message === 'Apply this Firebase deployment plan?'
+          ) {
+            Expect(defaultValue).toBe('continue')
+            Expect(choices.some(choice => choice.value === 'continue')).toBe(true)
+          }
+          return defaultValue ?? choices[0]!.value
         },
       }
       const pauses: number[] = []
       const firebaseSleep = async (milliseconds: number) => {
         pauses.push(milliseconds)
       }
-      await runTaoConnect('firebase', root, { ...options, prompts, firebaseRunner: runner, firebaseSleep })
+      await runTaoConnect('firebase', root, {
+        ...options,
+        manual: false,
+        prompts,
+        firebaseRunner: runner,
+        firebaseSleep,
+        firebaseInspector: async () => {
+          const deployed = calls.filter(call => call[0] === 'deploy').length >= 2
+          return {
+            auth: { emailPasswordEnabled: deployed, preserved: {} },
+            ...(deployed
+              ? {
+                database: {
+                  name: `projects/${proposedId}/databases/(default)`,
+                  type: 'FIRESTORE_NATIVE',
+                  databaseEdition: 'STANDARD',
+                  locationId: 'nam5',
+                },
+                rules: {
+                  releaseName: `projects/${proposedId}/releases/cloud.firestore`,
+                  rulesetName: 'rulesets/done',
+                  source: "rules_version = '2';\n",
+                },
+              }
+              : {}),
+          }
+        },
+      })
       const created = calls.find(call => call[0] === 'projects:create')?.[1] ?? ''
-      Expect(created).toMatch(/^tao-hosted-crud-[0-9a-f]{6}$/u)
-      Expect(questions[0]).toContain(`Return to create new project ${created}`)
+      Expect(created).toBe(proposedId)
+      Expect(created).toMatch(/^tao-hosted-crud-[0-9a-f]{8}$/u)
+      Expect(questions[0]).toContain('Enter a globally unique Firebase project ID')
       Expect(questions.some(question => question.includes('Type yes'))).toBe(false)
       Expect(await FS.readJson(FS.resolvePath('.tao/local/connections.json', root))).toEqual({
         firebase: {
@@ -555,13 +781,12 @@ Describe('tao connect', () => {
         'apps:list',
         'apps:create',
         'apps:sdkconfig',
-        'firestore:databases:list',
         'deploy',
         'deploy',
       ])
       Expect(pauses).toEqual([10_000])
       Expect(terminal.outputText()).toContain(
-        'Waiting for Firebase project to finish setup. Retrying in 10 seconds (attempt 2 of 10)…',
+        'Waiting for Firebase setup propagation. Retrying in 10 seconds (attempt 2 of 10)…',
       )
       Expect(terminal.outputText()).toContain(
         'Firebase connect completed.\nTo open Hosted CRUD in Expo Go and choose Firebase',
@@ -571,7 +796,7 @@ Describe('tao connect', () => {
       Expect(calls.filter(call => call[0] === 'deploy')[0]).toContain('auth,firestore:rules')
       Expect(await FS.readJson(FS.resolvePath('.tao/cache/firebase-connect/firebase.json', root))).toEqual({
         auth: { providers: { emailPassword: true } },
-        firestore: { rules: 'firestore.rules', location: 'nam5' },
+        firestore: { database: '(default)', edition: 'standard', rules: 'firestore.rules', location: 'nam5' },
       })
       Expect(await FS.readText(FS.resolvePath('.tao/cache/firebase-connect/firestore.rules', root)))
         .toBe("rules_version = '2';\n")
@@ -580,7 +805,7 @@ Describe('tao connect', () => {
       )
       Expect(terminal.outputText()).toContain('This can take a few minutes.')
       Expect(await FS.exists(FS.resolvePath('.tao/local/connect-secrets.json', root))).toBe(false)
-      Expect(terminal.outputText()).toContain('Firebase Hosting was not configured')
+      Expect(calls.some(call => call.includes('hosting'))).toBe(false)
     } finally {
       await FS.remove(root)
     }
@@ -597,35 +822,54 @@ Describe('tao connect', () => {
         return { exitCode: 0, stdout: JSON.stringify({ status: 'success', result }), stderr: '' }
       }
       await Expect(runTaoConnect('firebase', root, {
-        ...scripted(['tao-hosted-typo', 'no']).options,
+        ...scripted([]).options,
+        prompts: {
+          choice: async message => message === 'Choose the Firebase project' ? '__create__' : 'stop',
+          text: async () => 'tao-hosted-typo',
+          paste: async () => '',
+          secret: async () => '',
+        },
+        manual: false,
         firebaseRunner: runner,
-      })).rejects.toThrow('project creation was cancelled')
+      })).rejects.toThrow('setup was cancelled')
       Expect(calls).not.toContain('projects:create')
     } finally {
       await FS.remove(root)
     }
   })
 
-  Test('reports the Firebase CLI error text instead of a generic hint', async () => {
+  Test('reports the Firebase action and HTTP status without private provider error text', async () => {
     const root = await mkConnectProject('tao-connect-firebase-error-')
     try {
       await writePilotRules(root)
       const runner = async (args: readonly string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> =>
         args[0] === 'login:list'
-          ? { exitCode: 0, stdout: JSON.stringify({ status: 'success', result: [{ user: {} }] }), stderr: '' }
-          : {
-            exitCode: 2,
-            stdout: JSON.stringify({ status: 'error', error: 'HTTP Error: 429, quota exceeded' }),
+          ? {
+            exitCode: 0,
+            stdout: JSON.stringify({ status: 'success', result: [{ user: { email: 'developer@example.test' } }] }),
             stderr: '',
           }
-      await Expect(runTaoConnect('firebase', root, { ...scripted([]).options, firebaseRunner: runner }))
-        .rejects.toThrow('could not list Firebase projects: HTTP Error: 429, quota exceeded')
+          : {
+            exitCode: 2,
+            stdout: JSON.stringify({ status: 'error', error: 'HTTP Error: 429, quota exceeded; private-error-canary' }),
+            stderr: '',
+          }
+      const error = await runTaoConnect('firebase', root, {
+        ...scripted([]).options,
+        manual: false,
+        firebaseRunner: runner,
+      }).catch((error: unknown) => error)
+      Expect(error).toBeInstanceOf(Errors.HostEnvironmentError)
+      const message = Errors.formatForUser(error)
+      Expect(message).toContain('Firebase CLI could not list Firebase projects; HTTP Error: 429.')
+      Expect(message).not.toContain('quota exceeded')
+      Expect(message).not.toContain('private-error-canary')
     } finally {
       await FS.remove(root)
     }
   })
 
-  Test('does not replace existing Firestore rules without an explicit yes', async () => {
+  Test('does not deploy an existing Firebase project when the plan is cancelled', async () => {
     const root = await mkConnectProject('tao-connect-firebase-rules-')
     try {
       await writePilotRules(root)
@@ -662,9 +906,24 @@ Describe('tao connect', () => {
         return { exitCode: 0, stdout: JSON.stringify({ status: 'success', result }), stderr: '' }
       }
       await Expect(runTaoConnect('firebase', root, {
-        ...scripted(['tao-hosted-demo', 'no']).options,
+        ...scripted(['', '', '2']).options,
+        manual: false,
         firebaseRunner: runner,
-      })).rejects.toThrow('rules deployment was cancelled')
+        firebaseInspector: async () => ({
+          database: {
+            name: 'projects/tao-hosted-demo/databases/(default)',
+            type: 'FIRESTORE_NATIVE',
+            databaseEdition: 'STANDARD',
+            locationId: 'nam5',
+          },
+          auth: { emailPasswordEnabled: true, preserved: {} },
+          rules: {
+            releaseName: 'projects/tao-hosted-demo/releases/cloud.firestore',
+            rulesetName: 'rulesets/current',
+            source: 'pilot rules\n',
+          },
+        }),
+      })).rejects.toThrow('setup was cancelled')
       Expect(await FS.readJson(configPath)).toEqual({ preserved: true })
       Expect(calls).not.toContain('deploy')
     } finally {

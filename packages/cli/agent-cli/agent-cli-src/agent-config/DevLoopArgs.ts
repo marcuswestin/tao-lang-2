@@ -4,7 +4,8 @@ export type DevLoopRequest =
   | { kind: 'start'; args: readonly string[]; json: boolean }
   | { kind: 'status'; session?: string; json: boolean }
   | { kind: 'logs'; session: string; json: boolean; lines: number; follow: boolean }
-  | { kind: 'stop'; session: string; json: boolean }
+  | { kind: 'stop'; session: string; json: boolean; recoverController?: true }
+  | { kind: 'retire-retained-mobile'; session: string; json: boolean }
   | { kind: 'restart'; session: string; json: boolean }
   | { kind: 'reload'; session: string; json: boolean }
   | { kind: 'help'; json: false }
@@ -15,12 +16,18 @@ export const DEV_LOOP_HELP = `Usage: ./agent unsandboxed dev-loop <command> [opt
         [--show-browser] [--show-simulator] [--show-emulator] [--json]
   status [--session <id>] [--json]
   logs --session <id> [--lines <n>] [--follow] [--json]
-  stop|restart|reload --session <id> [--json]
+  stop --session <id> [--recover-controller] [--json]
+  retire-retained-mobile --session <id> [--json]
+  restart|reload --session <id> [--json]
 
 Start returns a recorded background session; status distinguishes startup from readiness.
 Loops have no default runtime timer. Stop waits for owned cleanup. Restart preserves
 configuration; reload requests app reload without restarting services. JSON is one object;
-logs --follow streams text and cannot be combined with --json.`
+logs --follow streams text and cannot be combined with --json.
+--recover-controller is an explicit stop-only recovery for a recorded controller stuck
+in stopping beyond the cleanup bound; exact process and resource custody must still match.
+retire-retained-mobile is bounded cleanup for an exactly recorded failed mobile session;
+it preserves the original acceptance result and requires exact owner and device fences.`
 
 /** The same grammar guards host dispatch and the implementation; private workers are never public verbs. */
 export function parseDevLoopArgs(argv: readonly string[]): DevLoopRequest {
@@ -28,8 +35,8 @@ export function parseDevLoopArgs(argv: readonly string[]): DevLoopRequest {
     return { kind: 'help', json: false }
   }
   const [kind, ...args] = argv
-  if (!['start', 'status', 'logs', 'stop', 'restart', 'reload'].includes(kind!)) {
-    return invalid('Expected start, status, logs, stop, restart, or reload.')
+  if (!['start', 'status', 'logs', 'stop', 'restart', 'reload', 'retire-retained-mobile'].includes(kind!)) {
+    return invalid('Expected start, status, logs, stop, restart, reload, or retire-retained-mobile.')
   }
   if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) {
     return { kind: 'help', json: false }
@@ -39,6 +46,7 @@ export function parseDevLoopArgs(argv: readonly string[]): DevLoopRequest {
   let session: string | undefined
   let lines = 200
   let follow = false
+  let recoverController = false
   const forwarded: string[] = []
   let pathSeen = false
   let startPath: string | undefined
@@ -58,6 +66,10 @@ export function parseDevLoopArgs(argv: readonly string[]): DevLoopRequest {
     seen.add(arg)
     if (arg === '--json') {
       json = true
+      continue
+    }
+    if (arg === '--recover-controller' && kind === 'stop') {
+      recoverController = true
       continue
     }
     if (arg === '--session' && kind !== 'start') {
@@ -125,7 +137,15 @@ export function parseDevLoopArgs(argv: readonly string[]): DevLoopRequest {
     }
     return { kind, session, lines, follow, json }
   }
-  return { kind: kind as 'stop' | 'restart' | 'reload', session, json }
+  if (kind === 'retire-retained-mobile') {
+    return { kind, session, json }
+  }
+  return {
+    kind: kind as 'stop' | 'restart' | 'reload',
+    session,
+    json,
+    ...(recoverController ? { recoverController: true as const } : {}),
+  }
 }
 
 function requiredValue(args: readonly string[], index: number, option: string): string {

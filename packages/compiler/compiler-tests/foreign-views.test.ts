@@ -8,7 +8,7 @@ Describe('compiler: foreign views', () => {
       view Main() {
         action Change(Value text) { }
         render CodeEditor("draft", Change) {
-          @toolbar Label("Tools")
+          @toolbar: Label("Tools")
           Label("Body")
         }
       }
@@ -23,7 +23,10 @@ Describe('compiler: foreign views', () => {
     Expect(code).toContain('Change={_Scope.Change.evaluate().jsValue}')
     Expect(code).toContain('Layout={TR.VisualLayout(_ViewProps.__tao)}')
     Expect(code).toContain('Tag={TR.VisualTag(_ViewProps.__tao)}')
-    Expect(code).toContain('Slots={_ViewProps.__taoSlots}')
+    Expect(code).toContain('Slots={_ViewProps.__taoSlots === undefined ? undefined : Object.fromEntries(')
+    Expect(code).toContain(
+      'React.createElement(TR.RenderSlots.Frame<Readonly<{}>>, { renderer: _TaoSlotRenderer, args: {} })',
+    )
     Expect(code).toContain('{_ViewProps.children}')
   })
 })

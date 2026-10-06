@@ -37,7 +37,7 @@ command FileNote(Note, Destination Folder, Label text) {
    Title "File note"
    Key "f"
    do -> { update Note {
-      Title: Label
+      Title: Label,
       Folder: Destination
    } }
 }

@@ -4,13 +4,13 @@
 // Counts Unicode-whitespace-delimited words after trimming leading and trailing whitespace. The
 // empty string and an all-whitespace string both contain zero words.
 public
-function CountWords(Value text) returns number {
+func CountWords(Value text) -> number {
    return CountWords(Value) from ./Text.ts
 }
 
 // Joins text values in source order, inserting Separator between adjacent values and nowhere else.
 // An empty list returns empty text, and a one-item list returns that item unchanged.
 public
-function Join(Values list of text, Separator text) returns text {
+func Join(Values list of text, Separator text) -> text {
    return Join(Values, Separator) from ./Text.ts
 }

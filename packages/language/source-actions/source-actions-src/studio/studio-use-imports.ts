@@ -28,7 +28,14 @@ export function ensureNamedImport(
 
 /** namedImportEdit adds one name to an existing `use` statement in canonical order, or nothing when it already imports it. */
 export function namedImportEdit(use: AST.UseStatement, declarationName: string): SourceEdit | undefined {
-  const imported = use.importedDeclarations.map(reference => reference.$refText)
+  const imported = use.importedDeclarations.map(AST.importLocalName)
+  const specifiers = use.importedDeclarations.map(AST.importSpecifierText)
+  const occupied = use.importedDeclarations.find(specifier => AST.importLocalName(specifier) === declarationName)
+  if (occupied !== undefined && AST.importSourceName(occupied) !== declarationName) {
+    Errors.throwUserInput(
+      `Studio cannot import '${declarationName}' because the name is already occupied by another import.`,
+    )
+  }
   if (
     use.$cstNode === undefined || imported.includes(declarationName)
     || (use.all && importedNameSupplied(use, declarationName))
@@ -39,7 +46,7 @@ export function namedImportEdit(use: AST.UseStatement, declarationName: string):
     end: use.$cstNode.end,
     replacement: use.all
       ? `${use.$cstNode.text}\nuse ${declarationName}${use.importPath ? ` from ${use.importPath}` : ''}`
-      : `use ${[...new Set([...imported, declarationName])].toSorted().join(', ')}${
+      : `use ${[...new Set([...specifiers, declarationName])].toSorted().join(', ')}${
         use.importPath ? ` from ${use.importPath}` : ''
       }`,
     start: use.$cstNode.offset,
@@ -47,10 +54,7 @@ export function namedImportEdit(use: AST.UseStatement, declarationName: string):
 }
 
 function importedNameSupplied(use: AST.UseStatement, name: string): boolean {
-  return AST.resolvedImportedDeclarations(use).some(declaration =>
-    AST.declarationNamespace(declaration) === 'value'
-    && (declaration.name === name || (AST.isEntityDataDeclaration(declaration) && declaration.singularName === name))
-  )
+  return AST.resolvedImportedBindings(use).some(binding => binding.namespace === 'value' && binding.localName === name)
 }
 
 /** ensureUiNamesImported adds the named `@tao/ui` declarations to the file's import when missing. */
@@ -61,14 +65,14 @@ export function ensureUiNamesImported(
   workspaceFiles: readonly AST.TaoFile[] = [file],
 ): string {
   const uses = file.statements.filter(AST.isUseStatement)
-  const imported = new Set(uses.flatMap(statement =>
-    statement.importPath === '@tao/ui'
-      ? statement.all
-        ? AST.resolvedImportedDeclarations(statement)
-          .filter(declaration => AST.declarationNamespace(declaration) === 'value').map(declaration => declaration.name)
-        : statement.importedDeclarations.map(reference => reference.$refText)
-      : []
-  ))
+  const uiUses = uses.filter(statement => statement.importPath === '@tao/ui')
+  const uiBindings = uiUses.flatMap(use => AST.resolvedImportedBindings(use))
+  const suppliesName = (binding: ReturnType<typeof AST.resolvedImportedBindings>[number], name: string): boolean =>
+    binding.namespace === 'value'
+    && binding.localName === name
+    && (binding.declaration.name === name
+      || (AST.isEntityDataDeclaration(binding.declaration) && binding.declaration.singularName === name))
+  const imported = new Set(required.filter(name => uiBindings.some(binding => suppliesName(binding, name))))
   if (required.every(name => imported.has(name))) {
     return source
   }
@@ -90,27 +94,36 @@ export function ensureUiNamesImported(
     }),
   ])
   const foreignImports = new Map<string, string>()
+  const uiNames = new Set([
+    ...uiBindings.map(binding => binding.localName),
+    ...uiUses.flatMap(use =>
+      use.importedDeclarations
+        .filter(specifier => specifier.target.ref === undefined)
+        .map(AST.importLocalName)
+    ),
+  ])
   for (const use of uses) {
     if (use.importPath === '@tao/ui') {
       continue
     }
-    const resolved = AST.resolvedImportedDeclarations(use)
-    for (const declaration of resolved) {
-      if (AST.declarationNamespace(declaration) === 'value') {
-        foreignImports.set(declaration.name, use.importPath ?? 'a bare use statement')
+    for (const binding of AST.resolvedImportedBindings(use)) {
+      if (binding.namespace === 'value') {
+        foreignImports.set(binding.localName, use.importPath ?? 'a bare use statement')
       }
     }
-    for (const reference of use.importedDeclarations) {
-      if (!resolved.some(declaration => declaration.name === reference.$refText)) {
-        foreignImports.set(reference.$refText, use.importPath ?? 'a bare use statement')
-      }
+    for (const specifier of use.importedDeclarations.filter(specifier => specifier.target.ref === undefined)) {
+      foreignImports.set(AST.importLocalName(specifier), use.importPath ?? 'a bare use statement')
     }
   }
   for (const name of required) {
     if (imported.has(name)) {
       continue
     }
-    const occupiedBy = visibleNames.has(name) ? 'a visible project declaration' : foreignImports.get(name)
+    const occupiedBy = visibleNames.has(name)
+      ? 'a visible project declaration'
+      : uiNames.has(name)
+      ? 'another @tao/ui import'
+      : foreignImports.get(name)
     if (occupiedBy !== undefined) {
       Errors.throwUserInput(
         `Studio cannot import '${name}' from @tao/ui because the name is already owned by ${occupiedBy}.`,
@@ -120,7 +133,7 @@ export function ensureUiNamesImported(
   const missing = required.filter(name => !imported.has(name))
   const uiUse = uses.find(statement => statement.importPath === '@tao/ui' && !statement.all)
   if (uiUse?.$cstNode !== undefined) {
-    const names = new Set(uiUse.importedDeclarations.map(reference => reference.$refText))
+    const names = new Set(uiUse.importedDeclarations.map(AST.importSpecifierText))
     for (const name of missing) {
       names.add(name)
     }

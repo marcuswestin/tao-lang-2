@@ -10,7 +10,7 @@ Describe('batch type inference', () => {
       type Name is text
       let Original = Name "Ada"
       let Alias = Original
-      function Echo(Value Name?) { return Value }
+      func Echo(Value Name?) { return Value }
       let Result = Echo(Alias)
     `)
     Expect(parsed.diagnostics).toEqual([])
@@ -20,6 +20,7 @@ Describe('batch type inference', () => {
     Expect.Is(name, AST.isTypeDeclaration)
     Expect.Is(name.type, AST.isPrimitiveTypeReference)
     Expect.Is(echo, AST.isFunctionDeclaration)
+    const nameType = name.type
     const parameter = AST.parametersOf(echo)[0]!
     const parameterType = parameter.inlineType?.type ?? parameter.type
     Expect.Is(parameterType, AST.isNamedTypeReference)
@@ -28,7 +29,7 @@ Describe('batch type inference', () => {
     const expression = alias.value
     const queries: Array<{ query: () => TaoType; node: object; property: string }> = [
       { query: () => Type.ofReference(parameterType), node: parameterType, property: 'root' },
-      { query: () => Type.ofTypeExpression(name.type!), node: name.type, property: 'primitive' },
+      { query: () => Type.ofTypeExpression(nameType), node: name.type, property: 'primitive' },
       { query: () => Type.ofDefinition(name), node: name, property: 'type' },
       { query: () => Type.ofParameter(parameter), node: parameter, property: 'inlineType' },
       { query: () => Type.ofExpression(expression), node: expression, property: 'target' },
@@ -68,7 +69,7 @@ Describe('batch type inference', () => {
       type Second is First
       let Left = Right
       let Right = Left
-      function Loop() { return Loop() }
+      func Loop() { return Loop() }
     `,
       { validation: false },
     )
@@ -337,6 +338,7 @@ function inferenceSummary(type: TaoType): unknown {
     item: () => common,
     entity: type => ({ ...common, entity: Type.dataEntityName(type.entity) }),
     enum: type => ({ ...common, declaration: type.declaration.name }),
+    capability: type => ({ ...common, declaration: type.declaration.name }),
     union: type => ({ ...common, members: type.members.map(inferenceSummary) }),
   })
 }
@@ -360,6 +362,7 @@ function inferenceReferences(type: TaoType): AST.Node[] {
     item: () => common,
     entity: type => [...common, type.entity],
     enum: type => [...common, type.declaration],
+    capability: type => [...common, type.declaration],
     union: type => [...common, ...type.members.flatMap(inferenceReferences)],
   })
 }

@@ -17,8 +17,8 @@ const imports = `
 `
 
 const clerk = 'Clerk { PublishableKey "pk_test" }'
-const localAuth = 'LocalAuth { Endpoint "http://127.0.0.1:4738" Resource "notes" }'
-const reference = 'Reference { ServerURL "http://127.0.0.1:4738" Resource "notes" }'
+const localAuth = 'LocalAuth { Endpoint "http://127.0.0.1:4738", Resource "notes" }'
+const reference = 'Reference { ServerURL "http://127.0.0.1:4738", Resource "notes" }'
 const instantDB = 'InstantDB { AppId "app" }'
 
 /** notesApp binds one Auth (or none) and one Datasource over a small owned-notes catalog. */
@@ -238,7 +238,7 @@ Describe('validator: app provider pairing', () => {
     async () => {
       const result = await testValidateCodeWithErrors(`
         ${notesApp(undefined, 'Memory { }', 'data Notes / Note { A text, B text, unique A + B }')}
-        app NotesSync = Notes with { id "notessync" Datasource ${instantDB} }
+        app NotesSync = Notes with { id "notessync", Datasource ${instantDB} }
       `)
       const errors = validationErrorMessages(result)
       Expect(errors).toContain(
@@ -302,7 +302,7 @@ Describe('validator: app provider pairing', () => {
     async () => {
       const result = await testValidateCodeWithErrors(`
         ${notesApp('TestAuth { }', 'Memory { }', 'access Account { Account can read }')}
-        app NotesOpen = Notes with { id "notesopen" Auth none }
+        app NotesOpen = Notes with { id "notesopen", Auth none }
       `)
       Expect(validationErrorMessages(result)).toContain(messages.accessWithoutAuth('NotesOpen', 'Account'))
       Expect(validationErrorMessages(result)).not.toContain(messages.accessWithoutAuth('Notes', 'Account'))

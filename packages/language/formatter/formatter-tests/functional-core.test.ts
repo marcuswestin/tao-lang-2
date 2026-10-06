@@ -7,7 +7,7 @@ Describe('functional core formatter', () => {
     formats(
       `function Label(Count number) returns text{return when(Count>0){true->"Count: {Count+1}" otherwise->"Empty"}}\nview Main(){state Ready=false action Flip(){guard Ready true->{toggle Ready}toggle Ready}render Stack() {when(Count>0 and not false){true->{Text(Label(Count))}otherwise->{Text("Empty")}}loop["Inbox","Today"]/Name{Text(Name)}}}`,
       `
-        function Label(Count number) returns text {
+        func Label(Count number) -> text {
            return when (Count > 0) {
               true -> "Count: { Count + 1 }"
               otherwise -> "Empty"
@@ -38,7 +38,7 @@ Describe('functional core formatter', () => {
     formats(
       `function Choice() returns text{return when true{\n// value preferred\ntrue->"yes"\n// value fallback\notherwise->"no"}}\nview Main(){state Ready=true action Flip(){guard Ready{\n// action preferred\ntrue->{toggle Ready}\n// action fallback\nfalse->{toggle Ready}}}render Stack(){when Ready{\n// render preferred\ntrue->{Text("yes")}\n// render fallback\notherwise->{Text("no")}}}}`,
       `
-        function Choice() returns text {
+        func Choice() -> text {
            return when true {
               // value preferred
               true -> "yes"
@@ -74,7 +74,7 @@ Describe('functional core formatter', () => {
     formats(
       `function Label(Value text default"Save") returns text{return Value}\nview Main(Title text default"Welcome"){action Submit(Message text default"Saved"){}render Card()}\nview Card(Gap number default 8){render inject \`\`\`ts\nreturn null\n\`\`\`}`,
       `
-        function Label(Value text default "Save") returns text {
+        func Label(Value text default "Save") -> text {
            return Value
         }
 
@@ -132,18 +132,36 @@ Describe('functional core formatter', () => {
   Test(
     'formats grouped entity availability guards and their error payload',
     formats(
-      `view DocumentScreen(Document){render Stack(){guard Document{loading->{Text("Loading")}missing->{Text("Missing")}unauthorized->{Text("Unauthorized")}error->Context{Text(Context.Message)}}DocumentEditor(Document)}}`,
+      `view DocumentScreen(Document){render Stack(){guard Document{loading->{Text("Loading")}none->{Text("No longer present")}unauthorized->{Text("Unauthorized")}error->Context{Text(Context.Message)}}DocumentEditor(Document)}}`,
       `
         view DocumentScreen(Document) {
            render Stack() {
               guard Document {
                  loading -> { Text("Loading") }
-                 missing -> { Text("Missing") }
+                 none -> { Text("No longer present") }
                  unauthorized -> { Text("Unauthorized") }
                  error -> Context { Text(Context.Message) }
               }
               DocumentEditor(Document)
         }  }
+      `,
+    ),
+  )
+
+  Test(
+    'preserves a declared enum case named missing as an identifier',
+    formats(
+      `type Availability is one of missing, Available\nview Main(Current Availability){render Stack(){when Current{missing->{Text("Unavailable")}Available->{Text("Ready")}otherwise->{Text("Unknown")}}}}`,
+      `
+        type Availability is one of missing, Available
+
+        view Main(Current Availability) {
+           render Stack() {
+              when Current {
+                 missing -> { Text("Unavailable") }
+                 Available -> { Text("Ready") }
+                 otherwise -> { Text("Unknown") }
+        }  }  }
       `,
     ),
   )

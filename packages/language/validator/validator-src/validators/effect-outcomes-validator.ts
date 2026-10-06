@@ -5,10 +5,13 @@ import type { ValidationContext } from '../validation'
 
 /** effectOutcomeValidationMessages declares `when do` diagnostics and the unhandled-failure warning. */
 const effectOutcomeValidationMessages = {
-  duplicateOutcome: (outcome: string) => `Outcome '${outcome}' is named more than once in this \`when do\`.`,
-  unknownOutcome: (outcome: string, effect: string) =>
-    `'${outcome}' is not an outcome of ${effect}; name \`saved\`, \`rejected\`, \`error\`, or a case it declares.`,
+  duplicateOutcome: (outcome: string) => `Outcome '${outcome}' is named more than once in this handler.`,
+  unknownOutcome: (outcome: string, effect: string, then = false) =>
+    then
+      ? `'${outcome}' is not an outcome of ${effect}; name \`done\`, \`error\`, \`cancelled\`, or a case it declares.`
+      : `'${outcome}' is not an outcome of ${effect}; name \`saved\`, \`rejected\`, \`error\`, or a case it declares.`,
   savedPayload: '`saved` carries no message, so it takes no name.',
+  otherwisePayload: '`otherwise` carries no message, so it takes no name.',
   emptyPayload: (outcome: string) => `\`${outcome}\` carries no message, so it takes no name.`,
   unhandledFailure: (effect: string, cases: readonly string[]) =>
     `${capitalized(effect)} can fail with ${
@@ -18,6 +21,10 @@ const effectOutcomeValidationMessages = {
     `${capitalized(effect)} can fail with ${
       caseList(cases)
     }, and this \`when do\` does not handle it; name it or add \`rejected\`.`,
+  unhandledThen: (effect: string, cases: readonly string[]) =>
+    `${capitalized(effect)} can fail with ${
+      caseList(cases)
+    }, and this \`then\` does not handle it; name it or add \`error\`.`,
 } as const
 
 /**
@@ -33,7 +40,15 @@ export const EffectOutcomesValidator = {
       }
     },
     [AST.DoStatement.$type]: (invocation, ctx) => {
-      if (!AST.isWhenDoStatement(invocation.$container)) {
+      if (AST.isWhenDoStatement(invocation.$container)) {
+        return
+      }
+      if (invocation.then) {
+        validateThenOutcomes(invocation, ctx)
+        if (ASTUtils.isRootEffectInvocation(invocation)) {
+          warnUnhandled(invocation, ASTUtils.unhandledOutcomeContract(invocation), ctx, 'then')
+        }
+      } else {
         warnRootInvocation(invocation, ctx)
       }
     },
@@ -49,7 +64,7 @@ function validateOutcomes(statement: AST.WhenDoStatement, ctx: ValidationContext
   const effect = ASTUtils.invokedEffect(statement)
   const auth = AST.isAuthLibraryDeclaration(effect, 'SignIn') || AST.isAuthLibraryDeclaration(effect, 'SignOut')
   const words = auth ? ['completed', 'cancelled', 'rejected', 'error'] : ASTUtils.effectOutcomeWords
-  const allowed = new Set<string>([...words, ...declared])
+  const allowed = new Set<string>([...words, 'otherwise', ...declared])
   const seen = new Set<string>()
   for (const outcome of statement.outcomes) {
     if (seen.has(outcome.case)) {
@@ -64,6 +79,30 @@ function validateOutcomes(statement: AST.WhenDoStatement, ctx: ValidationContext
     }
     if (outcome.case === 'saved' && outcome.payload) {
       ctx.error(outcome.payload, effectOutcomeValidationMessages.savedPayload)
+    }
+    if (outcome.case === 'otherwise' && outcome.payload) {
+      ctx.error(outcome.payload, effectOutcomeValidationMessages.otherwisePayload)
+    }
+  }
+}
+
+function validateThenOutcomes(statement: AST.DoStatement, ctx: ValidationContext): void {
+  const declared = new Set(ASTUtils.invocationFailureContract(statement).cases)
+  const allowed = new Set<string>(['done', 'error', 'cancelled', 'otherwise', ...declared])
+  const seen = new Set<string>()
+  for (const outcome of statement.outcomes) {
+    if (seen.has(outcome.case)) {
+      ctx.error(outcome, effectOutcomeValidationMessages.duplicateOutcome(outcome.case))
+    }
+    seen.add(outcome.case)
+    if (!allowed.has(outcome.case)) {
+      ctx.error(outcome, effectOutcomeValidationMessages.unknownOutcome(outcome.case, effectName(statement), true))
+    }
+    if (outcome.case === 'cancelled' && outcome.payload) {
+      ctx.error(outcome.payload, effectOutcomeValidationMessages.emptyPayload(outcome.case))
+    }
+    if (outcome.case === 'otherwise' && outcome.payload) {
+      ctx.error(outcome.payload, effectOutcomeValidationMessages.otherwisePayload)
     }
   }
 }
@@ -85,7 +124,7 @@ function warnUnhandled(
   invocation: ASTUtils.EffectInvocation,
   contract: ASTUtils.FailureContract,
   ctx: ValidationContext,
-  kind: 'failure' | 'outcome',
+  kind: 'failure' | 'outcome' | 'then',
 ): void {
   // D1 retains declared-case root warnings; unknown coverage becomes mandatory at the later
   // app-guard boundary, rather than rejecting existing applications before that boundary exists.
@@ -95,6 +134,8 @@ function warnUnhandled(
   }
   const message = kind === 'failure'
     ? effectOutcomeValidationMessages.unhandledFailure(effectName(invocation), cases)
+    : kind === 'then'
+    ? effectOutcomeValidationMessages.unhandledThen(effectName(invocation), cases)
     : effectOutcomeValidationMessages.unhandledOutcome(effectName(invocation), cases)
   ctx.warning(AST.isWhenDoStatement(invocation) ? invocation.invocation : invocation, message)
 }

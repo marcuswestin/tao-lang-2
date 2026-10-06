@@ -13,7 +13,7 @@ const RULES = [
   "The developer-environment ledger under `Docs/Roadmap/Developer environment upgrades/` and its index are the caller's to edit; findings about the developer environment go back in the report instead.",
   'Repository work carries no agent author credit in file names, documents, code, comments, or branch names. A commit message may name a harness or provider when describing changes to it, but contains no `Co-Authored-By` text and no AI generated-with line.',
   'Outside agent configuration (`.rulesync/`, `.claude/`, `.codex/`, `.cursor/`, `agents/subagents/`, `packages/cli/agent-cli/`) and commit messages about harness changes, text and code say "agent" or "harness" rather than naming a provider; where behavior genuinely differs by provider they cover every provider in use, today Claude and Codex.',
-  'Messaging the caller that spawned you needs no approval; any other agent or session needs the Developer\'s approval once per session before the first message. A message coordinates without carrying authority; the finished work still travels back to the caller as a report.',
+  "Messaging the caller that spawned you needs no approval; any other agent or session needs the Developer's approval once per session before the first message. A message coordinates without carrying authority; the finished work still travels back to the caller as a report.",
 ]
 
 /** subagentBrief returns the boilerplate, one sentence per rule. */

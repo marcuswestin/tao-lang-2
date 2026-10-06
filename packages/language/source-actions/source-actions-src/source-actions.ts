@@ -14,7 +14,6 @@ import {
 } from './source-actions-utils'
 import { StudioActions } from './studio-actions'
 import { removeUnusedImportNames } from './use-actions'
-import { insertValueEntryCommas } from './value-entry-actions'
 import { moveViewRendersLast } from './views-actions'
 
 /** organizeSource returns the document with canonical statement order and an organized import section. */
@@ -54,7 +53,6 @@ async function moveRendersLast(document: AST.Document): Promise<string | undefin
  * Each later fix reads the reparsed result of the one before it.
  */
 const sourceFixes: readonly ((document: AST.Document) => string | undefined)[] = [
-  insertValueEntryCommas,
   migrateRelationTraits,
   renameLegacyVisualHeads,
   moveFlatCatalogIntoBlocks,
@@ -63,7 +61,7 @@ const sourceFixes: readonly ((document: AST.Document) => string | undefined)[] =
 
 /**
  * fixSource returns the fully canonical source: decided design spellings and typed design blocks,
- * value-entry commas, renders last, organized imports, formatted.
+ * renders last, organized imports, formatted.
  */
 async function fixSource(document: AST.Document, options: SourceActionOptions = {}): Promise<string> {
   assertNoSyntaxErrors(document)

@@ -198,7 +198,7 @@ Describe('validator: rendered navs', () => {
       nav Center = StackNav { Initial Home }
       nav Other = StackNav { Initial Home }
       app ShellApp { id "shellapp" version "1.0.0" name "ShellApp" view Shell(Center) }
-      app OtherShellApp = ShellApp with { id "othershellapp" name "Other"
+      app OtherShellApp = ShellApp with { id "othershellapp", name "Other",
         view Shell(Other)
       }
       scene Shell(Navigator nav) {

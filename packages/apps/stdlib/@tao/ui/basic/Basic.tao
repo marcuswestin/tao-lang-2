@@ -46,6 +46,7 @@ view FormButton(Title text, Press action(), Id text default "", Disabled boolean
             disabled: effectiveDisabled,
             style: {
               alignItems: 'center',
+              justifyContent: 'center',
               minHeight: 44,
               opacity: effectiveDisabled ? 0.5 : 1,
               paddingHorizontal: 16,

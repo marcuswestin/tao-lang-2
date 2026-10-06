@@ -367,6 +367,114 @@ Describe('named host command dispatch', () => {
     }
   })
 
+  Test('process group probe filters an exact PGID and refuses invalid or incomplete snapshots', async () => {
+    const root = await mkTestDir('tao-process-group-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const bin = FS.resolvePath('bin', root)
+      const log = FS.resolvePath('ps.log', root)
+      const fixture = FS.resolvePath('ps.txt', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["processes group"] }')
+      await FS.mkdir(bin)
+      const ps = FS.resolvePath('ps', bin)
+      await FS.writeText(
+        ps,
+        '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\ncat "$TAO_PS_FIXTURE"\nexit "$TAO_PS_EXIT"\n',
+      )
+      await FS.chmod(ps, 0o755)
+      const env = {
+        PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+        TAO_HOST_LOG: log,
+        TAO_PS_FIXTURE: fixture,
+        TAO_PS_EXIT: '0',
+      }
+      for (const arg of ['0', '1', '-9427', '9427;kill', '9427.0', '009427', '99999999999999999999']) {
+        const denied = await CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, 'processes', 'group', arg],
+          cwd: root,
+          env,
+        })
+        Expect(denied.exitCode).toBe(2)
+        Expect(await FS.exists(log)).toBe(false)
+      }
+      const extra = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, 'processes', 'group', '9427', '-E'],
+        cwd: root,
+        env,
+      })
+      Expect(extra.exitCode).toBe(2)
+      Expect(await FS.exists(log)).toBe(false)
+      await FS.writeText(
+        fixture,
+        [
+          ' 101 1 9427 501 Ss /Applications/GoogleUpdater.app/GoogleUpdater',
+          ' 102 101 9427 501 S /Users/ro/code/tao-lang-2/.devenv/bin/bun',
+          ' 201 1 9999 501 S /other/group',
+          '',
+        ].join('\n'),
+      )
+      const selected = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, 'processes', 'group', '9427'],
+        cwd: root,
+        env,
+      })
+      Expect(selected.exitCode).toBe(0)
+      Expect(JSON.parse(selected.stdout)).toEqual({
+        pgid: 9427,
+        processes: [
+          {
+            pid: 101,
+            ppid: 1,
+            pgid: 9427,
+            uid: 501,
+            stat: 'Ss',
+            command: '/Applications/GoogleUpdater.app/GoogleUpdater',
+          },
+          {
+            pid: 102,
+            ppid: 101,
+            pgid: 9427,
+            uid: 501,
+            stat: 'S',
+            command: '/Users/ro/code/tao-lang-2/.devenv/bin/bun',
+          },
+        ],
+      })
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual([
+        '-axo',
+        'pid=,ppid=,pgid=,uid=,stat=,comm=',
+      ])
+      for (const bad of ['not a ps row\n', '101 1 9427 501 S /bin/echo', '101 1 9427 501 S /bin/echo\nunknown row\n']) {
+        await FS.writeText(fixture, bad)
+        const refused = await CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, 'processes', 'group', '9427'],
+          cwd: root,
+          env,
+        })
+        Expect(refused.exitCode).toBe(1)
+        Expect(refused.stdout).toBe('')
+      }
+      await FS.writeText(fixture, '101 1 9427 501 S /bin/echo\n')
+      const failed = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, 'processes', 'group', '9427'],
+        cwd: root,
+        env: { ...env, TAO_PS_EXIT: '1' },
+      })
+      Expect(failed.exitCode).toBe(1)
+      Expect(failed.stdout).toBe('')
+      await FS.writeText(fixture, 'x'.repeat(16 * 1024 * 1024 + 1))
+      const oversized = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, 'processes', 'group', '9427'],
+        cwd: root,
+        env,
+      })
+      Expect(oversized.exitCode).toBe(1)
+      Expect(oversized.stdout).toBe('')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('validates VM recovery and base profiles before Just can interpret extra recipes or options', async () => {
     const root = await mkTestDir('tao-vm-host-')
     try {

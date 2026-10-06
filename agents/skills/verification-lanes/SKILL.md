@@ -81,7 +81,9 @@ on its size.
 - Landing is one route, spelled out at the top of
   [hosted verification](references/hosted-verification.md): `open-pr --auto-merge` plus the local
   host-only gates in parallel, GitHub merging on green `Verify`. Local checks beyond that are for
-  iteration and diagnosis; never repeat CI-covered verification locally.
+  iteration and diagnosis; never repeat CI-covered verification locally. `open-pr` may print `WAIT`
+  and hold the push while two `Verify` runs are in flight or another lander changed the same files;
+  that is the route working, not a failure, and `--jump-queue` is the Developer's flag, not yours.
 - Never background a gate and then poll for its output in a sleep loop: run it in the foreground with
   a timeout, since the gate is no faster for being backgrounded. **Reporting while a lane runs**,
   below, is the one exception — a lane too long to wait out, with the Developer waiting on it.

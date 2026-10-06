@@ -74,11 +74,13 @@ const NODE_DOWNLOADS = 'https://nodejs.org/dist'
 /** BASE_TSCONFIG is the repository-wide compiler configuration the host's tsconfig extends. */
 const BASE_TSCONFIG = 'packages/tsconfig.base.json'
 
-try {
-  await main(Platform.runtimeProcess.argv.slice(2))
-} catch (error) {
-  HCI.writeErrorLine(Errors.formatForUser(error))
-  Platform.runtimeProcess.exit(1)
+if (import.meta.main) {
+  try {
+    await main(Platform.runtimeProcess.argv.slice(2))
+  } catch (error) {
+    HCI.writeErrorLine(Errors.formatForUser(error))
+    Platform.runtimeProcess.exit(1)
+  }
 }
 
 async function main(args: readonly string[]): Promise<void> {
@@ -250,7 +252,11 @@ async function assertSystemLibraryDependencies(binary: string): Promise<void> {
  */
 async function makeHostInstallable(repoRoot: string, stagedHost: string, portableBun: string): Promise<void> {
   const manifest = await FS.readJson<HostManifest>(FS.resolvePath(HOST_MANIFEST, repoRoot))
+  const rootManifest = await FS.readJson<{ patchedDependencies?: Record<string, string> }>(
+    FS.resolvePath('package.json', repoRoot),
+  )
   const dependencies: Record<string, string> = {}
+  const patchedDependencies: Record<string, string> = {}
   for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
     if (!range.startsWith('workspace:')) {
       dependencies[name] = await installedVersion(repoRoot, name)
@@ -259,12 +265,34 @@ async function makeHostInstallable(repoRoot: string, stagedHost: string, portabl
   for (const name of DEV_SERVER_TOOLING) {
     dependencies[name] = await installedVersion(repoRoot, name)
   }
+  for (const [key, patchPath] of Object.entries(rootManifest.patchedDependencies ?? {})) {
+    const separator = key.lastIndexOf('@')
+    const name = key.slice(0, separator)
+    if (separator <= 0 || !isMetroPatchPackage(name)) {
+      continue
+    }
+    const version = key.slice(separator + 1)
+    if (!version || !isSafePatchPath(patchPath)) {
+      Errors.throwHostEnvironment(`The standalone Expo host has an invalid Metro patch registration: ${key}.`)
+    }
+    const patchesRoot = FS.resolvePath('patches', repoRoot)
+    const source = FS.resolvePath(patchPath, repoRoot)
+    const pathFromPatches = FS.relativePath(patchesRoot, source)
+    if (pathFromPatches === '..' || pathFromPatches.startsWith('../') || !await FS.isFile(source)) {
+      Errors.throwHostEnvironment(`The standalone Expo host patch is missing or outside patches/: ${patchPath}.`)
+    }
+    await FS.copyFile(source, FS.resolvePath(patchPath, stagedHost))
+    patchedDependencies[key] = patchPath
+    // The patched package key owns the version; this must not drift to a newer installed range.
+    dependencies[name] = version
+  }
   await FS.writeJson(FS.resolvePath('package.json', stagedHost), {
     name: manifest.name,
     private: true,
     version: manifest.version,
     main: manifest.main,
     dependencies,
+    ...(Object.keys(patchedDependencies).length > 0 ? { patchedDependencies } : {}),
   })
 
   const tsconfigPath = FS.resolvePath('tsconfig.json', stagedHost)
@@ -284,6 +312,20 @@ async function makeHostInstallable(repoRoot: string, stagedHost: string, portabl
     cwd: repoRoot,
     stdio: 'inherit',
   })
+}
+
+/** StandaloneBuild exposes the production host-staging operation for packaging callers. */
+export const StandaloneBuild = { makeHostInstallable } as const
+
+function isMetroPatchPackage(name: string): boolean {
+  return name === 'metro' || name === '@expo/metro-file-map'
+}
+
+function isSafePatchPath(path: string): boolean {
+  return !FS.isAbsolute(path)
+    && !path.includes('\\')
+    && path.startsWith('patches/')
+    && path.split('/').every(part => part !== '' && part !== '.' && part !== '..')
 }
 
 /**
@@ -329,6 +371,7 @@ type HostManifest = {
   dependencies?: Record<string, string>
   main?: string
   name: string
+  patchedDependencies?: Record<string, string>
   version: string
 }
 

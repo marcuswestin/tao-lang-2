@@ -1,4 +1,4 @@
-import { Packages } from '@ast-utils'
+import { ASTUtils, Packages } from '@ast-utils'
 import {
   inspectMaintainedNativeBindings,
   type MaintainedBindingOptions,
@@ -180,13 +180,17 @@ async function compileValidated(
     ...context.nativeBindings,
     inspection: nativeBindings,
   })
-  const compiled = Backends[options.target ?? 'react-native'].compile({
-    validation: validationResult,
-    context: { ...context, nativeBridgeTypeOrigins },
-    app: selected.app,
-    appPath: selected.path,
-    options,
-  })
+  const emit = () =>
+    Backends[options.target ?? 'react-native'].compile({
+      validation: validationResult,
+      context: { ...context, nativeBridgeTypeOrigins },
+      app: selected.app,
+      appPath: selected.path,
+      options,
+    })
+  const compiled = validationResult.associatedEffects
+    ? ASTUtils.withAssociatedEffects(validationResult.associatedEffects, emit)
+    : emit()
   const afterNativeBindings = await inspectMaintainedNativeBindings(context.nativeBindings)
   Assert.input(
     afterNativeBindings.status === 'fresh' && afterNativeBindings.identity === nativeBindings.identity,

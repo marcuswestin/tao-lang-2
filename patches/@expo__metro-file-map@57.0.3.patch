@@ -1,0 +1,59 @@
+--- a/build/index.js
++++ b/build/index.js
+@@ -170,6 +170,8 @@
+     #canUseWatchmanPromise;
+     #changeID;
+     #changeInterval;
++    #fastFileMapTimer;
++    #fastFileMapEnded = false;
+     #console;
+     #crawlerAbortController;
+     #fileProcessor;
+@@ -557,6 +559,7 @@
+             this.#startupPerfLogger?.point('watch_end');
+             return;
+         }
++        const fastFileMap = process.env.TAO_STUDIO_FAST_FILE_MAP === 'true';
+         const hasWatchedExtension = (filePath) => this.#options.extensions.some((ext) => filePath.endsWith(ext));
+         let nextEmit = null;
+         const emitChange = () => {
+@@ -645,6 +648,16 @@
+                     firstEventTimestamp: onChangeStartTime,
+                 };
+                 nextEmit.events.push(event);
++                if (fastFileMap && this.#fastFileMapTimer == null && !this.#fastFileMapEnded) {
++                    this.#fastFileMapTimer = setTimeout(async () => {
++                        const currentChangeQueue = changeQueue;
++                        await currentChangeQueue;
++                        this.#fastFileMapTimer = null;
++                        if (!this.#fastFileMapEnded) {
++                            emitChange();
++                        }
++                    }, 1);
++                }
+             };
+             changeQueue = changeQueue
+                 .then(async () => {
+@@ -753,7 +766,9 @@
+                 this.#console.error(`metro-file-map: watch error:\n  ${error.stack}\n`);
+             });
+         };
+-        this.#changeInterval = setInterval(emitChange, CHANGE_INTERVAL);
++        if (!fastFileMap) {
++            this.#changeInterval = setInterval(emitChange, CHANGE_INTERVAL);
++        }
+         (0, invariant_1.default)(this.#watcher != null, 'Expected #watcher to have been initialised by build()');
+         await this.#watcher.watch(onChange);
+         if (this.#options.healthCheck.enabled) {
+@@ -772,6 +787,11 @@
+         this.#startupPerfLogger?.point('watch_end');
+     }
+     async end() {
++        this.#fastFileMapEnded = true;
++        if (this.#fastFileMapTimer != null) {
++            clearTimeout(this.#fastFileMapTimer);
++            this.#fastFileMapTimer = null;
++        }
+         if (this.#changeInterval) {
+             clearInterval(this.#changeInterval);
+         }

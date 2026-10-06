@@ -1,8 +1,10 @@
 import { DEV_LOOP_HELP, type DevLoopRequest, parseDevLoopArgs } from '@agent-cli/agent-config/DevLoopArgs'
-import { CLI, Errors, FS, HCI, Platform, Repo, Switch, Time } from '@shared'
+import { MachineResources } from '@host-control'
+import { CLI, Errors, FS, HCI, Platform, Repo, Switch, Text, Time } from '@shared'
 import { devLoopRequest } from '@shared/DevLoopControl'
 import { ProcessTree } from '@shared/ProcessTree'
 import { UiVisibility } from '@verification/UiVisibility'
+import { retireRetainedMobile } from './DevLoopMobileRetirement'
 import { disposeDeadDevLoopConnection, recoverDevLoopProcesses } from './DevLoopRecovery'
 import {
   devLoopDirectory,
@@ -18,6 +20,8 @@ type DevLoopCommandOperations = {
   status: typeof statusOf
   beforeRecovery?: () => Promise<void>
   recovery?: Parameters<typeof recoverDevLoopProcesses>[1]
+  controllerCommandLine?: (pid: number) => string | undefined
+  readControllerResource?: typeof MachineResources.readOwner
 }
 
 export async function runDevLoopCommand(
@@ -85,7 +89,16 @@ export async function runDevLoopCommand(
         }
         return undefined
       },
-      stop: async stop => await control(stop.session, 'stop', operations),
+      stop: async stop => {
+        HCI.writeStderr('Shutting down…\n')
+        return stop.recoverController
+          ? await recoverStuckController(stop.session, operations)
+          : await control(stop.session, 'stop', operations)
+      },
+      'retire-retained-mobile': async retire => {
+        HCI.writeStderr('Retiring the exact recorded mobile session…\n')
+        return await retireRetainedMobile(retire.session)
+      },
       restart: async restart => await control(restart.session, 'restart', operations),
       reload: async reload => await control(reload.session, 'reload', operations),
     })
@@ -275,6 +288,144 @@ async function control(
   operations: DevLoopCommandOperations,
 ): Promise<DevLoopReceipt> {
   return await controlSession(session, action, operations)
+}
+
+/** Opt-in recovery stops only this session's exactly recorded controller, then uses ordinary custody recovery. */
+async function recoverStuckController(session: string, operations: DevLoopCommandOperations): Promise<DevLoopReceipt> {
+  const directory = devLoopDirectory(session)
+  await operations.beforeRecovery?.()
+  return await FS.withFileMutationLock(FS.resolvePath('recovery.lock', directory), directory, async () => {
+    const original = await readDevLoopReceipt(session)
+    const controller = original.controller
+    if (controller === undefined) {
+      Errors.throwHostEnvironment('Controller recovery requires its recorded kernel identity.')
+    }
+    const originalConnection = await readDevLoopConnection(session)
+    const recovery = operations.recovery
+    const identities = recovery?.identities ?? ProcessTree.identities
+    const isAlive = recovery?.processIsAlive ?? Platform.processIsAlive
+    const now = recovery?.now ?? Date.now
+    const sleep = recovery?.sleep ?? Time.sleep
+    const signal = recovery?.signal ?? ProcessTree.signalTracked
+    const readOwner = operations.readControllerResource ?? MachineResources.readOwner
+    const commandLine = operations.controllerCommandLine
+      ?? (pid => ProcessTree.processTable().find(process => process.pid === pid)?.command)
+    const worker = Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/dev-loop/DevLoopWorker.ts')
+    const workerCommand = new RegExp(`^(?:\\S*/)?bun\\s+${Text.escapeRegExp(worker)}$`, 'u')
+    const assertCustody = async (requireLiveController = true): Promise<DevLoopReceipt> => {
+      const receipt = await readDevLoopReceipt(session)
+      if (
+        receipt.state !== 'stopping' || receipt.generation !== original.generation
+        || receipt.controller?.pid !== controller.pid || !ProcessTree.sameProcess(receipt.controller, controller)
+        || receipt.controllerDisposed || receipt.provenance !== 'complete' || receipt.ownershipRefusal
+        || receipt.mobileDriverCleanup === 'opening' || receipt.mobileDriverCleanup === 'retained'
+        || !Number.isFinite(Date.parse(original.updatedAt)) || now() - Date.parse(original.updatedAt) < 30_000
+      ) {
+        Errors.throwHostEnvironment(
+          'Controller recovery requires an unchanged owned session beyond its stop cleanup bound.',
+        )
+      }
+      const connection = await readDevLoopConnection(session)
+      if (
+        connection.session !== session || connection.generation !== receipt.generation
+        || connection.token !== originalConnection.token || connection.origin !== originalConnection.origin
+        || connection.controller?.pid !== controller.pid || !ProcessTree.sameProcess(connection.controller, controller)
+      ) {
+        Errors.throwHostEnvironment('Controller recovery lost its exact private control generation.')
+      }
+      for (const device of receipt.devices ?? []) {
+        if (!device.owned || device.state === 'released') {
+          continue
+        }
+        if (
+          device.holder?.pid !== controller.pid || !ProcessTree.sameProcess(device.holder, controller)
+          || device.generation === undefined || device.resources === undefined || device.resources.length === 0
+          || device.resources.some(owner => owner.id !== device.generation)
+        ) {
+          Errors.throwHostEnvironment('Controller recovery cannot prove the recorded resource holder.')
+        }
+        for (const expected of device.resources) {
+          const current = await readOwner({ name: expected.name })
+          if (
+            current === undefined || current.name !== expected.name || current.id !== expected.id
+            || current.pid !== controller.pid || expected.pid !== controller.pid
+            || current.processStartedAt !== expected.processStartedAt || current.startedAt !== expected.startedAt
+            || current.repositoryRoot !== receipt.checkout || expected.repositoryRoot !== receipt.checkout
+          ) {
+            Errors.throwHostEnvironment(
+              'Controller recovery lost the recorded resource generation; current owners are preserved.',
+            )
+          }
+        }
+      }
+      const current = identities([controller.pid]).get(controller.pid)
+      if (
+        requireLiveController
+        && (!ProcessTree.sameProcess(current, controller) || !workerCommand.test(commandLine(controller.pid) ?? ''))
+      ) {
+        Errors.throwHostEnvironment('Controller recovery refuses a changed process identity or command path.')
+      }
+      return receipt
+    }
+    HCI.writeStderr('Rechecking recorded controller ownership…\n')
+    await assertCustody()
+    HCI.writeStderr('Stopping the owned controller…\n')
+    signal([controller], 'SIGTERM')
+    const deadline = now() + 3_000
+    while (ProcessTree.sameProcess(identities([controller.pid]).get(controller.pid), controller) && now() < deadline) {
+      await sleep(50)
+    }
+    if (ProcessTree.sameProcess(identities([controller.pid]).get(controller.pid), controller)) {
+      await assertCustody()
+      signal([controller], 'SIGKILL')
+    }
+    const killedDeadline = now() + 3_000
+    while (identities([controller.pid]).get(controller.pid) !== undefined || isAlive(controller.pid)) {
+      if (now() >= killedDeadline) {
+        Errors.throwHostEnvironment(
+          'Controller absence remains unproved; owned records and resource fences are retained.',
+        )
+      }
+      await sleep(50)
+    }
+    try {
+      // Recheck durable custody after an early TERM exit as well as after forced termination.
+      await assertCustody(false)
+    } catch (error) {
+      const current = await readDevLoopReceipt(session)
+      if (
+        current.generation === original.generation && current.controller?.pid === controller.pid
+        && ProcessTree.sameProcess(current.controller, controller)
+      ) {
+        await writeDevLoopReceipt({
+          ...current,
+          state: 'interrupted',
+          provenance: 'uncertain',
+          ownershipRefusal: current.ownershipRefusal ?? {
+            version: 1,
+            generation: current.generation,
+            reason: 'Controller recovery lost recorded cleanup custody after its exit.',
+          },
+          cleanupOutcome: 'retained',
+          message:
+            'The controller ended, but changed cleanup custody requires inspection; recorded fences are retained.',
+        })
+      }
+      throw error
+    }
+    const saved = await readDevLoopReceipt(session)
+    if (
+      saved.generation !== original.generation || saved.controller?.pid !== controller.pid
+      || !ProcessTree.sameProcess(saved.controller, controller)
+    ) {
+      Errors.throwHostEnvironment(
+        'The dev-loop generation changed during controller recovery; its records are preserved.',
+      )
+    }
+    await writeDevLoopReceipt({ ...saved, state: 'interrupted', cleanupOutcome: 'pending' })
+    HCI.writeStderr('Recovering recorded services and Simulator…\n')
+    return await controlSession(session, 'stop', { ...operations, status: readDevLoopReceipt }, true)
+  })
 }
 
 async function controlSession(

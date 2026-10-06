@@ -46,10 +46,18 @@ Describe('tao firebase generate', () => {
       const printed = await withCapturedOutput(() =>
         runHostedProviderGenerate('firebase', appPath, { appName: 'Hosted', output })
       )
+      Expect(printed.stdout).toContain('https://firebase.google.com/docs/cli#install_the_firebase_cli')
+      Expect(printed.stdout).toContain('firebase login')
+      Expect(printed.stdout).toContain('allowed to deploy')
+      Expect(printed.stdout).toContain('https://console.firebase.google.com/project/firebase-project/firestore')
+      Expect(printed.stdout).toContain('no separate backend server')
+      Expect(printed.stdout).toContain('Select the (default) database')
       Expect(printed.stdout).toContain('combine them with any existing project-wide Firestore rules')
       Expect(printed.stdout).toContain(
-        "firebase deploy --only firestore:rules,firestore:indexes --project 'firebase-project'",
+        "firebase deploy --only firestore:rules --project 'firebase-project'",
       )
+      Expect(printed.stdout).toContain('deploy rules only to preserve existing indexes')
+      Expect(printed.stdout).not.toContain('firestore:rules,firestore:indexes')
       Expect(await FS.listDir(output)).toEqual(['firebase.json', 'firestore.indexes.json', 'firestore.rules'])
       const rules = await FS.readText(FS.resolvePath('firestore.rules', output))
       Expect(rules).toContain('match /users/{userId}/stores/{storageKey}')

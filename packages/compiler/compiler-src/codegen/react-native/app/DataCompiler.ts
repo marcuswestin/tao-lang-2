@@ -5,6 +5,7 @@ import { authGrants } from '../../../auth-policy'
 import { storedDataEntity, type StoredDataField } from '../../../stored-data-schema'
 import { type Compiled, gen, LocalDataBindings, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { hasAssociatedWitnessPublication } from './AssociatedMethodsCompiler'
 import { activeDataStorePlan } from './data-store-context'
 import { compileDeclarationIdentity } from './declaration-identity'
 
@@ -77,8 +78,8 @@ export const DataCompiler = {
   },
 
   /** EntityDataDeclaration contributes to its file catalog and emits no standalone schema. */
-  EntityDataDeclaration(): Compiled {
-    return gen.noop()
+  EntityDataDeclaration(entity: AST.EntityDataDeclaration): Compiled {
+    return hasAssociatedWitnessPublication(entity) ? Compile.AssociatedMethodsDeclaration(entity) : gen.noop()
   },
 
   EntityDataDefinition(entity: AST.EntityDataDeclaration, access: readonly AST.AccessDeclaration[] = []): Compiled {
@@ -152,6 +153,7 @@ export const DataCompiler = {
           ],
           ${clauses.find(AST.isOrderClause) ? Compile.OrderClause(clauses.find(AST.isOrderClause)!) : ''}
           ${compileLimitClause(clauses.find(AST.isLimitClause))}
+          ${compilePaginationClause(clauses.find(AST.isPaginationClause))}
           ${compileSearchClause(clauses.find(AST.isSearchClause))}
         },
         TR.Value,
@@ -224,7 +226,8 @@ export const DataCompiler = {
   },
 
   DataWriteField(pair: ASTUtils.DataWriteBindingPair): Compiled {
-    return gen`[${gen.jsLiteral(pair.field.name)}]: ${Compile.Expression(pair.write.value)},`
+    const value = Compile.Expression(pair.write.value)
+    return gen`[${gen.jsLiteral(pair.field.name)}]: ${pair.inverse ? gen`TR.Unary('not', ${value})` : value},`
   },
 } as const
 
@@ -267,6 +270,10 @@ function compileLimitClause(limit: AST.LimitClause | undefined): Compiled {
   return limit ? gen`limit: ${limit.count.value},` : gen.noop()
 }
 
+function compilePaginationClause(pagination: AST.PaginationClause | undefined): Compiled {
+  return pagination ? gen`pageSize: ${pagination.pageSize.value},` : gen.noop()
+}
+
 function compileSearchClause(search: AST.SearchClause | undefined): Compiled {
   return search ? gen`search: () => ${Compile.Expression(search.term)},` : gen.noop()
 }
@@ -275,7 +282,9 @@ function compileRelationSourceFilter(
   source: AST.MemberAccessExpression,
   entity: ASTUtils.DataEntityDefinition,
 ): Compiled {
-  const ownerType = Type.atMemberPath(Type.ofValueDeclaration(source.target.ref), source.members.slice(0, -1))
+  const target = source.target.ref
+  Assert(AST.isValueDeclaration(target), 'validated relation query source names a value declaration')
+  const ownerType = Type.atMemberPath(Type.ofValueDeclaration(target), source.members.slice(0, -1))
   if (ownerType.kind !== 'entity') {
     return Assert.never(ownerType as never, 'validated relation query source has an entity owner')
   }
@@ -286,8 +295,8 @@ function compileRelationSourceFilter(
   })
   Assert.defined(inverseField, 'validated relation query source resolves its inverse stored field')
   const owner = source.members.length === 1
-    ? Compile.ValueDeclarationReference(resolveRef(source.target))
-    : gen`TR.Member(${Compile.ValueDeclarationReference(resolveRef(source.target))}, [${
+    ? Compile.ValueDeclarationReference(target)
+    : gen`TR.Member(${Compile.ValueDeclarationReference(target)}, [${
       gen.join(
         source.members.slice(0, -1),
         member => gen`${gen.jsLiteral(member)}`,

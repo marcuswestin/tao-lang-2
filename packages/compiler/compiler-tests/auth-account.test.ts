@@ -62,7 +62,9 @@ Describe('compiler: app-scoped auth and account data', () => {
     Expect(code).toContain("TR.Auth.Account(_TaoAuthScope!, _Scope._TaoDataCatalog, 'Account')")
     Expect(code).toContain('_Scope.Leave = TR.Function((_TaoAuthArgument: TR.Evaluable) =>')
     Expect(code).toContain("declared: ['cancelled', 'rejected']")
-    Expect(code).toContain('TR.Call(_Scope.SignOut, TR.Value(_TaoAuthScope)).evaluate()')
+    Expect(code).toContain(
+      'TR.Call<TR.Action<[]>["jsValue"]>(_Scope.SignOut, TR.Value(_TaoAuthScope)).evaluate()',
+    )
     Expect(code).toContain('TR.Data.Query( TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog)')
   })
 
@@ -83,8 +85,16 @@ Describe('compiler: app-scoped auth and account data', () => {
     `)
     const code = result.code.replace(/\s+/g, ' ')
     Expect(code).toContain('_Scope.Leave = TR.Function((_TaoAuthArgument: TR.Evaluable) =>')
-    Expect(code).toContain('TR.Call(_Scope.Leave, TR.Value(_TaoAuthScope)).evaluate()')
-    Expect(code).toContain('TR.Call(_Scope.SignOut, TR.Value(_TaoAuthScope)).evaluate()')
+    Expect(code).toContain(
+      'TR.Call<TR.Action<[]>["jsValue"]>(_Scope.Leave, TR.Value(_TaoAuthScope)).evaluate()',
+    )
+    Expect(code).toContain(
+      'TR.Call<TR.Action<[]>["jsValue"]>(_Scope.SignOut, TR.Value(_TaoAuthScope)).evaluate()',
+    )
+    Expect(code).toContain('name: "LeaveLocally", owner: _TaoActionOwner,')
+    Expect(code).toContain(
+      'TR.BindEventAction(_Scope.LeaveLocally.evaluate(), _TaoActionOwner)',
+    )
     Expect(code).not.toContain('_Scope.LeaveLocally = TR.Function')
   })
 

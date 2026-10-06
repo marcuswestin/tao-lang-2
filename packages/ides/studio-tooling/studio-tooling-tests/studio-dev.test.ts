@@ -719,6 +719,40 @@ Describe('Studio smoke resource isolation', () => {
     Expect(isStudioClientSource('/repo/packages/ides/studio/studio-src/code-editor/CodeEditor.tsx')).toBe(true)
   })
 
+  Test('excludes dependency trees and generated state while watching authored client sources', () => {
+    const { ignoredStudioClientPath } = StudioClientDevReload.testing
+    Expect(ignoredStudioClientPath('/repo/Apps/Tao Studio/node_modules')).toBe(true)
+    Expect(ignoredStudioClientPath('/repo/Apps/Tao Studio/node_modules/@tao/runtime/Runtime.ts')).toBe(true)
+    Expect(ignoredStudioClientPath('/repo/Apps/Tao Studio/.tao/cache/Generated.tsx')).toBe(true)
+    Expect(ignoredStudioClientPath('/repo/Apps/Tao Studio/.git')).toBe(true)
+    Expect(ignoredStudioClientPath('/repo/Apps/Tao Studio/@ui/Scenario.tao')).toBe(false)
+    Expect(ignoredStudioClientPath('/repo/packages/ides/studio/studio-src/client/StudioApp.ts')).toBe(false)
+    Expect(ignoredStudioClientPath('/repo/.artifacts/landing/Apps/Tao Studio/@ui/Scenario.tao')).toBe(false)
+  })
+
+  Test('reaches real client watcher readiness and closes without starting a client rebuild', async () => {
+    let rebuilds = 0
+    const reload = await startStudioClientDevReload({
+      async loadAssets() {
+        rebuilds += 1
+        return {
+          async bundle() {
+            return 'diagnostic'
+          },
+          html() {
+            return 'diagnostic'
+          },
+        }
+      },
+    })
+    try {
+      Expect(reload.revision()).toBe(0)
+      Expect(rebuilds).toBe(0)
+    } finally {
+      await reload.close()
+    }
+  })
+
   Test('publishes only complete rebuilt Studio browser clients', async () => {
     let changed: ((change: { serverSourcesChanged: boolean }) => Promise<void>) | undefined
     let closed = 0
@@ -869,6 +903,36 @@ Describe('Studio smoke resource isolation', () => {
 
     Expect(environment['PATH']).toBe('/repo/.devenv/profile/bin:/usr/bin:/bin')
     Expect(environment['WATCHMAN_SOCK']).toBe('/repo/.watchman.sock')
+    Expect(environment['TAO_STUDIO_FAST_HMR']).toBe('true')
+    Expect(environment['TAO_STUDIO_FAST_FILE_MAP']).toBe('true')
+
+    const diagnosticOptOut = await StudioDev.testing.studioWatchmanEnvironment({
+      environment: {
+        PATH: '/usr/bin',
+        TAO_STUDIO_FAST_HMR: 'false',
+        TAO_STUDIO_FAST_FILE_MAP: 'false',
+      },
+      isFile: async () => true,
+      repositoryRoot: '/repo',
+      run: async (command, spec) => {
+        const args = [...(spec.args ?? [])]
+        return {
+          args,
+          command,
+          exitCode: 0,
+          signal: null,
+          stderr: '',
+          stdout: args[0] === 'list-capabilities'
+            ? '{"version":"2026.01.19.00","capabilities":["field-content.sha1hex","relative_root","suffix-set","wildmatch"]}'
+            : args.includes('get-sockname')
+            ? '{"sockname":"/repo/.watchman.sock"}'
+            : '{"watch":"/repo"}',
+        }
+      },
+      watchRoot: '/repo',
+    })
+    Expect(diagnosticOptOut['TAO_STUDIO_FAST_HMR']).toBe('false')
+    Expect(diagnosticOptOut['TAO_STUDIO_FAST_FILE_MAP']).toBe('false')
     Expect(calls[0]?.args).toEqual(['list-capabilities', '--output-encoding=json', '--no-pretty', '--no-spawn'])
     Expect(calls[1]?.args).toEqual(['--no-pretty', 'get-sockname', '--no-spawn'])
     Expect(calls[2]?.args).toEqual(['watch-project', '/repo/.artifacts/dev/studio-preview/runtime-test'])
@@ -1493,6 +1557,7 @@ Describe('Studio smoke resource isolation', () => {
 
       // The dev data fact arrives once the session has resolved its app, and keeps the gateway fact.
       await runtime.configure({
+        displayName: 'Notes — sample-project',
         devData: {
           app: 'Notes-0123abcd',
           capability: 'test_capability_0123456789abcdef0123456789abcdef',
@@ -1501,6 +1566,7 @@ Describe('Studio smoke resource isolation', () => {
         },
       })
       const configured = await FS.readJson<{ expo: Record<string, unknown> }>(FS.resolvePath('app.json', runtime.root))
+      Expect(configured.expo['name']).toBe('Notes — sample-project')
       Expect(configured.expo['extra']).toEqual({
         taoDevData: {
           app: 'Notes-0123abcd',

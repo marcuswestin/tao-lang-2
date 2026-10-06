@@ -47,6 +47,265 @@ function deadRecovery(): NonNullable<RecoveryOperations> {
   }
 }
 
+for (
+  const evidence of [
+    'owned',
+    'retained-owner-without-stamp',
+    'changed-owner-stamp',
+    'changed-resource-generation',
+    'reused-pid',
+    'wrong-command',
+    'changed-holder',
+    'changed-generation',
+    'active-proof',
+    'retained-proof',
+    'changed-control-controller',
+    'changed-control-generation',
+    'changed-control-token',
+    'changed-control-origin',
+    'term-exit-control-token',
+    'term-exit-resource-owner',
+    'fresh-stop',
+    'not-stopping',
+  ] as const
+) {
+  Test(`controller recovery respects ${evidence} custody and preserves other sessions`, async () => {
+    const owned = evidence === 'owned' || evidence === 'retained-owner-without-stamp'
+    const earlyExit = evidence === 'term-exit-control-token' || evidence === 'term-exit-resource-owner'
+    const record = disposedFailure()
+    record.controller = { command: 'bun', pid: 98_765, startedAt: 'recorded-controller-start' }
+    record.controllerDisposed = undefined
+    record.state = 'stopping'
+    record.cleanupOutcome = 'pending'
+    record.processGroups = [{ command: 'owned worker group', pid: 98_766, startedAt: 'worker-start' }]
+    const child = { command: 'owned child', pid: 98_767, startedAt: 'child-start' }
+    if (earlyExit) {
+      record.children = [child]
+    }
+    const other = disposedFailure()
+    other.state = 'ready'
+    other.controller = { command: 'other controller', pid: 12_345, startedAt: 'other-controller-start' }
+    await writeDevLoopReceipt(other)
+    const otherPath = FS.resolvePath('receipt.json', devLoopDirectory(other.session))
+    const otherBefore = await FS.readText(otherPath)
+    const owner = {
+      name: 'ios-simulator:OWNED-RECOVERY-FIXTURE',
+      id: 'owned-generation',
+      pid: record.controller.pid,
+      processStartedAt: evidence === 'retained-owner-without-stamp' ? undefined : record.controller.startedAt,
+      repositoryRoot: record.checkout,
+      command: 'fixture',
+      startedAt: 'acquired',
+    }
+    record.devices = [{
+      platform: 'ios',
+      id: 'OWNED-RECOVERY-FIXTURE',
+      owned: true,
+      state: 'booted',
+      holder: record.controller,
+      resources: [owner],
+      generation: owner.id,
+    }]
+    if (evidence === 'active-proof' || evidence === 'retained-proof') {
+      record.mobileDriverCleanup = evidence === 'active-proof' ? 'opening' : 'retained'
+    }
+    if (evidence === 'not-stopping') {
+      record.state = 'ready'
+    }
+    await writeDevLoopReceipt(record)
+    await writeDevLoopConnection({
+      session: record.session,
+      generation: record.generation,
+      controller: record.controller,
+      origin: 'http://127.0.0.1:1',
+      token: 'private-control-test-secret',
+    })
+    const signals: { pids: number[]; signal: string }[] = []
+    let live = true
+    let childLive = earlyExit
+    let clock = Date.now() + (evidence === 'fresh-stop' ? 0 : 60_000)
+    const recovery = deadRecovery()
+    recovery.now = () => clock
+    recovery.sleep = async milliseconds => {
+      clock += milliseconds
+      if (
+        evidence === 'changed-control-token' || evidence === 'changed-control-origin'
+        || evidence === 'term-exit-control-token'
+      ) {
+        await writeDevLoopConnection({
+          session: record.session,
+          generation: record.generation,
+          controller: record.controller!,
+          origin: evidence === 'changed-control-origin' ? 'http://127.0.0.1:2' : 'http://127.0.0.1:1',
+          token: evidence === 'changed-control-token' || evidence === 'term-exit-control-token'
+            ? 'replacement-control-test-secret'
+            : 'private-control-test-secret',
+        })
+      }
+    }
+    let earlyExitDriftPublished = false
+    recovery.identities = pids => {
+      if (!live && evidence === 'term-exit-control-token' && !earlyExitDriftPublished) {
+        earlyExitDriftPublished = true
+        // The recorded token drifts when the owned controller exits before the TERM grace ends.
+        FS.writeTextSync(
+          FS.resolvePath('active-control/credentials.json', devLoopDirectory(record.session)),
+          JSON.stringify({
+            session: record.session,
+            generation: record.generation,
+            controller: record.controller!,
+            origin: 'http://127.0.0.1:1',
+            token: 'replacement-control-test-secret',
+          }),
+        )
+      }
+      return new Map(pids.flatMap(pid =>
+        pid === child.pid && childLive
+          ? [[pid, child] as const]
+          : pid === record.controller!.pid && live
+          ? [
+            [
+              pid,
+              evidence === 'reused-pid' ? { ...record.controller!, startedAt: 'different-start' } : record.controller!,
+            ] as const,
+          ]
+          : []
+      ))
+    }
+    recovery.processIsAlive = pid => pid === record.controller!.pid && live || pid === child.pid && childLive
+    recovery.signal = (processes, signal) => {
+      if (processes.length > 0) {
+        signals.push({ pids: processes.map(process => process.pid), signal })
+      }
+      if (processes.some(process => process.pid === child.pid)) {
+        childLive = false
+      }
+      if (
+        signal === 'SIGKILL'
+        || signal === 'SIGTERM' && (evidence === 'term-exit-control-token' || evidence === 'term-exit-resource-owner')
+      ) {
+        live = false
+      }
+    }
+    recovery.readOwner = async () => owner
+    recovery.recoverResources = async options => {
+      Expect(await options.shutdown(owner)).toBe(true)
+    }
+    recovery.run = async (command, spec) => ({
+      command,
+      args: [...(spec?.args ?? [])],
+      exitCode: 0,
+      signal: null,
+      stderr: '',
+      stdout: spec?.args?.[1] === 'list'
+        ? JSON.stringify({ devices: { fixture: [{ udid: 'OWNED-RECOVERY-FIXTURE', state: 'Shutdown' }] } })
+        : '',
+    })
+    try {
+      const result = await withCapturedOutput(() =>
+        runDevLoopCommand([
+          'stop',
+          '--session',
+          record.session,
+          '--recover-controller',
+          '--json',
+        ], {
+          status: async () =>
+            Errors.throwUnexpected('Opt-in recovery must not call a blocked controller status route.'),
+          launchController: async () => Errors.throwUnexpected('Stop recovery must not launch a controller.'),
+          recovery,
+          controllerCommandLine: () =>
+            evidence === 'wrong-command'
+              ? 'bun /other/worker.ts'
+              : `bun ${Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/dev-loop/DevLoopWorker.ts')}`,
+          readControllerResource: async () =>
+            evidence === 'changed-holder' || evidence === 'term-exit-resource-owner' && !live
+              ? { ...owner, pid: 12_345 }
+              : evidence === 'changed-owner-stamp'
+              ? { ...owner, processStartedAt: 'successor-start' }
+              : evidence === 'changed-resource-generation'
+              ? { ...owner, id: 'successor-resource-generation' }
+              : owner,
+          beforeRecovery: async () => {
+            if (evidence === 'changed-control-controller' || evidence === 'changed-control-generation') {
+              await writeDevLoopConnection({
+                session: record.session,
+                generation: evidence === 'changed-control-generation' ? 'other-generation' : record.generation,
+                controller: evidence === 'changed-control-controller'
+                  ? { ...record.controller!, startedAt: 'other-start' }
+                  : record.controller!,
+                origin: 'http://127.0.0.1:1',
+                token: 'private-control-test-secret',
+              })
+            }
+            if (evidence === 'changed-generation') {
+              await writeDevLoopReceipt({ ...record, generation: 'successor-generation' })
+            }
+          },
+        })
+      )
+      if (owned) {
+        Expect(JSON.parse(result.stdout).error).toBeUndefined()
+      }
+      Expect(result.stdout.trim().split('\n').length).toBe(1)
+      Expect(result.stdout + result.stderr).not.toContain('private-control-test-secret')
+      Expect(result.stdout + result.stderr).not.toContain('replacement-control-test-secret')
+      Expect(result.stderr).toContain('Shutting down…')
+      Expect(result.result).toBe(owned ? 0 : 1)
+      Expect(await FS.readText(otherPath)).toBe(otherBefore)
+      if (owned) {
+        Expect(result.stderr.trim().split('\n')).toEqual([
+          'Shutting down…',
+          'Rechecking recorded controller ownership…',
+          'Stopping the owned controller…',
+          'Recovering recorded services and Simulator…',
+        ])
+        Expect(signals).toEqual([
+          { pids: [98_765], signal: 'SIGTERM' },
+          { pids: [98_765], signal: 'SIGKILL' },
+        ])
+        const saved = await readDevLoopReceipt(record.session)
+        Expect(saved.state).toBe('stopped')
+        Expect(saved.cleanupOutcome).toBe('proved')
+        Expect(saved.devices![0]!.state).toBe('released')
+        Expect(saved.failures).toEqual(['Intentional compile failure'])
+      } else {
+        Expect(signals).toEqual(
+          evidence === 'changed-control-token' || evidence === 'changed-control-origin'
+            || evidence === 'term-exit-control-token' || evidence === 'term-exit-resource-owner'
+            ? [{ pids: [98_765], signal: 'SIGTERM' }]
+            : [],
+        )
+        Expect(live).toBe(!earlyExit)
+        if (earlyExit) {
+          const saved = await readDevLoopReceipt(record.session)
+          Expect(saved.state).toBe('interrupted')
+          Expect(saved.cleanupOutcome).toBe('retained')
+          Expect(saved.provenance).toBe('uncertain')
+          Expect(saved.ownershipRefusal?.reason).toContain('lost recorded cleanup custody')
+          Expect(saved.devices![0]!.state).toBe('booted')
+          const retry = await withCapturedOutput(() =>
+            runDevLoopCommand(['stop', '--session', record.session, '--json'], {
+              status: readDevLoopReceipt,
+              launchController: async () => Errors.throwUnexpected('Refused cleanup must never launch a controller.'),
+              recovery,
+            })
+          )
+          Expect(retry.result).toBe(1)
+          Expect(childLive).toBe(true)
+          Expect(signals).toEqual([{ pids: [98_765], signal: 'SIGTERM' }])
+          const retained = await readDevLoopReceipt(record.session)
+          Expect(retained.ownershipRefusal).toEqual(saved.ownershipRefusal)
+          Expect(retained.devices![0]!.state).toBe('booted')
+        }
+      }
+    } finally {
+      await FS.remove(devLoopDirectory(record.session))
+      await FS.remove(devLoopDirectory(other.session))
+    }
+  })
+}
+
 async function stopDisposed(
   record: DevLoopReceipt,
   recovery: RecoveryOperations,

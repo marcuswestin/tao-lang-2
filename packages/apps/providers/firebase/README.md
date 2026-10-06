@@ -6,9 +6,12 @@ RxDB records local rows and tombstones, with SQLite on native and IndexedDB/Dexi
 Live Firestore replication forwards local changes and observes incoming changes.
 
 Public connection settings belong to the owning project's ignored `.tao/local/connections.json`.
-`tao connect firebase` records those settings locally. It does not configure Authentication,
-create Firestore, or deploy rules for ordinary Tao projects. The Developer completes account
-sign-ins locally. Never put passwords, server keys, or service account files in this config.
+`tao connect firebase` uses API setup by default: after local Google sign-in and project
+selection, it inspects the existing deployment, reviews the plan, configures Email/Password Auth
+and the default Firestore database when needed, and deploys and reads back generated rules.
+It preserves existing indexes and stops when existing rules cannot be safely combined.
+`--manual` retains the Console and public-config flow. Never put passwords, server keys,
+or service account files in this config.
 
 The first supported flow is a private, relation-free store with scalar fields and a locally
 bootstrapped Account whose ID is the Firebase UID. Authenticated Tao stores already generate
@@ -16,6 +19,12 @@ cryptographic UUID row IDs. Local database names include the Firebase project, s
 remote rows live under `users/{uid}/stores/{store}/{entity}/{id}`. Sign-out closes replication
 and the account connection; persisted account rows remain on the device for later offline use.
 The replica is not encrypted. Local cache custody is distinct from remote authorization.
+
+Firebase opts into the runtime's private-account access policy for each authenticated datasource.
+Within the backend-authorized UID namespace, the runtime permits private rows without authored
+access grants and limits Account access to the signed-in Account ID. Shared authentication does
+not confer this policy on other datasources. Providers without the policy retain grant-based
+default denial; authored grants retain their own checks.
 
 `tao firebase generate` derives Firestore rules from the compiled store. Writes require the
 signed-in UID's path and the declared row shape; RxDB deletion uses tombstones, and hard deletes

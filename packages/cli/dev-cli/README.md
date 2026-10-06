@@ -386,8 +386,11 @@ Agents default to hosted portable verification. When landing is authorized and r
 acceptance is complete, they start new final CI with `./agent unsandboxed open-pr --auto-merge`,
 follow it through completion, and confirm/archive with `merge-pr`. An already fully green PR goes
 directly to `merge-pr`. Plain `open-pr` leaves auto-merge off before landing readiness; the flag
-remains explicit. Focused local checks, diagnosis, and host acceptance remain useful. When offline
-or GitHub is unreachable, agents verify locally and report publication/landing as pending.
+remains explicit. Before pushing, `open-pr` waits (polling every 30 s, for at most 90 minutes) while
+two other Verify runs are in flight, since the runner pool holds two, or while the one in flight is a
+pull request that changed any of the same files, since the two would merge untested against each
+other. `--jump-queue` skips that wait and prints what it skipped. Focused local checks, diagnosis,
+and host acceptance remain useful. When offline or GitHub is unreachable, agents verify locally and report publication/landing as pending.
 
 The local landing route uses `./agent unsandboxed land` for host access. The wrapper forwards its arguments
 to the ordinary landing handler; the generated harness rules allow only the named operations in

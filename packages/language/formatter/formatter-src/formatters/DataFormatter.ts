@@ -9,7 +9,10 @@ function isStorageTail(entry: AST.Node): boolean {
 }
 
 /** Entity policies trail storage facts as their own semantic group. */
-function entryGroup(entry: AST.Node): 'field' | 'policy' | 'storage' {
+function entryGroup(entry: AST.Node): 'field' | 'policy' | 'storage' | 'callable' {
+  if (AST.isAssociatedFunctionDeclaration(entry)) {
+    return 'callable'
+  }
   return AST.isEntityCommandPolicy(entry) ? 'policy' : isStorageTail(entry) ? 'storage' : 'field'
 }
 
@@ -127,6 +130,10 @@ export const DataFormatter = {
 
   LimitClause(f) {
     f.oneSpaceAfter('limit')
+  },
+
+  PaginationClause(f) {
+    f.oneSpaceAfter('paginate')
   },
 
   CreateStatement(f) {

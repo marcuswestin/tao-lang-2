@@ -58,7 +58,9 @@ Test('private helper capture cutoff lets its parent exit while the exact retaine
     `
     import { FS, ProcessTree, Platform } from ${JSON.stringify(shared)};
     const identity = ProcessTree.identities([Platform.runtimeProcess.pid]).get(Platform.runtimeProcess.pid);
-    await FS.writeJson(${JSON.stringify(identityPath)}, identity);
+    // Publish only completed JSON: both parent and test use existence as readiness.
+    await FS.writeJson(${JSON.stringify(`${identityPath}.pending`)}, identity);
+    await FS.move(${JSON.stringify(`${identityPath}.pending`)}, ${JSON.stringify(identityPath)});
     setInterval(() => {}, 1000);
   `,
   )
