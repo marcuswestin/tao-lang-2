@@ -9,4 +9,11 @@
 - **Proposed change:** Move the settle wait into `StudioCdp.click`, so every browser gate resolves a point only once the element's box has stopped moving, and keep the diagnostic the agent-browser gate now prints on this timeout (switch state, status text, console errors) as the shape for other silent click misses. A `--retry-failed` on the complement command that reruns only the failed gates alone, with the same receipt and status, would also keep a one-gate flake from cancelling a hosted run.
 - **Dependencies:** None known. DEVENV-WATCHOS-SWIFT-PROBE-FAILS-UNDER-BROAD-LANES records a sibling probe-under-load failure.
 - **Acceptance:** `StudioCdp.click` waits for a settled box, or ten consecutive complement lanes pass the agent-browser gate after the gate-local fix.
+- **Related editor evidence (2026-10-06):** PR #29 host complements at 09:05 and 09:11
+  failed waiting for Outline glyphs while the preset stayed `all`, `aria-pressed` stayed false and
+  console errors were empty. The unchanged isolated editor journey passed all three tests and
+  102 assertions; an intervening parallel complement also passed. A gate-local readiness check
+  now scrolls the Outline button into view and checks its stable box and center hit target before
+  dispatching the single physical click. Keep the existing fold assertions and retain failed-run
+  evidence; this does not establish a shared click-helper fix or ten consecutive green complements.
 - **Source:** Second and third landings of `feat/landing-route-tooling` (#25), 2026-10-06.

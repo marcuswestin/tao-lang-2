@@ -365,7 +365,23 @@ Test('simulated user exercises the browser editor', async () => {
     // file: an edit beside a folded region is cancelled in favour of showing it, and a caret that
     // lands on its edge opens it rather than sitting in text the person cannot see.
     const revealedHead = 'app Smoke { id "smoke" version "1.0.0" name "Smoke" view MainView }'
+    // Editor publication can still move the toolbar after the source is saved. Dispatch one real
+    // click only after its target is stationary and unobstructed, as for other animated controls.
+    await browser.waitFor(`(() => {
+      const button = document.querySelector('[data-testid="studio-lens-preset-outline"]')
+      if (!(button instanceof HTMLButtonElement) || button.disabled) return false
+      button.scrollIntoView({ block: 'center', inline: 'center' })
+      const rect = button.getBoundingClientRect()
+      const box = [rect.left, rect.top, rect.width, rect.height].join(',')
+      const settled = window.__taoSmokeOutlineBox === box
+      window.__taoSmokeOutlineBox = box
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      return settled && rect.width > 0 && rect.height > 0 && button.contains(hit)
+    })()`)
     await browser.click('[data-testid="studio-lens-preset-outline"]')
+    await browser.waitFor(
+      `document.querySelector('[data-testid="studio-lens-preset-outline"]')?.getAttribute('aria-pressed') === 'true'`,
+    )
     await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
     const outlineFolds = await foldedRegions(browser)
     Expect(outlineFolds).toBeGreaterThan(1)
