@@ -22,3 +22,23 @@ outdated fixture expectations were corrected separately; none changes the bind
 policy, server coverage or timeout limits. The managed lane is not green. Compare
 against the task's named host verification receipt before attributing remaining
 failures to source code; no new host operation or permission expansion is included.
+
+## Home-cache denial in a related managed lane — October 6, 2026
+
+`feat/ci-partition-balance` at `ea315f97f`, integrated with main `5f383efc70`, stopped
+its local `verify-changed` at `cli/tao-cli#2`: three Firebase creation cases could not
+publish the lifecycle lock under `~/.tao/cache/test-runs` (`EPERM`, syscall `open`).
+The named node log is
+`.artifacts/logs/verify-changed/2026-10-06T06-00-07-766Z-97505-2e40d0a9/cli_tao-cli_2.log`.
+This is a home-cache write refusal, not evidence of port contention or failed
+Firebase behavior. The unchanged focused Firebase file passed all five cases in
+38.5 seconds with the supported absolute `TAO_HOME` pointing inside the checkout
+(`.artifacts/iteration-tao-home`); evidence is
+`.artifacts/logs/dev-test/2026-10-06T06-07-51-940Z-14991-d6ac557a/summary.json`.
+The same broad run also recorded direct port-zero `EADDRINUSE` failures in dev-cli.
+Four child-exit assertions and one publication waiter failed downstream of
+controller startup; bind denial is a source-supported explanation, but their
+uncaptured child stderr does not independently establish it. The dev-cli log's
+sole `EPERM` string is a passing test name, not another write-denial error.
+The incomplete local lane does not replace hosted portable verification. No
+permission expansion, host bypass or skipped assertion is part of this observation.
