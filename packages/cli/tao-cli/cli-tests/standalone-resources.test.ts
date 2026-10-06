@@ -1,8 +1,87 @@
 import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { StandaloneBuild } from '../cli-src/standalone-build'
 import { StandaloneResources } from '../cli-src/standalone-resources'
 
 Describe('standalone resources', () => {
+  Test('stages only registered Metro patches and pins their exact registered package versions', async () => {
+    const root = await mkTestDir('tao-standalone-host-patches-')
+    try {
+      const hostRoot = FS.resolvePath('packages/apps/expo-host', root)
+      const stagedHost = FS.resolvePath('staged-host', root)
+      await FS.mkdir(stagedHost)
+      const portableBun = FS.resolvePath('portable-bun', root)
+      await FS.writeText(portableBun, '#!/bin/sh\nexit 0\n')
+      await FS.chmod(portableBun, 0o755)
+      await FS.writeJson(FS.resolvePath('package.json', root), {
+        patchedDependencies: {
+          'metro@0.84.5': 'patches/metro@0.84.5.patch',
+          '@expo/metro-file-map@57.0.3': 'patches/@expo__metro-file-map@57.0.3.patch',
+          'unrelated-tool@3.2.1': 'patches/unrelated-tool@3.2.1.patch',
+        },
+      })
+      await FS.writeJson(FS.resolvePath('package.json', hostRoot), {
+        name: 'tao-expo-host',
+        version: '1.0.0',
+        main: 'index.ts',
+        dependencies: {
+          metro: '^0.84.6',
+          '@expo/metro-file-map': '^57.0.2',
+          expo: 'workspace:*',
+        },
+      })
+      await FS.writeJson(FS.resolvePath('tsconfig.json', stagedHost), {
+        extends: '../../../../packages/tsconfig.base.json',
+      })
+      await FS.writeJson(FS.resolvePath('packages/tsconfig.base.json', root), {
+        compilerOptions: { strict: true, paths: { '@repo/*': ['../*'] } },
+      })
+      for (
+        const [name, version] of [
+          ['metro', '0.84.6'],
+          ['@expo/metro-file-map', '57.0.3'],
+          ['typescript', '5.9.3'],
+          ['@types/react', '19.0.0'],
+        ]
+      ) {
+        await FS.writeJson(FS.resolvePath(`node_modules/${name}/package.json`, hostRoot), { name, version })
+      }
+      const patchContents = new Map([
+        ['patches/metro@0.84.5.patch', 'metro patch bytes\n'],
+        ['patches/@expo__metro-file-map@57.0.3.patch', 'Expo file map patch bytes\n'],
+        ['patches/unrelated-tool@3.2.1.patch', 'unrelated patch bytes\n'],
+      ])
+      for (const [path, contents] of patchContents) {
+        await FS.writeText(FS.resolvePath(path, root), contents)
+      }
+
+      await StandaloneBuild.makeHostInstallable(root, stagedHost, portableBun)
+
+      const stagedManifest = await FS.readJson<{
+        dependencies: Record<string, string>
+        patchedDependencies: Record<string, string>
+      }>(FS.resolvePath('package.json', stagedHost))
+      Expect(stagedManifest.patchedDependencies).toEqual({
+        'metro@0.84.5': 'patches/metro@0.84.5.patch',
+        '@expo/metro-file-map@57.0.3': 'patches/@expo__metro-file-map@57.0.3.patch',
+      })
+      Expect(stagedManifest.dependencies).toMatchObject({ metro: '0.84.5', '@expo/metro-file-map': '57.0.3' })
+      for (const [path, contents] of patchContents) {
+        const stagedPath = FS.resolvePath(path, stagedHost)
+        if (path.includes('unrelated-tool')) {
+          Expect(await FS.exists(stagedPath)).toBe(false)
+        } else {
+          Expect(await FS.readText(stagedPath)).toBe(contents)
+        }
+      }
+      Expect(await FS.readJson(FS.resolvePath('tsconfig.json', stagedHost))).toMatchObject({
+        compilerOptions: { strict: true },
+      })
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('ships the licence texts that cover the runtime it carries into apps', async () => {
     for (const name of StandaloneResources.LICENSE_FILES) {
       Expect(await FS.isFile(FS.resolvePath(`../../../../${name}`, import.meta.dir))).toBe(true)

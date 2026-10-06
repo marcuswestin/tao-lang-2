@@ -214,7 +214,8 @@ it is focused source evidence, never app or merge acceptance. Other test and ver
 keep their existing reference-app prerequisite.
 
 Broad checks, verification, bare test/test-changed, and unfiltered test-all stop admitting new work
-after a definite failure. Running work drains and cleans up before the lane releases its leases.
+after a definite failure. Running work is cancelled, with three seconds for cleanup before force-stop.
+The lane releases its leases only after its owned processes have stopped.
 Explicit file/directory/name targets and test-retry collect failures in that scope; a repository-root
 target remains broad. Individual checkers retain their diagnostics. Filtered or aborted runs are
 never complete coverage: diagnose the failed scope, fix it, then repeat broad verification.

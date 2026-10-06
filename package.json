@@ -34,5 +34,9 @@
     "rulesync": "16.18.0",
     "typescript": "5.9.3",
     "typescript-native": "npm:typescript@7.0.2"
+  },
+  "patchedDependencies": {
+    "metro@0.84.5": "patches/metro@0.84.5.patch",
+    "@expo/metro-file-map@57.0.3": "patches/@expo__metro-file-map@57.0.3.patch"
   }
 }
