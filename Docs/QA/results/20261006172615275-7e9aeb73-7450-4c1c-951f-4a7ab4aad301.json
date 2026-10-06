@@ -1,0 +1,50 @@
+{
+  "id": "20261006172615275-7e9aeb73-7450-4c1c-951f-4a7ab4aad301",
+  "runId": "20261006172029242-fcf23ba4-0d52-4ac6-83e3-33f655ba4f25",
+  "createdAt": "2026-10-06T17:26:15.273Z",
+  "recordedAt": "2026-10-06T17:26:15.273Z",
+  "commit": "eb1c7f95a8994c29679dc0951b770d6b523c5f29",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/Tutorials/Your First Tao App.md",
+      "Docs/QA/evidence/tutorial-first-hour/README.md",
+      "Docs/QA/evidence/tutorial-first-hour/source.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/5df8e906c74775b5694ed9e24983efb6f427933e408fa0b187b59f4085bf95ab.json"
+  },
+  "surfaceId": "doc:Docs/Tutorials/Your First Tao App.md",
+  "dimension": "text",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "source",
+  "evidence": [
+    {
+      "path": "Docs/Tutorials/Your First Tao App.md",
+      "sha256": "bc96dc357a8565df6cab34cd95d22faeb7f9459c01795b969154f819736c245c"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/README.md",
+      "sha256": "9b04ed6016680841120495d4d8084a9ba2a39be7d599018e5a04de8298e5cae4"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/source.json",
+      "sha256": "36a5db0fc2b865e0e227e8b732673ef0c875e891257f4201ece884c2bc21495a"
+    }
+  ],
+  "notes": "Reviewed prerequisites, file/working-directory instructions, current run/check/test commands, cumulative snippet parity, platform-tab wording, hug/fill layout explanation, deliberate light palette, test failure exercise, reload persistence and retry-versus-reset instructions. Live command help agrees. Editorial and automated engineering proof; required uncoached-reader acceptance remains pending.",
+  "sourceHash": "bc96dc357a8565df6cab34cd95d22faeb7f9459c01795b969154f819736c245c",
+  "rendererHash": "not-applicable",
+  "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
+}
