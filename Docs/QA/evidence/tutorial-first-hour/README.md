@@ -2,7 +2,46 @@
 
 Initial source candidate: `8d6e3ac40`, 2026-10-06; journey/layout repair `eb1c7f95a`.
 
-## Integrated candidate recheck
+## Final landing candidate recheck
+
+After integrating main `2e5d4e867` into candidate `1b8a44f0d`, the automatic QA
+[source replay](land-candidate/source.json) passed all three cases on the normal isolated retry
+in 20.9 seconds; the full source command took 254.7 seconds.
+[The command log](land-candidate/source.log.txt), [summary](land-candidate/source-summary.json),
+and the separate [initial per-test timeout](land-candidate/source-contention-timeout.log.txt)
+and [passing retry](land-candidate/source-retry.log.txt) retain both attempts.
+The replay exercises the documented setup, cumulative snippets, title edit, passing and deliberately
+failing tests, syntax failure, and restored valid source. It remains development evidence.
+
+Production browser replay `ff5aa509-746f-4248-9fcc-1d22ea8128b0` passed all three journeys:
+[command](land-candidate/browser/browser.json), [run](land-candidate/browser/run.json),
+[build digests](land-candidate/browser/build.json), [export](land-candidate/browser/web-export.json),
+and [output](land-candidate/browser/browser.log). Its source digest matches the current tutorial.
+All seven [fresh browser images](land-candidate/browser/) were inspected, including edited data
+surviving reload, long-list scrolling, storage failure, and recovery after Retry.
+
+The fresh staged capture completed all three cells in 115.6 seconds:
+[complete snapshot](land-candidate/capture/source-snapshot.json),
+[manifest](land-candidate/capture/review.json), inspected
+[phone](land-candidate/capture/screenshots/qa-views-phone-6c6dc4d8d0a9.png),
+[desktop](land-candidate/capture/screenshots/qa-views-desktop-1a11ea511a53.png), and
+[dark-scheme phone](land-candidate/capture/screenshots/qa-views-dark-ea74cf496d40.png).
+Tabs remain distinct, phone lists compact, desktop columns aligned, and captures free of overlays.
+
+Streaming preparation alone did not repair the automatic replay's watchdog:
+[a repeated idle timeout](land-candidate/qa-source-idle-after-streaming.json),
+[parent log](land-candidate/qa-source-idle-after-streaming.log.txt), and
+[worker log](land-candidate/qa-source-idle-worker.log.txt) retain that failure.
+Test workers capture output until completion, so the parent now uses the existing 600-second total
+deadline without interpreting worker silence as a hang. The explicit bounded policy preserves that
+deadline in diagnostic mode. The successful final replay retained the suite's per-test deadlines
+and normal isolated retry. The invocation regression checks this supervision contract and immutable
+resume; independent review found no actionable issue. This repair does not establish the cause of
+the separate per-test timeout.
+
+Required human release acceptance stays separate. Earlier receipts below remain historical evidence.
+
+## Earlier integrated candidate recheck
 
 After integrating main `4f3b2ca44` into candidate `4bfb13da4`, the fresh
 [source replay](integrated/source.json) passed all three tests in 91.5 seconds;
@@ -24,8 +63,9 @@ The inventory retains this Markdown-authored app beside automatic discovery of a
 and validates its exact app, staged project, source file and cell identities.
 
 The [buffered automatic replay](integrated/qa-source-timeout.json) hit its 120-second idle-output
-bound. The child front door now streams progress into the captured log while retaining the same
-600-second total and 120-second idle deadlines. An intermediate invocation put the flag before
+bound. At this earlier candidate, the child front door streamed progress into the captured log
+while retaining the same 600-second total and 120-second idle deadlines. The final repair above
+supersedes that insufficient watchdog fix. An intermediate invocation put the flag before
 the command and was [rejected](integrated/qa-source-flag-rejected.log.txt); it was corrected to
 `test-file --verbose` before the passing recheck. An unchanged overlapping direct run also hit the
 suite's per-test deadline; [its failure](integrated/source-contention-timeout.log.txt) is retained.

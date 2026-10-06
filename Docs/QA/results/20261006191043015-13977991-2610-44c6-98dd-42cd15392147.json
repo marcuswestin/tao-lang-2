@@ -1,0 +1,45 @@
+{
+  "id": "20261006191043015-13977991-2610-44c6-98dd-42cd15392147",
+  "runId": "20261006190454914-8e492d50-b4b4-47c3-98c3-b5aeb2c790d4",
+  "createdAt": "2026-10-06T19:10:42.989Z",
+  "recordedAt": "2026-10-06T19:10:42.989Z",
+  "commit": "1b8a44f0d840a8ab2ccbe2aad454939f8baa511f",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/tutorial-first-hour/land-candidate/source.json",
+      "Docs/QA/evidence/tutorial-first-hour/land-candidate/source.log.txt"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/e5e4a61c696f6e87e58902bdd79f2241ebe7012f38af7e664d5d25e377fb717a.json"
+  },
+  "surfaceId": "source:tutorial-replay",
+  "dimension": "functional",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "source-test",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/source.json",
+      "sha256": "b40a6970d494b0acb20b966fe9cfba732a5005ea6953638e5e78961ca4535414"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/source.log.txt",
+      "sha256": "956cc5daabd6e4fc7613321751a439ff8ea1cc03bee4af724c4899f545380394"
+    }
+  ],
+  "notes": "Fresh automatic source replay passes all three tests on its normal isolated retry: cumulative canonical snippets, documented project setup, final behavior, title edit, deliberately failing count, restored passing journey, malformed syntax and restored check. Initial per-test timeout under contention, the passing retry summary, and the earlier parent idle-watchdog failures remain retained. Development proof; installed CLI and human acceptance remain pending.",
+  "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+  "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
+  "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
+}

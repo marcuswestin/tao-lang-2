@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 197 applicable release acceptance cells are incomplete.
 
-Candidate source: `4bfb13da4d445e0bfe6eec755a0a2b7a75fccec4` with **uncommitted inputs**; this packet describes the working tree, not that commit. Tree digest `b5e1a9c2d7f3a928`; content hashes are stored per observation.
+Candidate source: `1b8a44f0d840a8ab2ccbe2aad454939f8baa511f`. Tree digest `537bf38960256d4d`; content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -46,7 +46,7 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 
 | Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | text      | 433            | 12       | 1            | 11            | 421     | 0       | 0        | 0    | 2.8%       | 0.2%     |
+| 1                | text      | 434            | 12       | 1            | 11            | 422     | 0       | 0        | 0    | 2.8%       | 0.2%     |
 
 ## Screenshot sets (development evidence)
 
@@ -74,12 +74,12 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - [visual:notebook / visual / notes-groceries / agent](results/20261003173525288-3fb34a34-8931-4d5c-983d-bb016da95455.json): **pass**, needs-recheck; execution profile development.
 - [visual:notebook / visual / notes-ideas / agent](results/20261003173525898-a95130d7-6b03-47fa-8008-49d8922ac23a.json): **pass**, needs-recheck; execution profile development.
 - [visual:notebook / visual / tablet-dark / agent](results/20261003173524612-e3558bf0-b9c2-4fa8-af68-2bd1d6de7c35.json): **pass**, needs-recheck; execution profile development.
-- [visual:reading-list / visual / phone-light / agent](results/20261006185256212-d4a45f10-cbaa-48dc-b06c-b54b0bebb9b5.json): **pass**, current; execution profile development.
-- [visual:reading-list / visual / desktop / agent](results/20261006185309199-1e1571a9-c5ff-4a55-8337-34fc58cba432.json): **pass**, current; execution profile development.
-- [visual:reading-list / visual / phone-dark / agent](results/20261006185326074-3315a454-8e24-4e23-af21-894cef5c79fa.json): **pass**, current; execution profile development.
-- [source:tutorial-replay / functional / source-test / agent](results/20261006185251416-ecff3a73-8fc2-40f8-9900-046743f1d911.json): **pass**, current; execution profile development.
+- [visual:reading-list / visual / phone-light / agent](results/20261006191118086-f5fee980-e927-4e8f-8530-c998930276a0.json): **pass**, current; execution profile development.
+- [visual:reading-list / visual / desktop / agent](results/20261006191130428-8133991f-5ccc-4f40-8a4f-dd4025447ef7.json): **pass**, current; execution profile development.
+- [visual:reading-list / visual / phone-dark / agent](results/20261006191143283-21680c5d-f992-49ae-8c4e-bb6b4e9c5923.json): **pass**, current; execution profile development.
+- [source:tutorial-replay / functional / source-test / agent](results/20261006191508618-ac0373eb-ea22-4663-9180-0fb7f7ee67d0.json): **pass**, current; execution profile development.
 - [doc:README.md / text / source / agent](results/20261003205750252-56902b36-9574-4f84-be2f-fcd6e665e57a.json): **pass**, needs-recheck; execution profile development.
-- [doc:Docs/Tutorials/Your First Tao App.md / text / source / agent](results/20261006185337190-3291818f-e174-4301-be42-499d5343f790.json): **pass**, current; execution profile development.
+- [doc:Docs/Tutorials/Your First Tao App.md / text / source / agent](results/20261006191520308-4aaddedc-5273-4cff-89e2-d8bfdb6c01a0.json): **pass**, current; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-data/SKILL.md / text / source / agent](results/20261003205752366-4daddc71-50f1-421e-8a2b-456b56efe373.json): **pass**, needs-recheck; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-run-and-ship/SKILL.md / text / source / agent](results/20261003205754511-613435ca-99fb-4756-95c5-55ab0e584a7a.json): **pass**, needs-recheck; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-testing/SKILL.md / text / source / agent](results/20261003205755510-555b36a3-00d8-4e85-ab87-b34d248e6f54.json): **pass**, needs-recheck; execution profile development.
@@ -93,7 +93,7 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - [visual:notebook / visual / tablet-dark / developer](results/20261003215642084-91c248d9-653a-46de-883b-0936ebfd4f4c.json): **pass**, needs-recheck; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-create/SKILL.md / text / source / agent](results/20261003205751575-29aa8baa-6053-49ba-8ea0-614742016167.json): **pass**, needs-recheck; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-project/SKILL.md / text / source / agent](results/20261003205753790-3f282d51-cff3-4af7-bf17-8cd415f2eed2.json): **pass**, needs-recheck; execution profile development.
-- [source:tutorial-replay / functional / browser-preview / agent](results/20261006185252889-871f5480-fef1-4f69-a583-7fb74741b1f5.json): **pass**, current; execution profile development.
+- [source:tutorial-replay / functional / browser-preview / agent](results/20261006191100850-4980bc1b-437a-4549-b0d8-59c50c1a4287.json): **pass**, current; execution profile development.
 
 ## Unresolved findings and accepted limitations
 
@@ -376,7 +376,7 @@ These are scoped observations; supplementary source checks do not fill public-ar
 
 - 2: Generated harness copy; canonical .rulesync or agents source is inventoried.
 - 44: Starter copy of the packaged Tao skills; the canonical packages/ai/tao-skills source is inventoried.
-- 192: Frozen archive; outside active-document review.
-- 21: QA evidence or generated register output; excluded from its own freshness inputs.
+- 193: Frozen archive; outside active-document review.
+- 26: QA evidence or generated register output; excluded from its own freshness inputs.
 
 Every excluded path and reason: [inventory](inventory.json).

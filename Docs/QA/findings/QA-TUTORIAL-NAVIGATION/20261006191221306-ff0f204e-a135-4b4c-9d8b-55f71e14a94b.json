@@ -1,0 +1,34 @@
+{
+  "id": "QA-TUTORIAL-NAVIGATION",
+  "status": "verified-closed",
+  "phase": 1,
+  "surfaceId": "visual:reading-list",
+  "dimension": "visual",
+  "channel": "phone-light",
+  "severity": "major",
+  "title": "navigation choices read as one label",
+  "observed": "The captured navigation reads LibraryAbout without a visible gap or selected treatment.",
+  "impact": "Readers cannot readily distinguish destinations or the active choice.",
+  "location": "Docs/QA/evidence/pilot/reading-list-phone.png:top-left navigation",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "a reader can distinguish the two destinations and the active choice.",
+  "recheck": "inspect and operate both tabs at phone and desktop widths. This is an observation of\n  the web-rendered tutorial; it makes no claim about native tabs.",
+  "evidence": [
+    "Docs/QA/evidence/tutorial-first-hour/README.md",
+    "Docs/QA/evidence/tutorial-first-hour/capture-complete/source-snapshot.json"
+  ],
+  "evidenceHashes": [],
+  "createdAt": "2026-09-26T22:52:29.463Z",
+  "updatedAt": "2026-10-06T19:12:21.300Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "agent",
+  "relatedStories": [],
+  "notes": "Fresh source, browser and complete staged captures on the integrated repository-pass candidate rechecked the repair; required human release acceptance remains separate.",
+  "passingResultId": "20261006191118086-f5fee980-e927-4e8f-8530-c998930276a0"
+}

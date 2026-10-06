@@ -1,9 +1,9 @@
 {
   "version": 1,
   "phase": 1,
-  "commit": "4bfb13da4d445e0bfe6eec755a0a2b7a75fccec4",
-  "dirty": true,
-  "treeDigest": "b5e1a9c2d7f3a92829d65dd2340ec15015c2019d5d507891bdaba79fa2736251",
+  "commit": "1b8a44f0d840a8ab2ccbe2aad454939f8baa511f",
+  "dirty": false,
+  "treeDigest": "537bf38960256d4d35d6033906ee9b7582fe8f8cdf64fb24e41447b8e3905bd2",
   "surfaces": [
     {
       "id": "doc:.config/nix/hutch-proxy-tests/README.md",
@@ -2604,7 +2604,7 @@
           "source"
         ]
       },
-      "sourceHash": "2e66931f91ff9ad1fc5ec606d3565c08085abf0d8591214225851f09b97f2873",
+      "sourceHash": "db285bb2486e6155cd6393184a810458c8a1ca566078f00f8f73dd79a5cf0e7a",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -3472,7 +3472,7 @@
           "source"
         ]
       },
-      "sourceHash": "eb22ab35fc1581b1ab0ef17ee6af3c804e3ab07b630c34009c9adbdf3eae6eb2",
+      "sourceHash": "172fbaffd42b2e1d3403bb92c397ac4a16aa742bdaecddc945cd7867fee1d138",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -3500,7 +3500,7 @@
           "source"
         ]
       },
-      "sourceHash": "d49f06e01c1aed91cccc7beab93a6df6dd237266c07aa35125400ee91c6dd57c",
+      "sourceHash": "8b9f74bd57af8f979ec84cd053a9ab1b810b114d951fc07256093d8c1f5f844e",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -5410,6 +5410,34 @@
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
     },
     {
+      "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-DEV-SESSION-OWNERSHIP-TESTS-FAIL-IN-AGENT-SANDBOX.md",
+      "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-DEV-SESSION-OWNERSHIP-TESTS-FAIL-IN-AGENT-SANDBOX.md",
+      "kind": "document",
+      "source": "Docs/Roadmap/Developer environment upgrades/DEVENV-DEV-SESSION-OWNERSHIP-TESTS-FAIL-IN-AGENT-SANDBOX.md",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "source"
+      ],
+      "dimensions": [
+        "text"
+      ],
+      "requirements": [
+        "agent"
+      ],
+      "dimensionChannels": {
+        "text": [
+          "source"
+        ]
+      },
+      "sourceHash": "f4e509c4c4a9871cdf3582f0be5a35c4096e53bb42f4630ad51d63312baa0e22",
+      "rendererHash": "not-applicable",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
+    },
+    {
       "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-DEVICE-HUB-APPROVAL-PROMPT-IS-MISSING.md",
       "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-DEVICE-HUB-APPROVAL-PROMPT-IS-MISSING.md",
       "kind": "document",
@@ -6166,34 +6194,6 @@
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
     },
     {
-      "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL.md",
-      "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL.md",
-      "kind": "document",
-      "source": "Docs/Roadmap/Developer environment upgrades/DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL.md",
-      "phase": 1,
-      "tags": [
-        "A"
-      ],
-      "channels": [
-        "source"
-      ],
-      "dimensions": [
-        "text"
-      ],
-      "requirements": [
-        "agent"
-      ],
-      "dimensionChannels": {
-        "text": [
-          "source"
-        ]
-      },
-      "sourceHash": "3ef1970e631eca3bc93be152c211e29c0cfd327a63973005d28c3a324cffbcbf",
-      "rendererHash": "not-applicable",
-      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
-      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
-    },
-    {
       "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-PERSISTENT-UI-CONTROLLER-POST-MVP.md",
       "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-PERSISTENT-UI-CONTROLLER-POST-MVP.md",
       "kind": "document",
@@ -6804,7 +6804,7 @@
           "source"
         ]
       },
-      "sourceHash": "e463fa9a1be462e99410b8d07e81f60528b4d575d7f96c8dd5748801a862cbb4",
+      "sourceHash": "a85ddfe4af742c9cb94be12bfa2ed353df950a6fffed774c68f1f9480ffd5a5b",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -7734,6 +7734,34 @@
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
     },
     {
+      "id": "doc:Docs/Roadmap/October 6 repository health review.md",
+      "title": "Docs/Roadmap/October 6 repository health review.md",
+      "kind": "document",
+      "source": "Docs/Roadmap/October 6 repository health review.md",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "source"
+      ],
+      "dimensions": [
+        "text"
+      ],
+      "requirements": [
+        "agent"
+      ],
+      "dimensionChannels": {
+        "text": [
+          "source"
+        ]
+      },
+      "sourceHash": "959a6f14d01718a544a05aa2866fbb78b2bbc69b4f9c43715a17c3cb786d422a",
+      "rendererHash": "not-applicable",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
+    },
+    {
       "id": "doc:Docs/Roadmap/Parallel agents on one machine.md",
       "title": "Docs/Roadmap/Parallel agents on one machine.md",
       "kind": "document",
@@ -7980,7 +8008,7 @@
           "source"
         ]
       },
-      "sourceHash": "6c1068329b4ffd307da5ff13938b68332ca2baadcb2449cab750ccde9a4b08e6",
+      "sourceHash": "41a058ce720da6ecf36d0c83ea54b53acee54e34e5e6b37d92681c5691655104",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -8008,7 +8036,7 @@
           "source"
         ]
       },
-      "sourceHash": "6ee5760492bcbe139fc3d8ba3976fdca6753c4480b8ab492673563d4c77252a5",
+      "sourceHash": "a33490759f8ef3c5e7b735c5b22243f7b01a06271af01fd7ef3670ef36b68d37",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9156,7 +9184,7 @@
           "source"
         ]
       },
-      "sourceHash": "afc4cc097a5c6605d52b74fb45596e7b024fe299486cc73b56948d0f8c727d09",
+      "sourceHash": "74b4baff3c67e65e3c8838c554a64d23a96f75785ab64d8bde0e52d8cc50cb1a",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9184,7 +9212,7 @@
           "source"
         ]
       },
-      "sourceHash": "c5cd1038d9f5278da9ab38375977288bc4bc5872e23911d84b3d24f854163edb",
+      "sourceHash": "02ddc9ba5fd55b5cadc3931e58be917f680bbc1e84400e0a6c64f8858719cba7",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9380,7 +9408,7 @@
           "source"
         ]
       },
-      "sourceHash": "5649560f898ace2b1e75094a48e56a7157676f9b9fab47fe2f0d86876021385f",
+      "sourceHash": "d3c2f16d5c59fa284c0b21510ab7eff5900b7ad6fd419c13d38a16660b96eeaf",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9520,7 +9548,7 @@
           "source"
         ]
       },
-      "sourceHash": "1c17dae28bd919461d90be1df437fae3577879657ac368df93822e8c91c1cd13",
+      "sourceHash": "bc2b725b6205fc9096759c39ac7f964d6980af4c49c820cc342ab82bb563f010",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9716,7 +9744,7 @@
           "source"
         ]
       },
-      "sourceHash": "e998c2fa20789d77fd80a2a0d6f5717e8f16e76d1723ccc9478d13d27b88c6d8",
+      "sourceHash": "eb23d088defff08d06ffd35c94052fc7f7a38984b9d16c2daa8d9ad1409f1b2d",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9968,7 +9996,7 @@
           "source"
         ]
       },
-      "sourceHash": "0544d42bd9202fd1b2c94cd44b7256203c61327663639b411b111214c89e4530",
+      "sourceHash": "594d769c4c0b03aa55d329f6209708c45ecb450fd3ea8109490df2f17561102e",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -10584,7 +10612,7 @@
           "source"
         ]
       },
-      "sourceHash": "88575d2560492f66f0beed761388aba87ee46508557db92c4ce38889523f3a04",
+      "sourceHash": "7c90602dae0f421ce5974ffaea27e69c86d0e1043ac9e57a748fdfba0737a8b7",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -11452,7 +11480,7 @@
           "source"
         ]
       },
-      "sourceHash": "a0ef7c9e14aba474c328b30e7b8e570b9cedcd2b9763cc1c88aa45e5b21f831f",
+      "sourceHash": "f15b995d116df4b19e9bc8fe1e9fbe62b20e9232c9bcc3c6d56112fdc158d09d",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -12163,8 +12191,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "b8628d9cab6e948f992a03e4573cff224205e88ab0dac8bff81f94927fc82da8",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "a6c072fc1f5d435ad8b73795b123f7af821f2a71823d23ac6c61dfdfefbd4dcd",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12202,8 +12230,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "cf8ed71145a7e603a15001fdaf0d61b0d99a63938649f3da9becf04325f7a68f",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "cf14acb1d74df910aaf9dbc54bec785598c9103ae8c7f325c9e701596d6304a2",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12239,8 +12267,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "e57347e904d8424fd3bf6d65dbb66ad1d2fc0c71e41042f9177f880e675e65f9",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "6ad51096e59c5886e2482892b4648d73abf499c6440e8e43803fa2949fbf1b67",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12275,8 +12303,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "21621396f84aadd568f593eaac76d6a7a712752269f81d107814a7b2b159e17b",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "244dca6972f71a7cdbbf5137f5bcda09b51e0c75007e3b3caba25b93f470d1e4",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12311,8 +12339,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "9cd704a753aa88465a7483c58ae23f97799b39584419671ee369f40afcdb43fe",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "159e4b35c4b18829edee8043ca63efac9123584d0cf6d034129024eada7b16b8",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12349,8 +12377,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "a7c2307f9d1c8f36cd264358b0803ec6984b331c42fd2c1af30091672846bbcb",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "8c0e1237cc145b1b88f47b4419f979e50e35fcffe4b20d9271b9e1a6305f2c9c",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12387,8 +12415,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "2b1fa84ed915d76313589818cbb849d360fc1ff41a792a08b44d3a6d82f7d5de",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "4b82fba612b907c61bdd9ac357a3380f6a05a3bef566976607677e434929ffc1",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12425,8 +12453,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "66ac1094ef58c4be1ebda64a869ed5a7120afb807f009d7f13351d443fd1a03c",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "cdc1f6dbf9790c8f2f95b606b620aec76ebf275118538cade74441e9885ee0ec",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12465,8 +12493,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "193c22cf58ebfb06892acc8a2e32d0e4929a63e1e15ec2e63ac8c6c34ab111f8",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "07ed433bb2199c8d214e3bf27d948562c2098d8e2685116455d9aa5c2d719f5d",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12501,8 +12529,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "02709969b8b68906d6fc69dbce2b0901446824a984d6724127f0bbbc6fea3c2c",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "535d21751e95e7d6e2b7d6fc07c517c527d55930ba9a1fa707d4130fc2fae122",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12537,8 +12565,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "7053e2b59364406803e1e1f2a98424535f3f19eef2e0d9e8211506ca5a3e0e28",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "7fde8c39d61626af4a3ac0cef420bf167ae15515fb1f07210c4c27c2f405e37e",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12573,8 +12601,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "03835ccbaab7ab3461f2324ebd44e1b6cc69e5e94b2965d83056011d56928d7c",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "3201abdedd4d9a85e852a9b3e1cda07011164db835f7888b028009f7754e935f",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12610,8 +12638,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "08176bbe9e8a733b300b08a8da6946bb9ce7fe9347ebbf6a6b675b7080af7fc7",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e1766cde791790eee0ece31bbaaf18aff046443b633ce9be72a4a83a458cf759",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12646,8 +12674,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "34f0f8773930bbd1a25bda8fb1068e5ecac3b84d96302c937eb33bbb7274504d",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "b54c9aae172a7c74672e0d15da74b80bf93dd91b150da09295874729e5e8717b",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12683,8 +12711,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "869eb7f68627149d67bf39ae9ffb53b5ebe0d1e10f7af6ed30cc386687ed92e7",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "81d89598008c98fbe5fc26f70e0a3485b93f69cb46dd416709ea283673c7fd23",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12724,8 +12752,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "804440dd5861cf0a5da61d3f659e45f67c9f41b4329ff36699dc224e6b370db4",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "932f7db21be0b451e1b05af443a6d6596be1fc2d47e6c7937ec328ca5928dd99",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12765,8 +12793,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "118f42f9b1b81405901683a64e61398d3e4284d83437e095a66d1b694807e6d7",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "1892b4e856986c3f44e44807d40aac06c255d4811106bbf0ec258022e09ee97c",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12805,8 +12833,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "4f7af14ba8b88b7e86bd7cca0d958e3f778aa85fcbfa9ed9ee516b8b696c6285",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "0501a3d7f9191f3efc189f8bcdaae218992df5a4aad17098bcdee6e0afd14de5",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12845,8 +12873,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "63650e11f75f459b8e4fd647cc5921abe44c3133ab27d9a2a401eaa21973a79b",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "7182ed6696e521c1b6b467a8ea2f3ea283916f8af14e9d6f3af9692933633280",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12885,8 +12913,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "b94f7292b542e10bcde4cfb80e6b6c806b8fb341a5afe07e9aad7af38e4f63c7",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "458fda2d81a3270c54c2a7e62facc597713d27fea5fbabf7fe3f78d16ee95f5e",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12925,8 +12953,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "fbe7fe12c6b39d6a36a7dae164cf3ceac48c55669b47cf43044dd292a5d23d22",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "9cdf75e09c8e18f65c67126547418e524d709983143b5803aee04ef720a66c73",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12965,8 +12993,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "584ac67cce84f47c0a9bfea82f13ec5b384a5ae40e6e88bd4d6032f8a2744dc7",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "224ded346a4ff399e2d8b2226283c7b11b9ff611660ef7a07d3eb883c3f2cc07",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13005,8 +13033,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "dec5fe825811382b91ba8b25326ccc10d843ec0af46445d718e71769f1791e41",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "b11c2f91a40e00bf3f7a512e8393bc0b5776587ba4e7c0c14aacf31fa89a81d0",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13045,8 +13073,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "fd8da88d6bb5124b2a8c51e7d41af9375b7d9f518a4c7a94be99774b0bf7963f",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "dc01287771892e48ed5ad1154572d314d862a26fb793e1ad8209f1c6eb6dddad",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13085,8 +13113,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "7687065414b679cc4a998df2cb954231d67a39e0ed334a06b7e619ab4e6b5782",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "c80dc2d2167f9a2466d5cd0c0c7731689c890f7c47be68a4d22a4c7c421c78f4",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13126,8 +13154,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "7ba415ad3363c632b1d0f6bcba6219439a08d014d591e91ac6beee0ee38693c5",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "880c2a1c4f74d84f86d1393291998685d497160e0ad39653092396b861304d3b",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13166,8 +13194,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "de0a015f73f5bad4baeadb4203522cf9b055b9e6598cdad8d165066327e07c3e",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "b0a12224c6094812acc2610a14b931e11fd91a883aca41fae089fe216f0ec223",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13206,8 +13234,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "4310129b287b423d76c6fcdff4bfc896ec997dc4091e6bcba094ef4bede842ba",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "2fce01b4264a18a47859d7c1a0c243c6c352d17fbad4af806a09627964f63c78",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13246,8 +13274,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "30eed4241bb1b0e9b32576a62778d93edea65c099d83287d0d67db87a1e4b7a5",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "86761244d61e69a048356f86e381710fbfc26c045d8e76c23da14b714fb30123",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13286,8 +13314,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "3985cf0042f92c260e3a432e7e4b0c0a94e09b85941b3a785316f6755442ab27",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "75e6a8128ca8484f637cffa49d1aec383d31ee6ce3b825a0d70c26fa74c5418e",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13326,8 +13354,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "668f064cdb72ab26aea7b1b90f6da4ca5c9ecc270f2f9f96a52844e58ba94d8e",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "5f27c42d40f8323115fb91fd06267b93327271767fd767ec846518cc8b21ded8",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13366,8 +13394,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "e3390fc67114e770fe8dc2f431b226cd8e3d52697678b657ab1040361e43f468",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "fe29fa53fad34c9ad013dd62b8f2d4e788c678c203338082cc81117741339db0",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13406,8 +13434,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "ea22c0a0a67e053a23a6fc7b989b09b530af7760bc8b6f5639793e6cc68ebe3f",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "b41adc3c9bda43483c1624ba068bf47a7384541ba83c4b131b40b0a0de281c17",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13445,8 +13473,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "d60dfd6538a5eb218bae18e7bab506eb277a5c88a8fadc476a44c3dfe0e1d157",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "02fd81929c7e337fda1a9b7605b715bcf902945d8d6e9f5ec5718c3ad1e142cf",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13487,8 +13515,8 @@
         "human",
         "developer"
       ],
-      "sourceHash": "9d43546443f2c259e8d94b6dd40b5894f7f82f97bee2571e8bd6167d21d11410",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "22eabc6c2fb2b706b5c005adbd41ce8c5af8f07c252782fba40e3d97950df65b",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13527,8 +13555,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "b1cb186c2b26f2306c0c6c743b17b50d81eb7448f4c619344a0e680bac93dc32",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "5680529e76536de0a553abbb4f9efb401afd688e8129afc34b16d316e159f30e",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13567,8 +13595,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "1dc8f5b23280aaa8ec25aca4f896686b7ab2e0f34887d2580843af3c285a063d",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "0f636eee9c75a8c3b54afc528e81f0be39b60617520cd1b9c9c3092d26f69d91",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13605,8 +13633,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "c9816ce9525b4ab385b0acdf061127eae864c66db051396943519664ffd932eb",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "010b2c94f3f08e4492b6cf63bb5ebd366d3a23e67ce3f3f4a977a7b66657516b",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13645,8 +13673,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "1c0cda6da2421b5bb7c763ca33005bec4d523cbb6b4d81ef2e25013bde5dbb15",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "469b0c648f574fe4f617eb2f12382f0cb4e87c3f198a9b3dc8d139844a3ea29b",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13685,8 +13713,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "239b399eac801f71e24ce68578e1e85fab1de9a15a009444242164021d289558",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "2c52724f3b5d906b260f614307b8ea920a3c06168f1171b1b8234e7e5cae29d4",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13722,8 +13750,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "9fd5514170ea6f57035b020cf2b16310a9fec59b96fcb9c5a270803876ca2d83",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "da629c415a496a310ef26093010872ab4ca6eb910f799a38102f7036bb96bb65",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13759,8 +13787,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "241f76bd4bf9f03632e0a4396460ca830b2cceb4016c2c4224cf3d8f2feed06c",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "db698c653468378bfc50c0b9de309e622d8bb56cce61c12b37b888c13cebb0f3",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13796,8 +13824,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "ec9391799960df211396479d5bc743cb9f929f89ac787817bbbde3bdf6b89cd5",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "d6b3313737eba1b8a73ed42b48b3c1098d1635f170633a4aabf928bab5799ccb",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13833,8 +13861,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "6489ecc0a1de0b199bf1edc187ea958189b6f872bfa22be29fa9a988ac127051",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e54dcfc542753633ee9c2ee46bda19997a14a185f9cb03356a96cc0d38d00a01",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13870,8 +13898,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "81ead7a06680f0ce4186e989da42fade47797529a0ac0da5987dda3fc7c0ad5b",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "845026d0220409249dc47fd4a82f641673c4f9f816454efb2d7217c3afab9f07",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13907,8 +13935,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "8387fca3e37044613ae5ae7b45c80e658b4f7e3262a169b7f9b28aa24c34cbe4",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "a16e084054d65e5d09608df378d8c8b404acf40df551dca88c360d92c4875ac7",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13944,8 +13972,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "35002894629814b10eca6b67151809a3c77665b9c8d38a0d1705dff2b3d0a81e",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e132336b21ea4784d762ba86d607d5f8d3136d5fd6e1a2e7e08700761d74ac9e",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13981,8 +14009,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "0440196a0a0f9bc9280e1e5362b28bc3f2ba3d04892a97128479b10caafaf67c",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e64bf1194a29766b95dcca29ab6c45cfd53e8fdeb3c45101699154eefb0baff5",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -14019,8 +14047,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "7fad843bc750c01e2870c059796a9defa935cfab43fd82d14d6f6b6d2afbf71e",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "0959ecba0d98cdb9884390ee4308dd1263f366b89c48c70be95453971dcd8a1a",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -14057,8 +14085,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "4563bf867472abe0880bc8382eaea98b9025a7fbffc7cd260e755cdc21c4f69b",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "b4197150c083b83e1101fa2dc2bbae7d80b07766aaf9c0404a829ab0dd184380",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Two real Apple devices with the same person: offline edit reconciliation, relaunch persistence and account-switch isolation. This does not accept the deferred hosted-data APP3 story."
     },
@@ -14098,8 +14126,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "4563bf867472abe0880bc8382eaea98b9025a7fbffc7cd260e755cdc21c4f69b",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "b4197150c083b83e1101fa2dc2bbae7d80b07766aaf9c0404a829ab0dd184380",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Exercise adapter success/error/retry, datasource identity and writes, and references across sources."
     },
@@ -14139,8 +14167,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "4563bf867472abe0880bc8382eaea98b9025a7fbffc7cd260e755cdc21c4f69b",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "b4197150c083b83e1101fa2dc2bbae7d80b07766aaf9c0404a829ab0dd184380",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Inspect adaptive design and interactive scenario identity in the native workbench; source tests remain supplementary."
     },
@@ -14168,8 +14196,8 @@
           "browser-preview"
         ]
       },
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -14199,8 +14227,8 @@
           "browser-preview"
         ]
       },
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -14244,8 +14272,8 @@
           "desktop"
         ]
       },
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -14272,8 +14300,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "FirebaseLiveAcceptancePreview",
       "captureProject": "Apps/Firebase Live Acceptance",
@@ -14318,8 +14346,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "HNReader",
       "captureProject": "Apps/HNReader",
@@ -14368,8 +14396,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "HNReaderStub",
       "captureProject": "Apps/HNReader",
@@ -14408,8 +14436,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "FirebaseNotesPreview",
       "captureProject": "Apps/Hosted Firebase",
@@ -14450,8 +14478,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "Notebook",
       "captureProject": "Apps/Starters/Notebook",
@@ -14502,8 +14530,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "Pantry",
       "captureProject": "Apps/Starters/Pantry",
@@ -14548,8 +14576,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "AuthReviewClerk",
       "captureProject": "Apps/Test Apps/Auth Review",
@@ -14584,8 +14612,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "AuthReviewConvexClerk",
       "captureProject": "Apps/Test Apps/Auth Review",
@@ -14620,8 +14648,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "AuthReviewPylon",
       "captureProject": "Apps/Test Apps/Auth Review",
@@ -14662,8 +14690,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "WordFlower",
       "captureProject": "Apps/WordFlower/1 - Current",
@@ -14708,8 +14736,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "WordFlowerDark",
       "captureProject": "Apps/WordFlower/1 - Current",
@@ -14750,8 +14778,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "WordFlowerDrawer",
       "captureProject": "Apps/WordFlower/1 - Current",
@@ -14790,8 +14818,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "WordFlowerInstantDB",
       "captureProject": "Apps/WordFlower/1 - Current",
@@ -14830,8 +14858,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
-      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+      "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "captureApp": "WordFlowerLocalInstantDB",
       "captureProject": "Apps/WordFlower/1 - Current",
@@ -17029,7 +17057,7 @@
     },
     {
       "path": "packages/apps/expo-host/expo-host-src/dev-loop/StudioProcessTree.ts",
-      "sha256": "544bf1d0f657d5d7f1b1f09aa14cd3693840b9f90b177de2ee6bf0610e573ab3"
+      "sha256": "9f6ffecc9709878871e2adeff5112ab42ada9d39d179eaaf26327118568c9d7c"
     },
     {
       "path": "packages/apps/expo-host/expo-host-src/dev-loop/WatchRoots.ts",
@@ -17341,7 +17369,7 @@
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/dev-loop-stop-signals.test.ts",
-      "sha256": "23b230a6f74bd7135a2d5b216b6dd79909c229bd8fca96b67f22c4fea6f40912"
+      "sha256": "2c8153fcd45b4035373bd8f6e3a5500343335cec513038752f297b847c852354"
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/dev-runtime.test.ts",
@@ -17785,7 +17813,7 @@
     },
     {
       "path": "packages/apps/native-bindings/native-bindings-src/maintained-native-bindings.ts",
-      "sha256": "79eff372c06226eb65c5c929676406cac738761adecce83d94b97f79d217cb9e"
+      "sha256": "319e73b03d3c5bf22b2a19e0706f2c76cc12d5f836721e0cc041734c9893fb91"
     },
     {
       "path": "packages/apps/native-bindings/native-bindings-src/maintained-native-sources.ts",
@@ -17813,7 +17841,7 @@
     },
     {
       "path": "packages/apps/native-bindings/native-bindings-src/typescript-api-source.ts",
-      "sha256": "803601928ec892c9cf1a691fa9c4ec56d7c00aa80cc20598dc787f31cefc6dee"
+      "sha256": "19de93a04decaa8825a91aff1251cf8d21191de4f4577a0737458757c4618a16"
     },
     {
       "path": "packages/apps/native-bindings/native-bindings-src/typescript-api-types.ts",
@@ -19769,11 +19797,11 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/agent-hooks/OutputDiscipline.ts",
-      "sha256": "b1481d0e97756a1e4efc702d6f408e1fc19adc835fb7c32ec749f8e1ca80b840"
+      "sha256": "690249d1f6d0a9af295a04c7d71c7d6048da9d296c0c906478a6a748373507ea"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/agent-hooks/OutputDisciplineEntry.ts",
-      "sha256": "1606169b566841846197b370a9590730eb54cc478c8738e9bc33307c685c8c54"
+      "sha256": "8e1c294c598e0710d06126391f526a96c7dd122ef53a8798122a1b5d4e26959a"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/agent-hooks/ShellHabits.ts",
@@ -19821,7 +19849,7 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/cli/agent-help.ts",
-      "sha256": "af98e9c2d72446c1390fe48989900eefc5775492ea7fc580bc73a7987e4023d8"
+      "sha256": "404b43e6a9a3237b4fb17cc2b10759da3a08d83f6938eec5bf5a1bd1ecbea00d"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/cli/agent-host-command-check.ts",
@@ -20009,7 +20037,7 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-tests/output-discipline.test.ts",
-      "sha256": "9ed1b28287d1e56fa3da000571c89a2fe6e4022fac9c5a75e0de882c0b8804e1"
+      "sha256": "b0aa68c9029dce732da43768de81044843db7f3a1b13c3ef641ac84493ff2b81"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-tests/output-policy.test.ts",
@@ -20109,7 +20137,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh",
-      "sha256": "3aa5a334f4c0a7f64bb1609fa47b97a8204c9664ddbd6c181cc2e310e27b96f3"
+      "sha256": "7f6f3670f0f1575dcc9195dd7eea4b7a48af561e3e917ec850004d6dabd511d8"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/cli/initial-dev-branch.zsh",
@@ -20121,7 +20149,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/dev-loop/DevLoopCommand.ts",
-      "sha256": "5e1c1a749bd978895d55c90bbeb1b667e2b297cffc0ffba4d4cad2601795ab4d"
+      "sha256": "dd123556a6a0e941db0f2a44ea13818263b5a7521ceac7368d398b1d533f7c42"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/dev-loop/DevLoopController.ts",
@@ -20249,7 +20277,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/doctor/Reclaim.ts",
-      "sha256": "6d05df19401aa40b9cf38788f54f57df9b078b2fba747823fecb950b9637316e"
+      "sha256": "d6bad53222109ad40f2ffa7735af2fd3d0d7819b038d8fbe8c62efb514d84eb7"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/doctor/ReclaimCommand.ts",
@@ -20377,7 +20405,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/pr/OpenPrCommand.ts",
-      "sha256": "79dfd98e25d509ce325b6a63e4e43c4536b8cb5f83a031bfe4daf78ce495cea5"
+      "sha256": "832f6652df91889855a7886b85341118097d4d8ded8a3c9b51b0221ed084c2da"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/pr/PrChecksCommand.ts",
@@ -20493,7 +20521,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/agent-config-recovery-bootstrap.test.ts",
-      "sha256": "d6794280c02b38e81c61fdf54ba0d69e3a76082a24f9c48a1fc3fc7e7481037a"
+      "sha256": "99fe14910a0db02a309558f5b3ea2642ffa68b7ca56be40e029e5b3c25bec40c"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/agent-worktree-profile.test.ts",
@@ -20549,7 +20577,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/dev-loop-command.test.ts",
-      "sha256": "1f6eb46a9b6ad84bfbc0f2af1e0d42678c79f4846901281d5b69608a3e525c3c"
+      "sha256": "65c28e82c0fcae65b8050bbc525d871341cc3f9aea6b547cb0735a668c1d0c75"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/dev-loop-controller.test.ts",
@@ -20677,7 +20705,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/managed-loop-command-barrier.test.ts",
-      "sha256": "02967bda29dc5dbe108a3f9ce198dadb7ed1cb349d76c016bf3975ecb4f73608"
+      "sha256": "b1f16c7d5af88be9f74fa065b4705705f6bbb088773af7628bdb62be3ba11912"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/managed-loop-finite-parent.test.ts",
@@ -20733,7 +20761,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/reclaim.test.ts",
-      "sha256": "e7d99b2ff330930d42323f85b78623a2ca3200f22f82cc00f7ae0a64eeb5dd6a"
+      "sha256": "d430b2425b8073172a5cff38be85496bf27cdc4a9e2427c27fc125e3dcf14f2c"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/release-workflow.test.ts",
@@ -20817,7 +20845,7 @@
     },
     {
       "path": "packages/cli/tao-cli/README.md",
-      "sha256": "a0ef7c9e14aba474c328b30e7b8e570b9cedcd2b9763cc1c88aa45e5b21f831f"
+      "sha256": "f15b995d116df4b19e9bc8fe1e9fbe62b20e9232c9bcc3c6d56112fdc158d09d"
     },
     {
       "path": "packages/cli/tao-cli/cli-src/agent-client-build.ts",
@@ -21045,7 +21073,7 @@
     },
     {
       "path": "packages/cli/tao-cli/cli-src/project-secrets-command.ts",
-      "sha256": "1666633ca75079392a774af9b95e1349d66c6f83dd240bb83600ba3b84d2ab45"
+      "sha256": "7bd5360ea4e95ef271499ccc7a8f07130cccbe40e4717fe260d2476c63f20fbd"
     },
     {
       "path": "packages/cli/tao-cli/cli-src/semantic-commands.ts",
@@ -21105,7 +21133,7 @@
     },
     {
       "path": "packages/cli/tao-cli/cli-src/standalone-acceptance.ts",
-      "sha256": "c480ba8ca8f20555d8ee8da5477b620a3bb668ea023164b2bb37e184cde36f4c"
+      "sha256": "5f50d4fe909615f961b8275e5b2a8ec0c02c1da556c0b56590976c215adba9b3"
     },
     {
       "path": "packages/cli/tao-cli/cli-src/standalone-browser-click.ts",
@@ -21129,7 +21157,7 @@
     },
     {
       "path": "packages/cli/tao-cli/cli-src/standalone-install.sh",
-      "sha256": "7deb49ab5427ec0c63c4e6c993c238cc193d128af3b733e9bd9098d64b0ac43c"
+      "sha256": "1e6fda49a2b1acb65d4457ebc93dcb262629cc37cbf4150ec0597d5c762a1252"
     },
     {
       "path": "packages/cli/tao-cli/cli-src/standalone-resources.ts",
@@ -21461,7 +21489,7 @@
     },
     {
       "path": "packages/cli/tao-cli/cli-tests/project-secrets.test.ts",
-      "sha256": "ef4d9098d591dcfcb47c3aeeb1a008dd583a5228ad63babb3912b4254196a9ef"
+      "sha256": "6d83709b7470f8152fbe8bdd8edb115f324daac7dbbd3e320accab6b4c1873ab"
     },
     {
       "path": "packages/cli/tao-cli/cli-tests/release-starter-projection.test.ts",
@@ -23013,7 +23041,7 @@
     },
     {
       "path": "packages/ides/studio-tooling/studio-tooling-tests/studio-dev.test.ts",
-      "sha256": "c4525e86ef4ba1555d2d3f6c992cac59523e1942e93408192ceadb20109f48d4"
+      "sha256": "c8558e1dcf4ea0e8993028d3006e2acc3b1a8f99db0acc4d903aa4f88624c3c5"
     },
     {
       "path": "packages/ides/studio-tooling/studio-tooling-tests/studio-device-cli.test.ts",
@@ -24205,7 +24233,7 @@
     },
     {
       "path": "packages/language/ast-utils/ast-utils-src/Packages.ts",
-      "sha256": "227e657e76c38204518af0eab8e218c38b0ce18838ef5b5b9225e29b0593a859"
+      "sha256": "befd8877a4d4537c88c1fe22b2f48e8354718baeb34d3532700b5f4365706960"
     },
     {
       "path": "packages/language/ast-utils/ast-utils-src/Type.ts",
@@ -24565,7 +24593,7 @@
     },
     {
       "path": "packages/language/ast-utils/ast-utils-tests/packages.test.ts",
-      "sha256": "e67aa822c9fc43fb39fbba9c4cd875135060b763b29df537a30e7f4607bb2ae4"
+      "sha256": "48b7aa47dc560bef5d102d8969cb33f07b32316d7d6c9fada8661df8210af4cb"
     },
     {
       "path": "packages/language/ast-utils/ast-utils-tests/project-graph.test.ts",
@@ -24637,7 +24665,7 @@
     },
     {
       "path": "packages/language/formatter/formatter-src/formatters/AssociatedMethodsFormatter.ts",
-      "sha256": "7fd17763636c198333321fb6eeb927869650bc67e613d72ad34fd1cc96a7bd2c"
+      "sha256": "4f16e3a168104fec5f4e7b7a9aa279e26eefc5d210981f73e837fd8e8f0df62e"
     },
     {
       "path": "packages/language/formatter/formatter-src/formatters/ConfigurationFormatter.ts",
@@ -25421,7 +25449,7 @@
     },
     {
       "path": "packages/language/project-tooling/project-tooling-src/ProjectNativeTypeScript.ts",
-      "sha256": "f5c3167ace8a3f73e675814b08369e558a60e79c50929a3c7f8a10a3beeb112a"
+      "sha256": "65bebf657c144d09fb61238fbb0c54054927f579e9b5dbb05ef385c4ced5524c"
     },
     {
       "path": "packages/language/project-tooling/project-tooling-src/ProjectOutputPublisher.ts",
@@ -25456,8 +25484,12 @@
       "sha256": "ae17e29097d31da4d10889de04f3f25667d9a591741d0152bee5aefce9e61fd8"
     },
     {
+      "path": "packages/language/project-tooling/project-tooling-src/ProjectTypeScriptLibrary.ts",
+      "sha256": "3ef30669fac8cb056169b97c3bf1956bbe9a63b84bd1b37646e41c2e8d27881c"
+    },
+    {
       "path": "packages/language/project-tooling/project-tooling-src/ProjectTypeScriptProgram.ts",
-      "sha256": "8ff66f2892660ed4d95dbac55070fff14b1538c80873a9ff498e4e430651be2d"
+      "sha256": "0f796939c06dbfa6c103d5df709e2a888cf1cc93f150053dcab5e8682c867f23"
     },
     {
       "path": "packages/language/project-tooling/project-tooling-src/ProjectTypeScriptResources.ts",
@@ -25602,6 +25634,10 @@
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectTypeScriptConfig.test.ts",
       "sha256": "e2af0169388fbfe1c2345c2e69a560a0c1601be0c4177d5cf1d7d14cd750f32f"
+    },
+    {
+      "path": "packages/language/project-tooling/project-tooling-tests/ProjectTypeScriptLibrary.test.ts",
+      "sha256": "8147e2b6847fdb11959c68be02956753fdbd2787dc8d057fb61cc27d047967dd"
     },
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectWatchPaths.test.ts",
@@ -26593,7 +26629,7 @@
     },
     {
       "path": "packages/shared/shared-src/Platform.ts",
-      "sha256": "513715a027e1019e059eaff3b3339992340e2831a12b62149687fbcc463fc25c"
+      "sha256": "13320d5cdc9b1cd226d1b8474e0abc2e46bb729593a5ba63eb45e76f1ef03844"
     },
     {
       "path": "packages/shared/shared-src/ProcessListeners.ts",
@@ -26810,6 +26846,10 @@
     {
       "path": "packages/shared/shared-tests/fs-private-files.test.ts",
       "sha256": "884572e6fde3462dcfa569898b8500209c6e92b0dfe0136876f989171e722414"
+    },
+    {
+      "path": "packages/shared/shared-tests/platform-commonjs-evaluation.test.ts",
+      "sha256": "a4246c913ff6939d87cfdcdf832fcfcb683eb55a84ded58de62add816992b0ba"
     },
     {
       "path": "packages/shared/shared-tests/platform-process-liveness.test.ts",
@@ -27417,7 +27457,7 @@
     },
     {
       "path": "packages/testing/verification/verification-src/GateRunner.ts",
-      "sha256": "ae6259489d2c99c12c9d822a70b710546f2f479bd448e1ea2e8ade24e643c8d5"
+      "sha256": "8373b66b7f551389fb07b4438fd004735ded1407b243d639f283c8f2bb4608a3"
     },
     {
       "path": "packages/testing/verification/verification-src/GeneratedEvidence.ts",
@@ -27529,7 +27569,7 @@
     },
     {
       "path": "packages/testing/verification/verification-src/VerifyComplement.ts",
-      "sha256": "82480b4974e19bd6c1ebd67ab6ef9d5138a92d69e09ae8888fcc3a211119cdad"
+      "sha256": "dda5431bc2db3f90de442e9ed9bd3ccc0818df0b8650d4bc3b462ee6ec2048ca"
     },
     {
       "path": "packages/testing/verification/verification-src/VerifyPartition.ts",
@@ -27637,7 +27677,7 @@
     },
     {
       "path": "packages/testing/verification/verification-tests/gate-runner.test.ts",
-      "sha256": "a25e17b4fd96ff2f9cfe1ad9fd4cfaa89e4f24faf51880723ade20beb997b05e"
+      "sha256": "fe5763b3166561e0ae81c8310dd72df4f042f9355c49157069da8073670d3ba8"
     },
     {
       "path": "packages/testing/verification/verification-tests/green-record-policy.test.ts",
@@ -27757,7 +27797,7 @@
     },
     {
       "path": "packages/testing/verification/verification-tests/verify-complement.test.ts",
-      "sha256": "30b04f21a8751f0189b79f0679bd1261b01ff017aa97d5646a8e189581817512"
+      "sha256": "9d6eb1bf8e50e1b39684b3ac54d018b423ad751f796698be7a1ceb2d11653fc0"
     },
     {
       "path": "packages/testing/verification/verification-tests/verify-partition.test.ts",
@@ -28438,6 +28478,26 @@
       "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
     },
     {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/qa-source-idle-after-streaming.log.txt",
+      "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/qa-source-idle-worker.log.txt",
+      "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/source-contention-timeout.log.txt",
+      "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/source-retry.log.txt",
+      "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/source.log.txt",
+      "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
+    },
+    {
       "path": "Docs/QA/evidence/tutorial-first-hour/mutation-browser.log.txt",
       "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
     },
@@ -28891,6 +28951,10 @@
     },
     {
       "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY.md",
+      "reason": "Frozen archive; outside active-document review."
+    },
+    {
+      "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL.md",
       "reason": "Frozen archive; outside active-document review."
     },
     {

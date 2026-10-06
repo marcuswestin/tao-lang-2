@@ -6,7 +6,7 @@ import { QaRegister } from '../dev-cli-src/qa/QaRegister'
 /** GIT_IDENTITY commits as a fixed author, as `initGitTestRepository` does, since a CI runner has none. */
 const GIT_IDENTITY = ['-c', 'user.name=Tao Test', '-c', 'user.email=tao@example.test']
 
-async function fixture(exitCode = 0): Promise<{ root: string; qa: QaRegister }> {
+async function fixture(exitCode = 0): Promise<{ root: string; qa: QaRegister; sourceInvocations: CLI.CommandSpec[] }> {
   const root = await mkGitTestDir('qa-register-')
   await initGitTestRepository(root, {
     commit: {
@@ -42,7 +42,12 @@ scenarios Notebook "devices" {
     args: [...GIT_IDENTITY, 'commit', '-qam', 'Make the fixture agent executable'],
     cwd: root,
   })
-  return { root, qa: new QaRegister(root) }
+  const sourceInvocations: CLI.CommandSpec[] = []
+  const qa = new QaRegister(root, async (command, spec) => {
+    sourceInvocations.push(spec ?? {})
+    return CLI.run(command, spec)
+  })
+  return { root, qa, sourceInvocations }
 }
 
 async function input(root: string, name: string, value: unknown): Promise<string> {
@@ -148,14 +153,22 @@ Describe('QA evidence register', () => {
   Test(
     'resumes immutable checks, refuses changed dependencies, and never converts a successful check into a reviewed story',
     async () => {
-      const { root, qa } = await fixture()
+      const { root, qa, sourceInvocations } = await fixture()
       const run = await qa.run(1, 'all')
+      Expect(sourceInvocations).toHaveLength(1)
+      Expect(sourceInvocations[0]).toMatchObject({
+        processPolicy: 'test',
+        timeoutMs: 600_000,
+        timeoutPolicy: 'bounded',
+      })
+      Expect(sourceInvocations[0]?.idleOutputMs).toBeUndefined()
       const receipt = FS.resolvePath(`.artifacts/qa/runs/${run.runId}/tutorial.json`, root)
       const original = await FS.readText(receipt)
       Expect(await FS.readText(FS.resolvePath('.artifacts/tutorial-args.txt', root))).toBe(
         'test-file\n--verbose\npackages/cli/tao-cli/cli-tests/tutorials.test.ts\n',
       )
       await qa.run(1, 'all', run.runId)
+      Expect(sourceInvocations).toHaveLength(1)
       Expect(await FS.readText(receipt)).toBe(original)
       Expect((await FS.readJson<{ outcome: string }>(receipt)).outcome).toBe('pass')
       const linkReceipt = FS.resolvePath(`.artifacts/qa/runs/${run.runId}/links.json`, root)
