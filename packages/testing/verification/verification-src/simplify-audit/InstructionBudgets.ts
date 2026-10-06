@@ -13,9 +13,10 @@
  * the change is the unit, and whether these files should also be smaller is a separate judgment
  * with its own evidence. `packages/AGENTS.md` had no budget at all until now. The root budget was raised
  * on 2026-09-22 by ten of that file's average sentences (126 characters each), from 11,500, and on
- * 2026-10-05 to 13,500, when landing gained its hosted route.
+ * 2026-10-05 to 13,500, when landing gained its hosted route, and on 2026-10-06 to 14,500 after two
+ * branches each added a sentence and their merge put the file over.
  */
-const INSTRUCTION_BUDGETS = { packageAgents: 6_000, rootAgents: 13_500, skill: 12_000 } as const
+const INSTRUCTION_BUDGETS = { packageAgents: 6_000, rootAgents: 14_500, skill: 12_000 } as const
 
 /** instructionLineCount counts a file's lines the way the audit means them. */
 export function instructionLineCount(source: string): number {

@@ -87,6 +87,9 @@ if (lane === 'child') {
     '--jobs',
     '3',
     ...(lane === 'default' ? [] : ['--lane', lane === 'denied' ? 'verify-full' : lane]),
+    // The hosted lane insists on its admission argument; none admitted keeps the probe's own gate out
+    // of the catalog's host-gate check, and the mocked runner runs the probe regardless.
+    ...(lane === 'verify-full-ci' ? ['--ci-host-gates', ''] : []),
   )
   await import('../../dev-cli-src/dev')
 }

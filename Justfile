@@ -772,6 +772,13 @@ verify-full-sandbox no_cache='false' partition='':
 verify-complement show_studio='false' status='true': _deps
     ./dev verify-complement {{ VERIFY_FULL_GATES }} {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if status == "false" { "--no-status" } else { "" } }}
 
+# The hosted macOS half of the same key: the host gates the workflow's CI_HOST_GATES admits, with the prepare nodes they read; every other host gate is reported pending. Never a green record. --partition k/n runs one runner's share
+[arg('host_gates', long='ci-host-gates')]
+[arg('partition', long='partition')]
+[group('Dev')]
+verify-full-ci host_gates='' partition='': _deps
+    ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full-ci --no-cache --ci-host-gates {{ quote(host_gates) }} {{ if partition == "" { "" } else { "--partition " + partition } }}
+
 # `verify-repo` is the end of the widening order, past where a scope can go: it is the only entry
 # that gives up every shortcut the others keep. `clean` removes the build outputs and the generated
 # trees, `verify-full --no-cache` then rebuilds and re-runs all of it rather than standing on a green

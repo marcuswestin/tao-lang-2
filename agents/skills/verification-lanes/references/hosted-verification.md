@@ -108,6 +108,14 @@ green tree. It proves the portable gates only; the local complement in the route
 rest. Read the current workflow and lane membership when deciding what
 the complement is; a gate the workflow admits leaves the local list.
 
+The same workflow's `CI macOS` job (`macos-26`, not required, not waited for by `Verify`) runs
+`verify-full-ci`: the host gates `CI_HOST_GATES` admits plus the prepare nodes they read, every
+other host gate reported as `Pending CI host admission`, no green record. A dispatched run's
+`host_gates` input tries one admission for that run without editing the file, which is how a gate
+is measured before it is admitted. Admitting a gate removes it from the local complement, and
+`CI macOS` is not required, so admit one only once its hosted run is reliable and with the
+`main` ruleset requiring `CI macOS` by name; until then the complement stays the proof.
+
 For feature work, refresh affected documents, review and commit the exact task paths, and prepare
 the reviewed message at `.artifacts/merge/<branch>.msg` without paying for local broad verification
 first. Until `Verify` is green on the current head, describe the branch as awaiting CI, not
