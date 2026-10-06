@@ -116,6 +116,7 @@ change that addressed it.
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
 - [DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL — Output hook requires an unavailable read tool](<Developer environment upgrades/DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL.md>) — Candidate
 - [DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT — Following checks spends GitHub's anonymous API limit](<Developer environment upgrades/DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT.md>) — Candidate
+- [DEVENV-PROCESS-GROUP-PROBE-REJECTS-PS-SNAPSHOT — Process group probe rejects the system process snapshot](<Developer environment upgrades/DEVENV-PROCESS-GROUP-PROBE-REJECTS-PS-SNAPSHOT.md>) — Candidate
 - [DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES — Profile lacks direnv while doctor passes](<Developer environment upgrades/DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES.md>) — Candidate
 - [DEVENV-PROJECT-TOOLING-RECEIPT-TESTS-BRUSH-THE-CI-TEST-BUDGET — Project-tooling receipt tests brush CI's 45-second test budget](<Developer environment upgrades/DEVENV-PROJECT-TOOLING-RECEIPT-TESTS-BRUSH-THE-CI-TEST-BUDGET.md>) — Candidate
 - [DEVENV-PROJECT-TOOLING-REFRESH-AND-WATCH-TESTS-TIME-OUT-UNDER-BROAD-LANES — Project-tooling refresh and watch tests time out under broad lanes](<Developer environment upgrades/DEVENV-PROJECT-TOOLING-REFRESH-AND-WATCH-TESTS-TIME-OUT-UNDER-BROAD-LANES.md>) — Candidate
