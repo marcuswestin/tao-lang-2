@@ -11,6 +11,109 @@ import {
 import { runManagedMobileFixture } from '../native/ManagedMobileFixture'
 import { createManagedMobileGrant } from '../native/ManagedMobileGrant'
 
+Test('Firebase startup checks the POST boundary and a missing native marker blocks every fixture action', async () => {
+  const root = await mkTestDir('firebase-startup-marker-')
+  const grant = createManagedMobileGrant({
+    identity: {
+      session: 'firebase-loop',
+      checkout: '/checkout',
+      loopGeneration: 'generation',
+      target: { platform: 'ios', id: 'SIM-FIREBASE' },
+      resources: [{ name: 'ios-simulator:SIM-FIREBASE', generation: 'owned' }],
+      runtime: {
+        session: 'firebase-loop',
+        checkout: '/checkout',
+        loopGeneration: 'generation',
+        kind: 'companion',
+        appId: 'com.devtao.studio.companion',
+        devUrl: 'taostudiocompanion://dev',
+        projectRoot: '/checkout/Apps/Firebase Live Acceptance',
+        appName: 'FirebaseLiveAcceptance',
+        sourceRevision: 'source',
+        compiledRevision: 'compiled',
+        nonce: 'nonce',
+      },
+    },
+    assertOwnerCurrent: async () => {},
+    assertLoopCurrent: async () => {},
+  })
+  const requests: string[] = []
+  let startupChecks = 0
+  let cleanupProved: boolean | undefined
+  try {
+    await Expect(runManagedMobileFixture({
+      grant,
+      artifactRoot: root,
+      assertFirebaseStartupCurrent: async () => {
+        await grant.assertRequestCurrent()
+        startupChecks++
+      },
+      openFirebaseWeb: async () => Errors.throwUnexpected('Missing marker cannot open the Firebase web fixture.'),
+      onDriverProcess: async () => {},
+      onCleanup: async proved => {
+        cleanupProved = proved
+      },
+    }, {
+      startServer: async options => ({
+        url: 'http://127.0.0.1:4723',
+        logs: () => '',
+        close: async () => {
+          options.onStartupCleanup?.(true)
+        },
+      }),
+      resources: () => ({
+        leases: {
+          acquire: async () => Errors.throwUnexpected('Managed startup must use its preheld simulator.'),
+          tryAcquire: async () => ({ generation: 'port', assertCurrent: async () => {}, release: async () => {} }),
+        },
+        serverReservations: () => ({
+          reserve: async () => Errors.throwUnexpected('No host server starts in this test.'),
+        }),
+        releaseAfterCleanup: async () => {},
+      }),
+      transport: config => ({
+        request: async request => {
+          await config.assertRequest?.(request)
+          requests.push(`${request.method} ${request.path}`)
+          if (request.path === '/session') {
+            return { status: 200, body: { value: { sessionId: 'driver' } } }
+          }
+          if (request.method === 'DELETE') {
+            return { status: 200, body: { value: null } }
+          }
+          if (request.path.endsWith('/execute/sync')) {
+            return {
+              status: 200,
+              body: {
+                value: {
+                  bundleId: request.purpose === 'managed-diagnostic'
+                    ? 'com.apple.springboard'
+                    : grant.identity.runtime.appId,
+                },
+              },
+            }
+          }
+          if (request.path.endsWith('/element')) {
+            return { status: 404, body: { value: { error: 'no such element', message: 'iOS mounted marker absent' } } }
+          }
+          Errors.throwUnexpected('Missing marker cannot authorize another Appium request.')
+        },
+      }),
+    })).rejects.toThrow('iOS mounted marker absent')
+    Expect(startupChecks).toBe(3)
+    Expect(requests).toEqual([
+      'POST /session',
+      'POST /session/driver/execute/sync',
+      'POST /session/driver/element',
+      'DELETE /session/driver',
+    ])
+    Expect(cleanupProved).toBe(true)
+  } finally {
+    grant.revoke()
+    await FS.remove(root)
+  }
+})
+
 for (
   const scenario of [
     { layout: 'nested', add: 'create', attempts: 1 },

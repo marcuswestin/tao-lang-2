@@ -182,6 +182,43 @@ function harness(
 }
 
 Describe('guided visionOS setup', () => {
+  Test('explains bundle ownership and obtaining a signing team before requesting either identifier', async () => {
+    const h = harness()
+    const prompts: string[] = []
+    const result = await VisionOSSetup.run({
+      ...h.options,
+      apply: true,
+      bundleId: undefined,
+      team: undefined,
+      terminal: {
+        isInteractive: () => true,
+        askText: async ({ message }) => {
+          prompts.push(message)
+          const output = h.reports.join('\n')
+          if (prompts.length === 1) {
+            Expect(message).toContain('Enter your own app bundle ID')
+            Expect(output).toContain('Reuse the bundle ID of your own app')
+            Expect(output).toContain('domain you own (yourcompany.com becomes com.yourcompany.visionhello)')
+            Expect(output).toContain('dot-separated parts starting with a letter')
+            return 'com.acme.visionhello'
+          }
+          Expect(message).toContain('Enter your 10-character development Team ID')
+          Expect(output).toContain('https://developer.apple.com/account > Membership details')
+          Expect(output).toContain('exactly 10 uppercase letters or digits')
+          Expect(output).toContain('Reuse the team that owns your app')
+          Expect(output).toContain('Xcode > Settings > Apple Accounts')
+          Expect(output).toContain('so Xcode can obtain signing credentials')
+          return 'ABCDEFGHIJ'
+        },
+      },
+    }, h.dependencies)
+    Expect(result).toBe(0)
+    Expect(prompts).toHaveLength(2)
+    const build = h.calls.find(call => call.command === '/usr/bin/xcodebuild')!
+    Expect(build.args).toContain('DEVELOPMENT_TEAM=ABCDEFGHIJ')
+    Expect(build.args).toContain('PRODUCT_BUNDLE_IDENTIFIER=com.acme.visionhello')
+  })
+
   Test(
     'exports before pairing, retains the project on quit, and explains manual device and simulator runs',
     async () => {

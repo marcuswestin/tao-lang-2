@@ -1,0 +1,26 @@
+use FirebaseAuth from @tao/auth/firebase
+use Firebase from @tao/data/providers/firebase
+use FirebaseLiveAcceptanceAuthNavigator from ./Auth
+
+// Firebase Live Acceptance: Firebase Live Acceptance.
+//
+// Created by tao create from: Firebase Live Acceptance
+//
+// This file holds the app. The navigation is in Chrome.tao, the entities in
+// Data.tao, the design in Design.tao, and each feature has its own folder.
+app FirebaseLiveAcceptance {
+   id "firebase-live-acceptance"
+   version "0.1.0"
+   name "Firebase Live Acceptance"
+   Navigator FirebaseLiveAcceptanceAuthNavigator
+   Auth FirebaseAuth {
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY",
+      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID"
+   }
+   Datasource Firebase {
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY",
+      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID",
+      StorageKey "firebase-live-acceptance"
+   }
+   Design FirebaseLiveAcceptanceDesign
+}

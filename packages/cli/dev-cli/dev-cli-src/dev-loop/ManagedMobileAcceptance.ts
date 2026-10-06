@@ -7,6 +7,11 @@ export async function executeManagedMobileAcceptance(
   session: string,
   target: 'ios' | 'android',
   artifactRoot: string,
+  fixture: 'mobile-interaction' | 'firebase-sync' = 'mobile-interaction',
 ): Promise<ManagedMobileFixtureEvidence> {
-  return await devLoopRequest(await readDevLoopConnection(session), '/mobile-acceptance', { target, artifactRoot })
+  return await devLoopRequest(
+    await readDevLoopConnection(session),
+    fixture === 'firebase-sync' ? '/firebase-sync' : '/mobile-acceptance',
+    { target, artifactRoot },
+  )
 }

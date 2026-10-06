@@ -6,7 +6,7 @@
 // identity. That last one runs real `age`, with a software identity standing in for the Secure Enclave and
 // counting its uses, because each use of the real one is a fingerprint prompt.
 import { Errors, FS, HCI, SecretsFile } from '@shared'
-import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
+import { Describe, Expect, fakeTerminal, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import {
   type Cipher,
   formatStore,
@@ -129,6 +129,40 @@ Describe('Generated environment file', () => {
 })
 
 Describe('Pasted secret hygiene', () => {
+  Test('explains where to get the credential before hidden input and never echoes the value', async () => {
+    const terminal = fakeTerminal('disposable-hidden-token\n')
+    const cipher: Cipher = {
+      decrypt: async () => 'unused',
+      decryptWithKey: async () => 'unused',
+      encrypt: async () => ARMOR,
+      generateKey: async () => ({ recipient: 'age1store', secretKey: 'disposable-store-key' }),
+      recipientOfKey: async () => 'age1store',
+    }
+    const stored = memory(store())
+    const captured = await withCapturedOutput(async () => {
+      const environment = {
+        cipher,
+        now: () => new Date('2026-09-27T00:00:00Z'),
+        promptSecret: async (message: string) => {
+          HCI.writeStderr('hidden input requested\n')
+          return (await HCI.askSecret({ ...terminal, message })).value
+        },
+      }
+      return await SecretsCommand.testing.addSecret('SERVICE_TOKEN', environment, undefined, access({ cipher }, stored))
+    })
+
+    Expect(captured.result).toBe(0)
+    Expect(captured.stderr).toBe(
+      'Obtain or create SERVICE_TOKEN from the service or app that uses it. This command encrypts the value you supply; it does not issue credentials. Enter the exact value in the hidden local prompt.\nhidden input requested\n',
+    )
+    Expect(captured.stdout).toContain('Added SERVICE_TOKEN')
+    Expect(captured.stdout).not.toContain('Obtain or create')
+    Expect(captured.stdout + captured.stderr + terminal.outputText()).not.toContain('disposable-hidden-token')
+    Expect(terminal.outputText()).toContain('Paste the value for SERVICE_TOKEN (hidden; a paste submits itself):')
+    Expect(terminal.rawMode()).toBe(false)
+    Expect(stored.state.current.secrets['SERVICE_TOKEN']?.value).toEqual(ARMOR.split('\n'))
+  })
+
   Test('says what is around a value, so the question names what was found', () => {
     // A copied credential usually carries a trailing newline; some secrets genuinely end in a space. The
     // difference cannot be guessed, so it is described and asked about rather than trimmed silently.

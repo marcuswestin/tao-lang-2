@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import tab from '@bomb.sh/tab/commander'
 import { registerResourceCommands } from '@cli-kit/ResourceCommands'
-import { Command } from '@commander-js/extra-typings'
+import { Command, type OptionValues } from '@commander-js/extra-typings'
 import { Diagnostic, Errors, FS, HCI, Platform, ReleaseCapabilities, Repo, ResourceInventory } from '@shared'
 import type { Command as BaseCommand } from 'commander'
 import * as DiagnosticReport from './diagnostic-report'
@@ -117,7 +117,7 @@ export function createCommands(): Command {
     .option('--id <id>', 'Checked-in project id and directory name. Suggested from the name when omitted.')
     .option('--yes', 'Accept the suggested id, the plan, and the first available AI lane without asking.')
     .option('--ai <lane>', 'How to shape the plan: auto, claude, codex, ollama, apple, or none.', 'auto')
-    .option('--provider <provider>', 'Use a hosted datasource and sign-in (development: firebase).')
+    .option('--provider <provider>', 'Required datasource: local, or firebase when hosted data is available.')
     .option('--validation-tools', 'Include temporary sample credential tools with --provider firebase.')
     .option('--skip-tests', "Skip running the new project's tests after creating it.")
     .description('Create a new Tao project from a description.')
@@ -139,14 +139,11 @@ export function createCommands(): Command {
           if (ai === undefined) {
             Errors.throwUserInput(`--ai must be one of ${createAiOptions.join(', ')}, not '${options.ai}'.`)
           }
-          if (options.provider !== undefined && options.provider !== 'firebase') {
-            Errors.throwUserInput('The hosted creation provider must be firebase.')
-          }
           if (options.validationTools === true && options.provider !== 'firebase') {
             Errors.throwUserInput('--validation-tools requires --provider firebase.')
           }
           await runCreate(description, {
-            ...(options.provider === undefined ? {} : { provider: options.provider as 'firebase' }),
+            ...(options.provider === undefined ? {} : { provider: options.provider as 'local' | 'firebase' }),
             ...(options.validationTools === true ? { validationTools: true } : {}),
             ai,
             ...(options.id === undefined ? {} : { id: options.id }),
@@ -255,9 +252,20 @@ export function createCommands(): Command {
     .command('connect')
     .argument('<provider>', 'Hosted service to connect (firebase or appwrite), or run to start the pilot in Expo Go.')
     .argument('[path]', 'Project directory to configure or run.', '.')
-    .description('Save local Firebase settings, configure the Hosted CRUD Appwrite pilot, or run the pilot in Expo Go.')
-    .action(async (provider: string, path: string) => {
+    .option('--manual', 'Use Firebase Console instructions and paste public configuration instead of API setup.')
+    .option('--app <name>', 'Select the Tao app whose Firebase backend should be configured.')
+    .option('--rules <file>', 'Use a reviewed rules file that preserves existing project rules.')
+    .description(
+      'Connect Firebase through the API, configure the Hosted CRUD Appwrite pilot, or run the pilot in Expo Go.',
+    )
+    .action(async (provider, path, options) => {
       try {
+        if (provider !== 'firebase' && (options.manual || options.app || options.rules)) {
+          Errors.throwUserInput('--manual, --app, and --rules apply to tao connect firebase only.')
+        }
+        if (options.manual && options.rules) {
+          Errors.throwUserInput('--rules is for API setup; omit --manual when deploying reviewed rules.')
+        }
         if (provider === 'run') {
           const { runHostedCrud } = await import('./hosted-crud-run')
           await runHostedCrud(path)
@@ -267,7 +275,7 @@ export function createCommands(): Command {
           Errors.throwUserInput(`Unknown provider '${provider}'. Choose firebase, appwrite, or run.`)
         }
         const { runTaoConnect } = await import('./connect-command')
-        await runTaoConnect(provider, path)
+        await runTaoConnect(provider, path, { manual: options.manual, appName: options.app, rulesFile: options.rules })
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.setExitCode(1)
@@ -476,10 +484,16 @@ export function createCommands(): Command {
     })
 
   for (const provider of ['jazz', 'convex', 'pylon', 'firebase'] as const) {
-    commands
-      .command(provider)
-      .description(`Generate deployable ${provider} backend source for a Tao app.`)
-      .command('generate')
+    const providerCommands = commands.command(provider)
+      .description(
+        provider === 'firebase'
+          ? 'Generate backend source and manage Firebase projects, apps, and one user store. Project and app deletion are not implemented.'
+          : `Generate deployable ${provider} backend source for a Tao app.`,
+      )
+    if (provider === 'firebase') {
+      registerFirebaseManagement(providerCommands)
+    }
+    providerCommands.command('generate')
       .argument('[path]', 'Tao file or directory whose app should be generated.', '.')
       .option('--app <name>', 'Select a named app.')
       .requiredOption('--output <directory>', 'Directory for generated backend source files.')
@@ -1079,4 +1093,91 @@ function writeChangedResults(results: readonly InPlace.Result[], labels: InPlace
       HCI.writeSuccess(`${line}\n`)
     }
   }
+}
+
+function registerFirebaseManagement(firebase: Command): void {
+  type Management = typeof import('./firebase-management').runFirebaseManagement
+  type Options = NonNullable<Parameters<Management>[2]>
+  const execute = (operation: Parameters<Management>[0]) => async (value: string | undefined, options: Options) => {
+    try {
+      const { runFirebaseManagement } = await import('./firebase-management')
+      await runFirebaseManagement(operation, value, options)
+    } catch (error) {
+      HCI.writeErrorLine(Errors.formatForUser(error))
+      Platform.runtimeProcess.setExitCode(1)
+    }
+  }
+  const common = <Args extends unknown[], Opts extends OptionValues, GlobalOpts extends OptionValues>(
+    command: Command<Args, Opts, GlobalOpts>,
+  ) =>
+    command
+      .option(
+        '--account <email>',
+        'Use this locally signed-in Google account; otherwise choose a numbered account, first by default.',
+      )
+      .option('--json', 'Print only known public result fields as JSON; progress and local prompts use stderr.')
+  const projects = firebase.command('projects').description(
+    'List, inspect, or create Firebase projects. Project deletion is not implemented.',
+  )
+  common(projects.command('list').description('List accessible Firebase projects.'))
+    .action((options: Options) => execute('projects-list')(undefined, options))
+  common(
+    projects.command('info').argument('<project-id>').description('Show public identity of an accessible project.'),
+  )
+    .action(execute('projects-info'))
+  common(
+    projects.command('inspect').argument('<project-id>').description(
+      'Read database metadata, Auth flags, and rules fingerprints; compare the local connect candidate without deploying.',
+    ),
+  )
+    .action(execute('projects-inspect'))
+  common(
+    projects.command('create').argument('[project-id]').description(
+      'Create a Firebase project after local confirmation; Enter accepts a generated ID when omitted.',
+    ),
+  )
+    .action(execute('projects-create'))
+  const apps = firebase.command('apps').description(
+    'Manage Firebase app registrations. Tao uses WEB apps with the Web SDK; app deletion is not implemented.',
+  )
+  common(
+    apps.command('list').requiredOption('--project <id>', 'Firebase project ID.').description(
+      'List apps on all platforms.',
+    ),
+  )
+    .action((options: Options) => execute('apps-list')(undefined, options))
+  common(
+    apps.command('info').argument('<app-id>').requiredOption('--project <id>', 'Firebase project ID.').description(
+      'Show public app metadata.',
+    ),
+  )
+    .action(execute('apps-info'))
+  common(
+    apps.command('config').argument('<web-app-id>').requiredOption('--project <id>', 'Firebase project ID.')
+      .description('Print public Firebase Web SDK configuration.'),
+  )
+    .action(execute('apps-config'))
+  common(
+    apps.command('create').argument('<display-name>').requiredOption('--project <id>', 'Firebase project ID.')
+      .description('Register a WEB app after local confirmation.'),
+  )
+    .action(execute('apps-create'))
+  common(
+    firebase.command('data').description('Reset one server store; Auth and local offline stores are preserved.')
+      .command('reset')
+      .requiredOption('--project <id>', 'Firebase project ID.')
+      .requiredOption(
+        '--uid <uid>',
+        'User UID from Firebase Console: selected project → Authentication → Users → User UID (console.firebase.google.com/project/<id>/authentication/users).',
+      )
+      .requiredOption(
+        '--store <StorageKey>',
+        'Authored Datasource Firebase StorageKey in Tao source (e.g. hosted-firebase-notes), not web app ID; s_ and URI encoding are applied automatically.',
+      )
+      .option('--dry-run', 'Print the exact recursive deletion plan locally, without authentication or changes.')
+      .description(
+        'Recursively delete users/<uid>/stores/s_<encoded StorageKey> in (default), after a local Continue (default) or Stop choice. Stop clients and clear local stores before reconnecting: offline replicas can republish data.',
+      ),
+  )
+    .action((options: Options) => execute('data-reset')(undefined, options))
 }

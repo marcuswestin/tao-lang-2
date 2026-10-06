@@ -124,10 +124,30 @@
     validation of all nineteen cases remains pending. Build/clean and Firebase creation passed on isolated retry after
     their initial timeouts; retain those observations without claiming stable
     first-attempt timing.
-  - Local fallback verification on October5 stopped at a live source-mutation lock wait after
+  - CI planning evidence on October 5: successful PR15 Verify `37356653198` at `e0383128`
+    and its successful main Verify `37358101885` at `63e70f0f` retain a portable tail.
+    PR partitions ranged156–535 seconds of verification; partition11 added about71 seconds
+    for an isolated CLI retry and partition10 about182 seconds for three isolated retries.
+    The outer planner had no exact numbered-shard or extracted-cohort history and used30-second
+    fallback weights. The initial adjustment derived estimates from current membership,
+    split independent native files, reserved nested-build capacity, and reconstructed seeds.
+    October6 main subsequently refined the cohorts, bounded concurrency and CI duration refit.
+    Integration retains those newer policies, corrects partial-suite inventory weighting, and
+    supplements missing current-file ledger weights. `.github/verify/README.md` distinguishes
+    the newer measured node durations from derived file weights; neither is a stable-tail verdict.
+  - Local fallback verification on October5 stopped at a live native-publication lock wait after
     120seconds; compiler and source-action processes also reached the300second wall bound.
     The Developer approved larger bounded waits while retaining assertions and lock ownership
     checks. This is timeout recovery, not evidence of faster execution or completed acceptance.
+    Inspection's fallback held the exclusive publisher lock while hashing declaration and output
+    inventories, allowing readers to perpetuate the queue after a writer finished. The fallback
+    now uses a short publication barrier and repeats snapshot-validated hashing outside the lock.
+    Provisional stale results receive an independent locked confirmation so completed publication
+    rollbacks cannot leak transient damage diagnostics; healthy reads remain unlocked.
+    Lock waiters also avoid publishing fsynced claim files while a valid owner is present and
+    probe at50millisecond intervals. The initial compiler serialization adjustment is superseded
+    by main's bounded-concurrency policy; explicit concurrency behavior tests remain intact.
+    Complete verification and comparable clean timing remain required before attributing gains.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much
   end-to-end tail remains; a cached skip is not a repeat measurement.

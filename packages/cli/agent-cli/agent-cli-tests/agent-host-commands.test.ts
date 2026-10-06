@@ -99,6 +99,7 @@ const expected = [
   'remote exists',
   'processes list',
   'processes started',
+  'processes group',
   'start-branch',
   'take-branch',
   'storage sync',

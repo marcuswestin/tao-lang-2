@@ -207,6 +207,18 @@ const commands = new Map<string, ReleaseCapability>([
     'pylon generate',
     'firebase',
     'firebase generate',
+    'firebase projects',
+    'firebase projects list',
+    'firebase projects info',
+    'firebase projects inspect',
+    'firebase projects create',
+    'firebase apps',
+    'firebase apps list',
+    'firebase apps info',
+    'firebase apps config',
+    'firebase apps create',
+    'firebase data',
+    'firebase data reset',
   ]
     .map(name => [name, 'hosted-data'] as const),
 ])
@@ -220,8 +232,28 @@ const targets = new Map<string, ReleaseCapability>([
 ])
 // Keyed by long flag, or by `<command path> <flag>` where one command gives a flag another meaning.
 const options = new Map<string, ReleaseCapability>([
-  ['create --provider', 'hosted-data'],
+  ['create --provider', 'core'],
   ['create --validation-tools', 'hosted-data'],
+  ['connect --manual', 'hosted-data'],
+  ['connect --rules', 'hosted-data'],
+  ...[
+    'firebase projects list --account',
+    'firebase projects info --account',
+    'firebase projects inspect --account',
+    'firebase projects create --account',
+    'firebase apps list --project',
+    'firebase apps list --account',
+    'firebase apps info --project',
+    'firebase apps info --account',
+    'firebase apps config --project',
+    'firebase apps config --account',
+    'firebase apps create --project',
+    'firebase apps create --account',
+    'firebase data reset --project',
+    'firebase data reset --uid',
+    'firebase data reset --store',
+    'firebase data reset --account',
+  ].map(name => [name, 'hosted-data'] as const),
   ...[
     '--app',
     '--json',

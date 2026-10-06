@@ -112,6 +112,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'remote exists': { command: 'git', fixedArgs: ['ls-remote', '--exit-code', 'origin'] },
   'processes list': { command: 'ps', fixedArgs: ['-axo', 'pid=,ppid=,lstart=,command='], argsPolicy: 'none' },
   'processes started': { command: 'ps', fixedArgs: ['-o', 'lstart=', '-p'], argsPolicy: 'pid' },
+  'processes group': { command: 'ps', fixedArgs: ['-axo', 'pid=,ppid=,pgid=,uid=,stat=,comm='], argsPolicy: 'pid' },
   'start-branch': { command: './dev', fixedArgs: ['start-branch'] },
   'take-branch': { command: './dev', fixedArgs: ['take-branch'] },
   // The `storage` submodule archives development evidence: syncing and pushing reach its GitHub

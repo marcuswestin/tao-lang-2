@@ -102,9 +102,9 @@ Describe('tao create lowering', () => {
       for (const entry of ['App.tao', 'Scenarios.tao', 'FieldNotes.test.tao']) {
         const result = await workspace.validate(FS.resolvePath(entry, generated))
         problems.push(
-          ...result.diagnostics.filter(diagnostic => diagnostic.severity === 'error').map(d =>
-            `${entry}: ${d.message}`
-          ),
+          ...result.diagnostics.filter(diagnostic =>
+            diagnostic.severity === 'error' || diagnostic.message.includes("Style property 'gap' is already present")
+          ).map(d => `${entry}: ${d.message}`),
         )
       }
       Expect(problems).toEqual([])

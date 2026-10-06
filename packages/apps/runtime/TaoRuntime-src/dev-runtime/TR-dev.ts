@@ -12,6 +12,8 @@ type TaoDebugStyleInput = TaoDebugStyle | readonly TaoDebugStyleInput[] | null |
 
 type TaoDevModeState = Required<TaoDevModeOptions>
 
+type HostDeveloperTools = { readonly label: string; readonly open: () => void }
+
 const layoutBoundColors = [
   '#e11d48',
   '#2563eb',
@@ -51,6 +53,7 @@ let devMode = defaultDevMode()
  * inspecting through the first — is two menus for one job.
  */
 let menuHidden = false
+let hostDeveloperTools: HostDeveloperTools | undefined
 const listeners = runtimeListeners()
 
 /** Dev configures Tao runtime development-only diagnostics. */
@@ -66,6 +69,7 @@ export const Dev = {
   setMode,
   toggleLayoutBounds,
   useMode,
+  useHostDeveloperTools,
 } as const
 
 /** DevControls exposes public, hook-free Tao runtime diagnostic controls. */
@@ -76,8 +80,19 @@ export const DevControls = {
   isLayoutBoundsEnabled,
   isMenuHidden,
   setMode,
+  setHostDeveloperTools,
   toggleLayoutBounds,
 } as const
+
+/** The native host supplies its tools; the runtime remains independent of the host library. */
+function setHostDeveloperTools(tools: HostDeveloperTools | undefined): void {
+  hostDeveloperTools = tools
+  listeners.notify()
+}
+
+function useHostDeveloperTools(): HostDeveloperTools | undefined {
+  return React.useSyncExternalStore(listeners.subscribe, () => hostDeveloperTools, () => undefined)
+}
 
 /** hideMenu withholds the floating dev menu for a host that presents the same options itself. */
 function hideMenu(hidden: boolean): void {

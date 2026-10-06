@@ -697,6 +697,104 @@ Test('recovery preserves uncertainty and device fences after recorded processes 
   Expect(recovered.message).toContain('unproved')
 })
 
+for (
+  const evidence of [
+    'already-shutdown',
+    'still-booted',
+    'absent-target',
+    'other-target-shutdown',
+    'list-failed',
+    'list-malformed',
+    'changed-owner',
+  ] as const
+) {
+  Test(
+    `interrupted iOS recovery requires exact authoritative shutdown after a nonzero shutdown: ${evidence}`,
+    async () => {
+      const record = receipt('complete')
+      record.checkout = FS.realPathSync(Repo.getRoot())
+      record.controller = { command: 'old controller', pid: 900, startedAt: 'old-holder' }
+      record.processGroups = [record.children[0]!]
+      const owner = {
+        command: 'managed simulator',
+        id: 'retained-ios-2',
+        name: 'ios-simulator:OWNED',
+        pid: 900,
+        repositoryRoot: record.checkout,
+        startedAt: 'diagnostic timestamp',
+      }
+      record.devices = [{
+        platform: 'ios',
+        id: 'OWNED',
+        owned: true,
+        state: 'retained',
+        generation: owner.id,
+        resources: [owner],
+        holder: record.controller,
+      }]
+      await writeDevLoopReceipt(record)
+      const observed: string[][] = []
+      let released = 0
+      try {
+        const result = await recoverDevLoopProcesses(record, {
+          processIsAlive: () => false,
+          identities: () => new Map(),
+          descendants: () => [],
+          signal: () => {},
+          sleep: async () => {},
+          now: () => 0,
+          groupMembers: () => [],
+          isGroupAlive: () => false,
+          readOwner: async () => evidence === 'changed-owner' ? { ...owner, id: 'successor' } : owner,
+          recoverResources: async options => {
+            Expect(options.name).toBe('ios-simulator:OWNED')
+            Expect(options.generation).toBe('retained-ios-2')
+            if (!await options.shutdown(owner)) {
+              Errors.throwHostEnvironment('Source recovery shutdown remains unproved; fences retained.')
+            }
+            released++
+          },
+          run: async (command, spec) => {
+            Expect(command).toBe('xcrun')
+            const args = [...spec?.args ?? []]
+            observed.push(args)
+            const shutdown = args[1] === 'shutdown'
+            const target = evidence === 'other-target-shutdown' ? 'UNOWNED' : 'OWNED'
+            return {
+              command,
+              args,
+              exitCode: shutdown || evidence === 'list-failed' ? 1 : 0,
+              signal: null,
+              stderr: shutdown ? 'Current state: Shutdown' : '',
+              stdout: evidence === 'list-malformed' ? 'invalid-json' : JSON.stringify({
+                devices: {
+                  ios: evidence === 'absent-target' ? [] : [{
+                    udid: target,
+                    state: evidence === 'still-booted' ? 'Booted' : 'Shutdown',
+                  }],
+                },
+              }),
+            }
+          },
+        })
+        const proved = evidence === 'already-shutdown'
+        Expect(released).toBe(proved ? 1 : 0)
+        Expect(result.state).toBe(proved ? 'stopped' : 'cleanup-failed')
+        Expect(result.cleanupOutcome).toBe(proved ? 'proved' : 'retained')
+        Expect(result.devices?.[0]?.state).toBe(proved ? 'released' : 'retained')
+        Expect(observed).toEqual(
+          evidence === 'changed-owner' ? [] : [
+            ['simctl', 'shutdown', 'OWNED'],
+            ['simctl', 'list', 'devices', '--json', 'available'],
+          ],
+        )
+      } finally {
+        await FS.remove(devLoopDirectory(record.session))
+      }
+    },
+  )
+}
+
 for (const owned of [true, false]) {
   Test(
     `matched interrupted iOS recovery ${

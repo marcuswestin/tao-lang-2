@@ -100,10 +100,21 @@ export async function openPhysicalDevice(
 ): Promise<boolean> {
   ReleaseCapabilities.require('companion')
   const shouldStop = dependencies.shouldStop ?? (() => false)
-  if (shouldStop() || await metro.waitForMetro(shouldStop) === false || shouldStop()) {
+  if (shouldStop()) {
     return false
   }
+  DevLoopOutput.logDevLoop('dev', 'Waiting for Metro before opening a physical device…')
+  if (await metro.waitForMetro(shouldStop) === false || shouldStop()) {
+    return false
+  }
+  DevLoopOutput.logDevLoop(
+    'dev',
+    'Finding connected physical devices… Xcode device discovery can take a minute. Unlock your phone and trust this Mac.',
+  )
   const iosDevices = await (dependencies.listIosDevices ?? (() => listIosPhysicalDevices(dependencies)))()
+  if (shouldStop()) {
+    return false
+  }
   const androidSerials = ReleaseCapabilities.allows('android') ? await listAndroidPhysicalDevices(android) : []
   if (shouldStop()) {
     return false
@@ -188,6 +199,7 @@ async function openIosPhone(
   options: PhysicalDeviceOptions,
 ): Promise<boolean> {
   try {
+    DevLoopOutput.logDevLoop('dev', `Checking whether Tao Companion is installed on ${device.name}…`)
     const probe = await runDevicectlJson(companionAppProbeArgs(device.id, CompanionIdentity.bundleIdentifier), options)
     if (options.shouldStop?.()) {
       return false
@@ -206,10 +218,15 @@ async function openIosPhone(
         }'\` once, then retry.`,
       )
     }
+    DevLoopOutput.logDevLoop('dev', `Finding the local network address for ${device.name}…`)
     const host = await (options.detectLanHost ?? detectLanIPv4)()
     if (options.shouldStop?.()) {
       return false
     }
+    DevLoopOutput.logDevLoop(
+      'dev',
+      `Opening Tao Companion on ${device.name}… Keep the phone unlocked; device preparation can take a few minutes.`,
+    )
     const result = await runDevicectlJson(
       companionLaunchArgs({
         bundleIdentifier: CompanionIdentity.bundleIdentifier,
