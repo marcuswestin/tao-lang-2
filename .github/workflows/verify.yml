@@ -76,12 +76,20 @@ env:
   BUN_INSTALL_CACHE_DIR: /home/runner/tao-cache/bun
   # Every directory Bun's isolated linker writes: the root store and each workspace's own links,
   # which point into it by relative paths, so the tree restores intact at the same checkout path.
+  # Left out: the Android, iOS, and other-platform binaries of Jazz's native packages, about 1 GB of
+  # the 3.7 GB tree that only Gradle, Xcode, or another OS ever loads. The excluded paths are part of
+  # the cache's version, so a tree saved with them is never restored as one without them.
   NODE_MODULES_PATHS: |
     node_modules
     packages/*/node_modules
     packages/*/*/node_modules
     packages/apps/providers/*/node_modules
     Apps/Hosted CRUD/node_modules
+    !node_modules/.bun/jazz-rn-android@*/node_modules/jazz-rn-android/android
+    !node_modules/.bun/jazz-rn-ios@*/node_modules/jazz-rn-ios/*.xcframework
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.darwin-*.node
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.win32-*.node
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.linux-arm64-*.node
 
 jobs:
   # Holds a pull request until its author has accepted CLA.md by posting the agreement sentence on a
