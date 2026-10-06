@@ -22,8 +22,9 @@ export const VERIFY_CHANGED = 'verify-changed'
 export const VERIFY_FULL = 'verify-full'
 export const VERIFY_FULL_SANDBOX = 'verify-full-sandbox'
 /**
- * The host-only gates hosted `Verify` does not admit, run locally beside it as the other half of a
- * landing's proof. Its membership is derived from the workflow (`VerifyComplement`), not listed.
+ * The host-only gates hosted `Verify` does not run, run locally beside it as the other half of a
+ * landing's proof. Its membership is derived from the catalog and `ci-macos.yml` (`VerifyComplement`),
+ * not listed.
  */
 export const VERIFY_COMPLEMENT = 'verify-complement'
 /**

@@ -13,7 +13,7 @@ other `Verify` run is in flight and 11 when one is; the `VERIFY_PARTITIONS` and
 overrides both for one run, and `open-pr` waits before pushing while two runs are already in flight.
 It currently has PR, main-push and dispatch triggers, but no `merge_group` trigger. Complete
 the queue prerequisites before requiring native merge queue. The live landing contract is in
-[`hosted-verification.md`](../../agents/skills/verification-lanes/references/hosted-verification.md).
+[`landing/SKILL.md`](../../agents/skills/landing/SKILL.md).
 
 ## Decide and prepare
 

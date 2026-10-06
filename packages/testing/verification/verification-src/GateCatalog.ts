@@ -625,6 +625,8 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       'studio-smoke',
       {
         ...studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts'),
+        // One slot, not HOSTED_BROWSER_LANE_COST: it drives no browser, and packed beside other gates
+        // it slows (15 s to 64 s) but passes, so reserving the runner would only lengthen the partition.
         runsOnHostedLinux: true,
       },
     ],
@@ -732,6 +734,21 @@ function isPrepare(name: string): boolean {
 function skippedUnsandboxed(name: string, options: { hostedLinux?: boolean } = {}): boolean {
   const gate = metadata(name)
   return gate.requiresUnsandboxed === true && !(options.hostedLinux === true && gate.runsOnHostedLinux === true)
+}
+
+/**
+ * hostedLinuxRefusal says why a lane may not take `--hosted-linux`, or nothing when it may: the flag
+ * belongs to a hosted Verify Linux partition, which also skips unsandboxed gates.
+ */
+function hostedLinuxRefusal(
+  options: { hostedLinux?: boolean; skipUnsandboxed?: boolean },
+  hostPlatform: string,
+): string | undefined {
+  if (options.hostedLinux !== true || (options.skipUnsandboxed === true && hostPlatform === 'linux')) {
+    return undefined
+  }
+  return '--hosted-linux is for a hosted Verify Linux runner and goes with --skip-unsandboxed; locally,'
+    + ' verify-full runs those gates and verify-complement leaves them to hosted Verify.'
 }
 
 /**
@@ -901,6 +918,7 @@ export const GateCatalog = {
   TAO_TEST_BUDGET_KEY: WorkGraph.BUDGET_ENV_KEYS.taoTest,
   TYPECHECK_COST,
   dependenciesOf,
+  hostedLinuxRefusal,
   isPrepare,
   isRecordable,
   machineWidth,

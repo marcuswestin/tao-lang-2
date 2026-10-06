@@ -545,10 +545,9 @@ await runWithCommands(commands => {
         // the host gates still pending are reported, so a summary never looks fuller than it is.
         const admission = hostedCi ? CiGateAdmission.select(gates, options.ciHostGates ?? '') : undefined
         const lane = admission === undefined ? gates : admission.gates
-        if (options.hostedLinux === true && (options.skipUnsandboxed !== true || Platform.hostPlatform !== 'linux')) {
-          Errors.throwUserInput(
-            '--hosted-linux is for a hosted Verify Linux runner and goes with --skip-unsandboxed; a local lane keeps those gates in the complement.',
-          )
+        const hostedLinuxRefusal = GateCatalog.hostedLinuxRefusal(options, Platform.hostPlatform)
+        if (hostedLinuxRefusal !== undefined) {
+          Errors.throwUserInput(hostedLinuxRefusal)
         }
         const runnable = options.skipUnsandboxed === true
           ? lane.filter(name => !GateCatalog.skippedUnsandboxed(name, { hostedLinux: options.hostedLinux }))

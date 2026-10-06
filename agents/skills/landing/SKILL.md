@@ -31,13 +31,13 @@ What you ask for turns on whether the gates prove the change, not on its size.
 
 - The branch is a clean `feat/<name>` with the exact reviewed task paths committed, and the roadmap, ledger, and spec documents the work changed are refreshed: an edit after `Verify` starts changes the head it proves.
 - The merge message at `.artifacts/merge/<branch>.msg` is written and reviewed (below).
-- In a fresh worktree or after merging `main`, run `./agent tao bindings generate --maintained`: stale maintained native bindings fail the complement on a change that never touched them.
+- Maintained native bindings need no manual step: `open-pr --auto-merge` regenerates them before the push and refuses if that fails or changes tracked files.
 - Run no broad local lane and no `finalize` first; the route is the proof. Until `Verify` is green on the current head, call the branch awaiting CI, not verified.
 
 ## The route
 
 1. Run `./agent unsandboxed open-pr --auto-merge`, always with `--auto-merge`. It waits for admission, pushes, opens or reuses the pull request titled from the reviewed message, and starts hosted `Verify`; GitHub squash-merges the moment `Verify` is green on that head.
-2. The same command runs `verify-complement` beside it: the host-only gates hosted `Verify` does not run, derived by `verify-complement` from the workflow. It posts `Verify (host)` on the head. `Verify (host)` is not a required check, so GitHub merges on a green `Verify` whether or not the complement has finished; "When the complement fails" covers the aftermath. Never run the sandbox-capable gates locally as merge evidence; hosted `Verify` owns them.
+2. The same command runs `verify-complement` beside it: the host-only gates hosted `Verify` does not run, derived by `verify-complement` from the catalog and `ci-macos.yml`. It posts `Verify (host)` on the head. `Verify (host)` is not a required check, so GitHub merges on a green `Verify` whether or not the complement has finished; "When the complement fails" covers the aftermath. Never run the sandbox-capable gates locally as merge evidence; hosted `Verify` owns them.
 3. `open-pr` returns once GitHub has merged, printing `merged_at`, or once the complement ends, whichever is later. It runs for many minutes: run it in the foreground with a long timeout, or backgrounded under `verification-lanes`' rules for reporting while a lane runs.
 4. When it exits before the merge, follow with `./agent unsandboxed pr-checks --wait`. A failed partition is `verification-lanes`' to diagnose; fix, commit, and run `open-pr --auto-merge` again, which restarts both halves.
 
@@ -47,7 +47,7 @@ What you ask for turns on whether the gates prove the change, not on its size.
 
 ### When `open-pr` reports no checks
 
-`No checks appeared … within 90s` exits with auto-merge unarmed. Ask `gh api repos/{owner}/{repo}/commits/<sha>/check-suites`: suites present means GitHub started late, so relaunch on the same head once the run exists; zero suites means the push event was lost, so push an empty commit and relaunch.
+`No checks appeared … within 180s` exits with auto-merge unarmed; a queued `Verify` run already counts as checks appearing. The message names the cause and its remedy: a conflict with `main` (merge it and relaunch), no check suite on the commit (the push event was lost: push an empty commit and relaunch), or check suites present (GitHub started late: relaunch on the same head once the run exists).
 
 ### When the complement fails
 

@@ -60,6 +60,8 @@ Describe('CI gate admission', () => {
     Expect(() => CiGateAdmission.select(FULL_LANE, 'studio-nowhere')).toThrow("not in this lane's gate list")
     Expect(() => CiGateAdmission.select(FULL_LANE, '_typecheck')).toThrow('portable gate')
     // Hosted Verify already runs a gate its Linux partitions prove, so CI macOS has nothing to admit.
-    Expect(() => CiGateAdmission.select([...FULL_LANE, 'studio-smoke'], 'studio-smoke')).toThrow('portable gate')
+    Expect(() => CiGateAdmission.select([...FULL_LANE, 'studio-smoke'], 'studio-smoke')).toThrow(
+      "runs in hosted Verify's Linux partitions",
+    )
   })
 })

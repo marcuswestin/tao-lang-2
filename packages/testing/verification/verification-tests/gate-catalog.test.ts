@@ -472,6 +472,16 @@ Describe('gate catalog metadata', () => {
     Expect(GateCatalog.skippedUnsandboxed('_typecheck', { hostedLinux: true })).toBe(false)
   })
 
+  Test('refuses --hosted-linux anywhere but a Linux lane that skips unsandboxed gates', () => {
+    const refusal = GateCatalog.hostedLinuxRefusal({ hostedLinux: true }, 'linux')
+    Expect(refusal).toContain('goes with --skip-unsandboxed')
+    // A local lane does not keep these gates in the complement: verify-full runs them.
+    Expect(refusal).toContain('verify-complement leaves them to hosted Verify')
+    Expect(GateCatalog.hostedLinuxRefusal({ hostedLinux: true, skipUnsandboxed: true }, 'darwin')).toBe(refusal)
+    Expect(GateCatalog.hostedLinuxRefusal({ hostedLinux: true, skipUnsandboxed: true }, 'linux')).toBeUndefined()
+    Expect(GateCatalog.hostedLinuxRefusal({ skipUnsandboxed: true }, 'darwin')).toBeUndefined()
+  })
+
   Test('marks every browser and native UI lane as requiring an unsandboxed host', () => {
     for (const name of HOST_ONLY_GATES) {
       Expect(GateCatalog.metadata(name).requiresUnsandboxed).toBe(true)
