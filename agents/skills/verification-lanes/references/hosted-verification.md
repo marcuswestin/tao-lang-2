@@ -23,7 +23,7 @@ variations:
    Developer has told to use it, never a way past a wait you find inconvenient.
 2. The same command starts the local complement beside `Verify`: `verify-complement`, one locked
    lane of exactly the gates CI cannot run, derived from the catalog's `requiresUnsandboxed` and
-   `requiresMacOS` gates minus whatever `CI_HOST_GATES` in `.github/workflows/verify.yml` admits
+   `requiresMacOS` gates minus whatever `CI_HOST_GATES` in `.github/workflows/ci-macos.yml` admits
    (about five minutes today). It posts the `Verify (host)` status on the head, which
    `pr-checks` follows beside `Verify`, and leaves a receipt (`complement.json`) beside the lane's
    `summary.json`. Never run the sandbox-capable gates locally as merge evidence: hosted `Verify`
@@ -78,6 +78,20 @@ diagnostic, never merge evidence; reassess machine contention before starting on
   infer free capacity from missing data or invent a repository command. State the local evidence,
   CI evidence, coverage, and chosen route briefly.
 
+### What a partition spends before its first test
+
+Every partition repeats a fixed cost: checkout and cache restores, the bootstrap, and the prepare
+phase. Measured on a 10-partition run before setup was trimmed: about 71 s before the prepare
+phase, including about 36 s bootstrapping, and 35–51 s of prepare-phase critical path. The bootstrap runs
+`--verify-setup`, which prepares only what gates read, and skips native bindings when their
+freshness check proves them current. The `node_modules` cache leaves out Jazz's other-platform
+binaries. The prepare phase stays in each partition: running it once in `plan` adds more serial
+time than it saves, and each partition must still fail on unformatted or stale generated files. The
+editor build skips when its recorded inputs and outputs both match, which helps repeat local builds.
+Verify does not cache it: the WordFlower compile beside it is as long, so a restore saved no critical
+path. Measured after, on an 11-partition run: about 46 s before the prepare phase. Read a run's
+per-step times before trusting these figures.
+
 Hosted `Verify` is the final portable proof even when a local lane would finish sooner; contention
 decides only when to run a diagnostic lane, never which machine proves the merge. A failed check
 still needs diagnosis; switching machines is not permission to ignore a failure.
@@ -94,6 +108,18 @@ Every partition and the aggregate read that resolved count. A cancelled or faile
 green tree. It proves the portable gates only; the local complement in the route above proves the
 rest. Read the current workflow and lane membership when deciding what
 the complement is; a gate the workflow admits leaves the local list.
+
+The `CI macOS` workflow (`.github/workflows/ci-macos.yml`, `macos-26`, not required) runs
+`verify-full-ci`: the host gates `CI_HOST_GATES` admits plus the prepare nodes they read, every
+other host gate reported as `Pending CI host admission`, no green record. It is a workflow of its
+own so a `Verify` run ends with its Linux partitions; as a job inside `Verify` it held the run in
+progress for its 16-minute wall, and `open-pr`'s admission and the `plan` job count such a run as
+holding the pool. It runs on pushes to `main` and on dispatch; a dispatched run's `host_gates`
+input tries one admission for that run without editing the file, which is how a gate is measured
+before it is admitted. Admitting a gate removes it from the local complement, and `CI macOS` is
+not required, so admit one only once its hosted run is reliable, in the same change that adds the
+`pull_request` trigger, and with the `main` ruleset requiring `CI macOS` by name; until then the
+complement stays the proof.
 
 For feature work, refresh affected documents, review and commit the exact task paths, and prepare
 the reviewed message at `.artifacts/merge/<branch>.msg` without paying for local broad verification

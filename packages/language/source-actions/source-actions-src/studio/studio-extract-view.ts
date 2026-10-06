@@ -219,11 +219,14 @@ function viewNameTaken(file: AST.TaoFile, name: string, files: readonly AST.TaoF
       (AST.isDeclaration(statement) && AST.declarationNamespace(statement) === 'value' && statement.name === name)
       || (AST.isEntityDataDeclaration(statement) && statement.singularName === name)
       || (AST.isUseStatement(statement)
-        && (AST.resolvedImportedDeclarations(statement).some(declaration =>
-          AST.declarationNamespace(declaration) === 'value'
-          && (declaration.name === name
-            || (AST.isEntityDataDeclaration(declaration) && declaration.singularName === name))
-        ) || statement.importedDeclarations.some(item => item.$refText === name && item.ref === undefined)))
+        && (AST.resolvedImportedBindings(statement).some(binding =>
+          binding.namespace === 'value'
+          && (binding.localName === name
+            || (statement.all && AST.isEntityDataDeclaration(binding.declaration)
+              && binding.declaration.singularName === name))
+        ) || statement.importedDeclarations.some(item =>
+          AST.importLocalName(item) === name && item.target.ref === undefined
+        )))
     )
   )
 }
@@ -377,6 +380,7 @@ function sourceTypeName(type: ASTUtils.TaoType): string | undefined {
   }
   return Switch.kind(type, {
     entity: plain,
+    capability: plain,
     enum: plain,
     item: item => item.nominal === undefined ? undefined : plain(),
     list: list => list.element === undefined || sourceTypeName(list.element) === undefined ? undefined : plain(),

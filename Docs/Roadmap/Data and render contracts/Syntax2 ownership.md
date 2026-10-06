@@ -6,7 +6,326 @@ language decisions. The first render foundation must land before A1/D1 dispatch.
 starts from fetched main containing this document and that implementation, records its exact base,
 and works in a separate feature branch/worktree. Later transfers are explicit amendments.
 
+## Review cadence
+
+The Developer selected substantially less frequent independent review on 2026-10-05. Managers
+implement substantial coherent batches, making multiple sensible commits before requesting one
+review of the accumulated range. Focused checks and manager inspection continue while writing;
+individual commits, worker returns and small integration handoffs do not require a dedicated
+reviewer. The coordinator may integrate inspected commits and continue dependent work within the
+existing ownership grants.
+
+Do not start independent reviews by default at intermediate milestones. Request a light targeted
+review only for a concrete unresolved correctness risk: inspect the changed behavior or named
+integration seam and report actionable blockers briefly. Existing reviewers narrow their scope
+accordingly; avoid broad architectural exploration, neighboring-feature audits, unsolicited
+refactors and repeated context gathering. Ordinary implementation handoffs do not wait for a
+dedicated reviewer.
+
+Defer comprehensive whole-project review until the implementation is working. Final landing
+readiness still requires its blocking-risk assessment and verification. This cadence supersedes
+earlier requests for independent review of each bounded cut; historical review receipts and
+ownership boundaries remain valid. Reuse completed proofs and avoid repeating green checks
+without a relevant change or concrete unresolved concern.
+
+## Verification cadence
+
+The Developer also selected less frequent broad verification on 2026-10-05. Managers and workers
+normally run focused affected-suite checks while implementing multiple commits. The coordinator
+batches repository typecheck and verify-changed on the integrated tree at substantial milestones,
+or when investigating a concrete cross-package regression. Do not run broad gates per commit or
+worker return, or repeat a known failure outside the workstream on a stale integration baseline.
+This supersedes the ordinary per-commit broad gate for this implementation program.
+
+Reserve full verification and required host acceptance for a completed landing candidate, using
+the landing workflow rather than duplicating those lanes in each manager's worktree. After a gate
+fails, fix and recheck the failing scope before repeating the broad lane. Passing focused checks
+does not imply whole-app or landing acceptance.
+
 ## First concurrent wave
+
+### Operator, source rendering and production timing amendment
+
+The generic packet `ebdf859c4` is integrated as `4662886f8`. A now owns the reused and
+additional paths in its committed-worktree proposal
+`.artifacts/checkpoint/next-operators-converters-grant.md`: blocks.langium,
+ast-structure.ts, TypesFormatter.ts, FunctionalCoreValidator.ts, numeric-units-validator.ts,
+associated-methods-validator.ts and its messages, target-capabilities-validator.ts, plus
+the existing generic/type/invocation/compiler paths and new focused operator/converter helpers.
+This covers authored operators, explicit pure converters, static methods and concrete numeric,
+item and entity method owners. D retains callable-effect-facts.ts; actual converter descriptors
+must enter that existing purity/effect pipeline. Root retains runtime facades, module publication,
+standard declarations and app graduation. Associated views require B's separate type-grammar seam.
+
+B owns StatementsFormatter.ts solely for EventHandler arrow whitespace, disjoint from A's
+generic header spacing. Its current bare-text and atomic-handler packet includes mounted empty
+value suppression, existing Text rendering and source dispatch. General structural ui and
+associated view integration now releases views.langium, render-targets.ts, views-validator.ts,
+ViewsFormatter.ts, ViewsCompiler.ts, InvocationsCompiler.ts, ui-render-codegen.ts and
+TR-ui-render.tsx to B, with focused associated-ui tests. A retains the actual associated-view
+descriptor, structural admission and rendered family in its held Type/associated-methods/type
+grammar interfaces. B starts from an already bound component and receiver props, preserving real
+occurrence props; root retains witness planning/publication and shared dispatch. Generic views
+later reuse A's ordinary generic invocation API, rather than a special LazyList compiler kind.
+
+A also owns actions.langium's StateDeclaration rule and StatesFormatter.ts solely for selected
+named-state shorthand. D retains every other action grammar rule. This is a disjoint source hunk,
+coordinated before replay; it preserves nominal state identity and the existing lexical type/value
+distinction.
+
+C owns runtime expo-module.config.json, ios/TaoContinuousClockModule.swift,
+ios/TaoRuntimeNative.podspec, android/build.gradle,
+android/src/main/java/tao/runtime/TaoContinuousClockModule.kt, runtime package.json native files,
+CLI app-modules.ts native packaging and Companion package.json local runtime linkage, with
+focused loader/native tests. The synchronous native clock uses sleep-inclusive monotonic platform
+primitives. Unsupported web or absent native capability reports HostEnvironmentError rather than
+silently changing the timing contract. Root retains TR-time hookup, the facade and standard Time
+declarations. Native build evidence and actual device-sleep acceptance remain distinct.
+
+C may also delegate the isolated app-owned BookBackend.ts leaf and its focused
+TR-tests/syntax2-book-backend.test.ts to a fast worker while native compilation runs. It implements
+the README's deterministic memory backend, bounded server pages and opaque continuation ownership,
+revision-specific acknowledgment and owned export-file operations with controlled failures.
+Root retains BookIO binding, schemas, query syntax, live-handle projection and all Tao app edits.
+This adapter leaf adds no universal query/status API and cannot count as completed app integration.
+
+C additionally owns the bounded query pagination frontend: data.langium QueryClause and its new
+PaginationClause, DataFormatter, query-specific data-validator rules/messages, and DataCompiler's
+EntityQueryDeclaration page-size hunk with focused source tests. It emits pageSize, never a local
+limit; the two clauses cannot be combined. Root owns native query context, provider operations,
+runtime page request metadata, BookProvider/BookIO and all app source graduation. C's backend
+followup adds atomic confirmed book upserts and explicit rejection of unsupported PDF text.
+Native Android compilation/invocation evidence is an independent C acceptance lane.
+
+C now also owns the app-only BookStoreProvider.ts and
+TR-tests/syntax2-book-provider.test.ts. It uses the root's authenticated native query/entity
+contexts and shared validated snapshot codec, preserves live server IDs and private continuation
+ownership, and proves bounded acquisition and confirmed writes through real runtime schemas.
+Root retains BookIO.ts and its Tao declarations, schemas, all app graduation, and runtime APIs.
+Managers may replay required committed coordinator dependencies into their own worktrees;
+those dependency copies are not returned for integration.
+
+C's next isolated standard-library grant is @tao/core/Quantity.tao and Quantity.ts,
+@tao/time/Durations.tao and Durations.ts, and one focused native-source proof file. It implements
+the selected concrete Duration/Ratio operators and units, Timer fixed samples and cancellable Wait
+through checked factories. Existing Time.tao/Time.ts ticker APIs and root-owned Core.tao/Core.ts
+remain outside this grant. Generic abstract-family arithmetic cannot claim concrete construction
+without actual selected-factory transport. Root retains Prelude, facades and native publication.
+Managers may merge a specifically supplied committed integration snapshot when dependency replay
+would dominate the work; return only owned leaf commits, never the dependency merge.
+
+A additionally owns an explicit abstract flag on real type declarations and constructor rejection
+for the selected abstract Scalar contract. Root owns quantity factory surface gating and standard
+declarations. Abstractness must use source metadata, never the spelling of a type name.
+
+A supplies the real entity/collection receiver containment, scoping and descriptor ABI for
+data-associated functions and views; B consumes it for components and D for associated actions.
+Root's narrow runtime-type-compiler quantity correction preserves opaque backing and is complete;
+A retains expression lowering, including native abstract-family argument preservation.
+
+D additionally owns TR-action-transactions.ts and its existing transaction/defer tests for a real
+root cancellation signal inherited by joined calls. Checked Wait consumes that signal through the
+root-owned facade; cleanup drains with cancellation shielded. Abandoned launches retain existing
+receipt and failure-report suppression. This does not change ask parking or promise cancellation
+of noncooperative awaits. The source return packet and new multi-outcome runtime leaf remain D's
+current integration work; when/pick grammar dispatch must coordinate with A's held files.
+
+### Current signature projections and unit-reading batches
+
+A resumes private signature projections and bare/dot role construction, including the forcing
+PersonName.GivenName, PersonName(.FamilyName "Lovelace") and Subtract(Right 2, Left 5) cases. It owns
+Type.ts, invocations.ts, parser expressions.langium, types.langium and value-scope.ts, the
+functions-validator.ts and types-validator.ts source, and ExpressionsCompiler.ts solely for this
+construction/resolution batch. New focused semantic, parser, validator and compiler tests or helper
+modules for these cases belong to A. Preserve existing named argument compatibility, upward-only
+callable admission, lexical name precedence and source identities. The coordinator retains
+export aggregation, production effect installation, registration and app graduation. B's current
+alias-only ast-structure.ts grant remains separate.
+
+A additionally owns configured-item-validator.ts solely for constructor-member resolution and
+diagnostics needed by these actual signature projections and explicit role constructions. The
+forcing declaration `type ProfileName is PersonName.GivenName` uses the selected named-type `is`
+relation; this grant does not introduce transparent `=` aliases or widen package-alias consumers.
+
+A also owns ExpressionsFormatter.ts solely for explicit leading-dot constructor spacing and
+stable fix/check behavior, with focused signature-role formatter tests. Canonical role selection
+must not consume its enclosing comma's space. Its next Type-only outcome hook may consume D's
+actual action-result descriptor; no recursive initializer visibility is introduced.
+
+C resumes generated unit-reading methods such as Span.seconds(), preserving concrete descendant
+roles and canonical backing. It owns new numeric-unit-readings.ts, its focused semantic test,
+numeric-unit-readings-validator.ts, NumericUnitReadingsValidationMessages.ts and validator test,
+existing NumericUnits.ts and NumericUnitsCompiler.ts solely for inherited unit ownership and
+unit-reading emission, and a focused compiler numeric-unit-readings test. Reuse actual receiver,
+unit and owner identities and existing checked factory.inUnit; no fake associated-method AST or
+second argument matcher. Publish a small real resolver/emitter API promptly for integration.
+A owns Type and ExpressionsCompiler dispatch and may integrate C's committed API under this
+grant, through the coordinator relay. C does not edit those shared files. The coordinator retains
+facade exports, validator registration, factory dependency publication and app graduation.
+
+C's unit-reading resolver/emitter and validator are returned at `20c59ae86` and `37a676ec7`,
+replayed as `4d9fd8270` and `053c8b76e`. Its next batch owns quantity-native-module.ts and
+bridge-metadata.ts solely for generated descendant quantity factories and dependency publication,
+plus focused quantity-native-module and quantity-publication tests. Derive each child through its
+actual checked parent factory rather than creating a separate nominal root with a copied table.
+Preserve parent admission, concrete role authentication, canonical backing, inherited units,
+cross-file linkage and generated TypeScript contracts. Existing aliases continue to forward the
+same owner instead of becoming descendants. Return any minimal shared resolver/facade request;
+Type and ExpressionsCompiler remain A-owned. No unrelated bridge or backend edits belong here.
+
+Both managers implement multiple sensible commits with focused checks; routine returns do not
+wait for a dedicated review. Remaining generic/Self/operator and converter work is still required,
+but these grants do not authorize unrelated shared-file changes or new language decisions.
+
+### Next generic and concrete Self batch
+
+A may now implement the accepted `where type T is Ordered and Display` function constraints and
+concrete implementing `type`/Self semantics, before operators and converters. Its existing Type,
+invocations, expressions/types grammar, value-scope, functions/types validators and
+ExpressionsCompiler ownership continues. It additionally owns callable-signatures.ts and
+associated-methods.ts for generic substitution and concrete Self correspondence, plus
+canonical-effect-snapshot.ts solely for substituting already-discovered method signatures without
+changing effect discovery or bounds. ExpressionsFormatter.ts, FunctionalCoreCompiler.ts and
+AssociatedMethodsCompiler.ts are released solely for canonical generic declarations and their
+actual associated-function emission. New generic-bindings.ts and focused feature tests belong
+to A. Use actual source declarations and the existing argument matcher; do not create a second
+matcher or infer equality between independent generic parameters. A same-T pair must reject
+mixed Celsius/Fahrenheit unless explicitly converted. Preserve function purity, inferred results,
+nominal direction, captured witnesses and the selected structural capability failure contracts.
+Root retains facades, production effect installation, capability transport and app graduation;
+D retains action result helpers and failure/runtime ownership. Operators and converters require
+the next bounded amendment after this generic batch, rather than being included implicitly.
+
+A additionally owns associated-invocations.ts and capability-transport.ts for aggregate generic
+constraints and already-selected witness forwarding, plus compiler capability-projection.ts for
+emitting that same correspondence. argument-bindings.ts is released solely for directed generic
+constructor-role metadata in the existing matcher, and StatementsFormatter.ts solely for generic
+header/parameter-list spacing. These grants supersede root ownership for those bounded changes;
+root will not write them concurrently. Preserve optional carrier sampling, input/result variance,
+concrete receiver identity and capability failure bounds. Existing configured-item-validator.ts
+ownership also covers validation of the selected newly admitted constructor payload expressions.
+
+### Next checked quantity arithmetic leaf
+
+C may implement new TR-quantity-arithmetic.ts and its focused runtime test under the existing
+runtime source/test directories. Accept authenticated operand and result factories supplied by
+the authored operation, rather than granting arithmetic through shared numeric storage. Reuse
+checked canonical construction for finite results and existing QuantityFailureCases; do not add
+an unrelated exception engine. Preserve ordered scaling and division, signed quantities, same-domain
+leftmost-unit selection, sole-quantity unit retention and explicit different-result-domain defaults.
+Reject invalid domain/unit/invariant inputs through the existing modeled quantity failures. Helpers
+must not make Celsius/Fahrenheit comparable merely because both have number backing, nor invent
+unrequested affine operator contracts. Root retains runtime facade publication, standard declarations
+and compiler dispatch. Wait/timer work needs a later exact grant and verified cancellation/clock seams.
+
+### Current action outcomes and lexical cleanup batch
+
+D's actual source projector is integrated at `488d45510` and `5f726c6ff`; those two paths returned
+to the coordinator. D resumes the executable `do ... then { ... }`, `done` outcome and lexical
+`defer` batch. It owns parser actions.langium; ActionsFormatter.ts; effect-outcomes.ts;
+effect-outcomes-validator.ts and its message module; compiler ActionsCompiler.ts and
+action-control-flow.ts; and focused parser/formatter/validator/compiler tests for this batch.
+New focused defer codegen/semantic helpers belong to D. The coordinator retains shared parser
+installation, ASTUtils/Compile/Format/TR facade dispatch, validator registration and app migration.
+
+D additionally owns ActionsValidator.ts and FunctionalCoreValidator.ts solely to admit selected
+action-local aliases and infer source action returns. New focused action-result semantic helpers
+belong to D; publish inference through the actual action/return nodes and a caller-supplied
+expression resolver so A can connect its held Type context. Preserve function purity and existing
+foreign action contracts. Canonical done/error payload bindings go before the arrow; legacy
+when-do input compatibility does not redefine the selected then syntax.
+
+D also owns TR-effect-outcomes.ts and its existing focused runtime tests for the canonical then
+outcome connection. Legacy when-do keeps message payloads; canonical then receives the actual
+done result or structured failure context with Message. A named failure takes precedence over
+the broad error arm, which handles modeled failures and unexpected faults alike. Reuse the
+existing joined action scope, savepoint and failure/cleanup preservation rather than adding a
+second walker. The coordinator retains TR.ts facade publication; publish the actual small API
+and its chosen compiler hookup together. This grant does not alter cancellation or app guard policy.
+Reuse the integrated runtime action scope and deferred-action primitives. Ordinary calls and their
+handlers remain joined; cleanup is serial LIFO on every scope exit and preserves a primary failure.
+Deferred shorthand registers the invocation instead of executing it during registration. Named
+failures and broad error fallback propagate through the existing failure machinery, not raw host
+exceptions. Preserve existing spellings as inputs where safe; migrate authored source separately
+through the coordinator. No function grammar, Type or ExpressionsCompiler ownership transfers.
+
+### Next multi-outcome runtime leaf
+
+D may implement new TR-multi-outcome.ts and focused tests while its source-return packet finishes.
+Capture one supplied subject observation and determine matching branches before running handlers;
+run every matched handler in declaration order. Await joined action handlers and stop on their
+unhandled failure. Rendering returns all selected results; an optional fallback runs only when
+no branch matched. Single-value pick remains first-match and separate. Reuse supplied canonical
+case matching and availability snapshots rather than add a second state model or re-read a live
+subject per branch. Root retains TR facade and existing runtime matcher publication. This grant
+does not transfer A's FunctionalCoreCompiler or B's views grammar; source when/pick integration
+follows their current batches and needs a separate ownership release.
+
+### Current slot validation and formatting release
+
+The reviewed nine-path frontend is integrated at `9a39f2b0e`; those paths returned to the
+coordinator. The next bounded B release owns existing
+`parser-src/ast-structure.ts` solely for cycle-safe view-alias slot contracts,
+`validator-src/validators/views-validator.ts` solely for the real fill/placement discriminator
+and repeated placement rules, and `formatter-src/formatters/ViewsFormatter.ts` solely for slot
+declarations, arguments and colon fills. It also owns new renderer-slots-validator.ts,
+RendererSlotsValidationMessages.ts and validator/formatter renderer-slots tests in their owning
+language packages. Use the returned callable binder and real AST identities; do not create a
+second matcher. The coordinator owns facade exports, validator registration, source migrations,
+compiler integration and app graduation. No value-scope, Type or compiler ownership is transferred.
+Authored-source migrations require a separate exact-path release after inventory.
+
+### Next bare text-value rendering batch
+
+B may implement bare text-value references and omission of empty text before general `ui` dispatch.
+It owns views.langium, render-targets.ts, views-validator.ts and InvocationsCompiler.ts for this
+batch, plus a new ui-render-codegen.ts helper, TR-ui-render.tsx runtime helper and focused parser,
+validator, compiler and mounted tests. Real alias/state/parameter declarations must retain source
+identity; do not manufacture a view or rewrite a value into an unlinked view declaration. Use the
+existing text view and reactive read tracking so styling/accessibility and value updates behave
+consistently. Bare empty text returns no node; quotation and explicit Text("") retain their nodes.
+Preserve argument-bearing view calls and parameterized/repeated slots. Publish the exact AST and
+scope hook needed from A before editing A-owned files. A retains value-scope, Type and expressions/
+types grammar; root retains facades, the quoted text import, intrinsic declarations and app
+graduation. Associated views and general structural `ui` rendering require the subsequent shared
+contract amendment; this release does not permit unrelated generic or associated-method edits.
+
+This B release also covers canonical atomic event handlers in views.langium and their focused
+formatter/compiler proofs: `on press -> do Save() then { ... }` and `on press -> when Mode { ... }`.
+Reuse the existing ActionBlock/AtomicActionBlock identity and D's action lowering; do not create
+a second action grammar or change outcome semantics. Root retains action/compiler facade ownership.
+
+### Next wait and fixed timer runtime leaves
+
+C may implement new TR-wait.ts and TR-time.ts with focused tests. Wait receives a checked Duration
+reader and cancellation signal supplied by its caller; nonpositive durations complete immediately,
+long delays use bounded host-timer chunks, and cancellation rejects through modeled failure so
+joined cleanup can unwind. Do not manufacture a global action cancellation contract. Publish the
+small hook required from D/root for production cancellation. Fixed timers receive an injected
+sleep-inclusive monotonic clock and checked Duration factory; Duration() returns a fixed sample.
+Time.Now remains wall clock. Verify the available host clock seam before claiming production
+monotonic or sleep-inclusive behavior; report any missing platform contract. Root retains TR facade,
+standard-library declarations, production clock/cancellation connection and app graduation.
+
+### Current slot compiler integration batch
+
+B also owns ViewsCompiler.ts, InvocationsCompiler.ts and FilesCompiler.ts solely for production
+renderer-slot descriptor wiring, argument binding and stable module-level slot-body components.
+Its existing renderer-slot-codegen.ts and render-slot-hoists.ts helpers and focused compiler and
+mounted renderer-slot tests belong to this batch. Use the integrated TR.RenderSlots runtime,
+actual source anchors and returned semantic binder. Preserve legacy zero-argument/native-slot
+compatibility while connecting parameterized defaults, colon fills and repeated placements.
+Captured environments update without replacing the body component; placement instances retain
+independent state. Explicit empty suppresses defaults and unselected renderers do not evaluate
+arguments. Compatible forwarding preserves the descriptor identity. The coordinator retains
+Compile/TR facades, registrations, authored migrations and app graduation; Type and
+ExpressionsCompiler remain A-owned. No associated-method or numeric-publication changes in
+FilesCompiler belong to this grant.
+
+B additionally owns TaoPropsCompiler.ts solely to publish a props-expression API for an actual
+slot placement source node, preserving its own layout and occurrence identity. Reuse existing
+props compilation; do not fabricate a render AST or omit placement metadata. This does not
+transfer other render-prefix semantics or the shared Compile facade.
 
 The grants below record the first-wave implementation. A1, B1, C1 and D1 are committed and reviewed;
 their shared seams are returned to the coordinator for integration. The D1 foreign-error follow-up
@@ -90,13 +409,268 @@ their branches. The coordinator reviews and validates the combined tree before l
 Second-wave return status: B's Studio repair and renderer runtime are frozen and integrated;
 D's lexical runtime plus its single-adoption joining repair are frozen and integrated. Their listed
 source paths have returned to the coordinator. A's concrete signatures and complete-correspondence
-repair are reviewed and integrated; the coordinator publishes their shared facade. C's alias/
-persisted-output completion repair remains active in its separate worktree and is excluded from
-the current foundation landing. Its bounded recognition hooks in TR.ts and TR-persisted-state.ts
-remain reserved until the repaired chain is frozen, reviewed and integrated. Their next proposals
-remain read-only; no capability, numeric/unit or slot frontend release is implied by this manifest.
-TR.ts remains reserved until C's reviewed accessor chain is integrated. The coordinator owns the
-callable export hook, subsequent runtime facade hooks, combined verification and landing.
+repair are reviewed and integrated; the coordinator published their shared facade. The foundation
+landed at `580f88cc5d8bec4682ebe430d08068f16aac3cb3`. C's accessor chain, including complete alias
+and persisted-output recognition, is reviewed and integrated on the follow-up numeric branch.
+The coordinator retains TR.ts and native publication; existing cleanup facade methods are published.
+
+Current exclusive assignments:
+
+- A's reviewed parameter-array adapter is integrated at `0ac15b312`; those paths have returned.
+  Its carrier runtime is integrated at `dc1e7266c`, returning TR-capabilities.ts and its tests.
+  Attach, reproject and method selection preserve the original receiver and live reads through
+  ordinary Function returns, without eager probes or a public nominal registry. The coordinator
+  owns its facade hookup. This isolated runtime leaf does not admit source-level structural
+  dispatch before purity/type/frontend proof. A independently reviews native import routing while
+  the shared frontend remains held; this read-only review transfers no source ownership.
+  Associated capability/method/converter frontend source remains withheld.
+- C owns the complete numeric/unit construction vertical: its focused feature modules/tests,
+  numeric grammar integration and parser AST/scoping, Type.ts, the AST facade, registrations,
+  NumericUnitsCompiler and ExpressionsCompiler. Its bounded validator adapters also own
+  types-validator.ts and configured-item-validator.ts for numeric unit bodies/construction,
+  DeclarationOrder.ts for unit-construction traversal, InjectionsCompiler.ts and
+  runtime-type-compiler.ts for numeric backing cases, preserving unrelated item construction and
+  upward-only invocation admission. The coordinator adds branded owner publication after return.
+  C additionally owns quoted-render.ts's parser-constructor injection while preserving quotation
+  lowering, use-package-validator.ts's bounded numeric alias admission and formatting.ts's units
+  brace selection. These are the three reviewed integration gaps; no broader formatter, alias or
+  parser redesign is released.
+  No other manager
+  writes these shared seams.
+- D's existing-block cleanup lowering and outcome assertion are integrated at `858a971f9`;
+  their source ownership has returned. Coordinator event/selection callers and mounted payload
+  cleanup proof are committed at `033a6d760`, including a caught scope-removal mutation.
+  D's reviewed transitive purity/failure packet releases exactly new failure-contracts.ts,
+  callable-effects.ts and ast-utils-tests/callable-effects.test.ts, plus effect-outcomes.ts and
+  callable-signatures.ts solely to move/reexport the unchanged failure algebra. The producer
+  consumes immutable, already-resolved execution facts, without Type/admission reentry, native
+  trust inferred from spelling, or a second target resolver. Separate purity and known/open failure
+  contracts preserve conservative unknown boundaries and recursive computation. Root supplies
+  resolution/native facts and shared admission/validation hooks after C returns its frontend.
+  No validator registration, native classification, function-failure lowering, defer grammar or
+  then/result-token extension is released by this semantic-leaf grant.
+- B's renderer and native-leaf paths have returned; slot frontend and foreign adapters remain held.
+  The isolated leaf is integrated at `62b2cac5d`, supplying constructor-only types.Owner.Unit methods
+  and allocated checked-factory/type linkage metadata from one owner factory, with executable/static
+  proof. To parallelize its publisher integration, B now owns bridge-metadata.ts,
+  ProjectToolingService.ts and new project-tooling-tests/QuantityPublication.test.ts, limited to
+  source quantity leaf/companion publication, mapped owner types and existing manifest lifecycle.
+  Its reviewed alias-publication amendment additionally owns quantity-native-module.ts and its
+  existing compiler test, limited to extracting the existing deterministic surface allocation and
+  sharing that plan with direct emission and canonical alias forwarding. Explicit local declaration,
+  canonical owner and native import-name metadata replace guessed exports. Forwarding modules retain
+  canonical factories and constructor objects across multiple source leaves; they allocate no owner
+  symbol or factory. Keep erased-contract collisions and full-source reservations consistent.
+  Preserve current erased contracts and dependency discovery. Supply explicit output/type-binding
+  and reexport APIs before coordinator Backend consumption; C owns NumericUnits/Type discovery.
+  The coordinator retains Backend/compiled output/DTS/native import rewriting, ProjectOutputPublisher
+  and snapshots, runtime ingress, compiler dependencies and whole-graph singleton acceptance.
+  B's slot frontend packet remains read-only until these shared publisher paths return.
+- The coordinator owns Backend/compiled native factory publication,
+  InvocationsCompiler/FunctionalCoreCompiler caller adaptations, runtime facade, preparatory
+  comma-helper retirement, app/stdlib graduation, combined verification and landing.
+
+## Associated frontend release
+
+The following release supersedes the frontend holds above. The integrated numeric input is
+`334ddc94a`; its 29 frontend, Type and helper paths returned unchanged. C retains only
+ExpressionsCompiler.ts and compiler-tests/numeric-units.test.ts until its native-result handoff.
+The supplied-graph callable-effects producer is integrated at `6cd436ad8`; its five paths have
+returned. Focused numeric parser, validator, formatter, callable-effects and type checks passed
+on that combined input. The original preserved compiler input is consumed without transferring
+the two retained paths.
+
+A now owns the first associated-method and structural-capability source vertical. The forcing
+case has distinct text nominals with distinct pure ToText implementations, a distinct descendant
+inheriting a method, structural Display admission, and live witness forwarding through an ordinary
+function return. This release does not add decisions or claim generic Self, converters, static
+factories, ui, collection storage or whole-app effect refinement is complete.
+
+Exact existing shared paths transferred to A, bounded to that vertical:
+
+- parser-grammar/{types,expressions,blocks,tao-grammar}.langium;
+  parser-src/{ast-structure,value-scope,parser}.ts.
+- ast-utils-src/{Type,ast-utils}.ts.
+- validator-src/{Validate,DeclarationOrder}.ts and
+  validators/{types-validator,functions-validator,FunctionalCoreValidator}.ts.
+- formatter-src/Format.ts and formatters/{TypesFormatter,ExpressionsFormatter}.ts.
+- compiler-src/codegen/react-native/Compile.ts and
+  app/{StatementsCompiler,FilesCompiler,runtime-type-compiler,reactive-parameters}.ts.
+
+Prefixes in this list refer to the existing owning packages under packages/language or
+packages/compiler. No other shared file is implicitly transferred. A also owns new feature files
+associated-methods.ts and associated-methods.test.ts in ast-utils; associated-methods-validator.ts,
+AssociatedMethodsValidationMessages.ts and associated-methods.test.ts in validator;
+AssociatedMethodsFormatter.ts and associated-methods.test.ts in formatter;
+AssociatedMethodsCompiler.ts and associated-methods.test.ts in compiler; and parser's new
+associated-methods.test.ts. The positive Associated Methods Test App and its Tao journey may be
+created after source integration; the coordinator owns the app index and Syntax2 graduation.
+
+Publish AST and method/type descriptor interfaces early. Structural admission must consume proved
+transitive function purity and full known/open failure bounds, without resolver/admission recursion.
+Unknown native effects stay unknown. Preserve concrete callable correspondence and nominal
+descendant identity; no sibling/downward implicit conversion or public nominal registry.
+The coordinator supplies actual source-effect/native facts and retains TR.ts, runtime modules,
+InvocationsCompiler, FunctionalCoreCompiler, Backend, bridge publication and all unlisted Type
+consumers. A requests a bounded consumer hook when needed, rather than changing another owner's
+file. C's two retained compiler paths remain untouched by A.
+
+A additionally owns formatter-src/formatting.ts and formatter-src/langium-formatting.ts for the
+associated-method vertical only. Preserve the existing numeric-unit formatting exemption; add the
+associated-body closing-brace boundary and canonical function keyword/return-arrow formatting
+hooks. This release does not authorize unrelated formatter normalization. Return both exact paths
+with the frontend cut and keep the agreed readable method layout in regression expectations.
+
+A also owns formatter-tests/{functional-core,typed-values,numeric-units,formatter}.test.ts solely
+to update existing canonical function keyword and return-arrow expectations. Preserve authored
+legacy input coverage and every unrelated assertion; do not weaken expectations to admit both
+outputs. Return these fixture paths with the associated formatter cut.
+
+D now owns exactly new ast-utils-src/callable-effect-facts.ts and
+ast-utils-tests/callable-effect-facts.test.ts. This discovery leaf consumes immutable, already
+published target, correspondence, read and native-contract rows keyed by real AST identity. It
+walks actual execution, arguments despite incomplete binding, selected defaults and live alias
+initializers; carrying a callable does not execute its body. Unproved native and unsupported
+indirect targets remain open. Import AST and effect-contract types only; no Type, binder, resolver,
+facade or resolution callbacks. Publish the input-row ABI early for the associated frontend.
+The coordinator retains production row publication and phase separation: correspondence must be
+available without effect-dependent admission, followed by effect analysis and final admission.
+Provisional correspondence never proves compatibility. Two-file discovery proof alone is not
+integrated function-purity or capability-admission proof; additional shared paths need a new grant.
+
+The integrated numeric continuation gate exposed one regression in source-actions' existing
+adjacent accessibility-label extraction case: a parenthesized label followed by a view invocation
+is consumed as a unit construction. A's parser grant includes repairing that syntactic boundary
+without unit-name guessing, newline significance or field-name reservations. Preserve the existing
+regression fixture and verify the whole source-actions scope after repair. The coordinator's
+reference-app comma migration and one-off comma-helper retirement are separate source paths.
+
+B additionally owns validator-tests/structural-contracts.test.ts for authored configuration comma
+migration only. Preserve all diagnostic and behavior assertions, including rejected examples; add
+only the delimiters required by the accepted configuration/item syntax. Parser diagnostic wording
+and the `(persist)` call boundary remain A-owned. This fixture-only grant does not release slot
+frontend or shared validator source. Return the exact test file after its focused proof.
+
+C's reviewed authenticated-parent runtime slice owns exactly
+TaoRuntime-src/TR-quantity-values.ts and TR-tests/TR-quantity-values.test.ts in the runtime package.
+Implement factory-owned derive, immutable private ancestry, distinct exact ownsPayload and upward
+acceptsPayload, inherited invariant checks, and view changes retaining the concrete descendant.
+Descendants inherit the same unit table; this grant adds no unit override or extension policy.
+Prove covariant declaration-proof types without authorizing reverse or sibling admission, preserving
+canonical-number accessor inference and existing default generic callers. No compiler, Type,
+grammar, facade, native admission adapter or publication changes are released. Return the exact
+two-path independently reviewed cut; the coordinator supplies later source ancestry/publication.
+
+A additionally owns parser-src/grammar-words.ts solely to preserve the existing author-facing
+`value` diagnostic for the new ValueReferenceTarget union. Preserve all other wording and grammar
+roles; this diagnostic adapter grant adds no lexer or unit-case source ownership.
+
+A's reviewed lowercase-unit lexical amendment additionally releases parser-grammar/terminals.langium,
+parser-grammar/numeric-units.langium and parser-src/tao-token-builder.ts. Add a lowercase unit token
+categorized as ordinary ID, and use its distinct grammar role for unit declarations and qualified
+final segments. Preserve all ordinary identifier spellings, keyword-prefix handling, existing
+continuation boundaries and persisted state syntax. Prove generation plus positive lowercase and
+negative uppercase/mixed-case suffixes, uppercase owners, lowercase ordinary views/fields/aliases
+and interpolation. No uppercase naming mandate for ordinary declarations is introduced.
+
+B's reviewed isolated slot-emitter packet releases exactly compiler-src/codegen/react-native/app/
+render-slot-hoists.ts and renderer-slot-codegen.ts, with compiler-tests/render-slot-hoists.test.ts
+and renderer-slot-codegen.test.ts. Consume already compiled fragments and real source anchors;
+reject duplicate hoist anchors/names, evaluate selection and props once, and project arguments only
+for a nonempty renderer. Preserve stable body identity and fresh captured environments. No parser,
+slot admission, facade, FilesCompiler, shared TaoProps or collision-name allocator ownership is
+released. The coordinator supplies those production seams and mounted acceptance after return.
+
+The lowercase lexical amendment is integrated at `4dd034184`; A has returned parser grammar,
+AST and scope ownership for the next explicit slot frontend release. Associated and lowercase-unit
+regressions remain required when those seams change. This return alone does not grant B unlisted
+source edits. C's authenticated ancestry runtime pair returned at `71be4aa26`.
+
+C now owns a spelling-only fixture migration in exactly these six test paths: compiler-tests/
+numeric-units.test.ts and quantity-publication.test.ts; project-tooling-tests/QuantityPublication.test.ts;
+parser-tests/numeric-units.test.ts; formatter-tests/numeric-units.test.ts; validator-tests/numeric-units.test.ts.
+The first two are under packages/compiler; the others are under their packages/language owners.
+Use lowercase unit declaration/suffix names and matching emitted unit members and diagnostics while
+preserving test cases, values, assertions and semantic failures. Keep runtime-only unit table tests
+case-sensitive and unchanged. A's new lowercase-units.test.ts is a frozen input, not a migration
+target. No production source, owner typing, grammar, native imports or metadata policy changes are
+released. A bounded worker may implement this settled migration; its manager reviews and commits
+the exact diff and returns focused proof before coordinator integration.
+
+B now owns the renderer-slot frontend in exactly six existing paths under packages/language:
+parser/parser-grammar/{views,blocks}.langium; parser/parser-src/{ast-structure,value-scope,parser}.ts;
+and ast-utils/ast-utils-src/reactive-parameters.ts. Three new paths are released:
+parser/parser-tests/renderer-slots.test.ts, ast-utils/ast-utils-src/renderer-slots.ts and
+ast-utils/ast-utils-tests/renderer-slots.test.ts. Consume the integrated lowercase lexer and
+associated AST at `62d34b064`; preserve their guards and regression suites. Add real slot
+parameters, placement arguments, binder/default/body ownership and repeated placements through
+the existing parameter-array callable and binding APIs. Keep ParameterizedDeclaration unchanged
+and use a separate slot accessor. Prove receiving fills versus placements, explicit empty,
+legacy zero-input bodies, missing/duplicate/unknown arguments and writable variance. No Type,
+matcher, validator/formatter registration, shared compiler, facade or generated output ownership
+is transferred. Request the follow-on registration hooks after this bounded frontend returns.
+
+C now owns the generated quantity role-proof alignment in exactly packages/compiler/compiler-src/
+quantity-native-module.ts and compiler-tests/quantity-native-module.test.ts. Consume runtime ancestry
+`71be4aa26` and lowercase fixture migration `9ffe32d20`. Pass the declaration's private symbol proof
+through the runtime payload/factory/constructor generic contracts; preserve declaration identity,
+strict known-value admission, read/inUnit signatures and source mappings. Do not silence TS2352
+with an unknown cast or weaken native nominal checks. Prove actual generated modules type-check,
+same-name owners stay distinct, and raw/reverse/sibling negatives remain rejected. No Type,
+source ancestry, bridge metadata, runtime or companion publication ownership is transferred.
+
+A now owns canonical effect-independent publication in six paths under language/ast-utils:
+new ast-utils-src/canonical-effect-snapshot.ts and ast-utils-tests/canonical-effect-snapshot.test.ts;
+existing ast-utils-src/{Type,invocations,associated-invocations,argument-bindings}.ts. Publish a
+branded immutable correspondence snapshot from actual linked files; retain targets, descriptors,
+canonical argument pairs, read proofs, exhaustive default eligibility, independent native phases
+and explicit metadata coverage. Reuse the existing admission kernel, binder and signature comparator
+with a phase-local relation; unresolved and pending competitors keep correspondence open and
+defaults possible. No inferred purity, native trust or concrete body failure proof is manufactured.
+Keep default behavior of ordinary public resolution unchanged. Index semantic metadata only;
+the existing effect discovery owns the one execution traversal. Publish the concrete type/factory
+ABI in an early reviewed commit for D. Root retains facade, native/requirement evidence, validation
+and compiler wiring. This release includes no whole-app refinement or new language decision.
+
+D's next release owns new ast-utils-src/callable-effect-publications.ts and
+ast-utils-tests/callable-effect-publications.test.ts under the same package. Source writing starts
+after consuming A's frozen actual snapshot ABI. Project that factory's records into the existing
+CallableEffectFactInputs; retain real source witnesses and conservative uncovered regions, without
+a second execution traversal, Type import, resolver or matcher. Prove actual parsed source through
+the canonical factory, projection, discovery and analyzer, including aliases/defaults, receiver
+reads, recursion, requirement failures and unknown native phases. If the projection is redundant,
+return that finding before introducing another layer. Root supplies final sealed admission/wiring.
+
+D additionally owns existing ast-utils-src/callable-effect-facts.ts and
+ast-utils-tests/callable-effect-facts.test.ts for the reviewed source-root/coverage adapter.
+Add optional inert discovery context with actual owner identity, real body roots, actual parameter
+default initializer witnesses and canonical covered nodes. Seed these edges in the existing queue;
+do not introduce another execution traversal, fabricated call rows, Type/resolver callbacks or
+purity promises. Whole-declaration default inclusion is a conservative admission upper bound;
+ordinary calls retain their independently selected defaults. An uncovered reached node keeps
+known facets and edges while opening the remainder. Root identity must match the analysis owner,
+and unsupported/pending metadata must remain open. Preserve independent read/native facets and
+all old context-free callers. Plural callee bodies remain incomplete until explicitly supported;
+never choose one alternative body to manufacture closure. This two-path adapter can proceed before
+A's committed snapshot ABI; D's production projector still waits for that coherent reviewed cut.
+
+A's canonical snapshot cut returns its six shared paths at `3caea4bb1`.
+The next bounded release owns new ast-utils-src/capability-transport.ts and
+ast-utils-tests/capability-transport.test.ts, plus new validator-src/validators/
+capability-transport-validator.ts and validator-tests/capability-transport.test.ts under language/.
+Plan runtime transport after final sealed admission using the existing Type relation and exact
+witness correspondence: identity, concrete attachment, capability projection, nested inputs/results,
+and none/present splitting. Unique or equivalent plans are safe; erased alternatives needing
+different plans receive a source diagnostic rather than payload-based dispatch. Keep Type admission
+unchanged. Publish immutable plans and their concrete ABI early for compiler consumption; root
+retains facade, registration, production context and compiler wiring. Also release only existing
+canonical-effect-snapshot.ts and its test for the reviewed actual PostfixMemberAccess selection
+facet: retain the real callee and static selected declaration without promising receiver purity.
+The existing discovery walker must still evaluate the real receiver independently. No Type,
+resolver, parser or ordinary action-call publication changes are granted by this follow-up.
+
+Managers implement against supplied frozen inputs in isolated worktrees and reconcile the landed
+base before frozen return. This manifest transfers no unlisted shared file implicitly.
 
 1. A preserves resolveArgumentBindings's parameter-ordered pairs and diagnostics, and the existing
    named/dynamic/unresolved action resolver. D consumes these APIs unchanged in its first slice.

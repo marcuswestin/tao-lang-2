@@ -4,14 +4,17 @@ set -eu
 
 tools_only=false
 install_nix=false
+verify_setup=false
 for argument in "$@"; do
   case "$argument" in
     --tools-only) tools_only=true ;;
     --install-nix) install_nix=true ;;
+    --verify-setup) verify_setup=true ;;
     --help)
-      printf 'Usage: ./.config/bootstrap-tao-dev-env [--install-nix] [--tools-only]\n'
+      printf 'Usage: ./.config/bootstrap-tao-dev-env [--install-nix] [--tools-only | --verify-setup]\n'
       printf 'Build the locked portable Linux profile, then run ./agent setup.\n'
       printf 'Use --tools-only to prepare a reusable tools image without repository dependencies.\n'
+      printf 'Use --verify-setup to prepare only what a verification lane reads, as CI does.\n'
       exit 0 ;;
     *) printf 'Unknown bootstrap option: %s\n' "$argument" >&2; exit 2 ;;
   esac
@@ -107,5 +110,22 @@ exec 9>&-
 printf 'Portable bootstrap: profile %s\n' "$identity"
 if "$tools_only"; then
   exit 0
+fi
+if "$verify_setup"; then
+  # What a verification lane reads and nothing else: the installed packages (adopted when a cache
+  # restored them), the generated parser, the maintained native bindings, and the Tao projects' npm
+  # pins. Agent configuration, Git hooks, shell completion, and the initial dev branch serve a
+  # person's checkout. The two generators write disjoint trees, so they run side by side.
+  PATH="$repository/.devenv/profile/bin:$PATH"
+  export PATH
+  printf 'Verify setup: dependencies...\n'
+  just _deps
+  printf 'Verify setup: native bindings and parser, side by side...\n'
+  just --no-deps native-bindings &
+  bindings=$!
+  just --no-deps _parser-gen
+  wait "$bindings"
+  printf 'Verify setup: Tao project dependencies...\n'
+  exec just --no-deps _tao-project-deps
 fi
 exec "$repository/agent" setup

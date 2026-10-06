@@ -16,6 +16,15 @@ export const ViewsFormatter = {
   /** ViewDeclaration formats a `view Name parameters` header with its optional responds clause. */
   ViewDeclaration: ViewDeclaration,
 
+  /** AssociatedViewDeclaration keeps the receiver-qualified name and ordinary view header spacing. */
+  AssociatedViewDeclaration(f) {
+    f.oneSpaceAfter('view')
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
+    f.noSpaceBefore('(')
+    f.oneSpaceBeforeProperty('layoutClause')
+  },
+
   /** ForeignViewImplementation formats its declared capabilities before the sidecar boundary. */
   ForeignViewImplementation(f) {
     f.oneSpaceAfter('accepts')
@@ -50,8 +59,22 @@ export const ViewsFormatter = {
 
   /** RenderSlotUse separates a named slot fill from its visual value. */
   RenderSlotUse(f) {
-    f.oneSpaceBeforeProperty('render')
+    if (f.node.inputBindings.length === 0) {
+      f.oneSpaceBeforeProperty('render')
+    }
+    f.noSpaceBefore('(')
+    f.noSpaceBefore(':')
+    if (AST.renderSlotBodyOf(f.node).kind === 'block') {
+      f.noSpaceAfter(':')
+    } else {
+      f.oneSpaceAfter(':')
+    }
+    f.commaSpacedList()
+    f.oneSpaceAround('->')
   },
+
+  /** RenderSlotInputBinding is one name owned by its inline renderer. */
+  RenderSlotInputBinding() {},
 
   /** CallerContentStatement is one atomic ambient placeholder. */
   CallerContentStatement() {},
@@ -155,7 +178,12 @@ export function canonicalRenderPrefixSource(
 function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
   f.visibilityOnOwnLine()
   f.oneSpaceAfter('view', 'scene')
-  f.noSpaceBefore('(')
+  if (f.node.genericParameters.length > 0) {
+    f.oneSpaceAround('where')
+    f.commaSpacedList()
+  } else {
+    f.noSpaceBefore('(')
+  }
   f.oneSpaceBefore('responds')
   f.oneSpaceAfter('responds')
   // The header clause sits between the parameters (or `responds`) and the body, spaced as a render
@@ -163,4 +191,7 @@ function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
   f.oneSpaceBeforeProperty('layoutClause')
   // The pass-through alias form: `view Name = ns.Member`.
   f.oneSpaceAround('=')
+  if (f.node.foreign?.accepts) {
+    f.oneSpaceBeforeProperty('foreign')
+  }
 }

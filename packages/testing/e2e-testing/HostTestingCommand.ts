@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Repo, Switch } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo, Switch, TaoStdlib } from '@shared'
 import { runBrowserHostProof } from './BrowserHostProof'
 import { runPlaywrightHostDriverProof } from './DriverHostProof'
 import { HostTestingArtifacts } from './HostTestingArtifacts'
@@ -102,6 +102,10 @@ export async function createHostTestingContext(
     artifactRoot,
     environment: {
       ...environment,
+      // Repository host proofs compile this checkout's stdlib, even when the child runner
+      // resolves workspace modules or installed resources through another checkout.
+      [TaoStdlib.DECLARED_ROOT_ENV]: environment[TaoStdlib.DECLARED_ROOT_ENV]
+        ?? Repo.resolvePath('packages/apps/stdlib'),
       TAO_HOST_TEST_APP: request.subject,
       TAO_HOST_TEST_ARTIFACTS: artifactRoot,
       TAO_HOST_TEST_BROWSER_CHANNEL: request.browserChannel,

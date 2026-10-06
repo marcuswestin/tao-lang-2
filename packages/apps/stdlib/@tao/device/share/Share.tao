@@ -8,6 +8,6 @@ type ShareSheet is {
 // `Share()` constructs one share-sheet value. React Native names and result objects never cross the
 // Tao contract.
 public
-function Share() returns ShareSheet {
+func Share() -> ShareSheet {
    return Share() from ./Share.ts
 }

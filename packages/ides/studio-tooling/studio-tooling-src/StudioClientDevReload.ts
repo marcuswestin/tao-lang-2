@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo, TaoFiles } from '@shared'
 import { type StudioClientAssetProvider, StudioClientAssets } from '@studio'
 import { watch } from 'chokidar'
 import { previewUrlMarker } from './StudioClientSnapshotProcess'
@@ -24,6 +24,7 @@ export const StudioClientDevReload = {
   testing: {
     isStudioClientSource,
     isStudioServerSource,
+    ignoredStudioClientPath,
     studioClientAssetSnapshot,
   },
 } as const
@@ -50,6 +51,14 @@ function isStudioServerSource(path: string): boolean {
   return !normalized.includes('/studio-src/client/')
     && !normalized.includes('/studio-src/code-editor/')
     && !normalized.endsWith('Panel.ts')
+}
+
+/** Excludes generated state and dependencies before the watcher traverses their symlink trees. */
+function ignoredStudioClientPath(path: string): boolean {
+  return path.replaceAll('\\', '/').split('/').some(part =>
+    part === '.tao' || part === '.git'
+    || TaoFiles.discoveryExcludeDirectoryNames.some(excluded => excluded === part)
+  )
 }
 
 /**
@@ -166,7 +175,7 @@ async function subscribeStudioClientSources(listener: StudioClientChangeListener
     Repo.resolvePath('packages/ides/studio-tooling/studio-tooling-src'),
     Repo.resolvePath('Apps/Tao Studio'),
   ]
-  const watcher = watch(roots, { ignoreInitial: true })
+  const watcher = watch(roots, { ignoreInitial: true, ignored: ignoredStudioClientPath })
   let timer: ReturnType<typeof setTimeout> | undefined
   let serverSourcesChanged = false
   const schedule = (path: string) => {

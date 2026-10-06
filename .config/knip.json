@@ -9,6 +9,7 @@
   ],
   "ignore": [
     "**/_gen_*/**",
+    "**/.tao-ts/**",
     "**/*.tao.ts"
   ],
   "workspaces": {
@@ -23,6 +24,7 @@
     },
     "packages/*": {
       "entry": [
+        "*-src/subprocess-test-api.ts",
         "*-tests/**/*.{test,jest,live}.{ts,tsx}",
         "*-tests/**/*-fixture.{ts,tsx}"
       ],

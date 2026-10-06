@@ -166,7 +166,7 @@ test('records navigation diagnostics separately from authored assertions and ret
   expect(timeline[1]).toMatchObject({ outcome: 'passed', diagnosticFailure: 'native diagnostic transport failed' })
 })
 
-test('treats only a typed Appium absent-element response as a passing missing-text assertion', async () => {
+test('treats typed leaf absence as missing text while preserving scope and transport failures', async () => {
   const adapter = appiumIosJourneyAdapter(new MissingElementSession(), { advance: async () => {} }, 'run-a')
 
   await expect(adapter.execute({
@@ -177,6 +177,34 @@ test('treats only a typed Appium absent-element response as a passing missing-te
     source: source(),
     text: 'No longer visible',
   })).resolves.toBeUndefined()
+
+  const missingScopedAdapter = appiumIosJourneyAdapter(
+    new MissingScopedElementSession(),
+    { advance: async () => {} },
+    'run-a',
+  )
+  await expect(missingScopedAdapter.execute({
+    kind: 'expect',
+    missing: true,
+    selector: 'text',
+    selections: [{ index: 2, source: source(), tag: 'book' }],
+    source: source(),
+    text: 'Export complete book-001',
+  })).resolves.toBeUndefined()
+
+  const missingScopeAdapter = appiumIosJourneyAdapter(
+    new MissingScopeSession(),
+    { advance: async () => {} },
+    'run-a',
+  )
+  await expect(missingScopeAdapter.execute({
+    kind: 'expect',
+    missing: true,
+    selector: 'text',
+    selections: [{ index: 2, source: source(), tag: 'book' }],
+    source: source(),
+    text: 'Export complete book-001',
+  })).rejects.toThrow('selected native scope is missing')
 
   const brokenAdapter = appiumIosJourneyAdapter(new BrokenLookupSession(), { advance: async () => {} }, 'run-a')
   await expect(brokenAdapter.execute({
@@ -504,6 +532,18 @@ class MissingElementSession extends RecordingSession {
   }
 }
 
+class MissingScopedElementSession extends RecordingSession {
+  override async observe(): Promise<HostObservation> {
+    throw new HostControlError('assertion', 'The scoped child is missing.', { reason: 'element-not-found' })
+  }
+}
+
+class MissingScopeSession extends RecordingSession {
+  override async observe(): Promise<HostObservation> {
+    throw new HostControlError('assertion', 'The selected native scope is missing.', { scope: 'book' })
+  }
+}
+
 class BrokenLookupSession extends RecordingSession {
   override async observe(): Promise<HostObservation> {
     throw new HostControlError('host', 'Appium transport failed.')
@@ -699,6 +739,42 @@ for (
         source: source(),
       }),
     ).rejects.toThrow("expected input value 'Lost draft'")
+  })
+
+  test(`${platform} label assertions preserve accessibility selection inside a row`, async () => {
+    const session = new RecordingSession()
+    const original = session.observe.bind(session)
+    session.observe = async request => {
+      const observation = await original(request)
+      const leaf = request.target.kind === 'scoped' ? request.target.target : request.target
+      if (leaf.kind !== 'accessibility') {
+        throw new AppiumNoSuchElementError('The label is not the rendered text')
+      }
+      return { ...observation, text: 'Export completed in 0.1 seconds.' }
+    }
+    const selections = [{ index: 1, source: source(), tag: 'book' }]
+    const adapter = createAdapter(session, { advance: async () => {} }, 'labels', [])
+    await adapter.execute({
+      kind: 'expect',
+      missing: false,
+      selector: 'label',
+      text: 'Export complete book-001',
+      selections,
+      source: source(),
+    })
+    expect(session.targets).toEqual([{
+      kind: 'scoped',
+      scope: { kind: 'tag', occurrence: 1, value: 'book' },
+      target: { kind: 'accessibility', name: 'Export complete book-001' },
+    }])
+    await expect(adapter.execute({
+      kind: 'expect',
+      missing: true,
+      selector: 'label',
+      text: 'Export complete book-001',
+      selections,
+      source: source(),
+    })).rejects.toThrow("expected hidden text 'Export complete book-001'")
   })
 
   test(`${platform} input assertions wait through missing, hidden and stale values`, async () => {

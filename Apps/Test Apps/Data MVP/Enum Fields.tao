@@ -22,7 +22,7 @@ data EnumNotes / EnumNote {
    Flag yes / no?,
 }
 
-function RoleLabel(Value Role?) returns text {
+func RoleLabel(Value Role?) -> text {
    return when (Value == none) {
       true -> "none"
       otherwise -> when (Value == Reader) {

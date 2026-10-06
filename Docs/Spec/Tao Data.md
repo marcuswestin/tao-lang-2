@@ -64,6 +64,13 @@ its case name, as in `Final yes / Draft no`. The `no` side is the default unless
 `(default Case)`. `Pinned` and `Public` above demonstrate the unaliased and explicit-default forms.
 They exercise declaration syntax and do not require product journeys. Writes, `is <Case>` tests,
 and boolean query filters use named declared cases rather than raw spelling conventions.
+Both case names read the same stored field: `Row.Draft` negates `Row.Final`. An explicit labeled
+write such as `update Row { Draft: yes }` stores `Final: no`; it does not create a second field.
+
+Explicit write labels also accept the negative alias. For `Final yes / Draft no`,
+`update Document { Draft: true }` writes `Final: false`; `Draft: false` writes `Final: true`.
+Only `Final` is stored. Supplying both `Final` and `Draft` in the same write is rejected,
+including when their values agree. A bare `Draft` case continues to write the stored false case.
 
 Indexes are separate entries, one default `order by` may be declared for the entity, and
 `local only` states that the entity is stored on the device whatever the app binds as its
@@ -151,6 +158,14 @@ unambiguous stored back-link. `(relation Account)` is retired and receives a mig
 the related rows in the collection. A stored to-one relationship does not declare cascade policy;
 without owner-side `owned`, deletion is restricted while another row refers to the target.
 Relationship values are live entity handles, not text IDs.
+
+An optional entity parameter in an ordinary view can be guarded before direct later render siblings
+read its fields: `guard Person { none -> "Unknown author" }`, then `"{Person.Name}"`. A matched
+guard ends that render block. The successful continuation captures the evaluated entity handle in
+a child scope, so a live caller retargeting its argument cannot change the value between the guard
+and that field read. This bounded refinement applies to the same immutable, noncopy parameter and
+either a bare guard or an explicit `none` branch; it does not infer general flow narrowing through
+aliases, nested blocks, actions, mutable parameters or guard handlers.
 
 ## Accounts, authentication, and access
 
@@ -515,7 +530,8 @@ It names one singular entity, which must declare a `unique` field, and it owns n
 A reference that holds a value always reads as an entity handle, so a guard can tell what state its
 target is in. When the target's store holds the row, the handle is that row. Otherwise it is a stable
 placeholder: `loading` while the store loads, or while a fill-capable store fetches the row, `error`
-when that fetch fails, and `missing` once there is nothing left to wait for. The first read of such a
+when that fetch fails, and internally `missing` once there is nothing left to wait for; a public guard
+handles that absence with `none`. The first read of such a
 placeholder offers the store the one-row query a live query would make — entity, the unique field's
 value, limit one — so an `Http` adapter that declares a by-id shape brings the row in and the next read
 returns it. A cleared reference reads as `none`.
@@ -913,7 +929,7 @@ Entity handles can be guarded before ordinary field access:
 ```tao
 guard Document {
    loading -> { Text("Loading document…") }
-   missing -> { Text("Document { Document.Id } no longer exists.") }
+   none -> { Text("Document { Document.Id } no longer exists.") }
    unauthorized -> { Text("You no longer have access to this document.") }
    error -> Context { Text(Context.Message) }
 }
@@ -921,13 +937,14 @@ guard Document {
 Text(Document.Title)
 ```
 
-`loading`, `missing`, `unauthorized`, and `error` are the exceptional entity cases; each exceptional
+`loading`, `none`, `unauthorized`, and `error` are the public exceptional entity cases; each exceptional
 render-guard handler may bind a `ReadContext`. If
 none applies, the entity is available and execution or rendering falls through to the statements
 after the guard. A matched action guard skips the rest of its action block; a matched render guard
-renders its branch instead of the rest of its enclosing render block. A deleted handle becomes
-`missing` while retaining `.Id`. Memory and Local produce loading, missing, and error. Auth-scoped
-account reads also distinguish session restoration from an absent or unauthorized account; a
+renders its branch instead of the rest of its enclosing render block. A deleted handle matches
+`none` while retaining `.Id`. Internally, Memory and Local still report loading, missing, and error.
+Expected optional or lookup absence uses `none`; violated required-data contracts remain typed failures.
+Auth-scoped account reads also distinguish session restoration from an absent or unauthorized account; a
 `SignedIn` session does not by itself prove that its application account row is available.
 
 ### The read net
@@ -945,7 +962,7 @@ Guard payloads infer `ReadContext`. A reusable view can name the same public typ
 `use ReadContext from @tao/data` and take `Context ReadContext` as a parameter.
 
 The runtime always supplies the net, using the app's `Spinner` and `Text` element defaults.
-Loading uses labeled activity; missing says the item could not be found rather than asserting that
+Loading uses labeled activity; `none` says the item could not be found rather than asserting that
 it was deleted; unauthorized uses generic access copy unless a cause is known; errors use safe
 runtime-authored copy. Raw provider diagnostics are not display context.
 
@@ -958,17 +975,17 @@ app Notebook {
          Spinner()
          Text(Context.Message)
       }
-      missing -> Context { Text(Context.Message) }
+      none -> Context { Text(Context.Message) }
       error -> Context { Text(Context.Message) }
    }
 }
 
 app NotebookVariant = Notebook with {
-   guard { missing -> Context { Text("This note could not be found") } }
+   guard { none -> Context { Text("This note could not be found") } }
 }
 ```
 
-Its four cases are `loading`, `missing`, `unauthorized`, and `error`. A handler is a render block
+Its four cases are `loading`, `none`, `unauthorized`, and `error`. A handler is a render block
 or one bare render; each may bind a `ReadContext`. An app declares at most one net. A variant
 replaces only named cases and inherits the rest from its base, transitively through variant
 chains. File-level `guard default` is retired. Resolution is a named site handler, then the app's
@@ -983,7 +1000,8 @@ guard Document {
 }
 ```
 
-`Context.Message` is safe display copy. `State` names the exceptional state and `ReadKind` names
+`Context.Message` is safe display copy. Public handlers use `none` for expected absence.
+`State` preserves the internal exceptional state, including `missing`, and `ReadKind` names
 the known read kind or `unknown`. Optional `SubjectLabel` and `SubjectType` describe the subject
 without requiring a read of its unavailable fields. Optional `LoadingPhase`, `ElapsedSeconds`,
 `ProgressCompleted`, `ProgressTotal`, `MissingReason`, `UnauthorizedReason`, `Recovery`,

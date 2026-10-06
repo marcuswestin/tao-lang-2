@@ -55,6 +55,7 @@ function owningAppDeclaration(state: AST.StateDeclaration): AST.AppDeclaration {
 
 function compilePersistedType(type: ASTUtils.TaoType): Compiled {
   return Switch.kind(type, {
+    capability: type => unsupportedPersistedType(type),
     primitive: type => {
       if (['boolean', 'duration', 'none', 'number', 'text', 'time'].includes(type.primitive)) {
         return gen`{ kind: "primitive", name: ${gen.jsLiteral(type.primitive)} }`

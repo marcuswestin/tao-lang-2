@@ -5,11 +5,20 @@ import { TaoActionOwner } from '../TaoRuntime-src/TR-native-subscription'
 import { runtimeTestOverrideSlot } from '../TaoRuntime-src/TR-test-override'
 
 const hooks = runtimeTestOverrideSlot({
-  read: () => ({ effect: React.useEffect, ref: React.useRef }),
-  equals: (left, right) => left.effect === right.effect && left.ref === right.ref,
+  read: () => ({
+    effect: React.useEffect,
+    ref: React.useRef,
+    context: React.useContext,
+    insertion: React.useInsertionEffect,
+  }),
+  equals: (left, right) =>
+    left.effect === right.effect && left.ref === right.ref && left.context === right.context
+    && left.insertion === right.insertion,
   write: value => {
     React.useEffect = value.effect
     React.useRef = value.ref
+    React.useContext = value.context
+    React.useInsertionEffect = value.insertion
   },
 })
 
@@ -51,11 +60,19 @@ Describe('native subscription ownership', () => {
     Expect(owner.subscriptions.size).toBe(0)
   })
 
-  Test('keeps a hook owner across renders and removes its listeners on unmount', async () => {
+  Test('keeps committed ownership during effect replay and revokes before unmount cleanup', async () => {
     const ref: { current: TaoActionOwner | undefined } = { current: undefined }
     let cleanup: (() => void) | undefined
+    let revoke: (() => void) | undefined
     const restore = hooks.install({
       ref: (() => ref) as typeof React.useRef,
+      context: (() => undefined) as typeof React.useContext,
+      insertion: effect => {
+        const release = effect()
+        if (release) {
+          revoke = release
+        }
+      },
       effect: effect => {
         cleanup = effect() as (() => void) | undefined
       },
@@ -75,7 +92,18 @@ Describe('native subscription ownership', () => {
     }, { owner }).jsValue.invoke()
     Expect(removed).toBe(0)
     cleanup?.()
+    Expect(owner.active).toBe(true)
     Expect(removed).toBe(1)
+    await TR.Action(() => {
+      TR.NativeSubscription().attach(() => {
+        removed += 1
+      })
+    }, { owner }).jsValue.invoke()
+    revoke?.()
+    Expect(owner.active).toBe(false)
+    Expect(removed).toBe(1)
+    cleanup?.()
+    Expect(removed).toBe(2)
   })
 
   Test('isolates two views and suppresses removed listener events', async () => {

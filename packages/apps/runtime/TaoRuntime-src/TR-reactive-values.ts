@@ -1,23 +1,71 @@
 import React from 'react'
 import { existingTransactionResource, transactionResource } from './TR-action-transactions'
-import type { TaoActionValue } from './TR-action-values'
+import type { TaoActionValue, TaoEvaluable } from './TR-action-values'
 import { RuntimeAssert } from './TR-assert'
 import { DataControls } from './TR-data'
-import { isPersistedEnumCase } from './TR-persisted-state'
+import { getJSValue, type TaoJSValue } from './TR-js-value'
+import { isCompletePersistedValue, isPersistedEnumCase } from './TR-persisted-state'
 import { isReactiveValue } from './TR-reactive'
+import { readAvailability, withReadAvailability } from './TR-read-availability'
 
-/** TaoRuntimeValue is the evaluable value shape generated Tao code exchanges at runtime. */
-export type TaoRuntimeValue<ValueT> = Readonly<{
-  evaluate(): TaoRuntimeValue<ValueT>
+/** TaoRuntimeValueInput preserves the minimal value contract accepted before native accessors. */
+export type TaoRuntimeValueInput<ValueT> = Readonly<{
+  evaluate(): TaoRuntimeValueInput<ValueT>
   jsValue: ValueT
 }>
+
+/** TaoRuntimeValue is the complete value produced by runtime factories. */
+export type TaoRuntimeValue<ValueT> = Readonly<{
+  evaluate(): TaoRuntimeValue<ValueT>
+  getJSValue(): TaoJSValue<ValueT>
+  jsValue: ValueT
+}>
+
+const registeredCompleteValues = new WeakSet<object>()
+const registeredRuntimeValues = new WeakSet<object>()
+const preservedStorageValues = new WeakSet<object>()
+
+/** Behavior carriers keep their selected witnesses when placed in mutable item storage. */
+export function registerPreservedStorageValue(value: TaoRuntimeValue<unknown>): void {
+  preservedStorageValues.add(value)
+}
+
+/** Only explicitly registered carriers survive storage; ordinary values retain raw backing. */
+function runtimeStorageValue<ValueT>(
+  source: TaoRuntimeValueInput<ValueT>,
+): ValueT | TaoRuntimeValueInput<ValueT> {
+  const value = source.evaluate()
+  return preservedStorageValues.has(value) ? value : value.jsValue
+}
+
+/** Runtime-owned evaluables may be categorized without promising the complete output protocol. */
+export function registerRuntimeValue(value: TaoEvaluable<unknown>): void {
+  registeredRuntimeValues.add(value)
+}
+
+/** Runtime-owned facade constructors register complete outputs without inspecting their reads. */
+export function registerCompleteRuntimeValue<ValueT>(value: TaoRuntimeValue<ValueT>): void {
+  registeredCompleteValues.add(value)
+  registeredRuntimeValues.add(value)
+}
+
+/** Native result categorization uses owned identity, never user fields or prototype membership. */
+export function isRuntimeValue(candidate: unknown): candidate is TaoEvaluable<unknown> {
+  return candidate !== null && (typeof candidate === 'object' || typeof candidate === 'function')
+    && (registeredRuntimeValues.has(candidate) || isCompletePersistedValue(candidate))
+}
+
+/** TaoWritableInput preserves narrow read/write capabilities without requiring output methods. */
+export type TaoWritableInput<ValueT> =
+  & TaoEvaluable<ValueT>
+  & Readonly<{ set(value: TaoRuntimeValueInput<ValueT>): void | Promise<void> }>
 
 /** TaoWritable exposes a value read plus the capability to change its owning storage. */
 export type TaoWritable<ValueT> =
   & TaoRuntimeValue<ValueT>
   & Readonly<{
     at(path: readonly string[]): TaoWritable<unknown>
-    set(value: TaoRuntimeValue<ValueT>): void | Promise<void>
+    set(value: TaoRuntimeValueInput<ValueT>): void | Promise<void>
   }>
 
 type TaoJoinedActionValue<Args extends any[] = any[]> =
@@ -26,15 +74,23 @@ type TaoJoinedActionValue<Args extends any[] = any[]> =
     invokeJoined(...args: Args): void | Promise<void>
   }>
 
-export function isWritable<ValueT>(value: TaoRuntimeValue<ValueT>): value is TaoWritable<ValueT> {
-  return 'set' in value && typeof (value as TaoWritable<ValueT>).set === 'function'
+export function isWritable<ValueT>(
+  value: TaoEvaluable<ValueT>,
+): value is TaoWritableInput<ValueT> {
+  return 'set' in value && typeof (value as TaoWritableInput<ValueT>).set === 'function'
 }
 
 class Value<ValueT> implements TaoRuntimeValue<ValueT> {
-  constructor(readonly jsValue: ValueT) {}
+  constructor(readonly jsValue: ValueT) {
+    registerCompleteRuntimeValue(this)
+  }
 
   evaluate(): TaoRuntimeValue<ValueT> {
     return this
+  }
+
+  getJSValue(): TaoJSValue<ValueT> {
+    return getJSValue(this)
   }
 }
 
@@ -48,7 +104,9 @@ class ReactiveCell<ValueT> implements TaoWritable<ValueT> {
   constructor(
     private current: ValueT,
     private readonly publish?: (value: ValueT) => void,
-  ) {}
+  ) {
+    registerCompleteRuntimeValue(this)
+  }
 
   evaluate(): TaoRuntimeValue<ValueT> {
     const overlay = existingTransactionResource<{ value: ValueT }>(this)
@@ -59,7 +117,11 @@ class ReactiveCell<ValueT> implements TaoWritable<ValueT> {
     return this.evaluate().jsValue
   }
 
-  set(value: TaoRuntimeValue<ValueT>): void | Promise<void> {
+  getJSValue(): TaoJSValue<ValueT> {
+    return getJSValue(this)
+  }
+
+  set(value: TaoRuntimeValueInput<ValueT>): void | Promise<void> {
     const next = value.evaluate().jsValue
     const overlay = transactionResource(
       this,
@@ -93,29 +155,37 @@ class ReactiveCell<ValueT> implements TaoWritable<ValueT> {
 
 class PathLens implements TaoWritable<unknown> {
   constructor(
-    private readonly root: Pick<TaoWritable<unknown>, 'evaluate' | 'set'>,
+    private readonly root: TaoWritableInput<unknown>,
     private readonly path: readonly string[],
-  ) {}
+  ) {
+    registerCompleteRuntimeValue(this)
+  }
 
   evaluate(): TaoRuntimeValue<unknown> {
     let value: unknown = this.root.evaluate().jsValue
     for (const segment of this.path) {
       value = value !== null && typeof value === 'object' ? (value as Record<string, unknown>)[segment] : undefined
     }
-    return reactiveValue(value === undefined ? null : value)
+    return isRuntimeValue(value)
+      ? completeRuntimeValue(value).evaluate()
+      : reactiveValue(value === undefined ? null : value)
   }
 
   get jsValue(): unknown {
     return this.evaluate().jsValue
   }
 
-  set(value: TaoRuntimeValue<unknown>): void | Promise<void> {
+  getJSValue(): unknown {
+    return getJSValue(this)
+  }
+
+  set(value: TaoRuntimeValueInput<unknown>): void | Promise<void> {
     RuntimeAssert.input(this.path.length > 0, 'A writable field path must name a field.')
     const root = this.root.evaluate().jsValue
     if (isReactiveValue(root) && root.writeMember) {
-      return root.writeMember(this.path, value.evaluate().jsValue)
+      return root.writeMember(this.path, runtimeStorageValue(value))
     }
-    return this.root.set(reactiveValue(replacePath(root, this.path, value.evaluate().jsValue)))
+    return this.root.set(reactiveValue(replacePath(root, this.path, runtimeStorageValue(value))))
   }
 
   at(path: readonly string[]): TaoWritable<unknown> {
@@ -125,7 +195,7 @@ class PathLens implements TaoWritable<unknown> {
 
 /** writablePath creates a field lens over any transaction-aware writable owner. */
 export function writablePath(
-  root: Pick<TaoWritable<unknown>, 'evaluate' | 'set'>,
+  root: TaoWritableInput<unknown>,
   path: readonly string[],
 ): TaoWritable<unknown> {
   return new PathLens(root, path)
@@ -144,13 +214,13 @@ function replacePath(root: unknown, path: readonly string[], replacement: unknow
 }
 
 /** createWritableCell creates detached mutable storage for one action invocation or test. */
-export function createWritableCell<ValueT>(initial: TaoRuntimeValue<ValueT>): TaoWritable<ValueT> {
+export function createWritableCell<ValueT>(initial: TaoRuntimeValueInput<ValueT>): TaoWritable<ValueT> {
   return new ReactiveCell(initial.evaluate().jsValue)
 }
 
 /** mappedWritable adapts a live read and a Tao action-backed update into one writable lens. */
 export function mappedWritable<ValueT>(
-  read: () => TaoRuntimeValue<ValueT>,
+  read: () => TaoRuntimeValueInput<ValueT>,
   change: TaoJoinedActionValue<[TaoRuntimeValue<ValueT>]>,
 ): TaoWritable<ValueT> {
   return new MappedWritable(read, change)
@@ -158,22 +228,28 @@ export function mappedWritable<ValueT>(
 
 class MappedWritable<ValueT> implements TaoWritable<ValueT> {
   constructor(
-    private readonly read: () => TaoRuntimeValue<ValueT>,
+    private readonly read: () => TaoRuntimeValueInput<ValueT>,
     private readonly change: TaoJoinedActionValue<[TaoRuntimeValue<ValueT>]>,
-  ) {}
+  ) {
+    registerCompleteRuntimeValue(this)
+  }
 
   evaluate(): TaoRuntimeValue<ValueT> {
-    return this.read().evaluate()
+    return completeRuntimeValue(this.read()).evaluate()
   }
 
   get jsValue(): ValueT {
     return this.evaluate().jsValue
   }
 
-  set(value: TaoRuntimeValue<ValueT>): void | Promise<void> {
+  getJSValue(): TaoJSValue<ValueT> {
+    return getJSValue(this)
+  }
+
+  set(value: TaoRuntimeValueInput<ValueT>): void | Promise<void> {
     // `invokeJoined` is TR.Do's transaction-preserving payload operation. A mapping is a caller
     // capability, not storage of its own, so its write must join the enclosing Tao action.
-    return this.change.invokeJoined(value)
+    return this.change.invokeJoined(new ForwardedValue(value))
   }
 
   at(path: readonly string[]): TaoWritable<unknown> {
@@ -181,17 +257,109 @@ class MappedWritable<ValueT> implements TaoWritable<ValueT> {
   }
 }
 
+/** ForwardedValue adds output methods while preserving an input's current read semantics. */
+class ForwardedValue<ValueT> implements TaoRuntimeValue<ValueT> {
+  constructor(
+    private readonly source: TaoEvaluable<ValueT>,
+    private readonly validateSnapshot?: (snapshot: unknown) => void,
+  ) {
+    registerCompleteRuntimeValue(this)
+  }
+
+  evaluate(): TaoRuntimeValue<ValueT> {
+    const evaluated = this.source.evaluate()
+    this.validateSnapshot?.(evaluated)
+    const completed = isKnownCompleteRuntimeValue(evaluated)
+      ? evaluated as TaoRuntimeValue<ValueT>
+      : new EvaluatedValue(evaluated)
+    const availability = readAvailability(evaluated)
+    return availability ? withReadAvailability(completed, availability) : completed
+  }
+
+  get jsValue(): ValueT {
+    return this.evaluate().jsValue
+  }
+
+  getJSValue(): TaoJSValue<ValueT> {
+    return getJSValue(this)
+  }
+}
+
+/** EvaluatedValue retains one evaluated wrapper without reading its payload during completion. */
+class EvaluatedValue<ValueT> implements TaoRuntimeValue<ValueT> {
+  constructor(private readonly source: Readonly<{ jsValue: ValueT }>) {
+    registerCompleteRuntimeValue(this)
+  }
+
+  evaluate(): TaoRuntimeValue<ValueT> {
+    return this
+  }
+
+  get jsValue(): ValueT {
+    return this.source.jsValue
+  }
+
+  getJSValue(): TaoJSValue<ValueT> {
+    return getJSValue(this)
+  }
+}
+
+/** completeRuntimeValue adds output methods without eagerly reading a legacy callable result. */
+export function completeRuntimeValue<ValueT>(
+  value: TaoEvaluable<ValueT>,
+  validateSnapshot?: (snapshot: unknown) => void,
+): TaoRuntimeValue<ValueT> {
+  return isKnownCompleteRuntimeValue(value)
+    ? value as TaoRuntimeValue<ValueT>
+    : new ForwardedValue(value, validateSnapshot)
+}
+
+/** Only registered runtime outputs guarantee complete evaluations; prototypes convey no authority. */
+function isKnownCompleteRuntimeValue(value: object): boolean {
+  return registeredCompleteValues.has(value)
+    || isCompletePersistedValue(value)
+}
+
+/** ForwardedWritable retains a legacy owner's storage while completing its produced value API. */
+class ForwardedWritable<ValueT> implements TaoWritable<ValueT> {
+  constructor(private readonly root: TaoWritableInput<ValueT>) {
+    registerCompleteRuntimeValue(this)
+  }
+
+  evaluate(): TaoRuntimeValue<ValueT> {
+    return completeRuntimeValue(this.root).evaluate()
+  }
+
+  get jsValue(): ValueT {
+    return this.evaluate().jsValue
+  }
+
+  getJSValue(): TaoJSValue<ValueT> {
+    return getJSValue(this)
+  }
+
+  set(value: TaoRuntimeValueInput<ValueT>): void | Promise<void> {
+    return this.root.set(value)
+  }
+
+  at(path: readonly string[]): TaoWritable<unknown> {
+    return new PathLens(this.root, path)
+  }
+}
+
 /** useParameterCell creates storage for one mounted occurrence and never reinitializes it on rerender. */
 export function useParameterCell<ValueT>(
-  initial: TaoRuntimeValue<ValueT>,
+  initial: TaoEvaluable<ValueT>,
   options: Readonly<{ copy?: boolean }> = {},
 ): TaoWritable<ValueT> {
   const initialRef = React.useRef<TaoRuntimeValue<ValueT> | undefined>(undefined)
-  initialRef.current ??= options.copy ? reactiveValue(copyValue(initial.evaluate().jsValue)) : initial.evaluate()
+  initialRef.current ??= reactiveValue(
+    options.copy ? copyValue(initial.evaluate().jsValue) : initial.evaluate().jsValue,
+  )
   const [, publish] = React.useReducer((revision: number) => revision + 1, 0)
   const cell = React.useRef<TaoWritable<ValueT> | undefined>(undefined)
   cell.current ??= new ReactiveCell(initialRef.current.jsValue, () => publish())
-  return options.copy || !isWritable(initial) ? cell.current! : initial
+  return options.copy || !isWritable(initial) ? cell.current! : new ForwardedWritable(initial)
 }
 
 /** copyValue makes storage-owning copies of ordinary structures while retaining entity identity. */
@@ -254,7 +422,7 @@ function isOpaqueRuntimeValue(value: object): boolean {
 /** NativeMutationLease prevents callbacks retained by an unmounted native control from publishing. */
 export type NativeMutationLease<ValueT> = Readonly<{
   revoke(): void
-  set(value: ValueT | TaoRuntimeValue<ValueT>): void | Promise<void>
+  set(value: ValueT | TaoRuntimeValueInput<ValueT>): void | Promise<void>
 }>
 
 /** NativeMutationLeaseCandidate stays inert until the render that produced it commits. */
@@ -282,9 +450,9 @@ class ActiveNativeMutationLease<ValueT> implements NativeMutationLease<ValueT> {
     this.#active = true
   }
 
-  set(value: ValueT | TaoRuntimeValue<ValueT>): void | Promise<void> {
+  set(value: ValueT | TaoRuntimeValueInput<ValueT>): void | Promise<void> {
     RuntimeAssert.input(this.#active, 'A native control tried to update a value after it unmounted.')
-    const wrapped = isRuntimeValue<ValueT>(value) ? value : reactiveValue(value)
+    const wrapped = isRuntimeValueInput<ValueT>(value) ? new ForwardedValue(value) : reactiveValue(value)
     return this.action.current.invoke(wrapped)
   }
 }
@@ -350,6 +518,8 @@ export function useNativeMutationLease<ValueT>(
   return candidate.lease
 }
 
-function isRuntimeValue<ValueT>(value: ValueT | TaoRuntimeValue<ValueT>): value is TaoRuntimeValue<ValueT> {
+function isRuntimeValueInput<ValueT>(
+  value: ValueT | TaoRuntimeValueInput<ValueT>,
+): value is TaoRuntimeValueInput<ValueT> {
   return typeof value === 'object' && value !== null && 'evaluate' in value && 'jsValue' in value
 }

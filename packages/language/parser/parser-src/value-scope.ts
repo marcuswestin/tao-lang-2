@@ -1,3 +1,5 @@
+import { Switch } from '@shared'
+import * as ASTStruct from './ast-structure'
 import { Langium } from './langium-exports'
 import type { PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
@@ -64,6 +66,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   /** getScope returns Tao values visible to a value reference. */
   override getScope(context: Langium.ReferenceInfo): Langium.Scope {
     const container = context.container
+    if (context.property === 'unit' && AST.isNumericUnitConstruction(container)) {
+      return this.createNumericUnitScope(container)
+    }
     const isStateTargetReference = context.property === 'target' && AST.isSetStatement(container)
     if (isStateTargetReference) {
       return this.createMutableScope(container)
@@ -130,8 +135,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     ) {
       return this.createCommandReferenceScope(context.container)
     }
-    if (context.property === 'importedDeclarations' && AST.isUseStatement(context.container)) {
-      return this.createUseImportScope(context.container)
+    if (
+      context.property === 'target' && AST.isNamedImport(context.container)
+      && AST.isUseStatement(context.container.$container)
+    ) {
+      return this.createUseImportScope(context.container.$container)
     }
     if (context.property === 'namespace' && AST.isPackageMemberReference(context.container)) {
       return this.createPackageNamespaceScope(context.container)
@@ -163,6 +171,15 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     if (context.property === 'slot' && AST.isRenderSlotUse(context.container)) {
       return this.createRenderSlotScope(context.container)
+    }
+    if (context.property === 'forwardedSlot' && AST.isRenderSlotUse(context.container)) {
+      return this.createOwnedRenderSlotScope(context.container)
+    }
+    if (
+      context.property === 'renderer'
+      && (AST.isRenderSlotUse(context.container) || AST.isRenderSlotDeclaration(context.container))
+    ) {
+      return this.createDeclarationScope(context.container, AST.isViewDeclaration)
     }
     if (context.property === 'view' && AST.isAppView(context.container)) {
       return this.createAppViewScope(context.container)
@@ -225,6 +242,61 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScopeForNodes([])
   }
 
+  /** Unit shorthand never chooses an owner from the destination's expected type. */
+  private createNumericUnitScope(node: AST.NumericUnitConstruction): Langium.Scope {
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    const candidates = new Map<string, Set<AST.NumericUnitDeclaration>>()
+    const add = (name: string, unit: AST.NumericUnitDeclaration): void => {
+      let units = candidates.get(name)
+      if (!units) {
+        units = new Set()
+        candidates.set(name, units)
+      }
+      units.add(unit)
+    }
+    const addOwner = (declaration: AST.TypeDeclaration, prefix?: string, name = declaration.name): void => {
+      const canonical = canonicalNumericUnitDeclaration(declaration)
+      const expression = canonical?.type
+      if (!expression || !AST.isDerivedTypeExpression(expression)) {
+        return
+      }
+      for (const block of expression.slots.unitBlocks) {
+        for (const unit of block.units) {
+          if (!unit.name) {
+            continue
+          }
+          add(`${prefix ? `${prefix}.` : ''}${name}.${unit.name}`, unit)
+          if (!prefix) {
+            add(unit.name, unit)
+          }
+        }
+      }
+    }
+    for (const declaration of root.statements.filter(AST.isTypeDeclaration)) {
+      addOwner(declaration)
+    }
+    for (const binding of this.importedBindings(node, AST.isTypeDeclaration)) {
+      addOwner(binding.declaration, undefined, binding.localName)
+    }
+    for (const statement of root.statements.filter(AST.isUsePackageStatement)) {
+      const namespace = AST.packageNamespaceName(statement)
+      if (namespace) {
+        for (const declaration of this.collectTargetDeclarations(statement).filter(AST.isTypeDeclaration)) {
+          addOwner(declaration, namespace)
+        }
+      }
+    }
+    // Repeated imports of the same canonical unit are one candidate. Distinct owners with the
+    // same spelling stay unresolved, so neither import order nor contextual typing picks one.
+    return this.createScope([...candidates].flatMap(([name, units]) => {
+      const unit = units.size === 1 ? units.values().next().value : undefined
+      return unit ? [this.descriptions.createDescription(unit, name, AST.getDocument(unit))] : []
+    }))
+  }
+
   /**
    * A design color name is a value only as an argument or a parameter default, where a `color` may be
    * expected (Decisions §13). It is resolved against the designs this project's apps mount, as the
@@ -281,11 +353,61 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     // procedure and the verb in front of it.
     const owner = AST.owningCommand(reference)
     const visible = (declaration: AST.Node) => declaration !== owner
-    let scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root).filter(visible), outer)
-    scope = this.createScopeForNodes(
-      this.importedDeclarations(reference, AST.isImportableValueDeclaration),
-      scope,
-    )
+    const method = AST.findOwningAssociatedFunction(reference)
+    const methodOwner = method ? AST.associatedFunctionOwner(method) : undefined
+    const entityMethodOwner = method && AST.associatedEntityReceiverOwner(method)
+    let scope = outer
+    if (isAssociatedTypeRootReference(reference)) {
+      scope = this.createImportedScope(reference, AST.isTypeDeclaration, scope)
+      scope = this.createScopeForNodes(root.statements.filter(AST.isTypeDeclaration), scope)
+    }
+    if (
+      method && !method.static && methodOwner && !AST.isEntityDataDeclaration(methodOwner)
+      && isWithinAssociatedBody(reference, method)
+    ) {
+      scope = this.createScopeForNodes([methodOwner], scope)
+    }
+    if (method && entityMethodOwner && isWithinAssociatedBody(reference, method)) {
+      scope = this.createEntityReceiverScope(entityMethodOwner, scope)
+    }
+    const associatedView = AST.findOwningAssociatedView(reference)
+    const associatedViewOwner = associatedView && AST.associatedViewOwner(associatedView)
+    const entityViewOwner = associatedView && AST.associatedEntityReceiverOwner(associatedView)
+    if (
+      associatedView && associatedViewOwner && AST.isTypeDeclaration(associatedViewOwner)
+      && isWithinAssociatedViewBody(reference, associatedView)
+    ) {
+      scope = this.createScopeForNodes([associatedViewOwner], scope)
+    }
+    if (associatedView && entityViewOwner && isWithinAssociatedViewBody(reference, associatedView)) {
+      scope = this.createEntityReceiverScope(entityViewOwner, scope)
+    }
+    const action = AST.findOwningAction(reference)
+    const entityActionReceiver = action && AST.associatedEntityActionReceiver(action)
+    if (action && entityActionReceiver && isWithinAssociatedActionBody(reference, action)) {
+      scope = this.createEntityReceiverScope(
+        entityActionReceiver.owner,
+        scope,
+        entityActionReceiver.cardinality === 'one'
+          ? entityActionReceiver.owner.singularName
+          : entityActionReceiver.owner.name,
+      )
+    }
+    const nominalActionOwner = action && AST.associatedNominalActionOwner(action)
+    if (
+      action && AST.isTypeDeclaration(nominalActionOwner)
+      && AST.associatedActionDispatch(action) === 'instance'
+      && isWithinAssociatedActionBody(reference, action)
+    ) {
+      scope = this.createScopeForNodes([nominalActionOwner], scope)
+    }
+    const converter = AST.findOwningAssociatedConverter(reference)
+    const converterSource = converter && AST.associatedConverterSourceOwner(converter)
+    if (converterSource) {
+      scope = this.createScopeForNodes([converterSource], scope)
+    }
+    scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root).filter(visible), scope)
+    scope = this.createImportedScope(reference, AST.isImportableValueDeclaration, scope)
     scope = this.createScopeForNodes(this.importedCaseSetCases(reference), scope)
 
     const app = owningAppDeclaration(reference)
@@ -321,22 +443,44 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     // Blocks and case payloads layer together at their lexical depth, so a handler payload wins
     // over outer bindings while bindings declared inside the handler shadow the payload.
     for (const carrier of scopeCarriersContaining(reference).reverse()) {
-      if (carrier.kind === 'payload') {
-        scope = this.createScopeForNodes([carrier.payload], scope)
-        continue
-      }
-      if (carrier.kind === 'action-block') {
-        const results = AST.actionResultDeclarationsOwnedByActionBlock(carrier.block).filter(binding =>
-          (binding.$cstNode?.end ?? Infinity) <= (reference.$cstNode?.offset ?? 0)
-        )
-        scope = this.createScopeForNodes([...AST.askDeclarationsOwnedByActionBlock(carrier.block), ...results], scope)
-        continue
-      }
-      const forBinding = AST.forBindingOwnedByBlock(carrier.block)
-      if (forBinding) {
-        scope = this.createScopeForNodes([forBinding], scope)
-      }
-      scope = this.createScopeForNodes(AST.valueDeclarationsOwnedByBlock(carrier.block).filter(visible), scope)
+      const currentScope = scope ?? this.createScopeForNodes([])
+      Switch.on(carrier, 'kind', {
+        'associated-function': value => {
+          scope = this.createScopeForParameters(value.declaration, currentScope, reference)
+        },
+        'associated-view': value => {
+          scope = this.createScopeForParameters(value.declaration, currentScope, reference)
+        },
+        'render-slot': value => {
+          scope = this.createScopeForParameters(value.declaration, currentScope, reference)
+        },
+        'render-slot-inputs': value => {
+          scope = this.createScopeForNodes(value.use.inputBindings, currentScope)
+        },
+        payload: value => {
+          scope = this.createScopeForNodes([value.payload], currentScope)
+        },
+        'action-block': value => {
+          const loop = value.block.$container
+          const bindings = AST.isForStatement(loop) && loop.block === value.block ? [loop] : []
+          const results = [
+            ...AST.actionResultDeclarationsOwnedByActionBlock(value.block),
+            ...value.block.statements.filter(AST.isAliasDeclaration),
+          ].filter(binding => (binding.$cstNode?.end ?? Infinity) <= (reference.$cstNode?.offset ?? 0))
+          scope = this.createScopeForNodes(
+            [...bindings, ...AST.askDeclarationsOwnedByActionBlock(value.block), ...results],
+            currentScope,
+          )
+        },
+        block: value => {
+          let nextScope = currentScope
+          const forBinding = AST.forBindingOwnedByBlock(value.block)
+          if (forBinding) {
+            nextScope = this.createScopeForNodes([forBinding], nextScope)
+          }
+          scope = this.createScopeForNodes(AST.valueDeclarationsOwnedByBlock(value.block).filter(visible), nextScope)
+        },
+      })
     }
 
     // A command's own slots are the innermost values in its body: they are what its metadata reads
@@ -357,7 +501,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createScopeForNodes([])
     }
     let scope = this.createScopeForNodes(root.statements.filter(AST.isCommandDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isCommandDeclaration), scope)
+    scope = this.createImportedScope(node, AST.isCommandDeclaration, scope)
     const view = AST.findOwningView(node)
     if (AST.isViewDeclaration(view)) {
       scope = this.createScopeForNodes(AST.commandsOf(view), scope)
@@ -366,18 +510,36 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createConstructorDeclarationScope(node: AST.ConfiguredValue): Langium.Scope {
+    const signature = immediateConstructorSignature(node)
+    const signatureScope = signature ? this.createSignatureTypeScope(signature) : this.createScope([])
+    if (node.relative) {
+      return signatureScope
+    }
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    const local = preferredConstructorDeclarations(node, root.statements.filter(AST.isConstructorDeclaration))
+    const local = preferredConstructorDeclarations(node, root.statements.filter(isFileConstructorDeclaration))
+    const bindings = this.importedBindings(node, isFileConstructorDeclaration)
     const imported = preferredConstructorDeclarations(
       node,
-      this.importedDeclarations(node, AST.isConstructorDeclaration),
+      bindings.map(binding => binding.declaration),
+      declaration => bindings.filter(binding => binding.declaration === declaration).map(binding => binding.localName),
     )
-    let scope = this.createScopeForNodes(local)
-    scope = this.createScopeForNodes(imported, scope)
+    let scope = this.createScopeForNodes(local, signatureScope)
+    scope = this.createScopeForBindings(bindings.filter(binding => imported.includes(binding.declaration)), scope)
     return scope
+  }
+
+  private createSignatureTypeScope(owner: AST.ParameterizedDeclaration): Langium.Scope {
+    const descriptions = AST.parametersOf(owner).flatMap(parameter => {
+      const name = parameterValueName(parameter)
+      const definition = constructorParameterDefinition(parameter)
+      return name && definition
+        ? [this.descriptions.createDescription(definition, name, AST.getDocument(definition))]
+        : []
+    })
+    return this.createScope(descriptions)
   }
 
   private createConfigurationDeclarationScope(node: AST.Node): Langium.Scope {
@@ -389,7 +551,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       AST.isImportableValueDeclaration(candidate)
       || AST.isConfigurableDeclaration(candidate)
     let scope = this.createScopeForNodes(root.statements.filter(configurable))
-    scope = this.createScopeForNodes(this.importedDeclarations(node, configurable), scope)
+    scope = this.createImportedScope(node, configurable, scope)
     const app = owningAppDeclaration(node)
     if (app?.block) {
       scope = this.createScopeForNodes(
@@ -412,9 +574,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const type = (candidate: AST.Node): candidate is AST.TypeDeclaration => AST.isTypeDeclaration(candidate)
     // A refinement name resolves the value namespace first, then falls back to the type namespace.
     // Keeping them as nested scopes also permits same-name peers without creating an ambiguous ref.
-    let scope = this.createScopeForNodes(this.importedDeclarations(node, type))
+    let scope = this.createImportedScope(node, type)
     scope = this.createScopeForNodes(root.statements.filter(type), scope)
-    scope = this.createScopeForNodes(this.importedDeclarations(node, value), scope)
+    scope = this.createImportedScope(node, value, scope)
     scope = this.createScopeForNodes(root.statements.filter(value), scope)
     return scope
   }
@@ -450,6 +612,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (view) {
       scope = this.createScopeForParameters(view, scope, statement)
     }
+    const slotOwner = renderSlotOwnerContaining(statement)
+    if (slotOwner) {
+      scope = this.createScopeForParameters(slotOwner, scope, statement)
+    }
     const action = AST.findOwningAction(statement)
     if (action) {
       scope = this.createScopeForParameters(action, scope, statement)
@@ -475,27 +641,31 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const isRenderable = (node: AST.Node): node is AST.ViewDeclaration | AST.NavDeclaration =>
       AST.isViewDeclaration(node) || AST.isNavDeclaration(node)
     let scope = this.createScopeForNodes(root.statements.filter(isRenderable))
-    scope = this.createScopeForNodes(this.importedDeclarations(render, isRenderable), scope)
-    const owner = AST.findOwningView(render)
-    const parameters = owner ? AST.parametersOf(owner).filter(isRenderableParameter) : []
-    const firstParameter = parameters[0]
-    if (!firstParameter) {
-      return scope
-    }
-    const document = AST.getDocument(firstParameter)
-    const descriptions = parameters.flatMap(parameter => {
-      const name = parameterValueName(parameter)
-      return name ? [this.descriptions.createDescription(parameter, name, document)] : []
-    })
-    return this.createScope(descriptions, scope)
+    scope = this.createImportedScope(render, isRenderable, scope)
+    const targets = new Set<string>([
+      AST.ViewDeclaration.$type,
+      AST.NavDeclaration.$type,
+      AST.AliasDeclaration.$type,
+      AST.StateDeclaration.$type,
+      AST.ParameterDeclaration.$type,
+      AST.RenderSlotInputBinding.$type,
+      AST.ForStatement.$type,
+    ])
+    const seen = new Set<string>()
+    return this.createScope(
+      this.createValueScope(render, scope).getAllElements().filter(description => {
+        if (!targets.has(description.type) || seen.has(description.name)) {
+          return false
+        }
+        seen.add(description.name)
+        return true
+      }),
+    )
   }
 
   private createRenderSlotScope(use: AST.RenderSlotUse): Langium.Scope {
-    if (!use.render) {
-      const owner = AST.findOwningView(use)
-      return this.createScopeForNodes(
-        AST.isViewDeclaration(owner) ? AST.renderSlotDeclarationsOf(owner) : [],
-      )
+    if (!ASTStruct.isRenderSlotFill(use)) {
+      return this.createOwnedRenderSlotScope(use)
     }
 
     const block = use.$container
@@ -508,12 +678,15 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
     // Resolve by the invocation's source name without touching its `.ref` while this slot itself
     // is linking. The ordinary render reference is linked independently by the same visible set.
-    const views = [
-      ...root.statements.filter(AST.isViewDeclaration),
-      ...this.importedDeclarations(use, AST.isViewDeclaration),
-    ]
-    const target = views.find(candidate => candidate.name === targetName)
+    const target = root.statements.filter(AST.isViewDeclaration).find(candidate => candidate.name === targetName)
+      ?? this.importedBindings(use, AST.isViewDeclaration)
+        .find(binding => binding.localName === targetName)?.declaration
     return this.createScopeForNodes(target ? AST.renderSlotDeclarationsOf(target) : [])
+  }
+
+  private createOwnedRenderSlotScope(use: AST.RenderSlotUse): Langium.Scope {
+    const owner = AST.findOwningView(use)
+    return this.createScopeForNodes(AST.isViewDeclaration(owner) ? AST.renderSlotDeclarationsOf(owner) : [])
   }
 
   /** A call resolves a pure function or named copy; both share the one call shape (Decisions §14). */
@@ -534,7 +707,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createScopeForNodes([])
     }
     let scope = this.createScopeForNodes(root.statements.filter(isDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(node, isDeclaration), scope)
+    scope = this.createImportedScope(node, isDeclaration, scope)
     return scope
   }
 
@@ -554,14 +727,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    const declarations = [
-      ...root.statements.filter(AST.isEntityDataDeclaration),
-      ...this.importedDeclarations(node, AST.isEntityDataDeclaration),
-    ]
-    return this.createScope(
-      declarations.map(declaration =>
-        this.descriptions.createDescription(declaration, declaration.name, AST.getDocument(declaration))
-      ),
+    return this.createScopeForNodes(
+      root.statements.filter(AST.isEntityDataDeclaration),
+      this.createImportedScope(node, AST.isEntityDataDeclaration),
     )
   }
 
@@ -570,14 +738,13 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    const declarations = [
-      ...root.statements.filter(AST.isEntityDataDeclaration),
-      ...this.importedDeclarations(node, AST.isEntityDataDeclaration, declaration => declaration.singularName),
-    ]
-    const descriptions = declarations.map(declaration =>
+    const descriptions = root.statements.filter(AST.isEntityDataDeclaration).map(declaration =>
       this.descriptions.createDescription(declaration, declaration.singularName, AST.getDocument(declaration))
     )
-    return this.createScope(descriptions)
+    return this.createScope(
+      descriptions,
+      this.createImportedScope(node, AST.isEntityDataDeclaration, undefined, declaration => declaration.singularName),
+    )
   }
 
   private createFixtureDeclarationScope(node: AST.ScenarioFixtureClause | AST.TestFixtureClause): Langium.Scope {
@@ -585,10 +752,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    return this.createScopeForNodes([
-      ...root.statements.filter(AST.isFixtureDeclaration),
-      ...this.importedDeclarations(node, AST.isFixtureDeclaration),
-    ])
+    return this.createScopeForNodes(
+      root.statements.filter(AST.isFixtureDeclaration),
+      this.createImportedScope(node, AST.isFixtureDeclaration),
+    )
   }
 
   private createScenarioSubjectScope(node: AST.ScenarioGroupDeclaration): Langium.Scope {
@@ -600,10 +767,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       ...AST.appValueDeclarationsInFile(root),
       ...root.statements.filter(AST.isViewDeclaration),
     ])
-    scope = this.createScopeForNodes(
-      this.importedDeclarations(node, AST.isScenarioSubjectDeclaration),
-      scope,
-    )
+    scope = this.createImportedScope(node, AST.isScenarioSubjectDeclaration, scope)
     return scope
   }
 
@@ -704,6 +868,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       root.statements.filter(AST.isTypeDeclaration).flatMap(AST.caseSetCasesOf),
     )
     scope = this.createScopeForNodes(this.importedCaseSetCases(node), scope)
+    scope = this.createScopeForBindings(AST.visibleFileBindings(node, AST.isTypeDeclaration), scope)
     return scope
   }
 
@@ -732,13 +897,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createScopeForNodes([])
     }
     let scope = this.createScopeForNodes(AST.appValueDeclarationsInFile(root))
-    scope = this.createScopeForNodes(
-      this.importedDeclarations(
-        node,
-        AST.isConcreteAppValueDeclaration,
-      ),
-      scope,
-    )
+    scope = this.createImportedScope(node, AST.isConcreteAppValueDeclaration, scope)
     return scope
   }
 
@@ -793,7 +952,13 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createScopeForParameters(
-    declaration: AST.ParameterizedDeclaration,
+    declaration:
+      | AST.ParameterizedDeclaration
+      | AST.AssociatedFunctionDeclaration
+      | AST.AssociatedViewDeclaration
+      | AST.CapabilityMethodDeclaration
+      | AST.RenderSlotDeclaration
+      | AST.ForeignViewSlotDeclaration,
     outerScope: Langium.Scope,
     reference?: AST.Node,
   ): Langium.Scope {
@@ -810,31 +975,75 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScope(descriptions, outerScope)
   }
 
-  private importedDeclarations<DeclarationT extends AST.Declaration>(
+  private createEntityReceiverScope(
+    entity: AST.EntityDataDeclaration,
+    outerScope?: Langium.Scope,
+    name = entity.singularName,
+  ): Langium.Scope {
+    return this.createScope(
+      [this.descriptions.createDescription(entity, name, AST.getDocument(entity))],
+      outerScope,
+    )
+  }
+
+  private importedBindings<DeclarationT extends AST.Declaration>(
     node: AST.Node,
     isDeclaration: (node: AST.Node) => node is DeclarationT,
     importedName: (declaration: DeclarationT) => string = declaration => declaration.name,
-  ): DeclarationT[] {
+  ): AST.VisibleFileBinding<DeclarationT>[] {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return []
     }
-    const document = AST.getDocument(node)
-    const currentPath = document.uri.path
-
-    const declarations: DeclarationT[] = [...this.folderDeclarations(currentPath, isDeclaration)]
-    for (const useStatement of root.statements.filter(AST.isUseStatement)) {
-      const importedNames = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
-      for (const statement of this.collectTargetDeclarations(useStatement, currentPath)) {
-        if (
-          AST.isDeclaration(statement) && isDeclaration(statement)
-          && (useStatement.all || importedNames.has(importedName(statement)))
-        ) {
-          declarations.push(statement)
+    const currentPath = AST.getDocument(node).uri.path
+    const bindings: AST.VisibleFileBinding<DeclarationT>[] = this.folderDeclarations(currentPath, isDeclaration)
+      .map(declaration => ({
+        declaration,
+        sourceName: importedName(declaration),
+        localName: importedName(declaration),
+        namespace: AST.isEntityDataDeclaration(declaration) && importedName(declaration) === declaration.singularName
+          ? 'type' as const
+          : AST.declarationNamespace(declaration),
+      }))
+    for (const use of root.statements.filter(AST.isUseStatement)) {
+      for (const binding of AST.resolvedImportedBindings(use, this.collectTargetDeclarations(use, currentPath))) {
+        const declaration = binding.declaration
+        if (isDeclaration(declaration) && binding.sourceName === importedName(declaration)) {
+          bindings.push({
+            declaration,
+            sourceName: binding.sourceName,
+            localName: binding.localName,
+            namespace: binding.namespace,
+          })
         }
       }
     }
-    return declarations
+    return bindings
+  }
+
+  private createScopeForBindings<DeclarationT extends AST.Declaration>(
+    bindings: readonly AST.VisibleFileBinding<DeclarationT>[],
+    outerScope?: Langium.Scope,
+  ): Langium.Scope {
+    return this.createScope(
+      bindings.map(binding =>
+        this.descriptions.createDescription(
+          binding.declaration,
+          binding.localName,
+          AST.getDocument(binding.declaration),
+        )
+      ),
+      outerScope,
+    )
+  }
+
+  private createImportedScope<DeclarationT extends AST.Declaration>(
+    node: AST.Node,
+    isDeclaration: (node: AST.Node) => node is DeclarationT,
+    outerScope?: Langium.Scope,
+    importedName?: (declaration: DeclarationT) => string,
+  ): Langium.Scope {
+    return this.createScopeForBindings(this.importedBindings(node, isDeclaration, importedName), outerScope)
   }
 
   // A `folder` declaration joins its siblings' scopes with no `use` statement naming it. This sits
@@ -889,6 +1098,70 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 }
 
+/** Only an actual associated-call or action receiver may fall back to a type root. */
+function isAssociatedTypeRootReference(reference: AST.Node): boolean {
+  if (AST.isMemberAccessExpression(reference)) {
+    return (AST.isMethodCallExpression(reference.$container) && reference.$container.callee === reference)
+      || (AST.isDoStatement(reference.$container) && reference.$container.action === reference)
+  }
+  if (AST.isValueReference(reference) && AST.isPostfixMemberAccess(reference.$container)) {
+    const callee = reference.$container
+    return AST.isMethodCallExpression(callee.$container) && callee.$container.callee === callee
+  }
+  return false
+}
+
+/** Only the nearest argument owner supplies contextual constructor names. */
+function immediateConstructorSignature(node: AST.ConfiguredValue): AST.ParameterizedDeclaration | undefined {
+  let current: AST.Node | undefined = node.$container
+  while (current) {
+    if (AST.isArgumentList(current)) {
+      const owner = current.$container
+      if (AST.isFunctionCallExpression(owner)) {
+        return owner.function.ref
+      }
+      if (AST.isRender(owner)) {
+        const target = owner.view?.ref
+        return AST.isParameterizedDeclaration(target) ? target : undefined
+      }
+      return undefined
+    }
+    current = current.$container
+  }
+  return undefined
+}
+
+/** Scope publishes authored definitions; a named signature type retains its declaring file. */
+function constructorParameterDefinition(parameter: AST.ParameterDeclaration): AST.TypeDefinition | undefined {
+  if (parameter.inlineType) {
+    return parameter.inlineType
+  }
+  const reference = parameter.type
+  if (!reference || reference.members.length > 0) {
+    return undefined
+  }
+  return ASTStruct.visibleFileBindings(reference, AST.isTypeDeclaration).find(binding =>
+    binding.localName === reference.root
+  )?.declaration
+}
+
+/** Inline parameter types enter only through the selected signature, never file imports. */
+function isFileConstructorDeclaration(node: unknown): node is AST.TypeDeclaration | AST.ParameterizedDeclaration {
+  return AST.isTypeDeclaration(node) || AST.isParameterizedDeclaration(node)
+}
+
+function canonicalNumericUnitDeclaration(
+  declaration: AST.TypeDeclaration,
+  seen = new Set<AST.TypeDeclaration>(),
+): AST.TypeDeclaration | undefined {
+  if (seen.has(declaration)) {
+    return undefined
+  }
+  seen.add(declaration)
+  const alias = declaration.aliasTarget?.member.ref
+  return AST.isTypeDeclaration(alias) ? canonicalNumericUnitDeclaration(alias, seen) : declaration
+}
+
 function entityDataForWrite(operation: AST.Node | undefined): AST.EntityDataDeclaration | undefined {
   if (AST.isCreateStatement(operation)) {
     return operation.entity?.ref
@@ -920,9 +1193,9 @@ function entityDataForValueDeclaration(
   if (AST.isParameterDeclaration(declaration)) {
     const type = declaration.inlineType ? declaration.inlineType.type : declaration.type
     if (AST.isNamedTypeReference(type) && type.members.length === 0) {
-      return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration, entity => entity.singularName).find(
-        entity => entity.singularName === type.root,
-      )
+      return AST.visibleFileBindings(context, AST.isEntityDataDeclaration, entity => entity.singularName).find(
+        binding => binding.localName === type.root,
+      )?.declaration
     }
   }
   if (AST.isForStatement(declaration)) {
@@ -960,11 +1233,8 @@ function relationEntityForField(
     return undefined
   }
   const relationName = field.typeName ?? field.name
-  return AST.visibleFileDeclarations(
-    field,
-    AST.isEntityDataDeclaration,
-    entity => entity.name === relationName ? entity.name : entity.singularName,
-  ).find(entity => entity.singularName === relationName || entity.name === relationName)
+  return AST.visibleFileBindings(field, AST.isEntityDataDeclaration)
+    .find(binding => binding.localName === relationName)?.declaration
 }
 
 function entityDataForCollection(
@@ -983,7 +1253,8 @@ function entityDataForCollection(
   if (!owner || !fieldName) {
     return undefined
   }
-  return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity => entity.name === fieldName)
+  return AST.visibleFileBindings(context, AST.isEntityDataDeclaration).find(binding => binding.localName === fieldName)
+    ?.declaration
 }
 
 function entityDataForQuery(query: AST.EntityQueryDeclaration): AST.EntityDataDeclaration | undefined {
@@ -991,20 +1262,49 @@ function entityDataForQuery(query: AST.EntityQueryDeclaration): AST.EntityDataDe
     return entityDataForCollection(query.source, query)
   }
   const sourceName = query.sourceName ?? query.name
-  return AST.visibleFileDeclarations(query, AST.isEntityDataDeclaration, entity => entity.name)
-    .find(entity => entity.name === sourceName)
+  return AST.visibleFileBindings(query, AST.isEntityDataDeclaration, entity => entity.name)
+    .find(binding => binding.localName === sourceName)?.declaration
 }
 
 type ScopeCarrier =
   | { kind: 'block'; block: AST.Block }
   | { kind: 'action-block'; block: AST.ActionBlock }
   | { kind: 'payload'; payload: AST.CasePayload }
+  | { kind: 'associated-function'; declaration: AST.AssociatedFunctionDeclaration }
+  | { kind: 'associated-view'; declaration: AST.AssociatedViewDeclaration }
+  | { kind: 'render-slot'; declaration: AST.RenderSlotDeclaration | AST.ForeignViewSlotDeclaration }
+  | { kind: 'render-slot-inputs'; use: AST.RenderSlotUse }
+
+function renderSlotOwnerContaining(
+  node: AST.Node,
+): AST.RenderSlotDeclaration | AST.ForeignViewSlotDeclaration | undefined {
+  let current: AST.Node | undefined = node
+  while (current) {
+    if (AST.isRenderSlotDeclaration(current) || AST.isForeignViewSlotDeclaration(current)) {
+      return current
+    }
+    current = current.$container
+  }
+  return undefined
+}
 
 /** scopeCarriersContaining returns blocks and case payloads from innermost to outermost. */
 function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
   const carriers: ScopeCarrier[] = []
   let current: AST.Node | undefined = node.$container
   while (current) {
+    if (AST.isRenderSlotUse(current) && current.render && current.inputBindings.length > 0) {
+      carriers.push({ kind: 'render-slot-inputs', use: current })
+    }
+    if (AST.isAssociatedFunctionDeclaration(current)) {
+      carriers.push({ kind: 'associated-function', declaration: current })
+    }
+    if (AST.isAssociatedViewDeclaration(current)) {
+      carriers.push({ kind: 'associated-view', declaration: current })
+    }
+    if (AST.isRenderSlotDeclaration(current) || AST.isForeignViewSlotDeclaration(current)) {
+      carriers.push({ kind: 'render-slot', declaration: current })
+    }
     if (AST.isBlock(current)) {
       carriers.push({ kind: 'block', block: current })
     }
@@ -1013,6 +1313,7 @@ function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
     }
     if (
       (AST.isGuardActionBranch(current) || AST.isGuardRenderBranch(current) || AST.isWhenRenderBranch(current)
+        || AST.isWhenActionBranch(current)
         || AST.isWhenDoOutcome(current) || AST.isGuardDefaultBranch(current) || AST.isAppGuardBranch(current))
       && current.payload
     ) {
@@ -1042,13 +1343,48 @@ function owningAppDeclaration(node: AST.Node): AST.AppDeclaration | undefined {
 }
 
 function visibleParametersAtReference(
-  declaration: AST.ParameterizedDeclaration,
+  declaration:
+    | AST.ParameterizedDeclaration
+    | AST.AssociatedFunctionDeclaration
+    | AST.AssociatedViewDeclaration
+    | AST.CapabilityMethodDeclaration
+    | AST.RenderSlotDeclaration
+    | AST.ForeignViewSlotDeclaration,
   reference: AST.Node | undefined,
 ): readonly AST.ParameterDeclaration[] {
-  const parameters = AST.parametersOf(declaration)
+  const parameters = AST.isRenderSlotDeclaration(declaration) || AST.isForeignViewSlotDeclaration(declaration)
+    ? ASTStruct.renderSlotParametersOf(declaration)
+    : AST.parametersOf(declaration)
   const defaultParameter = parameterOwningDefault(reference)
   const index = defaultParameter ? parameters.indexOf(defaultParameter) : -1
   return index >= 0 ? parameters.slice(0, index) : parameters
+}
+
+function isWithinAssociatedBody(reference: AST.Node, declaration: AST.AssociatedFunctionDeclaration): boolean {
+  let current: AST.Node | undefined = reference
+  while (current) {
+    if (current === declaration.block) {
+      return true
+    }
+    current = current.$container
+  }
+  return false
+}
+
+function isWithinAssociatedViewBody(reference: AST.Node, declaration: AST.AssociatedViewDeclaration): boolean {
+  let current: AST.Node | undefined = reference
+  while (current && current !== declaration.block) {
+    current = current.$container
+  }
+  return current === declaration.block
+}
+
+function isWithinAssociatedActionBody(reference: AST.Node, declaration: AST.ActionDeclaration): boolean {
+  let current: AST.Node | undefined = reference
+  while (current && current !== declaration.block) {
+    current = current.$container
+  }
+  return current === declaration.block
 }
 
 function parameterOwningDefault(node: AST.Node | undefined): AST.ParameterDeclaration | undefined {
@@ -1060,11 +1396,6 @@ function parameterOwningDefault(node: AST.Node | undefined): AST.ParameterDeclar
     current = current.$container
   }
   return undefined
-}
-
-/** isRenderableParameter reports a parameter whose declared type a render site may name. */
-function isRenderableParameter(parameter: AST.ParameterDeclaration): boolean {
-  return AST.renderablePrimitiveOfParameter(parameter) !== undefined
 }
 
 function parameterValueName(parameter: AST.ParameterDeclaration): string | undefined {
@@ -1082,10 +1413,11 @@ function parameterValueName(parameter: AST.ParameterDeclaration): string | undef
 function preferredConstructorDeclarations(
   node: AST.ConfiguredValue,
   candidates: readonly AST.ConstructorDeclaration[],
+  names: (declaration: AST.ConstructorDeclaration) => readonly string[] = declaration => [declaration.name],
 ): AST.ConstructorDeclaration[] {
   // Completion creates a partial constructor before it has a reference token.
   const rootName = node.type?.$refText
-  const sameName = candidates.filter(candidate => candidate.name === rootName)
+  const sameName = candidates.filter(candidate => rootName !== undefined && names(candidate).includes(rootName))
   if (sameName.length <= 1) {
     return [...candidates]
   }
@@ -1103,7 +1435,7 @@ function preferredConstructorDeclarations(
     ? typeMatches
     : sameName
   return [
-    ...candidates.filter(candidate => candidate.name !== rootName),
+    ...candidates.filter(candidate => rootName === undefined || !names(candidate).includes(rootName)),
     ...preferred,
   ]
 }

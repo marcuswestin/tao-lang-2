@@ -49,6 +49,14 @@ Describe('verification lane names', () => {
     Expect(VerificationLanes.VERIFY_OR_WIDER).toContain('verify-full-sandbox')
   })
 
+  Test('the hosted macOS lane is locked and named, but never proof of verify', () => {
+    // It runs one runner's admitted host gates; a green record from it would claim the tree.
+    Expect(VerificationLanes.ALL).toContain('verify-full-ci')
+    Expect(VerificationLanes.BROAD).toContain('verify-full-ci')
+    Expect(VerificationLanes.LOCKED).toContain('verify-full-ci')
+    Expect(VerificationLanes.VERIFY_OR_WIDER).not.toContain('verify-full-ci')
+  })
+
   Test('every lane the landing lock serializes is a recipe, so none of them escapes it by typo', async () => {
     const recipes = await justRecipeNames()
     Expect(VerificationLanes.LOCKED.filter(lane => !recipes.has(lane))).toEqual([])

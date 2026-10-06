@@ -31,7 +31,8 @@ async function runControls(context: HostTestingContext): Promise<void> {
     env: context.environment,
     processPolicy: 'test',
     stdio: 'stream',
-    timeoutMs: 120_000,
+    // Controls include cold compilation of multiple real host apps, including both Syntax2 fixtures.
+    timeoutMs: 300_000,
   }, context.artifactRoot)
 }
 

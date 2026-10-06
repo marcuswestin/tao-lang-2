@@ -1,10 +1,22 @@
 import { expect, test } from '@playwright/test'
-import { type CLI, Errors, Platform } from '@shared'
+import { type CLI, Errors, Platform, Repo, TaoStdlib } from '@shared'
 import { createHostTestingContext } from '../HostTestingCommand'
 import { parseHostTestingRequest } from '../HostTestingRequest'
 
 const base = { app: 'clockwork', seed: '12345' }
 const developerDir = '/Applications/Xcode-beta.app/Contents/Developer'
+
+test('host runners select the current checkout stdlib and preserve explicit payload overrides', async () => {
+  const request = parseHostTestingRequest('check', base)
+  const inherited = { TAO_RESOURCES: '/another/checkout/resources' }
+  const context = await createHostTestingContext(request, { environment: inherited })
+  expect(context.environment[TaoStdlib.DECLARED_ROOT_ENV]).toBe(Repo.resolvePath('packages/apps/stdlib'))
+  expect(inherited).toEqual({ TAO_RESOURCES: '/another/checkout/resources' })
+  const explicit = await createHostTestingContext(request, {
+    environment: { [TaoStdlib.DECLARED_ROOT_ENV]: '/explicit/stdlib' },
+  })
+  expect(explicit.environment[TaoStdlib.DECLARED_ROOT_ENV]).toBe('/explicit/stdlib')
+})
 
 test('accepts scoped Xcode only for Apple native modes and retained output only for iOS simulators', () => {
   for (const mode of ['ios', 'device', 'catalyst']) {
@@ -235,4 +247,33 @@ test('native Clipboard uses an explicit iOS simulator and rejects unrelated plat
       'native-bridge Clipboard acceptance requires ios',
     )
   }
+})
+
+test('Syntax2 native acceptance is limited to iOS, Android, and preparation', () => {
+  const syntax2 = { app: 'syntax2', seed: '12345' }
+  expect(parseHostTestingRequest('prepare', syntax2)).toMatchObject({
+    kind: 'browser',
+    mode: 'prepare',
+    subject: 'syntax2',
+  })
+  for (const mode of ['ios', 'android']) {
+    expect(parseHostTestingRequest(mode, { ...syntax2, device: 'owned-target' })).toMatchObject({
+      kind: 'native',
+      mode,
+      subject: 'syntax2',
+      device: 'owned-target',
+    })
+    expect(() => parseHostTestingRequest(mode, syntax2)).toThrow('Native proofs require --device')
+  }
+  for (const mode of ['browser', 'export', 'driver', 'device', 'catalyst', 'check', 'setup']) {
+    expect(() => parseHostTestingRequest(mode, { ...syntax2, device: 'owned-target' })).toThrow(
+      'syntax2 native acceptance requires ios or android',
+    )
+  }
+  expect(() => parseHostTestingRequest('prepare', { ...syntax2, fault: true })).toThrow(
+    '--fault is not supported for syntax2.',
+  )
+  expect(() => parseHostTestingRequest('ios', { ...syntax2, device: 'owned-target', fault: true })).toThrow(
+    '--fault is not supported for syntax2.',
+  )
 })

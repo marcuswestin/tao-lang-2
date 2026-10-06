@@ -1,6 +1,7 @@
 import { reportPostLandingResources } from '@cli-kit/ResourceCommands'
 import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { CiGateAdmission } from '@verification/CiGateAdmission'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
 import {
   FinalizeCommand,
@@ -57,6 +58,7 @@ type TestChangedCommandOptions = TestCommandOptions & {
 }
 
 type GatesCommandOptions = {
+  ciHostGates?: string
   showStudio?: boolean
   /**
    * Commander reads `--no-cache` as the negation of a `cache` option that defaults to true, so the
@@ -215,7 +217,7 @@ await runWithCommands(commands => {
     )
     .option(
       '--app <subject>',
-      'Explicit subject: hnreader, clockwork, native-navigation, native-bridge, or watchhello (watchos only).',
+      'Explicit subject: hnreader, clockwork, native-navigation, native-bridge, syntax2, or watchhello (watchos only).',
       'hnreader',
     )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')
@@ -477,6 +479,10 @@ await runWithCommands(commands => {
       "Run this machine's share of the lane's readers, one-based, e.g. 2/8; the prepare phase runs in full.",
     )
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
+    .option(
+      '--ci-host-gates <names>',
+      'verify-full-ci only: run these comma-separated host gates and the prepare nodes they read; empty runs none.',
+    )
     .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
     .option(
       '--green-tree <lanes...>',
@@ -488,15 +494,29 @@ await runWithCommands(commands => {
     // uncaught stack with a code frame from inside the error helper.
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       await runExitCommand(async () => {
+        const hostedCi = options.lane === VerificationLanes.VERIFY_FULL_CI
+        if (hostedCi !== (options.ciHostGates !== undefined)) {
+          Errors.throwUserInput('--ci-host-gates and the verify-full-ci lane go together; neither without the other.')
+        }
+        if (hostedCi && (options.skipUnsandboxed === true || options.greenTree !== undefined)) {
+          Errors.throwUserInput(
+            'verify-full-ci runs the admitted host gates as given and never reads or records a green tree.',
+          )
+        }
+        // The hosted macOS lane is the admitted host gates and their prepare closure, nothing else;
+        // the host gates still pending are reported, so a summary never looks fuller than it is.
+        const admission = hostedCi ? CiGateAdmission.select(gates, options.ciHostGates ?? '') : undefined
+        const lane = admission === undefined ? gates : admission.gates
         const runnable = options.skipUnsandboxed === true
-          ? gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
-          : gates
+          ? lane.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
+          : lane
         UiVisibility.preflightGates(runnable, options.showStudio)
         // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
         // Gate children inherit it; the invoking shell and landing process keep their priority.
         if (
           VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)
           || options.lane === VerificationLanes.VERIFY_COMPLEMENT
+          || hostedCi
         ) {
           const { WatchmanCommand } = await import('./doctor/WatchmanCommand')
           const watchmanStart = await WatchmanCommand.startBeforeLoweringPriority(
@@ -506,10 +526,13 @@ await runWithCommands(commands => {
           if (watchmanStart !== undefined && watchmanStart !== 0) {
             HCI.logProcessWarn('verify', 'Could not start Watchman at normal priority; Studio gates may refuse it.')
           }
-          try {
-            Platform.lowerProcessPriority()
-          } catch (error) {
-            HCI.logProcessWarn('verify', `${Errors.formatForUser(error)} Continuing at inherited priority.`)
+          // A hosted runner has nothing interactive to yield to; only local verification steps aside.
+          if (Platform.runtimeProcess.env['CI'] !== 'true') {
+            try {
+              Platform.lowerProcessPriority()
+            } catch (error) {
+              HCI.logProcessWarn('verify', `${Errors.formatForUser(error)} Continuing at inherited priority.`)
+            }
           }
         }
         const outputMode = WorkReporter.resolveMode({ requested: options.output })
@@ -517,7 +540,7 @@ await runWithCommands(commands => {
         return await holdingLandingLock(options.lane ?? 'verify', async () => {
           const summary = await runGates({
             showStudio: options.showStudio,
-            gates,
+            gates: lane,
             greenTree: options.greenTree === undefined || options.greenTree.length === 0
               ? undefined
               : { lanes: options.greenTree, noCache: options.cache === false, sharedRoot: GreenTree.sharedRoot() },
@@ -528,7 +551,7 @@ await runWithCommands(commands => {
             outputMode,
             partition: options.partition === undefined ? undefined : VerifyPartition.parse(options.partition),
             skipUnsandboxed: options.skipUnsandboxed === true,
-            skipped: options.skipped,
+            skipped: [...(options.skipped ?? []), ...(admission?.skipped ?? [])],
           })
           if (summary.greenTree !== undefined) {
             // A lane that ran nothing still states its verdict, and states it the same way: the record

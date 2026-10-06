@@ -102,6 +102,7 @@ Examples:
   ./agent test packages/language/parser/parser-tests/Parser.test.ts
   ./agent test-all
   ./agent test-file packages/language/parser/parser-tests/Parser.test.ts
+  ./agent test-source-file packages/language/parser/parser-tests/Parser.test.ts
   ./agent test-changed
   ./agent test-retry
   ./agent verify-changed
@@ -110,6 +111,7 @@ Examples:
   ./agent verify-full-sandbox
   ./agent unsandboxed open-pr --auto-merge
   ./agent unsandboxed verify-complement
+  ./agent unsandboxed verify-full-ci --ci-host-gates studio-canary
   ./agent unsandboxed cancel-verify
   ./agent unsandboxed land-fix
   ./agent unsandboxed merge-pr
@@ -207,6 +209,11 @@ test runs the suites the branch diff reaches, which can be green while a suite t
 never ran; a name pattern filters those same suites rather than widening back out to all of them.
 test-all runs every suite, and takes an optional name pattern of its own.
 
+test-source-file runs an explicit file/directory after parser generation, without building the
+reference app. Use it for language bootstrap when the new parser cannot compile that app yet;
+it is focused source evidence, never app or merge acceptance. Other test and verification lanes
+keep their existing reference-app prerequisite.
+
 Broad checks, verification, bare test/test-changed, and unfiltered test-all stop admitting new work
 after a definite failure. Running work is cancelled, with three seconds for cleanup before force-stop.
 The lane releases its leases only after its owned processes have stopped.
@@ -224,7 +231,9 @@ lanes passed. A lane whose tree is already recorded green prints that run's
 evidence and stops; --no-cache runs it anyway. When new CI is starting for an authorized, ready
 landing, run open-pr --auto-merge: it also runs verify-complement, the host-only gates hosted
 Verify does not admit, beside the hosted run, and cancels that run if the complement fails first
-(cancel-verify does the same by hand). merge-pr finishes from wherever the pull request stands:
+(cancel-verify does the same by hand). verify-full-ci is the CI macOS workflow's lane: the host
+gates its CI_HOST_GATES admits plus the prepare nodes they read, the rest reported
+pending; it records no green tree. merge-pr finishes from wherever the pull request stands:
 it archives one GitHub already merged, squash-merges one that is green with auto-merge off, and
 otherwise turns auto-merge on for this head. land-fix pushes a fix committed after GitHub merged
 straight to main, with a receipt and no full verification. Plain open-pr keeps auto-merge off for

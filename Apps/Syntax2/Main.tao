@@ -1,27 +1,138 @@
+use Duration, Length, Ratio, UpperCase from @tao/core
 use all from @tao/ui
+use GroupedShelf, NumberedBook, Shelf from ./Shelves
+use Add from ./library/BookActions
+use BookStore, LoadAfter, LoadedItems, Refresh from ./library/BookIO
+use Books, ComparedNames, EarlierLabel, GroupMode, NewBook, PersonName, Score, Subtract, Title as TitleType from ./library/Library
 
 app LibraryApp {
    id "com.tao.syntax2"
    name "Syntax2 Library"
    version "0.1.0"
+   Datasource BookStore
+   Design LibraryDesign
    view Library
-}
+   guard {
+      loading Context -> {
+         #loading accessible label "Loading books"
+         Spinner
+      }
+      error Problem -> { "{ Problem.Message }" }
+}  }
 
-view Banner(Heading text) {
+// 1. The projection preserves GivenName identity; this named descendant admits upward.
+type ProfileName is PersonName.GivenName
+
+// 2. Two text roles bind by their names, including when arguments are reversed.
+view Banner(Title text, Subtitle text) {
    render Col {
-      "{ Heading }" [weight bold]
+      "{ Title }" [weight bold]
+      "{ Subtitle }"
 }  }
 
 view Library {
-   state GroupMode is boolean = false
+   state GroupMode no
+   state Feedback = ""
+   state Draft = NewBook {
+      Title: TitleType ""
+   }
+   let Person = PersonName(ProfileName "Ada", .FamilyName "Lovelace")
+   let Readers = ComparedNames ["Ada", "Lovelace"]
+   let Shout = UpperCase(ProfileName "Ada")
+   let Title = TitleType.Default()
+   let ShelfLabel = TitleType "Shelf"
+   let Label = EarlierLabel(.Right ShelfLabel, .Left Title)
+   let Points = Score 2 + Score 3
+   let ScoreLabel = Points as TitleType
+   // 2.1 Quantities keep their unit view; dimensionless division yields Ratio.
+   let Span = 2 minutes + 30 seconds
+   let Scaled = 2 * Span
+   let Factor = Span / 30 seconds
+   let Offset = -2 seconds
+   query Feed = Books with {
+      order by Id asc
+      ,
+      paginate 40
+   }
+   // 3. An inferred source result reaches the joined completion handler.
+   action ReadyMessage() {
+      return "Ready"
+   }
    render Col {
       #heading accessible label "Library"
-      Banner("Library")
+      Banner(Subtitle "Reversed text roles", .Title "Library")
+      Person
+      Shout
+      Title
+      "Earlier: { Label }"
+      ScoreLabel
+      "{ Length(Readers) } readers"
+      Feedback
+      Row {
+         #draft
+         TextField(.Value Draft.Title)
+         Button("Add") {
+            on press -> do Add(Draft) then {
+               InvalidInput Problem -> { set Feedback = Problem.Message }
+               done -> { set Draft = NewBook {
+                  Title: TitleType ""
+               } }
+      }  }  }
+      Row {
+         Button("Show feedback") {
+            on press -> do ReadyMessage() then {
+               done Message -> { set Feedback = Message }
+         }  }
+         Button("Clear feedback") {
+            on press -> set Feedback = ""
+      }  }
+      "{ Subtract(Right 2, Left 5) }"
+      if Span == 150 seconds and Scaled == 300 seconds and Factor == 5 unity {
+         "Quantity arithmetic ready."
+      }
+      if Offset < 0 seconds {
+         "Signed offset ready."
+      }
       Spacer
       Button("Group") {
-         on press -> { toggle GroupMode }
-      }
+         // 4. Matching cases are captured before a selected action mutates their subject.
+         on press -> when GroupMode {
+            yes -> {
+               set GroupMode = GroupMode no
+            }
+            no -> {
+               set GroupMode = GroupMode yes
+      }  }  }
       when GroupMode {
-         true -> "Grouped books."
+         yes -> "Grouped books."
          otherwise -> "All books."
+      }
+      // 5. Acquisition is bounded; continuation extends this same owned window.
+      guard Feed
+      when Feed {
+         refreshing -> {
+            #refreshing accessible label "Refreshing books"
+            Spinner
+         }
+         empty -> "No books."
+         stale -> "Showing cached books."
+      }
+      "{ LoadedItems(Feed).Count } loaded"
+      when GroupMode {
+         no -> Shelf(LoadedItems(Feed)) {
+            @header Title -> Banner(.Title Title, .Subtitle "{ Length(Readers) } readers")
+            @item Book, Occurrence -> NumberedBook(Occurrence, Book)
+            @footer: empty
+         }
+         yes -> GroupedShelf(LoadedItems(Feed))
+      }
+      Button("More") {
+         on press -> do LoadAfter(Feed)
+      }
+      Button("Refresh") {
+         on press -> do Refresh(Feed) then {
+            error Problem -> { set Feedback = TitleType "{ Problem.Message }" }
+      }  }
+      Button("Return loaded") {
+         on press -> do LoadedItems(Feed).Return()
 }  }  }

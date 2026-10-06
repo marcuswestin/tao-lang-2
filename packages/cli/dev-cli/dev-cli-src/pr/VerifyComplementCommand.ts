@@ -74,11 +74,11 @@ export const VerifyComplementCommand = {
     const plan = await VerifyComplement.readPlan(options.gates, root)
     report(
       plan.workflowAdmits
-        ? `${VerifyComplement.WORKFLOW_PATH} admits ${describeList(plan.admitted)} on hosted runners.`
-        : `${VerifyComplement.WORKFLOW_PATH} carries no ${VerifyComplement.CI_HOST_GATES_KEY}; hosted Verify admits no host gate.`,
+        ? `${VerifyComplement.WORKFLOW_PATH} admits ${describeList(plan.admitted)} on a hosted macOS runner.`
+        : `${VerifyComplement.WORKFLOW_PATH} carries no ${VerifyComplement.CI_HOST_GATES_KEY}; no hosted runner admits a host gate.`,
     )
     if (plan.host.length === 0) {
-      report('PASS  Hosted Verify admits every host gate; nothing is left for this machine to run.')
+      report('PASS  CI macOS admits every host gate; nothing is left for this machine to run.')
       return { exitCode: 0, lines, plan }
     }
     report(`Complement: ${plan.host.join(' ')}`)

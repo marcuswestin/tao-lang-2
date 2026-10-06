@@ -20,6 +20,12 @@ export function foreignActionBindingName(action: AST.ActionDeclaration): string 
   return `__tao_foreign_action_${action.name}_${index + 1}__`
 }
 
+/** foreignActionExportName selects an owner-qualified sidecar alias for a nominal action. */
+export function foreignActionExportName(action: AST.ActionDeclaration): string {
+  const owner = AST.associatedNominalActionOwner(action)
+  return owner ? `${owner.name}_${action.name}` : action.name
+}
+
 /** foreignViewBindingName returns the private named-import alias for one sidecar component. */
 export function foreignViewBindingName(view: AST.ViewDeclaration): string {
   return `__tao_foreign_view_${view.name}__`

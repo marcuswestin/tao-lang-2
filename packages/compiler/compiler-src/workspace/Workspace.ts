@@ -273,11 +273,22 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     for (const validation of validations) {
       diagnostics.push(...validation.diagnostics)
     }
+    // Keep the sealed admission evidence for every graph in this same linked AST generation.
+    const effects = validations.flatMap(validation =>
+      validation.associatedEffects ? [validation.associatedEffects] : []
+    )
 
     return {
       diagnostics: Diagnostics.unique(diagnostics),
       entry: parsedEntries[0]!.entry,
       files: batchFiles,
+      associatedEffects: effects.length === validations.length
+        ? {
+          descriptors: new Map(effects.flatMap(context => [...context.descriptors])),
+          analyses: new Map(effects.flatMap(context => [...context.analyses])),
+          creatorAnalyses: new Map(effects.flatMap(context => [...context.creatorAnalyses ?? []])),
+        }
+        : undefined,
     }
   }
 

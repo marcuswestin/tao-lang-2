@@ -148,8 +148,11 @@ Implicit nominal admission follows declared ancestry upward; it does not narrow 
 into a descendant or cross sibling branches. Parameters referencing an existing named type preserve
 that identity. After explicit labels and exact identities, the binder considers compatible assignments
 together and accepts only pairs present in every maximum matching. Ambiguous alternatives remain
-errors instead of depending on argument order. Repeated primitive roles require explicit owner labels
-when unlabelled values cannot distinguish them. Contextual construction of literals and declared field
+errors instead of depending on argument order. Repeated primitive roles require role construction
+when raw values cannot distinguish them: `Subtract(Right 2, Left 5)` binds by scoped role names.
+`.Right 2` explicitly selects the receiving signature role when a lexical type shadows that name;
+the fully qualified projection is also available. Existing named-type inputs preserve their identity
+instead of creating a distinct signature-local type. Contextual construction of literals and declared field
 contracts remains separate from callable admission, including member writes and configured slots.
 
 Defaults may be omitted. A defaulted slot does not compete for an unlabeled value, so override it
@@ -167,13 +170,16 @@ invocations inside a render block. Actions, functions and presentation retain th
 Existing guard/when payload syntax retains priority: `loading -> Context { ... }` binds Context
 to the case payload. To render a view with children in that branch, write
 `loading -> { Handler { ... } }` or retain `Handler() { ... }` where that handler form is accepted.
-Removing those parentheses would change ownership; the bare-view shorthand does not override it.
+The canonical payload spelling is `loading Context -> { ... }`; legacy arrow-before-payload
+forms remain accepted where their handler grammar permits them. A compact quoted branch, such as
+`loading -> "Loading"`, has no payload binder and is unambiguous.
 
 Quoted render entries use the standard-library `Text` view, including its layout and native text
 defaults. This shorthand works without importing `Text` and is unaffected by a local view named
 `Text`; an explicit `Text(...)` call resolves normally. Interpolations remain reactive. Both a
-quoted empty string and explicit `Text("")` retain a text node. Bare text-value placement is not
-part of this implementation slice.
+quoted empty string and explicit `Text("")` retain a text node. A bare text value renders through
+the same library Text behavior, but an empty bare text value emits no node. Bare values with a
+structurally selected `ui` capability invoke their associated renderer instead.
 
 ```tao
 view Greeting(Name text) {
@@ -270,10 +276,67 @@ ordinary item field paths, or a writable parameter. An explicit change handler s
 action-backed mapping instead. Computed values, readonly aliases, and entity fields require that
 mapping or an explicit copy before mutation.
 
+### Structural capabilities and associated behavior
+
+`can` declares a structural behavior contract. Types satisfy it through matching associated
+signatures; they do not list an explicit implementation marker. A capability parameter uses
+ordinary type syntax, and methods inside a type may omit the redundant owner prefix:
+
+```tao
+can Display {
+   ToText() fails never -> text
+}
+
+type Title is text with {
+   func ToText() fails never { return UpperCase(Title) }
+   view Render() { render Title.ToText() }
+}
+
+func DisplayLabel(Value Display) { return Value.ToText() }
+```
+
+Return types may be inferred. An explicit return contract restricts the result. Functions,
+including converters, cannot invoke actions, perform I/O or suspend. A method's failure bound
+participates in structural admission: `fails never` is a closed empty bound, a named list is a
+closed bound, and omission retains an unknown remainder when inference cannot close it.
+
+The library `ui` capability selects an associated `Render` view. A transported capability keeps
+the original live receiver and the validated selected methods; an ordinary object with similar
+fields is not an authenticated runtime behavior carrier. Configured item fields and list
+transport preserve these carriers, including rendering a live Book stored in a grouped-row recipe.
+
+Generic signatures use `where type T is Contract`, with multiple requirements joined by `and`.
+Concrete `Self` requirements refer to that implementing domain. Inference can select an ancestor
+already supplied by a typed argument when every other input admits upward into it. It cannot
+invent an unsupplied ancestor to reconcile siblings. Explicit conversion remains available:
+
+```tao
+func Earlier where type T is Ordered (Left T, Right T) {
+   return pick Left.Compare(Right) {
+      greater -> Right
+      otherwise -> Left
+   }
+}
+Earlier(.Left Cool, .Right Imperial as Celsius)
+```
+
+Static methods retain their declared result identity. Associated converters declare an explicit
+source-to-target transformation inside the source type; merely sharing backing data does not
+permit implicit sibling conversion. Method visibility follows the visible owning type. A nominal
+value exposed through a public field or signature retains its associated converters without a
+separate import of the owner's name. Conversion admission still uses the concrete source ancestry
+and exact target, not shared storage or an arbitrary conversion graph.
+
+The core `ConversionFailure` family contains `InvalidFormat`, `UnsupportedEncoding`, `OutOfRange`,
+`PrecisionLoss`, and `ConstraintViolation`. A converter can declare one leaf or the family as its
+failure bound; a propagated failure reaches the ordinary action outcome or app error guard.
+
+### Native event controls
+
 Native press and submit bindings can declare controls before their action:
 
 ```tao
-on press (preventDefault) -> Save
+on press (preventDefault) -> do Save()
 on submit (preventDefault, stopPropagation) -> { do Save() }
 ```
 
@@ -323,6 +386,11 @@ preserves omitted fields; it does not infer which fields the user changed.
 
 ### Persisted app state
 
+Named-state construction may omit a redundant assignment: `state GroupMode no` constructs
+`GroupMode no` and binds a state value named `GroupMode`. Constructor positions select the type;
+bare value positions select the state. An imported type alias can disambiguate a dotted static
+call when a lexical value has the original type's spelling.
+
 App-level state must declare an explicit type and device-local persistence:
 
 ```tao
@@ -340,27 +408,29 @@ before load finishes. Saves serialize in write order. Persisted state participat
 the explicit runtime-capture registry. This slice permits `(persist)` only on app state; view-local keying
 remains future work.
 
-### Subject `when`
+### Matching: `pick` and `when`
 
-`when` evaluates one subject once and selects one case lazily:
+`pick` produces one value, selecting the first matching case lazily:
 
 ```tao
-let Label = when Draft {
+let Label = pick Draft {
    empty -> "Required"
    otherwise -> Draft
 }
 
 when Ready {
-   true -> { Text("Ready") }
-   otherwise -> { Text("Waiting") }
+   yes -> "Ready"
+   otherwise -> "Waiting"
 }
 ```
 
-`otherwise` is required for every supported `when`; it is always exhaustive. Value branches must
-have compatible results. Exact boolean cases preserve ordinary boolean conditionals. Query subjects
-add mutually exclusive `loading`, `error -> Message`, and ready `empty` cases. Render branches use
-blocks. This tranche did not introduce an action-statement `when`; actions use `check`, one-sided
-`if`, and guards.
+`pick` requires exhaustiveness and compatible result types. Statement and render `when` run every
+matching case in source order. They capture the subject and all case matches before running any
+case, so writes in one action case cannot change which later cases run. A failure interrupts the
+remaining action cases. `otherwise` runs only when no ordinary case matched; it is optional for
+multi-outcome `when`. Query states can overlap, such as usable empty content while refreshing.
+Condition-only forms use `pick { Condition -> Value ... }` or `when { Condition -> Body ... }`.
+Existing value-position `when` remains a compatibility spelling for single-value matching.
 
 ### One-sided `if`
 
@@ -372,8 +442,8 @@ if Result is Confirmed {
 }
 ```
 
-It never takes `else`. A conditional with two or more outcomes is modeled by exhaustive `when` in
-the contexts where `when` is supported. `Value is <Case>` can appear anywhere a boolean expression
+It never takes `else`. Use `pick` to select one value, or `when` to apply matching statement/render
+outcomes. `Value is <Case>` can appear anywhere a boolean expression
 is accepted; the declaration-linked case must belong to that value.
 
 ### Action early exit: `check`
@@ -428,7 +498,7 @@ called action's current block; execution after `do Callee()` in the caller conti
 a nested event handler stops only that handler block. A render guard renders its matched handler and
 skips only later siblings in the same render block.
 
-An entity subject additionally supports `loading`, `missing`, `unauthorized`, and `error`.
+An entity subject additionally supports `loading`, `none`, `unauthorized`, and `error`.
 Exceptional render-guard payloads are `ReadContext` records, whose `Message` is safe display copy;
 optional metadata, timing, cause and recovery fields are `none` when unknown or unimplemented.
 Ordinary `when` and action-guard error payloads remain text.
@@ -445,7 +515,7 @@ guard Document {
          Spinner()
          Text(Context.Message)
       }
-   missing -> Context { Text(Context.Message) }
+   none -> Context { Text(Context.Message) }
    unauthorized -> Context { Text(Context.Message) }
    error -> Context { Text(Context.Message) }
 }
@@ -476,6 +546,8 @@ surface; raw provider rows and ID-based test selectors remain private.
 
 ## Unit values
 
+### Primitive duration compatibility
+
 A unit family has a canonical base and fixed ratios, so one accessor mechanism builds, converts, and
 reads its values. `.unit` on a number constructs a value of that unit's family, and `.unit` on a
 value of the family reads it back as a number in that unit; the two round-trip.
@@ -485,8 +557,8 @@ let Wait = 220.ms                 // number → duration
 Wait.s                            // duration → number: 0.22
 ```
 
-`duration` is the one family the language registers today, because it is the only one a real feature
-forces. Its base is the nanosecond, and its units are `ms`, `s`, `min`, `h`, `d`, and `wk`, each with
+The primitive `duration` family retains its nanosecond backing for existing APIs. Its units are
+`ms`, `s`, `min`, `h`, `d`, and `wk`, each with
 long singular and plural aliases (`1.second`, `30.seconds`). There is no bare `m` duration unit:
 minutes are `min`. Months and years are not durations, since neither has a fixed length.
 
@@ -511,6 +583,81 @@ unit or a reading the family does not have is a diagnostic, so `Wait.meters` doe
 A duration lowers to a plain number of its base unit, which is why same-family arithmetic needs no
 runtime support and only the accessors and the calendar pairs convert.
 
+### Checked numeric quantities
+
+The standard library also implements `Scalar`, an abstract numeric operation family, and concrete
+`Duration` and `Ratio` domains. These are distinct from primitive `duration`: checked `Duration`
+uses canonical seconds, and `Ratio` uses canonical unity. They do not silently convert to the
+primitive nanosecond carrier.
+
+| Domain   | Default unit | Other units and canonical scales           |
+| -------- | ------------ | ------------------------------------------ |
+| Duration | seconds      | milliseconds 0.001, minutes 60, hours 3600 |
+| Ratio    | unity        | percent 0.01, permille 0.001               |
+
+Unit names are lowercase grammar elements owned by their declaring type. A numeric expression
+followed by a visible unit constructs its checked quantity; a qualified suffix such as
+`2 Duration.seconds` selects that owner explicitly. Ambiguous shorthand produces a diagnostic.
+With the standard-library declarations in scope:
+
+```tao
+let Span = 2 minutes + 30 seconds
+let Offset = -2 seconds
+let Factor = Span / 30 seconds
+let SecondsView = Span.seconds()
+```
+
+`Span` has canonical backing 150 and retains the left operand's `minutes` view. `SecondsView`
+has the same canonical backing and concrete domain, with its selected view changed to `seconds`.
+The generated `seconds()` reading returns a typed quantity view, not a bare number. `ToText()`
+and text interpolation render the retained selected unit, so `SecondsView.ToText()` is
+`"150 seconds"` and `Factor.ToText()` is `"5 unity"`. An extreme selected reading that cannot be
+represented as a finite nonzero number uses a canonical/scale expression instead of infinity or
+false zero.
+
+Scalar supplies inherited same-`Self` addition, subtraction and unary negation, multiplication by
+a number in either order, division by a number, and the six comparisons. Static `Self` is selected
+from the source operand domains and requires a concrete quantity domain. Parent-typed operands
+use that parent's contract even when their payloads are authentic descendants; operations after
+erasing the operands to abstract `Scalar` are rejected. Comparisons normalize canonical values
+within the selected domain. Unrelated domains and nominal siblings do not gain compatibility from
+sharing unit names.
+
+Duration and Ratio additionally declare their own concrete contracts: Duration divided by Duration
+returns Ratio in unity; Duration multiplied or divided by Ratio returns Duration; Ratio multiplied
+or divided by Ratio returns Ratio. Their explicitly declared result domains remain those domains.
+There is no general inherited `Self * Self` or `Self / Self` contract. Checked construction and
+arithmetic reject nonfinite backing and enforce the selected result factory's invariant chain.
+Duration remains signed; negative construction does not clamp it to zero.
+
+### Clock samples and waits
+
+`Time.StartTimer()` synchronously creates a runtime-only timer. `Timer.Duration()` samples a fixed
+elapsed checked Duration in seconds. Sampling neither stops the timer nor makes a prior result
+live; later samples can advance while earlier returned values stay fixed. Serializing a timer
+handle fails. Persist a sampled Duration instead of the timer's monotonic origin.
+
+The native clock is required on iOS and Android, and uses
+[mach_continuous_time](https://developer.apple.com/documentation/kernel/1646199-mach_continuous_time)
+and [elapsedRealtimeNanos](https://developer.android.com/reference/android/os/SystemClock#elapsedRealtimeNanos()),
+respectively. Those platform APIs include system sleep. Native samples cross the bridge in
+milliseconds; the timer converts their difference to canonical seconds. The loader rejects
+unsupported platforms, a missing or invalid module, and invalid readings as host-environment
+failures, with no wall-clock or JavaScript fallback. The timer also rejects a decreasing sample.
+This describes the implemented clock choice; simulator compilation and injected-clock tests do
+not prove installed-module loading or a real suspend/resume journey.
+
+`Time.Now()` currently returns the implemented primitive `time` carrier: a fixed wall-clock sample
+in Unix epoch milliseconds from the runtime clock. It honors the held test clock. DateTime,
+calendar transformations and live-time APIs are not implemented by this quantity slice.
+
+`do Wait(Amount)` accepts checked Duration and reads canonical seconds. Negative and zero values
+introduce no intentional delay; positive values schedule host waits, rounding fractional
+milliseconds upward and splitting delays beyond the host's supported range. Wait inherits the
+active action's cancellation, including the existing deferred-cleanup shield. Callback resumption
+can be late and waits do not survive process termination. Legacy APIs that accept primitive
+`duration`, such as Interval, retain their nanosecond contract.
+
 ## The TypeScript boundary
 
 `<expression> from <path>` is how a value reaches TypeScript. It binds loosest, taking the whole
@@ -528,7 +675,25 @@ let BuildStamp is text = BuildStamp() from ./Shell.ts
 The expression is a name or a call to one, and that head name resolves to a **named export** of the
 path rather than to a Tao declaration — there are no default exports, in either direction, which is
 what lets one sidecar back several bindings. Arguments are ordinary Tao expressions, evaluated on the
-Tao side and passed as plain JavaScript values; the result is wrapped as a Tao value.
+Tao side. Ordinary arguments cross as plain JavaScript values and ordinary results are wrapped as
+Tao values. Checked quantity arguments retain their runtime wrapper and authenticated opaque
+payload, including their concrete owner and selected unit view.
+
+Runtime values expose `getJSValue()` at the trusted TypeScript boundary. It evaluates a live value
+once per read, retains ordinary payload identity, and extracts a checked quantity's canonical
+number regardless of its selected unit view. Aliases, cells and persisted owners stay live;
+complete value wrappers returned through runtime helpers retain their identity. This explicit
+extraction is separate from the automatic checked-quantity argument ABI.
+
+Generated quantity bindings expose the declaration-owned factory, such as
+`types.Duration.Factory`. Native implementations construct checked values with `Factory.fromUnit`
+or `Factory.fromJSValue`; the latter consumes canonical backing in the default unit. Native
+quantity results must return an evaluable wrapper with an authenticated payload owned by a
+permitted declared result factory. Raw numbers, raw payloads and forged quantity-shaped objects
+are not admitted as checked results. Selected static numeric `Self` calls append a compiler-supplied
+`TR.QuantityFactory` argument to the native signature. Helpers use that selected factory for
+operand admission and result construction, rather than deriving the result domain from whichever
+payload arrives first.
 
 Tao owns the type. A bridged value therefore needs a declared one — a `returns` clause, or a
 `let Name is Type =` ascription — and that declaration is the contract the sidecar must satisfy. The
@@ -590,7 +755,8 @@ The generated bridge contract checks its plain JavaScript parameter types and `v
 `void` completion when no result is declared. A named foreign action with `returns T` instead checks
 `T` or `Promise<T>` completion. `let Name = do Action(...)` awaits that result and binds an immutable
 local value of the declared type for the following statements. Nullable results use `returns T?`.
-Only foreign actions declare results; result-bearing actions cannot use `runs latest`.
+Source actions infer results from their returns and may declare a result contract explicitly.
+Result-bearing foreign actions cannot use `runs latest`.
 The ordinary `from` expression remains synchronous and does not unwrap promises.
 Entity parameters are structural records of their declared fields.
 
@@ -603,18 +769,50 @@ Configuration implementation factories are checked against the declared nav or d
 
 The maintained `@tao/device/photos` and `@tao/device/files` modules are generated
 from pinned modern native declarations. Constructors, methods and property reads
-are result-bearing foreign actions; property writes are foreign actions. Operation
-names include their owning type, and property reads observe the current native
+are result-bearing foreign actions; property writes are foreign actions. Reference-owned operations
+are associated actions, with constructors and native static operations selected through their type.
+The earlier flat operation names remain available for compatibility. Property reads observe the current native
 value rather than a construction-time snapshot. React convenience hooks are not
 native operations and are explicitly deferred.
 
 Native objects have distinct nominal reference types. Repeated wrapping preserves
 native object identity and method receivers; nested records and lists retain those
 typed references. Native references remain in memory and cannot enter persisted
-state or serialized restoration descriptors. A generated `Release<Type>` action
-releases the Tao wrapper reference only. Closing a file handle, cancelling a
+state or serialized restoration descriptors. A generated `ReleaseReference()` associated action
+(or its flat `Release<Type>` equivalent) releases the Tao wrapper reference only. Closing a file handle, cancelling a
 transfer and deleting a file or photo require their explicit upstream operations.
 Native side effects retain upstream behavior and do not gain rollback guarantees.
+
+```tao
+let Document = do File.Construct(.Uris ["owned-path"])
+defer Document.ReleaseReference()
+let Handle = do Document.Open()
+defer Handle.ReleaseReference()
+defer Handle.Close()
+let Bytes = do Handle.ReadBytes(.Length 5)
+```
+
+Deferred actions run in reverse registration order on success and failure, so the handle closes
+before its wrapper is released. A native operation named `Release` remains distinct from
+`ReleaseReference`. Foreign associated implementations export `Owner_Member`; instance actions
+receive their captured nominal receiver before the authored arguments, while static actions do not.
+Ordinary native promises join through `do` and `then`; independently observed progress or callback
+lifetimes retain their explicit handles.
+
+Structural capabilities can require actions without turning them into pure functions:
+
+```tao
+can ByteReader {
+   action ReadBytes(Length number) -> list of number
+}
+action ReadFive(Reader ByteReader) {
+   return do Reader.ReadBytes(.Length 5)
+}
+```
+
+A matching native `FileHandle` satisfies this contract structurally. Action requirements retain
+their failure bounds and use `do` for execution; a same-named pure function does not satisfy an
+action requirement, and a native action does not satisfy a pure-function requirement.
 
 Generated TypeScript contracts retain these nominal identities through receivers,
 results, callbacks and nested records or lists. Verified generation metadata maps

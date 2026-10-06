@@ -63,7 +63,7 @@ Describe('compiler: files and packages', () => {
           let MainNav = CustomStack { Initial Home }
           app Demo { id "com.tao.test.demo" version "1.0.0"
             name "Demo"
-            Navigator CustomStack
+            Navigator (CustomStack)
             Datasource SnapshotStore { StorageKey "demo" }
           }
           view Home() { render inject ${tsFence} return null ${fence} }

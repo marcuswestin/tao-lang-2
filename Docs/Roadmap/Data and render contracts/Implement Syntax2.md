@@ -7,32 +7,124 @@ This task records the implementation program. The design baseline landed on main
 `825637cd72395958bfbab396e5e8de13e604b90e`. The first render foundation and executable shell landed
 at `3bcd71647bfcbc5e6a371c3cd8fcccba8b1fb6f2` after full host verification. Four separate manager
 worktrees delivered A1 nominal/binding, B1 accessibility prefixes, D1 open failure contracts and
-C1 checked-quantity runtime storage. The integration branch adds public wildcard imports, erased
-native sidecar type checks and preparatory comma migration. Its first-wave combined host proof
-passed before later runtime changes; fresh combined verification is required for landing.
-Reviewed second-wave renderer descriptors provide independently mounted placements, fresh captures
-and own-property default selection. Lexical cleanup runtime joins admitted work, drains serial
-LIFO cleanup and preserves primary failures; scoped foreign thenables are adopted once. These
-runtime leaves do not yet expose the selected slot/defer source grammar or compiler lowering.
-Concrete callable signatures now cover required inputs before preferring exact matches, preserving
-ambiguity and ordinary argument binding. Uniform native accessors are undergoing a bounded
-complete-output identity repair in their separate worktree and are excluded from this landing.
-Checked native factory publication, capabilities, full slots, units, cleanup lowering and app
-adapter/list graduation remain. No language stream is complete.
-Reconciled with the 2026-10-04 project/module migration before baseline landing.
+C1 checked-quantity runtime storage. The shared foundation landed at
+`580f88cc5d8bec4682ebe430d08068f16aac3cb3` with public wildcard imports, erased native sidecar
+type checks, preparatory comma migration and the runtime cleanup facade. Combined host verification
+passed at that tree; lint, typecheck and runtime packaging reused exact-tree green evidence.
 
-Planning readiness: **100% for the high-level implementation plan**, reviewed 2026-10-04.
-The bounded final audit found no unresolved author decision blocking the plan. This is not
-implementation completion. Exact native ABI, feature extraction and exclusive file assignments
-are prerequisite engineering work; return a concrete semantic conflict if one is discovered.
+## Language baseline checkpoint — 2026-10-05
+
+The accepted nondeferred language families are implemented on the integration branch. This is an
+independently functioning baseline for other branches to consume, not completion of the full
+forcing-app/platform acceptance program. On 2026-10-05 the Developer resumed implementation,
+authorized adapting the incoming Photos/Files bindings to these contracts, and authorized landing
+the combined baseline before completing the remaining acceptance work.
+
+Implemented:
+
+- Nominal ancestry and signature projections; contextual construction, order-independent role/type
+  matching, repeated backing types, explicit conversions, wildcard imports and aliases.
+- Structural capabilities, concrete Self and generic constraints, associated/static members,
+  inferred result contracts, operators/converters and transitive pure-function restrictions.
+- Checked numeric/Scalar/Duration/Ratio values, signed lowercase postfix units, owner-qualified
+  units, canonical native storage/factories and retained unit views.
+- Bare render views/values, quoted text, bare-empty-text omission, structural ui dispatch,
+  parameterized/defaulted/repeated renderer slots, exact forwarding and accessibility prefixes.
+- Snapshot multi-match when, single-result pick, app-owned failure guards, typed/inferred/open
+  failure contracts, joined then/done, detached roots, cancellation and lexical LIFO defer.
+- Data item/collection receivers, writable inverse fields, optional none/empty behavior, typed
+  create/update inputs, adapter-owned bounded acquisition and revision acknowledgment.
+- Standard-library Keyed/RenderKey/LazyList/Occurrence and active grouped row recipes through
+  ordinary checked Tao builders and generated native capability contracts.
+
+Latest pre-landing evidence: Syntax2 source validation (9 files, no errors/noncanonical issues),
+WordFlower source validation (13 files, no errors/noncanonical issues; four existing style warnings),
+combined package typechecking, the declaration-slot boundary suite (12 tests) and formatter suite
+(52 tests). Focused compiled-source grouped-row and renderer-slot composition checks pass.
+Four actual Library journeys passed again on 2026-10-05 after final lazy/grouped activation,
+using the supported checkout-local TAO_HOME for test cache ownership. Final integrated landing gates own the baseline's
+merge verdict; preserve separate host/device limits below even when those gates pass.
+
+Integration on 2026-10-06 migrated remaining configured-field and renderer-slot fixtures without
+relaxing their behavior assertions. Runtime Studio action stand-ins now use the checked action
+facade; its environment suite (12 tests) and scenario suite (6 tests) pass. Host-read navigation
+fixtures pass all 19 tests after field separator migration. A host simulated-editor run failed
+with Outline still unselected and no browser errors; the unchanged isolated rerun passed all three
+tests and 102 assertions. Retain both results: an isolated rerun does not replace the final
+host complement and hosted CI proof.
+
+## Handing over the rest
+
+The follow-up slice is `feat/syntax2-acceptance`, to start from the landed combined baseline. The
+Developer authorized continuing through completion; deferred semantic investigations remain outside
+that authorization's implementation scope.
+
+1. **Combined lazy/grouped Library journeys.** Run `./agent tao test Apps/Syntax2` against active
+   Shelf/GroupedShelf. The final source composes and typechecks; all four app journeys passed
+   after lazy/grouped activation on 2026-10-05. The tests now distinguish 40/80/83 acquired counts from mounted
+   viewport rows. Verify stable keys, regrouping/author changes, live row updates, seen revisions,
+   writes, continuation/refresh failures and cancellation. Do not restore eager all-row assumptions.
+2. **Native acceptance.** Compiled Export tests prove PDF bytes, checked Duration and cleanup on
+   success/upload failure; native CompareTitles and grouped builder boundaries have focused proof.
+   Installed iOS simulator run `8075bfdd-c223-4ecf-8417-6e72d9df47ff` and Android emulator run
+   `39e509a5-7fdd-4822-a1d8-84528f4ea2eb` pass real ten-second background/resume timing,
+   immediate sampling of the same timer, joined cancellation cleanup and actual Library export.
+   Two mounted screens preserve Library state and virtualized row reachability; native assertions
+   retain accessibility-label selectors independently of visible text. Neither receipt
+   claims physical-device or operating-system file-service behavior.
+3. **Future-source and coverage reconciliation.** Complete: Main, the empty-result journey and the
+   grouped projection sketch are retired after case-by-case mapping to active modules and named
+   checks in the app README. The mounted query-presentation proof covers initial loading, refreshing
+   with retained rows and stale content after refresh failure. The shared conversion-failure family
+   has a cross-file effect check and an actual app rejection journey. Retired sketches are not runtime
+   dependencies or installed-platform acceptance evidence.
+4. **Final program acceptance.** Address failures from the combined journeys and applicable host
+   checks, review the integrated seams, run the required final gates and land the acceptance slice.
+   The broad deferred language investigations remain outside this task's completion criteria.
+
+Planning readiness remains 100%; implementation of the language baseline and completion of the
+whole app/platform program are deliberately separate milestones. Earlier workstream/wave sections
+below describe the execution architecture and retained audit obligations, not outstanding language
+feature families.
 
 ## Scope and boundaries
+
+### Acceptance execution plan
+
+The acceptance branch starts from landed baseline `a024a29a`. Complete the following
+slices without reopening deferred language decisions. Each slice records the exact checks and
+their proof boundaries before its coherent changes land through hosted Verify and the host-only
+complement. A source test is not installed-platform evidence.
+
+| Slice            | Required result                                                                                                                                                                                                            | Evidence owner                                                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Library          | Empty results remain available; first creation removes the empty message. Paging preserves acquired rows and live handles across refresh, errors and cancellation. Grouping preserves book identity across author changes. | Active Library journeys; empty CLI and mounted-app journeys; BookStore provider, grouped rows and mounted Shelf tests.                      |
+| Native           | Checked durations, export and deferred cleanup work on installed iOS and Android; cancellation and suspend/resume preserve the selected lifecycle contract.                                                                | Existing compiled export tests plus managed installed-platform acceptance receipts, identifying simulator versus physical-device execution. |
+| Future fixtures  | Every distinct retained example has executable coverage or an explicit deferred owner before retirement.                                                                                                                   | A case-by-case mapping of Main, Library journey and grouped projection future fixtures to active source and named checks.                   |
+| Written contract | Specifications and app guidance describe the actual implemented behavior and remaining platform limits.                                                                                                                    | Updated app README, relevant specs and the numbered audit below, tied to recorded checks.                                                   |
+| Integration      | All required cases and applicable platform checks pass on the final integrated head; meaningful slices are landed.                                                                                                         | Focused local repair evidence, hosted Verify, host complement and confirmed merged pull requests.                                           |
+
+Baseline recheck on 2026-10-06: all four active Library journeys and all eight BookStore
+provider tests pass. Existing empty-result CLI and mounted-app tests must be rerun before
+closing that obligation; retained future text alone does not prove it. Native capability queries
+find available iOS simulators and an Android device state, but neither establishes installed app
+acceptance. Final reporting must preserve these distinctions.
+
+If CI fails, cancel the remaining run, inspect which relevant suites never completed, reproduce
+those suites locally and batch repairs before the next push. Local diagnostic runs do not replace
+hosted merge proof.
+
+The detailed future-fixture audit closed S61's shared `ConversionFailure` contract with an executable
+core family and Title-to-ValidTitle converter. A cross-file check proves declared leaf effects admit
+into the family contract; the fifth Library journey proves safe propagated conversion feedback.
+The fixture's explicit loading override is implemented and observed by a mounted acquisition test.
+Its typed app error branch reconciles to S61's selected generic app guard; this does not add typed
+app guard cases or implement A29's deferred state redesign.
 
 Use [Decisions](../Tao%20Revolution/Decisions.md) and the app README. S66's unit table, supplied-ancestor
 inference and explicit conversions, and S67's five integration choices are selected. The final
 forcing-source audit is complete; maintain its coverage obligations during implementation.
-Prototype owner-elided methods, named-state construction and bare-text rendering
-before implementation depends on their exact grammar. Do not promote provisional app adapter/API
+Owner-elided methods, named-state construction and bare-text rendering are implemented. Do not promote provisional app adapter/API
 spellings into universal language decisions. The program supplements the existing Revolution process;
 it does not silently change MVP priority or replace WordFlower tranche obligations.
 
@@ -61,8 +153,9 @@ the Developer or explicitly omit the demonstration; do not invent a universal mo
 Keyed/RenderKey and uniqueness policy belong to the standard-library LazyList implementation.
 The compiler supplies ordinary capability/generic checking, not list-name or field-name magic.
 Do not inject Key methods into all entities or impose this policy on loops/custom list components;
-use ordinary associated/library adapters. stdlib/Keyed.tao.future graduates into its standard-library
-owner, not an app-local competing declaration. Scalar is an abstract operation family; unit ambiguity
+use ordinary associated/library adapters. The former stdlib/Keyed.tao.future target graduated into
+its standard-library owner and is retired, rather than creating an app-local competing declaration.
+Scalar is an abstract operation family; unit ambiguity
 requires qualification; inverse alias double fills are rejected even if consistent.
 
 Preserve existing effect-outcome machinery: transitive failure inference, contained-call savepoints,

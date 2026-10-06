@@ -186,7 +186,7 @@ or fails.
 
 ## Foreign action results
 
-A foreign action may declare `returns T`. Its TypeScript implementation returns `T` or `Promise<T>`;
+A foreign action may declare `-> T`. Its TypeScript implementation returns `T` or `Promise<T>`;
 the caller binds the resolved value with `let Name = do Action(...)`. The binding is immutable and
 available to following statements in its action block. Completion is awaited before those statements
 run, with the same joined transaction and failure behavior as ordinary `do`. A failed call does not
@@ -215,8 +215,10 @@ action Paste() {
 }
 ```
 
-Here `Copied` is writable boolean state and `Draft` is writable text state in the owning view. Native Tao action bodies cannot declare
-or return a result. A result-bearing foreign action cannot use `runs latest`, whose skipped-call
+Here `Copied` is writable boolean state and `Draft` is writable text state in the owning view.
+Source actions may return values; their result is inferred from owned lexical returns, or restricted
+by an explicit `-> T` annotation. Result handlers receive that value after joined cleanup completes.
+A result-bearing foreign action cannot use `runs latest`, whose skipped-call
 contract does not produce a value. Synchronous `from` value expressions do not await promises.
 
 ### Native listener ownership
@@ -275,7 +277,10 @@ records whether such an effect ran. A failure report is retry-eligible only when
 reports that fact but does not automatically retry an action.
 
 An `async { ... }` action block is detached from its caller. When encountered inside a transaction, it starts
-as a new serialized root after the caller finishes rather than joining the caller's overlay.
+as a new isolated root after the caller finishes rather than joining the caller's overlay. Suspended
+detached work does not hold the foreground action queue: UI actions can sample or cancel it.
+Explicit action draining still joins detached completion, including detached children. A replacement
+launch excludes abandoned work from its drain.
 
 The runtime also provides explicit lexical cleanup frames. Admitted joined work and its outcome
 handlers settle before a frame drains cleanup, serially in reverse registration order. Every
@@ -284,14 +289,50 @@ cleanup failures are diagnostic metadata. A cleanup-only failure prevents succes
 Generated continuations must capture the active frame and restore it after suspension. Scoped
 foreign thenables are adopted once for both joining and the caller's observation.
 
-The public `TR.ActionScope(body)` and `TR.Defer(cleanup)` runtime APIs are opt-in. A scope preserves
-synchronous completion when its body, joined work and cleanup are synchronous. The selected Tao
-`defer` syntax and automatic compiler frame lowering remain future work; existing action blocks do
-not acquire cleanup merely by using the runtime.
+Action blocks compile to lexical cleanup frames. Register cleanup with a block or an invocation:
+
+```tao
+action Export(Book) {
+   let File = do CreateTemporaryPDF(Book)
+   defer DeleteTemporaryFile(File)
+   do UploadFile(File)
+}
+```
+
+`defer DeleteTemporaryFile(File)` abbreviates `defer { do DeleteTemporaryFile(File) }`.
+Cleanup is explicit; creating a temporary file does not automatically register deletion. The frame
+drains after admitted joined work, on return, failure or cancellation. Returned values are sampled
+before cleanup, and successful completion is delivered only after cleanup succeeds. A scope retains
+synchronous completion when its body, joined work and cleanup are synchronous. The runtime APIs
+`TR.ActionScope(body)` and `TR.Defer(cleanup)` expose the same machinery.
 
 ## Effect outcomes
 
-A call site that must react to a verb's failure runs it with `when do` and names what happens next:
+The canonical spelling is `do Invocation(...) then { ... }`:
+
+```tao
+action Submit(NewBook) {
+   do Add(NewBook) then {
+      InvalidInput Problem -> { set Feedback = Problem.Message }
+      done -> { set Feedback = "Added" }
+   }
+}
+```
+
+Payload names precede the arrow. `done Result -> { ... }` receives the resolved result; `done`
+without a payload discards it. A named failure receives its typed payload. `error Problem -> { ... }`
+receives the public action failure context, including `Problem.Message`. Named cases, `rejected`,
+`error`, `cancelled`, and `otherwise` may select one outcome; the success name is `done`.
+The invocation and selected handler are sequential and joined: subsequent statements wait for both,
+including their suspended work and cleanup. Use an explicit `async { ... }` block to detach work.
+
+The outcome boundary saves the caller's private overlays before the invocation. A failure restores
+that savepoint before its handler runs, preserving the caller's earlier writes. An unhandled
+failure propagates to the root; a handled failure is consumed. External effects cannot be rolled back.
+
+### Compatibility spellings
+
+The older `when do` spelling remains accepted, including the following form:
 
 ```tao
 type ExportFailure is one of Offline, TooLarge
@@ -369,14 +410,26 @@ unresolved recursive calls can remain open; listing known cases does not prove c
 known cases preserves that remainder. In the current `when do` spelling, `otherwise`, or both
 `rejected` and `error`, covers it. Detached actions keep their own contracts. Raw foreign throws retain
 their original error provenance, while deliberately declared/provider failures follow `rejected`.
-Mandatory app-wide coverage and the selected future `then`, `done` and `fails` bounds are not yet
-implemented by this foundation.
+`then` and `done` use the same savepoint and joined outcome machinery. A callable may constrain
+its effective failure contract with `fails Foo, Bar`, or state a closed empty contract with
+`fails never`. An omitted bound permits an open contract; known source cases are inferred when
+possible. Structural capability declarations retain their declared bound, so an unconstrained
+requirement does not prove that a supplied method is failure-free. General whole-app refinement
+and complete static failure coverage remain deferred.
 
-An unhandled failure stays silent at runtime, but the compiler warns at a root invocation whose effective
+The compiler warns at a root invocation whose effective
 contract is not covered: a view event handler (`on press Verb` or a `do` in `on press -> { … }`), an
 `on select` handler, a command's `do` clause, or a `do` directly inside an `async` block. The warning names the cases and points at `when do`; at a
 root `when do` it names the cases the site leaves unhandled. A `do` inside another action is not a root —
 its cases join that action's contract instead.
+
+Each mounted app host contains an unhandled owned root failure after rollback and joined cleanup.
+Its `guard { error Problem -> { ... } }` handler receives a read-only public `ReadContext`, with
+`Problem.Message` selected by the safe message policy below. If that handler is absent, the runtime
+shows its default recovery surface. Recovery is explicit and does not reinvoke the failed action.
+Ownership is captured when the event dispatches, including before root and latest-only queues.
+An unmounted or replaced owner cannot publish into another app host. Named and inline event actions
+share this behavior; a deliberately observed action receipt retains its own failure result.
 
 ## Unexpected render failure containment
 
@@ -427,11 +480,11 @@ The runtime contains a failed root action and reports:
 - whether retry is eligible; and
 - a timestamp.
 
-Message selection follows this ladder:
-
-1. a sentence carried by the thrown provider or server `Error`;
-2. the sentence declared for the matching foreign case, or the sentence at a native `fail` site;
-3. `Couldn't finish '<action name>.' Nothing was changed.`
+Diagnostics retain the provider or thrown error's sentence, then the declared case sentence, then
+the runtime fallback. Public app guards use a separate safe message: deliberately modeled action
+failures may expose their authored/provider sentence; arbitrary thrown errors use the runtime
+fallback. A raw error's diagnostic text never becomes the app guard's public message by default.
+External effects and cleanup failures remain part of the report and constrain recovery.
 
 An unknown provider case never borrows the sentence declared for a different case.
 
@@ -450,9 +503,10 @@ one preview cell; it does not automatically write the capture back as Tao fixtur
 
 Action-failure reports still carry name-only call frames rather than compiler source ranges. Render-failure
 frames carry the source range supplied by their automatic boundary. `retryEligible` is reported, and render
-containment can offer Try again, but the runtime does not automatically reinvoke a failed action. Root
-serialization prevents a second root action from overlapping the active transaction; unrelated host
-callbacks still do not have separate async transaction context.
+containment can offer Try again, but the runtime does not automatically reinvoke a failed action.
+Foreground roots remain serialized; detached roots and explicit response actions can run while another
+root is suspended. Generated continuations restore their own transaction and cleanup frame; unrelated
+host callbacks still do not have separate async transaction context.
 
 `TR.Errors` is the runtime's one error-handling surface. It publishes `capture` and `reset` for the bounded
 action-history diagnostics, `onFailure` for contained root action failures, and `onUnowned` and

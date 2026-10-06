@@ -4,6 +4,7 @@ import {
   androidShellUrl,
   appiumFault,
   cleanupAppiumNativeHostProof,
+  journeyFor,
   parseAndroidAvdName,
   requireNativeNavigationHosts,
   runIosBuildOnly,
@@ -115,6 +116,12 @@ test('binds the HNReader mutation to the post-relaunch source-ranged assertion r
     sourceMarker: 'HNReader.test.tao:30:0:30:12',
     sourcePath: 'HNReader.test.tao',
     text: '2 opened',
+  })
+})
+
+test('Syntax2 Appium proof selects the installed Library native acceptance check', async () => {
+  await expect(journeyFor('syntax2')).resolves.toMatchObject({
+    check: { name: 'renders the installed Library', run: { appName: 'LibraryApp' } },
   })
 })
 

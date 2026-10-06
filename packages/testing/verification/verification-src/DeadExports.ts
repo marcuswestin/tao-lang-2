@@ -59,7 +59,8 @@ const PROJECT_ROOTS = ['Apps', 'packages']
 const TAO_EXTENSIONS = ['.tao', '.tao-next', '.tao-revolution']
 
 /** Directories that hold no authored source; `_gen_*` is knip's ignore and dprint's too. */
-const EXCLUDED_DIRECTORIES = (name: string) => name === 'node_modules' || name.startsWith('_gen_')
+const EXCLUDED_DIRECTORIES = (name: string) =>
+  name === 'node_modules' || name.startsWith('_gen_') || (name.startsWith('.') && name !== '.host-tests')
 
 /** The issue lists knip's JSON reporter uses for unused exported symbols. */
 const KNIP_EXPORT_KEYS = ['enumMembers', 'exports', 'nsExports', 'nsTypes', 'types'] as const
@@ -95,9 +96,11 @@ const TAO_INJECT_BINDING = new RegExp(String.raw`=\s*inject\s+"(${TAO_RELATIVE_P
 const TAO_BINDING_TAILS = [
   /\s+runs\s+latest$/,
   /\s+fails\s+[A-Za-z_]\w*\s+"(?:[^"\\]|\\.)*"$/,
+  /\s+fails\s+[A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*$/,
   /\s+responds\s+[A-Za-z_]\w*$/,
   /\s+accepts(?:\s+[A-Za-z_]\w*)?(?:\s+slots\s+@[\w.\-@/]+(?:\s*,\s*@[\w.\-@/]+)*)?$/,
   /\s+returns\s+(?:(?:list\s+of\s+)?[A-Za-z_][\w.]*\??|\{[^{}]*\})$/,
+  /\s*->\s+(?:(?:list\s+of\s+)?[A-Za-z_][\w.]*\??|\{[^{}]*\})$/,
 ]
 
 /**
@@ -203,6 +206,29 @@ export function taoForeignBindings(source: string): TaoBindingScan {
   let injecting = false
   const rawLines = maskTaoComments(source).split('\n')
   const codeLines = rawLines.map(maskTaoStrings)
+  let depth = 0
+  let pendingOwner: string | undefined
+  let ownerBody = false
+  const owners: { name: string; depth: number }[] = []
+  const advanceScope = (code: string): void => {
+    for (const token of code.matchAll(/\bwith\b|[{}]/g)) {
+      if (token[0] === 'with') {
+        ownerBody = pendingOwner !== undefined
+      } else if (token[0] === '{') {
+        depth += 1
+        if (ownerBody && pendingOwner !== undefined) {
+          owners.push({ name: pendingOwner, depth })
+          pendingOwner = undefined
+          ownerBody = false
+        }
+      } else {
+        if (owners.at(-1)?.depth === depth) {
+          owners.pop()
+        }
+        depth -= 1
+      }
+    }
+  }
   rawLines.forEach((rawLine, index) => {
     const code = codeLines[index]!
     const fences = (code.match(/```/g) ?? []).length
@@ -213,6 +239,17 @@ export function taoForeignBindings(source: string): TaoBindingScan {
     if (insideInjection || injecting) {
       return
     }
+    const owner = /^\s*(?:(?:public|file|folder|package|workspace)\s+)?type\s+([A-Za-z_]\w*)\b/.exec(code)
+    if (owner !== null) {
+      pendingOwner = owner[1]
+      ownerBody = false
+    } else if (
+      /^\s*(?:(?:public|file|folder|package|workspace)\s+)?(?:func|function|action|view|scene|data|app|let|state|can|primitive)\b/
+        .test(code)
+    ) {
+      pendingOwner = undefined
+      ownerBody = false
+    }
     const line = rawLine
     const injected = TAO_INJECT_BINDING.exec(line)
     if (injected !== null && code[injected.index] === '=') {
@@ -222,15 +259,31 @@ export function taoForeignBindings(source: string): TaoBindingScan {
     if (/^\s*use\b/.test(line)) {
       return
     }
+    let scanned = 0
     for (const match of code.matchAll(TAO_FROM_BINDING)) {
       const head = code.slice(0, match.index)
+      advanceScope(code.slice(scanned, match.index))
+      scanned = match.index
       const name = boundExportName(head) ?? wrappedExportName(codeLines, index, head)
       if (name === undefined) {
         unreadable.push(index + 1)
         continue
       }
-      bindings.push({ line: index + 1, name, path: match[1]! })
+      const declarationHead = head.trim() === ''
+        ? codeLines.slice(Math.max(0, index - TAO_WRAPPED_HEAD_LIMIT), index).join(' ')
+        : head
+      const declaration = [
+        ...declarationHead.matchAll(/\b(?:func|function|action)\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g),
+      ].at(-1)
+      const receiver = declaration?.[1]?.includes('.')
+        ? declaration[1].split('.').slice(0, -1).join('_')
+        : owners.at(-1)?.depth === depth
+        ? owners.at(-1)?.name
+        : undefined
+      const exportName = declaration !== undefined && receiver !== undefined ? `${receiver}_${name}` : name
+      bindings.push({ line: index + 1, name: exportName, path: match[1]! })
     }
+    advanceScope(code.slice(scanned))
   })
   return { bindings, unreadable }
 }
@@ -357,6 +410,18 @@ function maskTaoStrings(line: string): string {
  */
 function boundExportName(head: string, shape?: 'parameter list required'): string | undefined {
   let text = head.trimEnd()
+  const accepts = /\s+accepts\b/.exec(text)
+  if (accepts !== null) {
+    let clause = text.slice(accepts.index)
+    for (let stripped = true; stripped;) {
+      const simpler = clause.replace(/\([^()]*\)/g, '')
+      stripped = simpler !== clause
+      clause = simpler
+    }
+    if (TAO_BINDING_TAILS.some(tail => tail.test(clause))) {
+      text = text.slice(0, accepts.index).trimEnd()
+    }
+  }
   for (let stripped = true; stripped;) {
     stripped = false
     for (const tail of TAO_BINDING_TAILS) {
@@ -371,6 +436,7 @@ function boundExportName(head: string, shape?: 'parameter list required'): strin
     return shape === 'parameter list required' ? undefined : /([A-Za-z_]\w*)$/.exec(text)?.[1]
   }
   text = text.slice(0, openingParenthesisIndex(text)).trimEnd()
+  text = text.replace(/\s+where\s+type\s+.*$/, '').trimEnd()
   return /([A-Za-z_]\w*)$/.exec(text)?.[1]
 }
 
@@ -1057,7 +1123,10 @@ async function readSourceFiles(repositoryRoot: string, extensions: readonly stri
     if (!await FS.isDirectory(rootPath)) {
       continue
     }
-    for await (const path of FS.walk(rootPath, { excludeDirectory: EXCLUDED_DIRECTORIES, extensions })) {
+    // Authored host fixtures bind sidecars too; ordinary hidden build/cache trees remain excluded.
+    for await (
+      const path of FS.walk(rootPath, { excludeDirectory: EXCLUDED_DIRECTORIES, extensions, includeHidden: true })
+    ) {
       if (path.endsWith('.tao.ts')) {
         continue
       }

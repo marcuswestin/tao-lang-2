@@ -2,6 +2,11 @@ import { AST } from '@parser'
 import { collapsesToOneLine, type FormatHandlers } from '../formatting'
 
 export const ActionsFormatter = {
+  DeferStatement(f) {
+    if (f.node.invocation) {
+      f.oneSpaceAfter('defer')
+    }
+  },
   RetryStatement(f) {
     f.oneSpaceAfter('retry')
   },
@@ -15,6 +20,7 @@ export const ActionsFormatter = {
     // and control-flow bodies keep their own lines. A comment inside would swallow the closing braces,
     // so it holds the block open.
     const canUseSingleLineActionBody = isInlineActionBody(f.node.$container)
+      && !f.node.statements.some(AST.isWhenActionStatement)
       && collapsesToOneLine(f.node, f.node.statements)
     if (canUseSingleLineActionBody) {
       f.singleLineBraceBlock(f.node.statements[0]!)
@@ -27,9 +33,13 @@ export const ActionsFormatter = {
   ActionDeclaration(f) {
     f.visibilityOnOwnLine()
     f.oneSpaceAfter('action')
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
     f.noSpaceBefore('(')
     f.oneSpaceBefore('returns')
     f.oneSpaceAfter('returns')
+    f.oneSpaceBefore('->')
+    f.oneSpaceAfter('->')
     f.noSpaceBefore('?')
     f.oneSpaceBefore('runs')
     f.oneSpaceAfter('runs')
@@ -116,6 +126,26 @@ export const ActionsFormatter = {
     f.lineSeparatedList(f.node.branches)
   },
 
+  /** WhenActionStatement formats matching action branches in authored order. */
+  WhenActionStatement(f) {
+    const branches = [...f.node.branches, ...(f.node.otherwise ? [f.node.otherwise] : [])]
+    f.oneSpaceAfter('when')
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock(branches)
+    f.lineSeparatedList(branches)
+  },
+
+  /** WhenActionBranch separates its case, optional payload, and branch body. */
+  WhenActionBranch(f) {
+    f.oneSpaceBefore('->')
+    f.oneSpaceBeforeProperty('payload')
+  },
+
+  /** WhenActionOtherwise formats the no-match fallback body. */
+  WhenActionOtherwise(f) {
+    f.oneSpaceBefore('->')
+  },
+
   /** GuardActionBranch formats its optional handler and error payload. */
   GuardActionBranch(f) {
     f.oneSpaceBefore('->')
@@ -140,6 +170,17 @@ export const ActionsFormatter = {
     f.noSpaceBefore('(')
     f.noSpaceAfter('(')
     f.noSpaceBefore(')')
+    if (f.node.then) {
+      const outcomes = [...f.node.outcomes, ...(f.node.otherwise ? [f.node.otherwise] : [])]
+      f.oneSpaceBefore('then')
+      if (f.node.otherwise?.barSyntax) {
+        f.indentedLines(outcomes)
+        return
+      }
+      f.oneSpaceBefore('{')
+      f.indentedBraceBlock(outcomes)
+      f.lineSeparatedList(outcomes)
+    }
   },
 
   /** WhenDoStatement puts its invocation on the `when` line and each outcome on its own line. */

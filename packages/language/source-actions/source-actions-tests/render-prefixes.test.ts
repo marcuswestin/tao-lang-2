@@ -1,16 +1,18 @@
 import { AST } from '@parser'
-import { Diagnostics } from '@shared'
+import { Assert, Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import Validator from '@validator'
 import SourceActions from '../source-actions-src/source-actions'
 import { parseDocument } from './test-source-actions'
 
 function textRender(document: AST.Document, text: string): AST.Render {
-  return AST.streamAllContents(document.parseResult.value)
+  const render = AST.streamAllContents(document.parseResult.value)
     .find((node): node is AST.Render =>
       AST.isRender(node) && node.view?.$refText === 'Text'
-      && node.$cstNode?.text.replace(/^render\s+/, '') === `Text("${text}")`
-    )!
+      && AST.argumentsOf(node).some(argument => AST.isStringLiteral(argument.value) && argument.value.value === text)
+    )
+  Expect.Is(render, AST.isRender)
+  return render
 }
 
 function renderId(render: AST.Render): string {
@@ -180,7 +182,7 @@ Describe('Studio render occurrence prefixes', () => {
   Test('extracts a labelled public-tagged leaf and captures a parameter used only by its label', async () => {
     const document = await parseDocument(`use Col, Text from @tao/ui
       type Caption is text
-      view Main(Caption) { render Col() { #a accessible label Caption Text("A") Text("B") } }
+      view Main(Caption) { render Col() { #a accessible label (Caption) Text("A") Text("B") } }
     `)
     const patch = await SourceActions.applyStudioPatch(document, {
       kind: 'extract-view',
@@ -191,7 +193,7 @@ Describe('Studio render occurrence prefixes', () => {
     const leaf = textRender(updated, 'A')
     Expect(AST.findOwningView(leaf)?.name).toBe('Leaf')
     Expect(AST.isRenderStatement(leaf)).toBe(true)
-    Expect(labels(leaf)).toEqual(['Caption'])
+    Expect(labels(leaf)).toEqual(['(Caption)'])
     Expect(AST.attachedTag(leaf)?.tag).toBe('#a')
     Expect(patch.content).toContain('view Leaf(Caption)')
     Expect(patch.content).toContain('Leaf(Caption: Caption)')
@@ -201,11 +203,13 @@ Describe('Studio render occurrence prefixes', () => {
 
   Test('extracts adjacent labels and captures label-only aliases in first-read order', async () => {
     const document = await parseDocument(`use Col, Text from @tao/ui
-      type Caption is text
+      type Caption is text with {
+        static func +(Left Caption, Right text) fails never -> text { return "{Left}{Right}" }
+      }
       view Main(Caption) {
         let Alias = Caption
         render Col() {
-          accessible label Caption Text("A")
+          accessible label (Caption) Text("A")
           accessible label (Alias + " second") Text("B")
           Text("C")
         }
@@ -219,7 +223,7 @@ Describe('Studio render occurrence prefixes', () => {
     const updated = await updatedDocument(patch.content)
     Expect(patch.content).toContain('Summary(Caption: Caption, Alias: Alias)')
     Expect(patch.content).toContain('view Summary(Caption, Alias Caption)')
-    Expect(labels(textRender(updated, 'A'))).toEqual(['Caption'])
+    Expect(labels(textRender(updated, 'A'))).toEqual(['(Caption)'])
     Expect(labels(textRender(updated, 'B'))).toEqual(['(Alias + " second")'])
     Expect(AST.findOwningView(textRender(updated, 'A'))?.name).toBe('Summary')
     Expect(labels(textRender(updated, 'C'))).toEqual([])
@@ -228,7 +232,7 @@ Describe('Studio render occurrence prefixes', () => {
 
   Test('rejects label-only state dependencies instead of moving their owner', async () => {
     const document = await parseDocument(`use Col, Text from @tao/ui
-      view Main() { state Caption = "A name" render Col() { accessible label Caption Text("A") Text("B") } }
+      view Main() { state Caption = "A name" render Col() { accessible label (Caption) Text("A") Text("B") } }
     `)
     await Expect(SourceActions.applyStudioPatch(document, {
       kind: 'extract-view',
@@ -254,7 +258,10 @@ Describe('Studio render occurrence prefixes', () => {
       Text("B")
     } }`)
     const container = AST.streamAllContents(document.parseResult.value)
-      .find((node): node is AST.ViewRender => AST.isViewRender(node) && node.view.$refText === 'Row')!
+      .find((node): node is AST.ViewRender => AST.isViewRender(node) && node.view?.$refText === 'Row')
+    Expect.Is(container, AST.isViewRender)
+    Assert.defined(container.view, 'the snapped descendant fixture has a named container reference')
+    Expect(container.view.$refText).toBe('Row')
     const renderIds = [renderId(container), renderId(textRender(document, 'B'))]
     await Expect(SourceActions.applyStudioPatch(document, { kind: 'extract-view', name: 'Pair', renderIds }))
       .rejects.toThrow('Unsnap the sketch first')
@@ -285,7 +292,7 @@ Describe('Studio render occurrence prefixes', () => {
     const document = await parseDocument(`use Text from @tao/ui
       view Host() accepts content slots @toolbar from ./Host.tsx
       view Main() { render Host() {
-        @toolbar Text("Tools")
+        @toolbar: Text("Tools")
         #a accessible label "A name" Text("A")
         Text("B")
       } }
@@ -295,7 +302,7 @@ Describe('Studio render occurrence prefixes', () => {
       renderId: renderId(textRender(document, 'A')),
     })
     const updated = await updatedDocument(patch.content)
-    Expect(patch.content).toContain('@toolbar Text("Tools")')
+    Expect(patch.content).toContain('@toolbar: Text("Tools")')
     Expect(textRender(updated, 'Tools')).toBeDefined()
     Expect(labels(textRender(updated, 'Tools'))).toEqual([])
     Expect(labels(textRender(updated, 'B'))).toEqual([])

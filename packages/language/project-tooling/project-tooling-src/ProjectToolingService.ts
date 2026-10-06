@@ -11,6 +11,7 @@ import {
   type ProjectRequirement,
 } from '@parser'
 import {
+  Assert,
   type Diagnostic,
   Diagnostics,
   Errors,
@@ -565,6 +566,52 @@ async function refreshUnderLock(
           [...selected.statementsBySourcePath].map(([path, statements]) => [path, [...statements]]),
         )
         const runtimeDeclarationsByPublication = new Map<ProjectPublication, readonly AST.Declaration[]>()
+        const includeQuantityOwnerSources = async (): Promise<void> => {
+          let expanded = true
+          while (expanded && !Diagnostics.hasError(diagnostics)) {
+            expanded = false
+            const owners = validation.files.filter(file => contractSourcePaths.has(file.path))
+              .flatMap(file => BridgeMetadata.quantityReferencedOwnersOf(file.ast))
+            const pathsByRoot = new Map<string, Set<string>>()
+            for (const owner of owners) {
+              const path = AST.getDocument(owner).uri.path
+              if (contractSourcePaths.has(path)) {
+                continue
+              }
+              const projectRoot = Packages.projectRootForPath(context.index, path)
+                ?? (FS.pathIsWithin(path, root)
+                  ? root
+                  : FS.pathIsWithin(path, context.stdlibRoot)
+                  ? context.stdlibRoot
+                  : undefined)
+              Assert.defined(projectRoot, 'quantity owner belongs to an indexed project or standard library')
+              const knownOrigin = [...origins.values()].find(origin => origin.projectRoot === projectRoot)
+              Assert(
+                projectRoot === root || projectRoot === context.stdlibRoot || knownOrigin !== undefined,
+                'quantity dependency retains its known publication origin',
+              )
+              origins.set(path, privateSourceOrigin(path, knownOrigin ?? { projectRoot, modulePath: projectRoot }))
+              contractSourcePaths.add(path)
+              statementsBySourcePath.set(path, [])
+              const paths = pathsByRoot.get(projectRoot) ?? new Set<string>()
+              paths.add(path)
+              pathsByRoot.set(projectRoot, paths)
+              dependencyRoots = [...new Set([...dependencyRoots, projectRoot])]
+              expanded = true
+            }
+            for (const [projectRoot, paths] of pathsByRoot) {
+              const ownerValidation = await (await Workspace.open(projectRoot)).validateFiles([...paths])
+              diagnostics.push(...ownerValidation.diagnostics)
+              const files = new Map(validation.files.map(file => [file.path, file]))
+              for (const file of ownerValidation.files) {
+                files.set(file.path, file)
+              }
+              validation = { ...validation, files: [...files.values()] }
+            }
+          }
+          lastDependencyRoots.set(root, dependencyRoots)
+        }
+        await includeQuantityOwnerSources()
         const collectContracts = () =>
           BridgeMetadata.collect(
             validation.files.filter(file => contractSourcePaths.has(file.path)),
@@ -576,7 +623,7 @@ async function refreshUnderLock(
               typeOriginResolver,
             },
           )
-        let modules = collectContracts()
+        let modules = Diagnostics.hasError(diagnostics) ? [] : collectContracts()
         let snapshots = await collectProjectDependencySnapshots(root, modules, origins, nativeBindings)
         let changed = true
         while (changed && !Diagnostics.hasError(diagnostics)) {
@@ -653,7 +700,8 @@ async function refreshUnderLock(
             }
           }
           if (changed) {
-            modules = collectContracts()
+            await includeQuantityOwnerSources()
+            modules = Diagnostics.hasError(diagnostics) ? [] : collectContracts()
             snapshots = await collectProjectDependencySnapshots(root, modules, origins, nativeBindings)
           }
         }
@@ -679,18 +727,19 @@ async function refreshUnderLock(
           })
         }
         planned = Diagnostics.hasError(diagnostics) ? undefined : [
-          ...modules.map(module => ({
-            path: module.path,
-            sourcePath: module.sourcePath,
-            content: module.code,
-            kind: 'contract' as const,
-            sourceMappings: module.sourceMappings.map(mapping => ({
-              generatedPath: module.path,
-              generatedRange: mapping.generated,
+          ...modules.flatMap(module => [module, ...module.quantityModule === undefined ? [] : [module.quantityModule]])
+            .map(module => ({
+              path: module.path,
               sourcePath: module.sourcePath,
-              sourceRange: mapping.source,
+              content: module.code,
+              kind: 'contract' as const,
+              sourceMappings: module.sourceMappings.map(mapping => ({
+                generatedPath: module.path,
+                generatedRange: mapping.generated,
+                sourcePath: module.sourcePath,
+                sourceRange: mapping.source,
+              })),
             })),
-          })),
           ...snapshots.outputs,
         ]
       }
@@ -1013,7 +1062,11 @@ function runtimeSidecarDeclarations(
       if (target === undefined || origin === undefined) {
         continue
       }
-      const seeds = CompilerDependencies.taoSidecarValueDeclarations(target, edge)
+      const seeds = CompilerDependencies.taoSidecarValueDeclarations(
+        target,
+        edge,
+        BridgeMetadata.quantitySurfaceFor(target),
+      )
       for (const declaration of Packages.reachableProjectDeclarations(seeds, allFiles, origin.projectRoot, index)) {
         if (reached.has(declaration)) {
           continue

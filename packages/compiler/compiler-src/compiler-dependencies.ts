@@ -31,6 +31,12 @@ export type UnresolvedSidecarImport = Readonly<{
 
 type SidecarImportRequest = Readonly<{ sourcePath: string; sourceText: string }>
 
+/** Publication supplies exact constructor namespace membership; discovery does not infer numeric types. */
+type QuantityDependencySurface = Readonly<{
+  facadeNamespaceExport: string
+  declarations: readonly Readonly<{ declaration: AST.TypeDeclaration }>[]
+}>
+
 export type TaoSidecarEdge = Readonly<{
   sourcePath: string
   targetPath: string
@@ -70,14 +76,20 @@ export const CompilerDependencies = {
   taoSidecarValueDeclarations(
     file: AST.TaoFile,
     edge: Pick<TaoSidecarEdge, 'valueNames' | 'runtimeNamespace'>,
+    quantitySurface?: QuantityDependencySurface,
   ): readonly AST.Declaration[] {
+    const quantities = edge.runtimeNamespace || (quantitySurface !== undefined
+        && edge.valueNames.includes(quantitySurface.facadeNamespaceExport))
+      ? new Set(quantitySurface?.declarations.map(row => row.declaration))
+      : new Set<AST.TypeDeclaration>()
     return file.statements.filter(AST.isDeclaration).filter(declaration =>
-      AST.isEmittingRuntimeBinding(declaration)
-      && !AST.isEntityDataDeclaration(declaration)
-      && (!AST.isTypeDeclaration(declaration) || AST.isCaseSetTypeExpression(declaration.type))
-      && (edge.valueNames.includes(declaration.name)
-        || (edge.runtimeNamespace && AST.isTypeDeclaration(declaration)
-          && AST.isCaseSetTypeExpression(declaration.type)))
+      (AST.isTypeDeclaration(declaration) && quantities.has(declaration))
+      || (AST.isEmittingRuntimeBinding(declaration)
+        && !AST.isEntityDataDeclaration(declaration)
+        && (!AST.isTypeDeclaration(declaration) || AST.isCaseSetTypeExpression(declaration.type))
+        && (edge.valueNames.includes(declaration.name)
+          || (edge.runtimeNamespace && AST.isTypeDeclaration(declaration)
+            && AST.isCaseSetTypeExpression(declaration.type))))
     )
   },
   collect(graph: ProjectGraph, selection: DependencySelection): readonly DependencyEnvironment[] {
