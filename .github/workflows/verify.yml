@@ -286,6 +286,21 @@ jobs:
           restore-keys: |
             tao-native-bindings-${{ runner.os }}-
 
+      # The built editor extension, the prepare phase's longest node and on every partition's critical
+      # path. The build hashes its own inputs and outputs and skips only when both match the record
+      # inside the restored tree, so a restore from any key, or none, costs at most a rebuild. The key
+      # is only a hit-rate hint; it is computed here, before setup writes anything under packages/.
+      - name: Restore the built editor extension
+        id: ide-extension
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            packages/ides/ide-extension/_gen_ide-extension
+            packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes
+          key: tao-ide-extension-${{ runner.os }}-${{ hashFiles('bun.lock', 'devenv.lock', 'packages/**', '!**/node_modules/**', '!**/_gen_*/**', '!**/.tao-ts/**', '!**/.tao/cache/**') }}
+          restore-keys: |
+            tao-ide-extension-${{ runner.os }}-
+
       # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then prepares
       # only what the lane reads (`--verify-setup`): the full `./agent setup` also writes agent
       # configuration, Git hooks, and shell completion, which no gate reads.
@@ -359,6 +374,18 @@ jobs:
 
       - name: Verify partition ${{ env.PARTITION }}
         run: ./agent verify-full-sandbox --partition "$PARTITION"
+
+      # Saved only when the partition rebuilt the extension (its record is written last, on success).
+      # Every partition builds the same tree, so the first to finish saves and the rest are refused.
+      - name: Save the built editor extension
+        if: always() && steps.ide-extension.outputs.cache-hit != 'true' && hashFiles('packages/ides/ide-extension/_gen_ide-extension/.build-identity.json') != ''
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            packages/ides/ide-extension/_gen_ide-extension
+            packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes
+          key: ${{ steps.ide-extension.outputs.cache-primary-key }}
 
       # Locally the prepare phase fixes formatting and regenerates indexes in place; here a rewrite
       # means the pull request carries unformatted or stale files, which is a failure.
