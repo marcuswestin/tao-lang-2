@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 197 applicable release acceptance cells are incomplete.
 
-Candidate source: `8d6e3ac40ac11e6fb32acb3b9652afccfa10fbda` with **uncommitted inputs**; this packet describes the working tree, not that commit. Tree digest `1ae315af4b36cfeb`; content hashes are stored per observation.
+Candidate source: `3b92eb50faab8f50b9b66d32abf4ca171ef86ddb`. Tree digest `8a6f9c3b5d45a8fe`; content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -76,7 +76,7 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - [visual:reading-list / visual / phone-dark / agent](results/20261006173343683-7fcba746-29ec-46b8-8b78-26f36e92b799.json): **pass**, current; execution profile development.
 - [source:tutorial-replay / functional / source-test / agent](results/20261006173335650-59482495-9d13-4faa-926d-54e871cbcaae.json): **pass**, current; execution profile development.
 - [doc:README.md / text / source / agent](results/20261003205750252-56902b36-9574-4f84-be2f-fcd6e665e57a.json): **pass**, needs-recheck; execution profile development.
-- [doc:Docs/Tutorials/Your First Tao App.md / text / source / agent](results/20261006173732719-714dfe4c-491f-4ffe-9ade-c38fa5b2f8f8.json): **pass**, current; execution profile development.
+- [doc:Docs/Tutorials/Your First Tao App.md / text / source / agent](results/20261006181313856-ccb66994-0fcf-408a-909a-1b7e54a03312.json): **pass**, current; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-data/SKILL.md / text / source / agent](results/20261003205752366-4daddc71-50f1-421e-8a2b-456b56efe373.json): **pass**, needs-recheck; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-run-and-ship/SKILL.md / text / source / agent](results/20261003205754511-613435ca-99fb-4756-95c5-55ab0e584a7a.json): **pass**, needs-recheck; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-testing/SKILL.md / text / source / agent](results/20261003205755510-555b36a3-00d8-4e85-ab87-b34d248e6f54.json): **pass**, needs-recheck; execution profile development.

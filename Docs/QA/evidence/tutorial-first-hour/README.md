@@ -39,8 +39,11 @@ Uncaught page exceptions fail the journeys. The runner stops its browser and ser
    copying the original project's machine state; its focused regression checks source preservation.
 
 The final browser replay `c755027f-17ed-4223-82d9-2bb7e9f352b7` passed all three tests.
-[The command receipt](browser/browser.json), [run/build provenance](browser/run.json), and
-[test output](browser/browser.log) are retained. The restored negative-control replay
+[The command receipt](browser/browser.json), [run summary](browser/run.json),
+[build provenance](browser/build.json), [production export receipt](browser/web-export.json), and
+[test output](browser/browser.log) are retained. The build's source digest matches the current
+tutorial Markdown; its compiled-artifact digest identifies the generated app used by this replay.
+The restored negative-control replay
 `cf787650-22b9-4996-bb3a-6cda6dfa4ef0` also passed all three tests. The unchanged layout passed in replay
 `9e12071c-df1f-44a4-bf7e-acd17182a0a7` before the deliberate mutations.
 
