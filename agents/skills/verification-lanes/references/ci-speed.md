@@ -13,5 +13,9 @@ A change meant to make the hosted `Verify` workflow faster carries its own befor
 - Pushing to a pull request cancels its running `Verify`, so wait for the cache-saving steps to
   finish before pushing the next improvement.
 - Put the table in the pull request description or the merge message.
+- After a landing that moved test cost, or when partition wall times spread beyond about 1.3×,
+  refit the seed from CI with `ci-timings --import-durations` (newest green push to `main`, or
+  `--run <id>`) and commit `.github/verify/durations.json`; `.github/verify/README.md` owns the
+  seeds and that rolling loop. The artifact download needs `GH_TOKEN` or a `gh` login.
 - It reads the public API, whose anonymous limit is 60 requests an hour per address and
   `pr-checks --wait` spends quickly; set `GH_TOKEN` when it reports the limit spent.
