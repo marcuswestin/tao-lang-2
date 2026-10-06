@@ -1,6 +1,6 @@
 # DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME — Native session timestamps use monotonic time
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Host proof evidence
 - **Impact:** Native session evidence labels process-relative elapsed time as an ISO calendar date,
@@ -19,3 +19,11 @@
 - **Acceptance:** Both real native controllers record capture times consistent with filesystem epoch
   time; a monotonic-clock substitution fails the regression.
 - **Source:** 2026-09-26 native-navigation acceptance and host-evidence review.
+
+Resolved 2026-10-06 on `feat/ui-driver-hardening`: both controllers use an injectable calendar
+clock, defaulting to the existing named `HostArtifactClock` adapter. Host-free tests exercise
+controlled values and current epoch time; substituting the monotonic clock fails all four cases.
+Historical evidence is unchanged. This closes the source timestamp defect and does not claim
+fresh real-device acceptance.
+
+Archived 2026-10-06.

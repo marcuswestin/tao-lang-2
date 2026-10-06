@@ -2,6 +2,7 @@ import { AppiumNoSuchElementError } from '@appium-driver'
 import type { HostAction, HostObservation, HostRevision, HostSession } from '@host-control'
 import { expect, test } from '@playwright/test'
 import { Errors, FS, Repo } from '@shared'
+import { hostArtifactDate } from '../../environment/HostArtifactClock'
 import { assertNativeInputValue, enterNativeInput } from '../AppiumNativeInputs'
 import {
   type AppiumElement,
@@ -23,6 +24,36 @@ import {
 } from './AppiumXcuiTestController'
 
 const revision: HostRevision = { build: 'build-a', source: 'source-a' }
+
+for (const controlled of [true, false]) {
+  test(`iOS observations use ${controlled ? 'the injected calendar clock' : 'current epoch time by default'}`, async () => {
+    const root = await Repo.mkScratchDir('tao-appium-calendar-')
+    const host = createAppiumXcuiTestController({
+      calendarClock: controlled ? () => new Date('2026-10-06T12:34:56.000Z') : undefined,
+      client: new FakeClient('calendar'),
+      leases: new FakeLeases(),
+      receipts: new FakeReceipts(),
+      target: simulator('SIM-CALENDAR'),
+    })
+    try {
+      const session = await host.openSession({ artifactRoot: root, mode: 'acceptance', revision, target: 'clockwork' })
+      const before = hostArtifactDate().toISOString()
+      const observation = await session.observe({
+        expectedRevision: revision,
+        target: { kind: 'tag', value: 'reading' },
+      })
+      const after = hostArtifactDate().toISOString()
+      if (controlled) {
+        expect(observation.timestamp).toBe('2026-10-06T12:34:56.000Z')
+      } else {
+        expect(observation.timestamp >= before && observation.timestamp <= after).toBe(true)
+      }
+    } finally {
+      await host.close()
+      await FS.remove(root)
+    }
+  })
+}
 
 test('allocates collision-free Appium resources for two simulator UDIDs', async () => {
   const leases = new FakeLeases()

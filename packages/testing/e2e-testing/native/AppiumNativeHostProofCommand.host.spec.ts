@@ -129,9 +129,10 @@ test('retains the real target lease when a proof receipt reports an ambiguous fa
   expect(shouldReleaseAppiumTargetLease({ retainsTargetLease: true })).toBe(false)
   expect(shouldReleaseAppiumTargetLease({ cleanupFailure: { message: 'close failed' } })).toBe(false)
   expect(shouldReleaseAppiumTargetLease({})).toBe(true)
+  expect(shouldReleaseAppiumTargetLease(undefined)).toBe(false)
 })
 
-test('attempts Appium server close, uninstall, and target release independently while preserving every failure', async () => {
+test('attempts owned cleanup but retains the target when Appium server close fails', async () => {
   const artifactRoot = await Repo.mkScratchDir('tao-appium-cleanup-')
   const events: string[] = []
   try {
@@ -156,11 +157,11 @@ test('attempts Appium server close, uninstall, and target release independently 
       },
     })
 
-    expect(events).toEqual(['close server', 'uninstall', 'release target'])
+    expect(events).toEqual(['close server', 'uninstall'])
     expect(failures.map(failure => [failure.operation, Errors.messageOf(failure.error)])).toEqual([
       ['close Appium server', 'server close failed'],
       ['uninstall isolated application', 'uninstall failed'],
-      ['release host target lease', 'target release failed'],
+      ['retain host target lease', 'Appium driver or server shutdown is unproved; the target fence remains retained.'],
     ])
     await expect(FS.readText(FS.resolvePath('appium/server.log', artifactRoot))).resolves.toBe('server log')
   } finally {
@@ -197,7 +198,62 @@ test('retains a target lease when driver cleanup was ambiguous', async () => {
       },
     })
     expect(events).toEqual(['uninstall'])
-    expect(failures).toEqual([])
+    expect(failures).toEqual([expect.objectContaining({ operation: 'retain host target lease' })])
+  } finally {
+    await FS.remove(artifactRoot)
+  }
+})
+
+for (const startupCleanupProved of [true, false]) {
+  test(`startup without a returned server ${startupCleanupProved ? 'releases a proved' : 'retains an unproved'} target`, async () => {
+    const artifactRoot = await Repo.mkScratchDir('tao-appium-startup-custody-')
+    let releases = 0
+    try {
+      const failures = await cleanupAppiumNativeHostProof({
+        artifactRoot,
+        serverShutdownProved: startupCleanupProved,
+        targetLease: {
+          release: async () => {
+            releases++
+          },
+        },
+        uninstall: async () => {},
+      })
+      expect(releases).toBe(startupCleanupProved ? 1 : 0)
+      expect(failures.map(failure => failure.operation)).toEqual(
+        startupCleanupProved ? [] : ['retain host target lease'],
+      )
+    } finally {
+      await FS.remove(artifactRoot)
+    }
+  })
+}
+
+test('log and uninstall failures preserve diagnostics without overriding proved server shutdown', async () => {
+  const artifactRoot = await Repo.mkScratchDir('tao-appium-cleanup-diagnostics-')
+  const events: string[] = []
+  try {
+    const failures = await cleanupAppiumNativeHostProof({
+      artifactRoot,
+      server: {
+        close: async () => {
+          events.push('close server')
+        },
+        logs: () => Errors.throwHostEnvironment('log failed'),
+      },
+      serverShutdownProved: false,
+      targetLease: {
+        release: async () => {
+          events.push('release target')
+        },
+      },
+      uninstall: async () => Errors.throwHostEnvironment('uninstall failed'),
+    })
+    expect(events).toEqual(['close server', 'release target'])
+    expect(failures.map(failure => failure.operation)).toEqual([
+      'write Appium server log',
+      'uninstall isolated application',
+    ])
   } finally {
     await FS.remove(artifactRoot)
   }

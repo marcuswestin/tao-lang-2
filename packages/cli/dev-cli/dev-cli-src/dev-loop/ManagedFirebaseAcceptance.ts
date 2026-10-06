@@ -114,6 +114,7 @@ export async function openManagedFirebaseWeb(options: {
   const cdp = await (options.attach ?? StudioCdp.attach)({
     artifactRoot: options.artifactRoot,
     baseUrl: browser.devToolsUrl,
+    viewport: { width: 1440, height: 900 },
     targetUrlPrefix: `${new URL(receipt.url).origin}/`,
   })
   const guard = async (): Promise<void> => {

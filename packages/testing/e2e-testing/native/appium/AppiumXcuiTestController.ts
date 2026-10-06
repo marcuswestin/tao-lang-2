@@ -18,7 +18,8 @@ import {
   type HostTarget,
   MachineResources,
 } from '@host-control'
-import { Errors, FS, Repo, Time } from '@shared'
+import { Errors, FS, Repo } from '@shared'
+import { hostArtifactDate } from '../../environment/HostArtifactClock'
 import type { ManagedMobileGrant } from '../ManagedMobileGrant'
 
 type AppiumPhysicalSigning = Readonly<{
@@ -139,6 +140,8 @@ export type AppiumRevisionPublisher = (
 ) => Promise<void>
 
 export type AppiumXcuiTestControllerOptions = Readonly<{
+  /** Calendar time labels observations; polling and duration clocks remain monotonic. */
+  calendarClock?: () => Date
   client: AppiumXcuiTestClient
   leases?: AppiumLeaseManager
   /** A proof command may reserve the simulator before build/install. It is consumed by one session open. */
@@ -212,6 +215,7 @@ export function appiumXcuiTestCapabilities(
 }
 
 class AppiumXcuiTestController implements HostController {
+  readonly #calendarClock: () => Date
   readonly #managed?: ManagedMobileGrant
   readonly #beforeDriverDeletion?: () => Promise<void>
   readonly #firebaseStartupGuard?: () => Promise<void>
@@ -230,6 +234,7 @@ class AppiumXcuiTestController implements HostController {
     beforeDriverDeletion?: () => Promise<void>,
     firebaseStartupGuard?: () => Promise<void>,
   ) {
+    this.#calendarClock = options.calendarClock ?? hostArtifactDate
     this.#managed = managed
     this.#beforeDriverDeletion = beforeDriverDeletion
     this.#firebaseStartupGuard = firebaseStartupGuard
@@ -309,6 +314,7 @@ class AppiumXcuiTestController implements HostController {
       }
       await writeReceipt('open')
       const hostSession = new AppiumXcuiTestSession({
+        calendarClock: this.#calendarClock,
         allocationLeases: allocation.leases,
         allocation: allocation.value,
         artifactRoot: options.artifactRoot,
@@ -419,6 +425,7 @@ class AppiumXcuiTestController implements HostController {
 }
 
 class AppiumXcuiTestSession implements HostSession {
+  readonly #calendarClock: () => Date
   readonly #managed?: ManagedMobileGrant
   readonly #beforeDriverDeletion?: () => Promise<void>
   readonly #allocationLeases: readonly AppiumLease[]
@@ -447,6 +454,7 @@ class AppiumXcuiTestSession implements HostSession {
       allocation: AppiumSessionReceipt['allocation']
       allocationLeases: readonly AppiumLease[]
       artifactRoot: string
+      calendarClock: () => Date
       descriptor: HostSessionDescriptor
       onClosed: () => void
       publishRevision?: AppiumRevisionPublisher
@@ -460,6 +468,7 @@ class AppiumXcuiTestSession implements HostSession {
       beforeDriverDeletion?: () => Promise<void>
     }>,
   ) {
+    this.#calendarClock = options.calendarClock
     this.#allocationLeases = options.allocationLeases
     this.#managed = options.managed
     this.#beforeDriverDeletion = options.beforeDriverDeletion
@@ -632,7 +641,7 @@ class AppiumXcuiTestSession implements HostSession {
         sessionId: this.#descriptor.id,
         target: request.target,
         ...(element.getText === undefined ? {} : { text: await element.getText() }),
-        timestamp: new Date(Time.nowMs()).toISOString(),
+        timestamp: this.#calendarClock().toISOString(),
         visible,
         version: 1,
       }
