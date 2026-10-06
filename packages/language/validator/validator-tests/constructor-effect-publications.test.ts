@@ -115,7 +115,7 @@ Describe('validator: named constructor effect publications', () => {
     Expect(ASTUtils.analyzeCallableEffects(method, facts).effects.purity.open).toBe(true)
   })
 
-  Test('keeps numeric checks and block construction conservatively unpublished for execution', async () => {
+  Test('keeps numeric checks unpublished and publishes resolved block construction', async () => {
     const parsed = await Parser.parseCode(
       `
       type Count is numeric with { static func Default() { return Count 1 } }
@@ -132,8 +132,14 @@ Describe('validator: named constructor effect publications', () => {
     const snapshot = ASTUtils.publishCanonicalEffectSnapshot([parsed.entry.ast])
     Expect(constructors.map(constructor => snapshot.constructors.get(constructor)?.kind)).toEqual([
       'unknown',
-      'unknown',
+      'complete',
     ])
+    const blockConstructor = constructors[1]!
+    Expect(snapshot.constructors.get(blockConstructor)?.binding?.kind).toBe('complete')
+    const fn = parsed.entry.ast.statements.find(AST.isFunctionDeclaration)
+    Expect.Is(fn, AST.isFunctionDeclaration)
+    const blockFacts = materialize(parsed.entry.ast, fn).facts
+    Expect(blockFacts.find(row => row.node === blockConstructor)?.kind).toBe('complete')
     const method = AST.streamAllContents(parsed.entry.ast).find(AST.isAssociatedFunctionDeclaration)
     Expect.Is(method, AST.isAssociatedFunctionDeclaration)
     const { facts } = materialize(parsed.entry.ast, method)
