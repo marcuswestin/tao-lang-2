@@ -26,7 +26,9 @@ variations:
    `requiresMacOS` gates minus whatever `CI_HOST_GATES` in `.github/workflows/ci-macos.yml` admits
    (about five minutes today). It posts the `Verify (host)` status on the head, which
    `pr-checks` follows beside `Verify`, and leaves a receipt (`complement.json`) beside the lane's
-   `summary.json`. Never run the sandbox-capable gates locally as merge evidence: hosted `Verify`
+   `summary.json`. `Verify (host)` is not a required check, so GitHub merges on a green `Verify`
+   whether or not the complement has finished; step 4 is the route when it fails afterwards.
+   Never run the sandbox-capable gates locally as merge evidence: hosted `Verify`
    owns them. `open-pr --auto-merge --no-complement` and a separate
    `./agent unsandboxed verify-complement` are the two-command shape for a machine that must run
    the lane at another time.
@@ -119,7 +121,8 @@ input tries one admission for that run without editing the file, which is how a 
 before it is admitted. Admitting a gate removes it from the local complement, and `CI macOS` is
 not required, so admit one only once its hosted run is reliable, in the same change that adds the
 `pull_request` trigger, and with the `main` ruleset requiring `CI macOS` by name; until then the
-complement stays the proof.
+complement stays the proof. `verify-complement` enforces the trigger half: without a `pull_request`
+trigger in that workflow it ignores `CI_HOST_GATES` and keeps every host gate.
 
 For feature work, refresh affected documents, review and commit the exact task paths, and prepare
 the reviewed message at `.artifacts/merge/<branch>.msg` without paying for local broad verification
