@@ -445,7 +445,12 @@ Describe('gate catalog metadata', () => {
 
   Test('only browser gates proved on hosted Linux stay in a hosted Linux lane that skips unsandboxed gates', () => {
     const hostedLinux = HOST_ONLY_GATES.filter(name => GateCatalog.metadata(name).runsOnHostedLinux === true)
-    Expect(hostedLinux.toSorted()).toEqual(['studio-dialog-browser', 'studio-metro-refresh', 'studio-smoke'])
+    Expect(hostedLinux.toSorted()).toEqual([
+      'studio-agent-browser',
+      'studio-dialog-browser',
+      'studio-metro-refresh',
+      'studio-smoke',
+    ])
     for (const name of HOST_ONLY_GATES) {
       // A local sandboxed lane skips every one of them, hosted-Linux or not.
       Expect(GateCatalog.skippedUnsandboxed(name)).toBe(true)
