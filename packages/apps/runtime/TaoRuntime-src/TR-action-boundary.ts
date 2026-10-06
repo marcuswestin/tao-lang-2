@@ -8,8 +8,6 @@ import { reactiveValue } from './TR-reactive-values'
 import { readContext } from './TR-read-net'
 import type { TaoProps } from './TR-TaoProps'
 
-export { ActionBoundaryContext, MountedActionBoundary, type TaoActionFailureSink } from './TR-action-boundary-model'
-
 /** Mount ownership and recovery stay outside the children replaced by a latched failure. */
 export function MountedAppActionBoundary(props: {
   app: RuntimeAppDefinition

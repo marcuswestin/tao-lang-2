@@ -9,7 +9,7 @@ import { type TaoType, Type } from './Type'
 
 type GenericCallable = AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | AST.ViewDeclaration
 
-export type GenericInvocationDiagnostic = Readonly<{
+type GenericInvocationDiagnostic = Readonly<{
   kind: 'uninferred-generic' | 'incompatible-generic'
   parameter: AST.GenericTypeParameter
   arguments: readonly AST.Argument[]

@@ -5,7 +5,6 @@ import { AfterEach, Describe, Expect, mkTestDir, Test, withTaoFiles } from '@sha
 
 const wordFlowerDir = Repo.resolvePath('Apps/WordFlower/1 - Current')
 const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
-const typeSystemTestsPath = Repo.resolvePath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 const previewProject = '/workspace/preview-project'
 const runtimeRoots: string[] = []
 

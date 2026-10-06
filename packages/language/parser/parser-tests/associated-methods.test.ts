@@ -255,7 +255,7 @@ Describe('parser: associated methods', () => {
     Expect.Is(member, AST.isMethodCallExpression)
     Expect.Is(member.callee, AST.isMemberAccessExpression)
     Expect(member.callee.target.ref).toBe(token)
-    Expect(AST.associatedReceiverOwner(member.callee.target)).toBeUndefined()
+    Expect(AST.associatedReceiverOwner(member.callee)).toBeUndefined()
     Expect(
       result.diagnostics.filter(diagnostic => diagnostic.source === 'linker').map(diagnostic => diagnostic.message),
     )

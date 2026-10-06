@@ -6,7 +6,7 @@ type TaoDataProviderContext = TR.DataProviderContext
 type TaoQueryDescriptor = TR.QueryDescriptor
 import { BookBackend, type BookInput, type BookPage, type BookRecord } from './BookBackend'
 
-export type BookStoreAcquisition = 'first' | 'next' | 'refresh'
+type BookStoreAcquisition = 'first' | 'next' | 'refresh'
 
 export type BookStoreSession = Readonly<{
   backend: BookBackend

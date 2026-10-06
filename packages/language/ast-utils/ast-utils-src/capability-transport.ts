@@ -27,7 +27,7 @@ export type CapabilityTransportPlan =
   }>
 
 /** Contravariant input transport follows the admitted implementation's parameter order. */
-export type CapabilityTransportInput = Readonly<{
+type CapabilityTransportInput = Readonly<{
   required: CallableInput
   supplied: CallableInput
   plan: CapabilityTransportPlan

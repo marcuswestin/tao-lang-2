@@ -85,7 +85,7 @@ export type ResolvedActionInvocation = {
 }
 
 /** Associated action dispatch retains the authored receiver and its actual entity domain. */
-export type AssociatedActionReceiver = Readonly<{
+type AssociatedActionReceiver = Readonly<{
   receiver: AssociatedMethodReceiver
   domain: TaoType
   owner: AST.TypeDeclaration | AST.EntityDataDeclaration
@@ -116,7 +116,7 @@ export type ResolvedActionTarget =
   | { kind: 'dynamic' }
   | { kind: 'unresolved' }
 
-export type ResolvedCapabilityActionTarget = Readonly<{
+type ResolvedCapabilityActionTarget = Readonly<{
   kind: 'capability'
   requirement: AST.CapabilityActionDeclaration
   associated: AssociatedActionReceiver

@@ -68,7 +68,7 @@ Describe('compiler: named event ownership', () => {
             JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/TestReactNative.ts'))
           }
         import { overrideRuntimeConsole, runtimeConsole } from ${
-            JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))
+            JSON.stringify(Repo.resolvePath('packages/shared/shared-src/subprocess-test-api.ts'))
           }
         MockModule('react-native', () => reactNativeStubs())
         MockModule('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 0 }) }))
@@ -78,8 +78,11 @@ Describe('compiler: named event ownership', () => {
         const { Started, Release, Owners, Calls } = await import(${
             JSON.stringify(FS.resolvePath('Native.tsx', output))
           })
-        const { MountedAppActionBoundary, ActionBoundaryContext } = await import(${
+        const { MountedAppActionBoundary } = await import(${
             JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-action-boundary.ts'))
+          })
+        const { ActionBoundaryContext } = await import(${
+            JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-action-boundary-model.ts'))
           })
         const { TaoErrorBoundary } = await import(${
             JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-error-containment.tsx'))
@@ -242,7 +245,7 @@ Describe('compiler: named event ownership', () => {
           JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/TestReactNative.ts'))
         }
         import { overrideRuntimeConsole, runtimeConsole } from ${
-          JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))
+          JSON.stringify(Repo.resolvePath('packages/shared/shared-src/subprocess-test-api.ts'))
         }
         MockModule('react-native', () => reactNativeStubs())
         MockModule('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 0 }) }))

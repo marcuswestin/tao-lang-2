@@ -103,7 +103,7 @@ Describe('compiler: mounted app action failure boundary', () => {
             JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/TestReactNative.ts'))
           }
         import { overrideRuntimeConsole, runtimeConsole } from ${
-            JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))
+            JSON.stringify(Repo.resolvePath('packages/shared/shared-src/subprocess-test-api.ts'))
           }
         MockModule('react-native', () => reactNativeStubs())
         MockModule('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 0 }) }))

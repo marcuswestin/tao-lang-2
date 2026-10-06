@@ -719,6 +719,40 @@ Describe('Studio smoke resource isolation', () => {
     Expect(isStudioClientSource('/repo/packages/ides/studio/studio-src/code-editor/CodeEditor.tsx')).toBe(true)
   })
 
+  Test('excludes dependency trees and generated state while watching authored client sources', () => {
+    const { ignoredStudioClientPath } = StudioClientDevReload.testing
+    Expect(ignoredStudioClientPath('/repo/Apps/Tao Studio/node_modules')).toBe(true)
+    Expect(ignoredStudioClientPath('/repo/Apps/Tao Studio/node_modules/@tao/runtime/Runtime.ts')).toBe(true)
+    Expect(ignoredStudioClientPath('/repo/Apps/Tao Studio/.tao/cache/Generated.tsx')).toBe(true)
+    Expect(ignoredStudioClientPath('/repo/Apps/Tao Studio/.git')).toBe(true)
+    Expect(ignoredStudioClientPath('/repo/Apps/Tao Studio/@ui/Scenario.tao')).toBe(false)
+    Expect(ignoredStudioClientPath('/repo/packages/ides/studio/studio-src/client/StudioApp.ts')).toBe(false)
+    Expect(ignoredStudioClientPath('/repo/.artifacts/landing/Apps/Tao Studio/@ui/Scenario.tao')).toBe(false)
+  })
+
+  Test('reaches real client watcher readiness and closes without starting a client rebuild', async () => {
+    let rebuilds = 0
+    const reload = await startStudioClientDevReload({
+      async loadAssets() {
+        rebuilds += 1
+        return {
+          async bundle() {
+            return 'diagnostic'
+          },
+          html() {
+            return 'diagnostic'
+          },
+        }
+      },
+    })
+    try {
+      Expect(reload.revision()).toBe(0)
+      Expect(rebuilds).toBe(0)
+    } finally {
+      await reload.close()
+    }
+  })
+
   Test('publishes only complete rebuilt Studio browser clients', async () => {
     let changed: ((change: { serverSourcesChanged: boolean }) => Promise<void>) | undefined
     let closed = 0

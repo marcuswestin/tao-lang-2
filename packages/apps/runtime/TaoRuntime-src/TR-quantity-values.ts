@@ -64,7 +64,7 @@ export type TaoQuantityValue<
 >
 
 /** TaoQuantityView changes only the selected unit while retaining every concrete role proof. */
-export type TaoQuantityView<Payload, Unit extends string> = Omit<Payload, 'unit'> & QuantityPayload<Unit>
+type TaoQuantityView<Payload, Unit extends string> = Omit<Payload, 'unit'> & QuantityPayload<Unit>
 
 /** TaoQuantityFactory checks native backing and preserves the declaration's nominal identity. */
 export type TaoQuantityFactory<

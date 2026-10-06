@@ -50,7 +50,7 @@ export type CanonicalCallableDescriptor = Readonly<{
 }>
 
 /** Every declared default has an eligibility record, even when correspondence is unknown. */
-export type CanonicalDefaultEligibility = Readonly<{
+type CanonicalDefaultEligibility = Readonly<{
   parameter: AST.ParameterDeclaration
   expression: AST.Expression
   eligibility: 'cannot' | 'may' | 'unknown'
@@ -58,7 +58,7 @@ export type CanonicalDefaultEligibility = Readonly<{
 }>
 
 /** Completeness here proves correspondence only; final admission runs after real analysis. */
-export type CanonicalCallPublication =
+type CanonicalCallPublication =
   & PublicationStatus
   & Readonly<{
     site:
@@ -127,7 +127,7 @@ export type CanonicalReadPublication =
   }>
 
 /** Allocation executes real supplied/default operands independently of latent associated bodies. */
-export type CanonicalConstructorPublication =
+type CanonicalConstructorPublication =
   & PublicationStatus
   & EffectContract
   & Readonly<{
@@ -139,7 +139,7 @@ export type CanonicalConstructorPublication =
   }>
 
 /** Intrinsic contracts retain resolved unit witnesses and evaluate their actual source operands. */
-export type CanonicalUnitOperationPublication =
+type CanonicalUnitOperationPublication =
   & EffectContract
   & Readonly<{
     kind: 'complete'

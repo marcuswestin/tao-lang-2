@@ -21,7 +21,7 @@ export type AssociatedOperatorContract = Readonly<{
   inputTypes?: readonly TaoType[]
 }>
 
-export type AssociatedOperatorCandidate = Readonly<{
+type AssociatedOperatorCandidate = Readonly<{
   descriptor: AssociatedCallableDescriptor
   dispatch: 'instance' | 'static'
   /** Includes the implicit receiver domain for an instance declaration. */

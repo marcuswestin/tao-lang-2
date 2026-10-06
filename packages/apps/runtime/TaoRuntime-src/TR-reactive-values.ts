@@ -31,7 +31,7 @@ export function registerPreservedStorageValue(value: TaoRuntimeValue<unknown>): 
 }
 
 /** Only explicitly registered carriers survive storage; ordinary values retain raw backing. */
-export function runtimeStorageValue<ValueT>(
+function runtimeStorageValue<ValueT>(
   source: TaoRuntimeValueInput<ValueT>,
 ): ValueT | TaoRuntimeValueInput<ValueT> {
   const value = source.evaluate()

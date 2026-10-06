@@ -368,7 +368,7 @@ scene BookScreen(Book) {
    action Save() {
       check TitleDraft is not empty
       update Book {
-         Title: TitleDraft
+         Title: TitleDraft,
          Author: AuthorDraft
    }  }
    action SetFinished(Value boolean) {
@@ -763,7 +763,7 @@ scene BookScreen(Book) {
    action Save() {
       check TitleDraft is not empty
       update Book {
-         Title: TitleDraft
+         Title: TitleDraft,
          Author: AuthorDraft
    }  }
    action SetFinished(Value boolean) {

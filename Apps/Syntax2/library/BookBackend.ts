@@ -11,7 +11,7 @@ export type BookInput = Readonly<Omit<BookRecord, 'Revision' | 'LoanedOut'> & { 
 
 export type BookQuery = Readonly<{ AuthorID?: string; Text?: string }>
 
-export type BookBackendFailure = Readonly<{
+type BookBackendFailure = Readonly<{
   kind: 'cancelled' | 'invalid-request' | 'invalid-token' | 'permission-denied' | 'injected-failure' | 'server-changed'
   message: string
 }>

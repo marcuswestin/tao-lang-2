@@ -46,7 +46,7 @@ export type NativeEffectPublication =
   }>
 
 /** The wrapper's own execution is separate from its authored operand evaluation. */
-export type ResolvedConstructorExecution =
+type ResolvedConstructorExecution =
   & PublicationStatus
   & EffectContract
   & Readonly<{
@@ -55,7 +55,7 @@ export type ResolvedConstructorExecution =
   }>
 
 /** Canonically resolved intrinsic operations execute their own contract and real source operands. */
-export type ResolvedUnitExecution =
+type ResolvedUnitExecution =
   & EffectContract
   & Readonly<{
     kind: 'complete'
