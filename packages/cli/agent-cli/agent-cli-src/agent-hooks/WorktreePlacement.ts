@@ -1,4 +1,4 @@
-import { CLI, Errors, FS } from '@shared'
+import { CLI, Errors, FS, Platform } from '@shared'
 
 /**
  * Where an agent harness's worktrees for this repository live: beside the primary checkout, in
@@ -27,7 +27,12 @@ const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 
 type Git = (args: readonly string[], cwd: string) => Promise<CLI.CommandResult>
 
-const runGit: Git = (args, cwd) => CLI.run('git', { args: [...args], cwd })
+/**
+ * The hook runs with no terminal to answer a prompt, so git must never ask: a remote waiting on
+ * credentials fails at once into `baseRef`'s warn-and-fall-back instead of stalling worktree creation.
+ */
+const runGit: Git = (args, cwd) =>
+  CLI.run('git', { args: [...args], cwd, env: { ...Platform.runtimeProcess.env, GIT_TERMINAL_PROMPT: '0' } })
 
 /** siblingWorktreeRoot is the directory beside the primary checkout that holds its worktrees. */
 export function siblingWorktreeRoot(primaryCheckout: string): string {
