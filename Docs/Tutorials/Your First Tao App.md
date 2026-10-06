@@ -20,14 +20,14 @@ the signed standalone CLI is published, use the repository-development setup in 
 From the checkout root, save the first block below as `ReadingList.tao`, then run:
 
 ```sh
-./agent tao check ReadingList.tao
-./agent tao dev ReadingList.tao --app ReadingList --web
+./tao check ReadingList.tao
+./tao run ReadingList.tao --app ReadingList --web
 ```
 
 The second command opens the browser app and watches the file. Keep it running as you replace and
-add snippets. After step 9, stop the dev process and run the test command shown there. The example's
-`license MIT` is a choice for this sample app. An app you build with Tao is yours to license however you
-like; see the [Tao Application Exception](../../LICENSE-APP-EXCEPTION.md).
+add snippets. After step 9, stop the dev process and run the test command shown there. An app you
+build with Tao is yours to license however you like; see the
+[Tao Application Exception](../../LICENSE-APP-EXCEPTION.md).
 
 ## What you will have built
 
@@ -133,7 +133,7 @@ design ReadingListDesign {
       screen [fill, content top stretch, pad 16, background paper]
       title [size 28, weight 700, ink ink]
       body [size 16, line 22, ink inkMuted]
-      card [pad 12, radius 8, background paper, border line]
+      card [hug, pad 12, radius 8, background paper, border line]
    }
 }
 ```
@@ -168,6 +168,9 @@ scene BookList() {
 "styles" and "layout", because a style is only ever the clauses you could have typed yourself.
 
 The screen has a background, a heading, and a bordered card.
+
+This sample deliberately keeps its light paper palette in both system color schemes. The four
+explicit colors belong to the app; switching the browser to dark mode does not replace them.
 
 ## Step 4 — data
 
@@ -488,10 +491,10 @@ scene About() {
   keys, and each names a `Label`, an `Icon`, and its `Content`.
 - **`Content LibraryStack`** nests the stack inside the tab, so pushing a book screen keeps the tabs
   and Back still works.
-- **`Display "automatic"`** lets the runtime choose the shape — a tab bar on a phone, a sidebar on a
-  wide screen. You do not write that rule; you say what the areas are.
+- **`Display "automatic"`** uses the platform's tab surface where available and a portable tab bar
+  in the browser. The destinations keep their own navigation stacks.
 
-Same declaration, two shapes.
+The library's Back button still works after switching to About and returning.
 
 ## Step 8 — one layout for phone and desktop
 
@@ -543,7 +546,7 @@ scene BookList() {
             on press AddBook
          }
          Panes() [gap 16] {
-            Col() [gap 6] {
+            Col() [hug, width fill, gap 6] {
                Text("Reading: { CurrentlyReading.Count }") [title]
                guard CurrentlyReading empty -> { Text("Nothing on the go") [body] }
 
@@ -552,7 +555,7 @@ scene BookList() {
                   BookRow(Book)
                   on select -> { present BookScreen(Book) }
             }  }
-            Col() [gap 6] {
+            Col() [hug, width fill, gap 6] {
                Text("Finished: { FinishedBooks.Count }") [title]
                guard FinishedBooks empty -> { Text("Nothing finished yet") [body] }
 
@@ -576,6 +579,10 @@ layout and a stacked phone layout.
 `.Count` works on any query or list.
 
 Narrow the window until the two columns become one.
+
+Each pane uses `hug` to keep its height close to its content and `width fill` to use its share of
+the available width. A short phone list therefore leaves the two sections next to one another in
+the vertical flow rather than spreading them across the screen.
 
 ## Step 9 — a test that drives the whole app
 
@@ -629,8 +636,19 @@ test "Reading List" {
 Save the file and run this from the checkout root:
 
 ```sh
-./agent tao test ReadingList.tao
+./tao test ReadingList.tao
 ```
+
+To see a useful failure, temporarily change the test's `text "Reading: 1"` expectation to
+`text "Reading: 2"` and run it again. The test must fail and name the expectation. Restore
+`Reading: 1` and rerun; it must pass again. Tests use an isolated store, so this exercise does not
+erase the books you entered in the browser.
+
+For a persistence check, restart the browser app, add a book, edit its title and author, then reload
+the page. The edited row should still be there. If browser storage is temporarily unavailable,
+the runtime shows a load-failure panel. Restore storage access and choose **Try loading data again**;
+your saved books should return. **Reset app data and reload**, offered for corrupt saved data,
+discards that app's local books; use it only when you intend to start over.
 
 The complete file below is the same result as applying the steps, not a second file to create.
 
@@ -665,7 +683,7 @@ design ReadingListDesign {
       screen [fill, content top stretch, pad 16, background paper]
       title [size 28, weight 700, ink ink]
       body [size 16, line 22, ink inkMuted]
-      card [pad 12, radius 8, background paper, border line]
+      card [hug, pad 12, radius 8, background paper, border line]
    }
 }
 
@@ -731,7 +749,7 @@ scene BookList() {
             on press AddBook
          }
          Panes() [gap 16] {
-            Col() [gap 6] {
+            Col() [hug, width fill, gap 6] {
                Text("Reading: { CurrentlyReading.Count }") [title]
                guard CurrentlyReading empty -> { Text("Nothing on the go") [body] }
 
@@ -740,7 +758,7 @@ scene BookList() {
                   BookRow(Book)
                   on select -> { present BookScreen(Book) }
             }  }
-            Col() [gap 6] {
+            Col() [hug, width fill, gap 6] {
                Text("Finished: { FinishedBooks.Count }") [title]
                guard FinishedBooks empty -> { Text("Nothing finished yet") [body] }
 

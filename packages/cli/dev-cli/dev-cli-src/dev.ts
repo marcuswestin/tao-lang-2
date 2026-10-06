@@ -217,7 +217,7 @@ await runWithCommands(commands => {
     )
     .option(
       '--app <subject>',
-      'Explicit subject: hnreader, clockwork, native-navigation, native-bridge, syntax2, or watchhello (watchos only).',
+      'Explicit subject: hnreader, clockwork, reading-list (browser only), native-navigation, native-bridge, syntax2, or watchhello (watchos only).',
       'hnreader',
     )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')

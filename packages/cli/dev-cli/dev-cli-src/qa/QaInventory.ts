@@ -246,10 +246,10 @@ export class QaInventory {
       },
       {
         id: 'source:tutorial-replay',
-        title: 'Tutorial source snippets and final behavior journey',
+        title: 'Tutorial source snippets, CLI failure recovery, and browser journey',
         source: 'Docs/Tutorials/Your First Tao App.md',
         dimension: 'functional',
-        channels: ['source-test'],
+        channels: ['source-test', 'browser-preview'],
       },
       {
         id: 'visual:reading-list',

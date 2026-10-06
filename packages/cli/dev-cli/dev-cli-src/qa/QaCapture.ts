@@ -127,6 +127,8 @@ export class QaCapture {
       }
       manifest.status = 'capturing'
       await FS.writeJson(receiptPath, manifest)
+      // Staging omits machine state, but Studio still needs a fresh project-root marker.
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', stagedRoot), '')
       const result = await this.capture(stagedRoot, { appName: options.app, artifactRoot })
       manifest.cells = await this.cells(result)
       // Capture finishing is not capture succeeding: only a manifest whose every cell was captured completes.
