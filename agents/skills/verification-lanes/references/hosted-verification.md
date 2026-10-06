@@ -10,6 +10,17 @@ variations:
    "open first, arm later" step. It pushes, opens or reuses the pull request, and starts hosted
    `Verify`, which runs every gate CI can run. GitHub squash-merges the pull request the moment
    `Verify` is green on that head; nothing reruns and nothing waits.
+   Before the push, `open-pr` checks the `Verify` runs already in flight, because the runner pool
+   holds two runs at once and no more. Expect one of three lines: `PASS` and an immediate push when
+   no other run is in flight or the one other run changed none of this branch's files; `WAIT` when
+   two runs are in flight, or when the one other run is a pull request that changed a file this
+   branch also changes, since the two would merge untested against each other. A wait is normal
+   and is not a failure: it polls every 30 s, prints again only when the blocking set changes or
+   every five minutes, and gives up after 90 minutes without pushing. While waiting, do nothing to
+   the other runs, tell the Developer on the first wait line, and expect your own run to take
+   about 7.5 min at 11 partitions when it shares the pool rather than 6.5 min at 20 alone.
+   `--jump-queue` pushes without the check; it is for the Developer, or for a coordinator the
+   Developer has told to use it, never a way past a wait you find inconvenient.
 2. The same command starts the local complement beside `Verify`: `verify-complement`, one locked
    lane of exactly the gates CI cannot run, derived from the catalog's `requiresUnsandboxed` and
    `requiresMacOS` gates minus whatever `CI_HOST_GATES` in `.github/workflows/verify.yml` admits
