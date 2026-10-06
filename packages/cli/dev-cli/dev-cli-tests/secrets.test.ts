@@ -7,7 +7,6 @@
 // counting its uses, because each use of the real one is a fingerprint prompt.
 import { Errors, FS, HCI, SecretsFile } from '@shared'
 import { Describe, Expect, fakeTerminal, mkTestDir, Test, withCapturedOutput } from '@shared/test'
-import { PassThrough } from 'node:stream'
 import {
   type Cipher,
   formatStore,
@@ -228,9 +227,7 @@ async function machine() {
   const wire = Buffer.concat([sshField(new TextEncoder().encode('ssh-ed25519')), sshField(publicKey)])
   // The unlock notice goes to a stream of this machine's own: these tests run concurrently, and one written to
   // process stderr lands in whichever sibling test is capturing it at that moment.
-  const notices = new PassThrough()
-  notices.resume()
-  const real = SecretsCommand.testing.ageCipher(identity, { output: notices })
+  const real = SecretsCommand.testing.ageCipher(identity, { output: fakeTerminal().output })
   const counter = { uses: 0 }
   const cipher: Cipher = {
     ...real,
