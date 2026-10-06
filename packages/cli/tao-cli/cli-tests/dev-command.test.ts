@@ -1,5 +1,6 @@
+import type { ProjectToolingWatch } from '@project-tooling'
 import { CLI, FS, HCI, ProjectDevSession, Repo, Text } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { PassThrough } from 'node:stream'
 import { discoverTaoDevProjects, type TaoDevProject } from '../cli-src/dev-app-discovery'
 import {
@@ -320,6 +321,141 @@ Describe('Tao run app discovery and selection', () => {
     }
   })
 
+  Test(
+    'prints startup status before watching and releases its lease when a signal interrupts the initial watch',
+    async () => {
+      const root = await mkTestDir('tao-dev-startup-signal-')
+      const enteredWatch = Deferred()
+      const output = terminalStream()
+      let written = ''
+      output.on('data', chunk => {
+        written += chunk.toString()
+      })
+      const signalHandlers = new Map<string, () => void>()
+      let startupSignal: AbortSignal | undefined
+      try {
+        await writeRunnableApp(root)
+        const run = runTaoDev(root, {
+          appName: 'Chosen',
+          output,
+          onSignal: (_signal, listener) => {
+            signalHandlers.set(_signal, listener)
+            return () => {
+              signalHandlers.delete(_signal)
+            }
+          },
+          acquireSession: async (projectRoot, surface, acquireOptions) => {
+            Expect([...signalHandlers.keys()].toSorted()).toEqual(['SIGHUP', 'SIGINT', 'SIGTERM'])
+            return await ProjectDevSession.acquire(projectRoot, surface, acquireOptions)
+          },
+          watchProject: (_projectRoot, watchOptions) => {
+            Expect(stripAnsi(written)).toContain('Preparing Tao project…')
+            startupSignal = watchOptions?.startupSignal
+            enteredWatch.resolve()
+            return new Promise<ProjectToolingWatch>((_resolve, reject) => {
+              startupSignal?.addEventListener('abort', () => reject(startupSignal?.reason), { once: true })
+            })
+          },
+        })
+        await enteredWatch.promise
+        signalHandlers.get('SIGTERM')?.()
+        Expect(await run).toBe(143)
+        Expect(startupSignal?.aborted).toBe(true)
+        Expect(await FS.isFile(FS.resolvePath('.tao/local/sessions/owner.json', root))).toBe(false)
+      } finally {
+        await FS.remove(root)
+      }
+    },
+  )
+
+  Test('times out a stalled initial watch with its last phase and releases the lease', async () => {
+    const root = await mkTestDir('tao-dev-startup-timeout-')
+    try {
+      await writeRunnableApp(root)
+      const failure = await runTaoDev(root, {
+        appName: 'Chosen',
+        output: new PassThrough(),
+        startupTimeoutMs: 25,
+        watchProject: async (_projectRoot, options) => {
+          options?.onStartupProgress?.('checking host packages')
+          return await new Promise<ProjectToolingWatch>(() => {})
+        },
+      }).then(() => undefined, error => error)
+      Expect(failure).toBeInstanceOf(Error)
+      Expect((failure as Error).message).toContain('checking host packages')
+      Expect((failure as Error).message).toContain('Check the host environment and retry.')
+      Expect(await FS.isFile(FS.resolvePath('.tao/local/sessions/owner.json', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('preserves the timeout diagnostic when the watch rejects immediately on abort', async () => {
+    const root = await mkTestDir('tao-dev-startup-abort-timeout-')
+    try {
+      await writeRunnableApp(root)
+      await Expect(runTaoDev(root, {
+        appName: 'Chosen',
+        output: new PassThrough(),
+        startupTimeoutMs: 25,
+        watchProject: (_projectRoot, options) => {
+          options.onStartupProgress?.('watching pending fixture input')
+          return new Promise<ProjectToolingWatch>((_resolve, reject) => {
+            options.startupSignal?.addEventListener('abort', () => reject(options.startupSignal?.reason), {
+              once: true,
+            })
+          })
+        },
+      })).rejects.toThrow('timed out waiting for watching pending fixture input')
+      Expect(await FS.isFile(FS.resolvePath('.tao/local/sessions/owner.json', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('disposes a watch that completes after startup was interrupted without starting the loop', async () => {
+    const root = await mkTestDir('tao-dev-startup-late-watch-')
+    const enteredWatch = Deferred()
+    const watchResult = Deferred<ProjectToolingWatch>()
+    const disposed = Deferred()
+    const signalHandlers = new Map<string, () => void>()
+    let runs = 0
+    try {
+      await writeRunnableApp(root)
+      const run = runTaoDev(root, {
+        appName: 'Chosen',
+        output: new PassThrough(),
+        onSignal: (_signal, listener) => {
+          signalHandlers.set(_signal, listener)
+          return () => {
+            signalHandlers.delete(_signal)
+          }
+        },
+        watchProject: async () => {
+          enteredWatch.resolve()
+          return await watchResult.promise
+        },
+        runLoop: async () => {
+          runs++
+          return { kind: 'exit', exitCode: 0 }
+        },
+      })
+      await enteredWatch.promise
+      signalHandlers.get('SIGTERM')?.()
+      Expect(await run).toBe(143)
+      watchResult.resolve({
+        lastResult: { status: 'fresh' } as ProjectToolingWatch['lastResult'],
+        requestRefresh: async () => ({ status: 'fresh' } as ProjectToolingWatch['lastResult']),
+        dispose: async () => disposed.resolve(),
+      })
+      await disposed.promise
+      Expect(runs).toBe(0)
+      Expect(await FS.isFile(FS.resolvePath('.tao/local/sessions/owner.json', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('an observed managed stop prevents a restart outcome from creating another generation', async () => {
     const root = await mkTestDir('tao-dev-stop-restart-')
     let stopRequested = false
@@ -362,6 +498,14 @@ function projectFixture(appCount: number): TaoDevProject[] {
     { apps: apps.slice(0, 5), name: 'Project 1', root: '/repo/Project 1' },
     { apps: apps.slice(5), name: 'Project 2', root: '/repo/Project 2' },
   ]
+}
+
+async function writeRunnableApp(root: string): Promise<void> {
+  await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+  await FS.writeText(
+    FS.resolvePath('App.tao', root),
+    `app Chosen { id "chosen" version "1.0.0" name "Chosen" view MainView } ${viewSource}`,
+  )
 }
 
 function terminalStream(): PassThrough & { isTTY: boolean } {

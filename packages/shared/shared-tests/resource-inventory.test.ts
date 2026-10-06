@@ -48,6 +48,24 @@ async function processRecord(root: string, overrides: Record<string, unknown> = 
 }
 
 Describe('resource inventory process ownership', () => {
+  Test('discovers installed launch ownership in authored project local state', async () => {
+    const options = await fixture()
+    const project = FS.resolvePath('Apps/Example', options.checkout)
+    await processRecord(FS.resolvePath('.tao/local/resource-inventory', project), { checkout: project })
+    for (const mode of ['startup', 'full'] as const) {
+      const report = await inspect({
+        ...options,
+        mode,
+        inspectProjectFiles: () => ['Apps/Example/Main.tao'],
+        inspectIdentities: () => new Map([[child.pid, child]]),
+      })
+      Expect(report.entries.find(entry => entry.kind === 'process')).toMatchObject({
+        classification: 'stranded',
+        pid: child.pid,
+      })
+    }
+  })
+
   Test('a captured child surviving its dead owner is stranded', async () => {
     const options = await fixture()
     await processRecord(options.indexRoot)

@@ -15,7 +15,7 @@ export type StudioProcessTreeSpec = Pick<CLI.CommandSpec, 'args' | 'cwd' | 'env'
   /** Resolve when the process exits even if a descendant still holds its captured output pipes. */
   settleOnExit?: boolean
   stdio?: Platform.SpawnOptions['stdio']
-  /** Test-owned registry location; production uses the machine-local resource index. */
+  /** Explicit registry location for installed projects or tests; source runs use the machine-local index. */
   resourceIndexRoot?: string
   /** Controlled ownership-write failures in lifecycle regressions; no command-line surface. */
   beforeLaunchPublication?: (root: TrackedProcess) => void | Promise<void>
