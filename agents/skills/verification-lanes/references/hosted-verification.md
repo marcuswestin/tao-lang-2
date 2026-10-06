@@ -29,7 +29,11 @@ variations:
    `.artifacts/logs/land-fix/`, without a full verification. Report the push to the Developer
    with the fix.
 5. Follow `Verify` with `./agent pr-checks --wait`, diagnose failures from their annotations, fix,
-   and push through `open-pr --auto-merge` again. Never `gh pr merge` by hand, and never run
+   and push through `open-pr --auto-merge` again. `pr-checks` polls every 30 s while partitions
+   queue, every 15 s while they run, and every 10 s once one finishes, with conditional requests;
+   it never waits on the post-merge `Archive` check. GitHub merges about 45 s after `Verify`
+   concludes, and `open-pr` returns once it has, printing `merged_at`, or after the complement,
+   whichever is later; the archive workflow records `merged/<name>` about 10 s after the merge. Never `gh pr merge` by hand, and never run
    `./agent unsandboxed land` for a `feat/<name>` branch while GitHub is reachable.
 
 Use local checks for focused iteration, diagnosis, and the host-only complement above. When CI is
