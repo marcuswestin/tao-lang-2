@@ -9,7 +9,7 @@ notes after each completed pass; Git history is the longer record.
 - **Reviewed through:** `5d9330f85e402a0a9bf28bf5b4de2700b6094fc8` (2026-10-06), the 91 first-parent landings after `39aac77c`. The [October 6 repository health review](<October 6 repository health review.md>) records findings, dispositions and evidence boundaries. Repairs landed from `feat/repository-pass-2026-10-06`.
 - **Repairs:** Partition proof and complement admission in hosted verification; patch-aware install cache keys; `tao secrets grant` no longer trusts the committed recipient list; the output hook lets Codex read files; reclaim spares fresh worktrees; naturally exiting launches retire their process records; `dev-loop status` survives one bad receipt; source-path module indexing; standalone acceptance's `--provider`; the installed CLI's TypeScript default libraries and Bun cache; a Linux-only barrier test wait. Stale tutorial, spec, skill and help text corrected.
 - **Health:** Agent worktrees grew from about 29 GiB to 279 GiB in eight days; `./agent reclaim` classifies 16 reclaimable, not executed. Routing audit found no mismatch; the context reminder was measured and retired. The [dependency advisory follow-up](<Dependency advisory follow-up.md>) records this pass's remediation.
-- **Acceptance:** PLACEHOLDER-ACCEPTANCE
+- **Acceptance:** Standalone vanilla passed 20 of 22 and prepared Xcode 21 of 22 on `82de800e`; the Xcode failure was A2, fixed before landing, and the vanilla `tao run` Metro start timed out under load. The ARM64 contributor guest found P1 (fixed) and P2 (open). Details in the [health review](<October 6 repository health review.md>). A standalone rerun on the A2 fix was in flight at landing.
 
 ## Consider next time
 
