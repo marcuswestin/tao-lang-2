@@ -271,6 +271,14 @@ jobs:
       - name: Bootstrap Nix, the pinned toolchain, and Tao setup
         run: ./.config/bootstrap-tao-dev-env --install-nix
 
+      # TEMPORARY measurement for the fixed-cost slice; removed before landing.
+      - name: Measure the restored node_modules
+        run: |
+          du -sm node_modules | tail -n 1
+          du -sm node_modules/.bun/* | sort -nr | head -n 40
+          find node_modules/.bun -type f | wc -l
+          du -sm "Apps/Test Apps/Native Bridge/.tao/cache/install" .devenv/portable-generations 2>/dev/null || true
+
       # Saved straight after the bootstrap, so a partition that later fails still warms the caches,
       # and before verification writes any tool cache under node_modules. All partitions share one
       # key; the first to finish saves it and the rest are refused harmlessly. Saved under the key
