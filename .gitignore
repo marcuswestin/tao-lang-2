@@ -39,6 +39,14 @@ local.properties
 !.artifacts/.gitkeep
 _gen_*/
 # Project-local state uses .tao/.gitignore; store/ is committed.
+# Keep former generated layouts ignored when integration precedes local migration.
+# Running loops and conflicting cache destinations may still retain these files.
+**/.tao/typescript/
+**/.tao/bridge-check.tsconfig.json
+**/.tao/connect-run/
+**/.tao/dev/runtime/
+# Preserve the surviving pre-migration identity beside the committed store identity.
+/Apps/Hosted Firebase/.tao/project.json
 
 # Disposable package diagnostics. Scripts here inherit their package tsconfig and workspace context.
 packages/*/.scratch/

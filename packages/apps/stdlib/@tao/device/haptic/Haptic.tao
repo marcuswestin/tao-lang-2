@@ -11,6 +11,6 @@ type Haptics is {
 // Expo's enum families never cross the Tao contract, and the native module remains untouched until
 // Play is invoked.
 public
-function Haptic() returns Haptics {
+func Haptic() -> Haptics {
    return Haptic() from ./Haptic.ts
 }

@@ -118,6 +118,16 @@ Describe('test shard counts', () => {
     Expect(unseen.shards).not.toEqual(free.shards)
   })
 
+  Test('shares complete-suite cost weights and uses equal fallback weights when history is absent', () => {
+    const files = ['heavy.test.ts', 'light.test.ts', 'fresh.test.ts']
+    const costs = costsOf([{ costMs: 9_000, file: files[0]! }, { costMs: 1_000, file: files[1]! }])
+
+    Expect([...TestShards.normalizedFileCosts(files, costs).values()]).toEqual([9_000, 1_000, 5_000])
+    Expect(TestShards.weightShare([files[0]!], files, costs)).toBe(0.6)
+    Expect(TestShards.weightShare([files[2]!], files, costs)).toBe(1 / 3)
+    Expect(TestShards.weightShare(['a'], ['a', 'b', 'c'], new Map())).toBe(1 / 3)
+  })
+
   Test('caps the count before a shard would be mostly startup', () => {
     const files = Array.from({ length: 8 }, (_, index) => `packages/demo/demo-tests/f${index}.test.ts`)
     // 14.0s measured less 6.0s startup is 8.0s of work: two shards at the 4.0s target, but 8.0s

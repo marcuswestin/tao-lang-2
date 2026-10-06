@@ -2,7 +2,7 @@ import { Errors, FS, HCI, Platform } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import type { InstantPushReport } from 'tao-instantdb/push'
 import { chooseTaoApp } from './dev-app-selection'
-import { readInstantPushInputs } from './instantdb-push-inputs'
+import { instantCloudApiURI, readInstantPushInputs } from './instantdb-push-inputs'
 import { projectSecretIfStored } from './project-secrets-command'
 
 /**
@@ -41,12 +41,12 @@ export async function runInstantDBPush(path: string, options: InstantDBPushOptio
   const provider: InstantPushModule = await import('tao-instantdb/push')
   const mapping = provider.instantMapping(inputs.definition, inputs.policy?.accountEntity)
   const rules = provider.instantRules(mapping, inputs.policy)
-  const token = await pushToken(app.projectRoot, options)
   const out = { output: options.output }
   HCI.writeLine(
     `InstantDB app ${inputs.appId} at ${inputs.apiURI} (${app.appName}, ${FS.displayPath(app.appPath)})`,
     out,
   )
+  const token = await pushToken(app.projectRoot, inputs, options)
   const report = await provider.pushInstantSchema(
     {
       apiURI: inputs.apiURI,
@@ -99,6 +99,7 @@ function writeSchemaChanges(report: InstantPushReport, dryRun: boolean, out: { o
  */
 async function pushToken(
   projectRoot: string,
+  address: { appId: string; apiURI: string },
   options: InstantDBPushOptions,
 ): Promise<{ label: string; value: string }> {
   const fromEnvironment = (options.env ?? Platform.runtimeProcess.env)[instantTokenVariable]?.trim()
@@ -110,11 +111,37 @@ async function pushToken(
     return { label: 'token from Tao project secrets', value: fromProject }
   }
   const terminal = { input: options.input, interactive: options.interactive, output: options.output }
+  const cloud = URL.parse(address.apiURI)?.origin === new URL(instantCloudApiURI).origin
   if (!HCI.isInteractive(terminal)) {
+    const source = cloud
+      ? `Get the Admin token for app ${address.appId} from that app in https://instantdb.com/dash.`
+      : `Get the admin token for app ${address.appId} from the app provisioning or dashboard of ${address.apiURI}.`
     Errors.throwUserInput(
-      `Store ${instantTokenVariable} with \`tao secrets set\`, set the environment variable, or run this command in a terminal to enter it.`,
+      `${source} Store ${instantTokenVariable} with \`tao secrets set\`, set the environment variable, or run this command in a terminal to enter it.`,
     )
   }
+  const out = { output: options.output }
+  if (cloud) {
+    HCI.writeLine('1. Open https://instantdb.com/dash and sign in to an account with access to this app.', out)
+    HCI.writeLine(`2. Select the existing app whose App ID is ${address.appId}, then copy its Admin token.`, out)
+    HCI.writeLine('   Use the app admin token, not a personal access token or user sign-in token.', out)
+  } else {
+    HCI.writeLine(`1. This app uses a local or self-hosted InstantDB service at ${address.apiURI}.`, out)
+    HCI.writeLine(
+      `2. Sign in to that installation's dashboard with access to App ID ${address.appId}; select that app's Admin page and copy its Admin token.`,
+      out,
+    )
+    HCI.writeLine(
+      'The repository local stack dashboard is http://localhost:3000; its seeded app has no saved admin token.',
+      out,
+    )
+    HCI.writeLine(
+      'For dashboard access or setup, ask the installation owner: https://www.instantdb.com/docs/self-hosting',
+      out,
+    )
+  }
+  HCI.writeLine('3. Paste only that app admin token at the hidden prompt, then press Enter.', out)
+  HCI.writeLine('Tao uses it to push schema and permissions; it is not included in client app configuration.', out)
   const entered = (await HCI.askSecret({ ...terminal, message: 'InstantDB app admin token:' })).value.trim()
   if (entered === '') {
     Errors.throwUserInput('No InstantDB token was entered; nothing was pushed.')

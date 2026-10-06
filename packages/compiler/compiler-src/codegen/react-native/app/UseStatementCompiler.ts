@@ -12,7 +12,10 @@ export const UseStatementCompiler = {
   UseStatement(useStatement: AST.UseStatement): Compiled {
     const importedNames = useStatement.all
       ? 'all'
-      : useStatement.importedDeclarations.map(reference => reference.$refText).join(', ')
+      : useStatement.importedDeclarations.map(specifier => {
+        const source = AST.importSourceName(specifier)
+        return specifier.alias ? `${source} as ${specifier.alias}` : source
+      }).join(', ')
     const fromClause = useStatement.importPath ? ` from ${useStatement.importPath}` : ''
     return gen.comment(`use ${importedNames}${fromClause}`)
   },

@@ -1,6 +1,20 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
-import { deferTransactionCommit, transactionResource } from '../TaoRuntime-src/TR-action-transactions'
+import { Deferred, Describe, Expect, Test } from '@shared/test'
+import {
+  actionCancellationSignal,
+  beginActionLaunch,
+  cancelActionContinuation,
+  captureActionContinuation,
+  deferDetached,
+  deferTransactionCommit,
+  registerDeferredAction,
+  resumeActionContinuation,
+  runAction,
+  runActionScope,
+  settleActionRoots,
+  type TaoActionContinuation,
+  transactionResource,
+} from '../TaoRuntime-src/TR-action-transactions'
 import type {
   TaoDataConnection,
   TaoDataConnectionObserver,
@@ -33,7 +47,213 @@ function recordingSchema(): { saved: string[]; schema: ReturnType<typeof TR.Data
   return { saved, schema: TR.Data.Schema(definition, connection) }
 }
 
+/** A cooperative signal fixture proves root lifecycle, independently of the unpublished checked Wait leaf. */
+function waitForAbort(signal: AbortSignal | undefined): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (!signal) {
+      resolve()
+    } else if (signal.aborted) {
+      reject(signal.reason)
+    } else {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    }
+  })
+}
+
 Describe('Tao action transactions', () => {
+  Test(
+    'shares the actual root cancellation signal with joined work and gives detached roots their own signal',
+    async () => {
+      Expect(actionCancellationSignal()).toBeUndefined()
+      const detachedFinished = Deferred()
+      let parent: AbortSignal | undefined
+      let joined: AbortSignal | undefined
+      let detached: AbortSignal | undefined
+      const child = TR.Action(() => {
+        joined = actionCancellationSignal()
+      }, { name: 'Joined' })
+      await TR.Action(async () => {
+        parent = actionCancellationSignal()
+        await TR.Do(child)
+        deferDetached(async () => {
+          detached = actionCancellationSignal()
+          detachedFinished.resolve()
+        })
+      }, { name: 'SignalRoot' }).jsValue.invoke()
+      await detachedFinished.promise
+      await settleActionRoots()
+
+      Expect(parent).toBeDefined()
+      Expect(joined).toBe(parent)
+      Expect(detached).toBeDefined()
+      Expect(detached).not.toBe(parent)
+      Expect(detached?.aborted).toBe(false)
+      Expect(actionCancellationSignal()).toBeUndefined()
+      Expect(() => cancelActionContinuation({ transaction: {} })).toThrow()
+    },
+  )
+
+  Test(
+    'abandons and aborts all old live roots including an interrupted root and roots queued in the old launch',
+    async () => {
+      const cleanupGate = Deferred()
+      const cleanupStarted = Deferred()
+      const seen: string[] = []
+      const receipts: string[] = []
+      const reports: unknown[] = []
+      const count = TR.Cell(TR.Value(0))
+      let asking: AbortSignal | undefined
+      let interrupting: AbortSignal | undefined
+      let queued: AbortSignal | undefined
+      let current: AbortSignal | undefined
+      const stop = TR.Errors.onFailure(report => reports.push(report))
+      const old = runAction(
+        'OldRoot',
+        [],
+        () =>
+          runActionScope(async () => {
+            asking = actionCancellationSignal()
+            asking?.addEventListener('abort', () => {
+              seen.push(`abort old after ${receipts.join(',')}`)
+            }, { once: true })
+            registerDeferredAction(async () => {
+              const continuation = captureActionContinuation()
+              Expect(actionCancellationSignal()).toBeUndefined()
+              seen.push('old cleanup start')
+              cleanupStarted.resolve()
+              await cleanupGate.promise
+              resumeActionContinuation(continuation)
+              TR.Set(count, () => TR.Value(999))
+              seen.push('old cleanup finish')
+            })
+            TR.Set(count, () => TR.Value(1))
+            await waitForAbort(asking)
+            seen.push('old tail')
+          }),
+        false,
+        false,
+        undefined,
+        receipt => receipts.push(`old ${receipt.outcome}`),
+      )
+      const oldQueued = runAction(
+        'QueuedOldRoot',
+        [],
+        () =>
+          runActionScope(async () => {
+            queued = actionCancellationSignal()
+            seen.push(`queued starts aborted ${queued?.aborted}`)
+            await waitForAbort(queued)
+            seen.push('queued tail')
+          }),
+        false,
+        false,
+        undefined,
+        receipt => receipts.push(`queued ${receipt.outcome}`),
+      )
+      const interrupt = runAction(
+        'InterruptRoot',
+        [],
+        () =>
+          runActionScope(async () => {
+            interrupting = actionCancellationSignal()
+            await waitForAbort(interrupting)
+            seen.push('interrupt tail')
+          }),
+        false,
+        true,
+        undefined,
+        receipt => receipts.push(`interrupt ${receipt.outcome}`),
+      )
+      try {
+        Expect(asking).toBeDefined()
+        Expect(interrupting).toBeDefined()
+        Expect(interrupting).not.toBe(asking)
+        beginActionLaunch()
+        await TR.Action(() => {
+          current = actionCancellationSignal()
+          TR.Set(count, () => TR.Value(10))
+        }, { name: 'NewRoot' }).jsValue.invoke()
+        await cleanupStarted.promise
+
+        Expect(asking?.aborted).toBe(true)
+        Expect(interrupting?.aborted).toBe(true)
+        Expect(current?.aborted).toBe(false)
+        Expect(current).not.toBe(asking)
+        Expect(count.evaluate().jsValue).toBe(10)
+        Expect(receipts).toEqual(['old abandoned', 'queued abandoned', 'interrupt abandoned'])
+        Expect(seen).toEqual([
+          'abort old after old abandoned,queued abandoned,interrupt abandoned',
+          'old cleanup start',
+        ])
+      } finally {
+        cleanupGate.resolve()
+        await Promise.all([old, oldQueued, interrupt])
+        stop()
+      }
+
+      Expect(queued?.aborted).toBe(true)
+      Expect(seen).toEqual([
+        'abort old after old abandoned,queued abandoned,interrupt abandoned',
+        'old cleanup start',
+        'old cleanup finish',
+        'queued starts aborted true',
+      ])
+      Expect(receipts).toEqual(['old abandoned', 'queued abandoned', 'interrupt abandoned'])
+      Expect(reports).toEqual([])
+      Expect(count.evaluate().jsValue).toBe(10)
+      Expect(actionCancellationSignal()).toBeUndefined()
+    },
+  )
+
+  Test('cancels a live suspended continuation without cancelling its interrupt root', async () => {
+    const interruptGate = Deferred()
+    const reports: unknown[] = []
+    let askingContinuation: TaoActionContinuation = {}
+    let interruptContinuation: TaoActionContinuation = {}
+    let asking: AbortSignal | undefined
+    let interrupting: AbortSignal | undefined
+    const stop = TR.Errors.onFailure(report => reports.push(report))
+    const old = TR.Action(() =>
+      runActionScope(async () => {
+        askingContinuation = captureActionContinuation()
+        asking = actionCancellationSignal()
+        await waitForAbort(asking)
+      }), { name: 'AskingRoot' }).jsValue.invoke()
+    const interrupt = TR.Action(() =>
+      runActionScope(async () => {
+        interruptContinuation = captureActionContinuation()
+        interrupting = actionCancellationSignal()
+        await interruptGate.promise
+        resumeActionContinuation(interruptContinuation)
+        Expect(actionCancellationSignal()).toBe(interrupting)
+      }), { name: 'InterruptRoot', interrupt: true }).jsValue.invoke()
+    try {
+      Expect(() =>
+        cancelActionContinuation({
+          transaction: askingContinuation.transaction,
+          scope: interruptContinuation.scope,
+        })
+      ).toThrow()
+      Expect(asking?.aborted).toBe(false)
+      Expect(interrupting?.aborted).toBe(false)
+      Expect(cancelActionContinuation(askingContinuation)).toBe(true)
+      await old
+      Expect(asking?.aborted).toBe(true)
+      Expect(interrupting?.aborted).toBe(false)
+    } finally {
+      interruptGate.resolve()
+      await Promise.all([old, interrupt])
+      stop()
+    }
+
+    Expect(reports).toEqual([Expect['objectContaining']({
+      action: 'AskingRoot',
+      case: 'cancelled',
+      message: 'Cancelled',
+    })])
+    Expect(actionCancellationSignal()).toBeUndefined()
+  })
+
   // REMOVAL CANDIDATE: Async response-release coverage also preserves asking writes and one commit; this adds synchronous interrupt completion.
   Test('lets a response root interrupt an ask and restores the suspended transaction', async () => {
     const { saved, schema } = recordingSchema()

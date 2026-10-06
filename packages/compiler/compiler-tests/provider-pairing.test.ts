@@ -51,8 +51,8 @@ Describe('compiler: provider pairing metadata', () => {
         app Notes { id "com.tao.test.notes" version "1.0.0"
           name "Notes"
           Navigator StackNav { Initial Main }
-          Auth LocalAuth { Endpoint "http://127.0.0.1:4738" Resource "notes" }
-          Datasource Reference { ServerURL "http://127.0.0.1:4738" Resource "notes" }
+          Auth LocalAuth { Endpoint "http://127.0.0.1:4738", Resource "notes" }
+          Datasource Reference { ServerURL "http://127.0.0.1:4738", Resource "notes" }
         }
       `,
     }, async paths => {

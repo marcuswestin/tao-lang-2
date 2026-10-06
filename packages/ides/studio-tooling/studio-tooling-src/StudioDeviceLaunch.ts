@@ -1,6 +1,10 @@
 import { detectLanIPv4, type InterfaceAddress, parseIfconfigIPv4 } from '@expo-host/dev-loop/expo-runner/lan-host'
 import { type ExpoFetch, expoRuntimeLink, fetchExpoOpenEndpoint } from '@expo-host/dev-loop/expo-runner/metro'
-import { companionDevClientUrl, CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
+import {
+  companionDevClientUrl,
+  CompanionIdentity,
+  companionLaunchUrl,
+} from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
 import { CLI, Errors, Json } from '@shared'
 import type {
   StudioDeviceLaunchDiagnostic,
@@ -72,7 +76,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
         const probe = await fetchExpoOpenEndpoint(metroOrigin, 'ios', fetchImpl)
         const openUrl = typeof probe.body?.url === 'string' ? probe.body.url : undefined
         if (openUrl !== undefined) {
-          return openUrl
+          return companionLaunchUrl(openUrl)
         }
         if (probe.status !== 404) {
           // The endpoint exists but answered with nothing usable. Say so and still try /_expo/link

@@ -1,0 +1,11 @@
+--- a/src/HmrServer.js
++++ b/src/HmrServer.js
+@@ -166,7 +166,7 @@
+             latestChangeEvent,
+           );
+         },
+-        50,
++        process.env.TAO_STUDIO_FAST_HMR === "true" ? 0 : 50,
+       );
+       const unlisten = this._bundler
+         .getDeltaBundler()

@@ -2,7 +2,7 @@ import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { appMetadata } from '../../../app-metadata'
-import { type CodegenOptions, type Compiled, gen, resolveRef } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen, resolveRef, scopeBindingName } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileAccountBinding, needsAuthContext } from './auth-context'
 import { activeDataStorePlan, activeFixtureStores } from './data-store-context'
@@ -120,7 +120,9 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     function ${gen.Name(bindApp)}(_TaoAppId: string) {
       ${
     crossModuleBase
-      ? gen`const _TaoBaseBinding = ${gen.Name(moduleScope)}.${gen.Name(crossModuleBase)}.definition.bindApp!(_TaoAppId)
+      ? gen`const _TaoBaseBinding = ${gen.Name(moduleScope)}.${
+        scopeBindingName(crossModuleBase)
+      }.definition.bindApp!(_TaoAppId)
           const _Scope = Object.create(${gen.Name(moduleScope)})`
       : base
       ? gen`const _TaoBaseBinding = ${gen.Name({ name: `_TaoBindApp_${base.name}` })}(_TaoAppId)

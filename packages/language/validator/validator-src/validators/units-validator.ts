@@ -13,6 +13,12 @@ export const unitsValidationMessages = {
 export const unitsValidationChecks = {
   [AST.PostfixMemberAccess.$type]: (access, ctx) => {
     const receiver = Type.ofExpression(access.receiver)
+    if (
+      AST.isMethodCallExpression(access.$container)
+      && Type.associatedMethodDeclaration(receiver, access.member)
+    ) {
+      return
+    }
     if (receiver.kind !== 'primitive') {
       return
     }

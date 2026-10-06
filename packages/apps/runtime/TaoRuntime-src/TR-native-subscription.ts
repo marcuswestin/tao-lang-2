@@ -1,4 +1,9 @@
 import React from 'react'
+import {
+  ActionBoundaryContext,
+  type MountedActionBoundary,
+  type TaoActionFailureSink,
+} from './TR-action-boundary-model'
 import { actionOwner, registerActionCleanup } from './TR-action-transactions'
 import { RuntimeAssert } from './TR-assert'
 import { reportUnownedFailure } from './TR-errors'
@@ -7,10 +12,34 @@ import { invokeNativeAction, type NativeActionInput } from './TR-native-action'
 /** One mounted view owns its explicitly registered native subscriptions. */
 export class TaoActionOwner {
   active = true
+  boundary: MountedActionBoundary | undefined
+  private generation = 0
   readonly subscriptions = new Set<() => void>()
+
+  captureFailureSink(): TaoActionFailureSink | undefined {
+    const sink = this.active ? this.boundary?.capture() : undefined
+    if (!sink) {
+      return undefined
+    }
+    const generation = this.generation
+    const guarded: TaoActionFailureSink = failure => this.active && this.generation === generation && sink(failure)
+    return guarded
+  }
 
   dispose(): void {
     this.active = false
+    this.invalidate()
+  }
+
+  /** Revoke committed ownership without running native cleanup during an insertion effect. */
+  revoke(): void {
+    this.active = false
+    this.generation += 1
+  }
+
+  /** A replay invalidates earlier work and listeners while the committed view remains active. */
+  invalidate(): void {
+    this.generation += 1
     for (const remove of [...this.subscriptions]) {
       try {
         remove()
@@ -23,12 +52,19 @@ export class TaoActionOwner {
 
 /** The hook keeps ownership stable through renders and removes listeners at unmount. */
 export function useActionOwner(): TaoActionOwner {
+  const boundary = React.useContext(ActionBoundaryContext)
   const owner = React.useRef<TaoActionOwner | undefined>(undefined)
   owner.current ??= new TaoActionOwner()
   const current = owner.current
-  React.useEffect(() => {
+  React.useInsertionEffect(() => {
+    current.boundary = boundary
+  }, [current, boundary])
+  React.useInsertionEffect(() => {
     current.active = true
-    return () => current.dispose()
+    return () => current.revoke()
+  }, [current])
+  React.useEffect(() => {
+    return () => current.invalidate()
   }, [current])
   return current
 }

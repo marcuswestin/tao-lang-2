@@ -1,7 +1,8 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import ts from 'typescript'
 
 /**
- * Knip finds exported symbols nothing imports. Three of this repository's own conventions are
+ * Knip finds exported symbols nothing imports. Four of this repository's own conventions are
  * invisible to it, and each one turns live code into a false report:
  *
  *  - A `.tao` source binds TypeScript exports by name (`action SyncDraft(…) from ./Actions.ts`).
@@ -11,11 +12,15 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
  *    perform through the re-export, so it reports every member the owning package never calls.
  *  - `@ast-utils` republishes types through a declaration-merged namespace of `import('./M').Name`
  *    queries, which knip does not read as imports at all.
+ *  - React Native selects a `.native` sibling for an unsuffixed module import. Knip follows the
+ *    ordinary module instead, missing the same named export in the native implementation.
  *
- * All three are answered by restoring the missing edge rather than by muting a rule: a `.tao`
+ * All four are answered by restoring the missing edge rather than by muting a rule: a `.tao`
  * binding is matched against the exact file and symbol it names, a facade member is kept only when
  * a module that really binds the facade name writes `Facade.member`, and a type query is read as
- * the import it is. Scoping that member match to importers matters: an unrelated `Errors` or `Text`
+ * the import it is. A native sibling is reached only for a name both implementations export that
+ * a runtime binding actually uses or a barrel re-exports. Scoping that member match to importers
+ * matters: an unrelated `Errors` or `Text`
  * of a module's own would otherwise vouch for every same-named member of the facade. A
  * same-named export in a different file stays reported — which is the whole point, since the dead
  * `CreateFile` this repository removed lived one file away from the live `CreateFile` a `.tao` view
@@ -90,9 +95,11 @@ const TAO_INJECT_BINDING = new RegExp(String.raw`=\s*inject\s+"(${TAO_RELATIVE_P
 const TAO_BINDING_TAILS = [
   /\s+runs\s+latest$/,
   /\s+fails\s+[A-Za-z_]\w*\s+"(?:[^"\\]|\\.)*"$/,
+  /\s+fails\s+[A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*$/,
   /\s+responds\s+[A-Za-z_]\w*$/,
   /\s+accepts(?:\s+[A-Za-z_]\w*)?(?:\s+slots\s+@[\w.\-@/]+(?:\s*,\s*@[\w.\-@/]+)*)?$/,
   /\s+returns\s+(?:(?:list\s+of\s+)?[A-Za-z_][\w.]*\??|\{[^{}]*\})$/,
+  /\s*->\s+(?:(?:list\s+of\s+)?[A-Za-z_][\w.]*\??|\{[^{}]*\})$/,
 ]
 
 /**
@@ -198,6 +205,29 @@ export function taoForeignBindings(source: string): TaoBindingScan {
   let injecting = false
   const rawLines = maskTaoComments(source).split('\n')
   const codeLines = rawLines.map(maskTaoStrings)
+  let depth = 0
+  let pendingOwner: string | undefined
+  let ownerBody = false
+  const owners: { name: string; depth: number }[] = []
+  const advanceScope = (code: string): void => {
+    for (const token of code.matchAll(/\bwith\b|[{}]/g)) {
+      if (token[0] === 'with') {
+        ownerBody = pendingOwner !== undefined
+      } else if (token[0] === '{') {
+        depth += 1
+        if (ownerBody && pendingOwner !== undefined) {
+          owners.push({ name: pendingOwner, depth })
+          pendingOwner = undefined
+          ownerBody = false
+        }
+      } else {
+        if (owners.at(-1)?.depth === depth) {
+          owners.pop()
+        }
+        depth -= 1
+      }
+    }
+  }
   rawLines.forEach((rawLine, index) => {
     const code = codeLines[index]!
     const fences = (code.match(/```/g) ?? []).length
@@ -208,6 +238,17 @@ export function taoForeignBindings(source: string): TaoBindingScan {
     if (insideInjection || injecting) {
       return
     }
+    const owner = /^\s*(?:(?:public|file|folder|package|workspace)\s+)?type\s+([A-Za-z_]\w*)\b/.exec(code)
+    if (owner !== null) {
+      pendingOwner = owner[1]
+      ownerBody = false
+    } else if (
+      /^\s*(?:(?:public|file|folder|package|workspace)\s+)?(?:func|function|action|view|scene|data|app|let|state|can|primitive)\b/
+        .test(code)
+    ) {
+      pendingOwner = undefined
+      ownerBody = false
+    }
     const line = rawLine
     const injected = TAO_INJECT_BINDING.exec(line)
     if (injected !== null && code[injected.index] === '=') {
@@ -217,15 +258,31 @@ export function taoForeignBindings(source: string): TaoBindingScan {
     if (/^\s*use\b/.test(line)) {
       return
     }
+    let scanned = 0
     for (const match of code.matchAll(TAO_FROM_BINDING)) {
       const head = code.slice(0, match.index)
+      advanceScope(code.slice(scanned, match.index))
+      scanned = match.index
       const name = boundExportName(head) ?? wrappedExportName(codeLines, index, head)
       if (name === undefined) {
         unreadable.push(index + 1)
         continue
       }
-      bindings.push({ line: index + 1, name, path: match[1]! })
+      const declarationHead = head.trim() === ''
+        ? codeLines.slice(Math.max(0, index - TAO_WRAPPED_HEAD_LIMIT), index).join(' ')
+        : head
+      const declaration = [
+        ...declarationHead.matchAll(/\b(?:func|function|action)\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g),
+      ].at(-1)
+      const receiver = declaration?.[1]?.includes('.')
+        ? declaration[1].split('.').slice(0, -1).join('_')
+        : owners.at(-1)?.depth === depth
+        ? owners.at(-1)?.name
+        : undefined
+      const exportName = declaration !== undefined && receiver !== undefined ? `${receiver}_${name}` : name
+      bindings.push({ line: index + 1, name: exportName, path: match[1]! })
     }
+    advanceScope(code.slice(scanned))
   })
   return { bindings, unreadable }
 }
@@ -352,6 +409,18 @@ function maskTaoStrings(line: string): string {
  */
 function boundExportName(head: string, shape?: 'parameter list required'): string | undefined {
   let text = head.trimEnd()
+  const accepts = /\s+accepts\b/.exec(text)
+  if (accepts !== null) {
+    let clause = text.slice(accepts.index)
+    for (let stripped = true; stripped;) {
+      const simpler = clause.replace(/\([^()]*\)/g, '')
+      stripped = simpler !== clause
+      clause = simpler
+    }
+    if (TAO_BINDING_TAILS.some(tail => tail.test(clause))) {
+      text = text.slice(0, accepts.index).trimEnd()
+    }
+  }
   for (let stripped = true; stripped;) {
     stripped = false
     for (const tail of TAO_BINDING_TAILS) {
@@ -366,6 +435,7 @@ function boundExportName(head: string, shape?: 'parameter list required'): strin
     return shape === 'parameter list required' ? undefined : /([A-Za-z_]\w*)$/.exec(text)?.[1]
   }
   text = text.slice(0, openingParenthesisIndex(text)).trimEnd()
+  text = text.replace(/\s+where\s+type\s+.*$/, '').trimEnd()
   return /([A-Za-z_]\w*)$/.exec(text)?.[1]
 }
 
@@ -575,9 +645,219 @@ export function typeImportedMembers(files: readonly SourceFile[]): Set<string> {
   return reached
 }
 
+/** Restore used named imports and runtime re-exports of an unsuffixed native implementation. */
+export function nativeImportedMembers(files: readonly SourceFile[]): Set<string> {
+  const known = new Set(files.map(file => file.path))
+  const siblings = new Map<string, string>()
+  for (const file of files) {
+    if (!file.path.endsWith('.ts') && !file.path.endsWith('.tsx')) {
+      continue
+    }
+    const stem = file.path.replace(/\.tsx?$/, '')
+    if (/\.(?:native|web|ios|android)$/.test(stem)) {
+      continue
+    }
+    const sibling = [`${stem}.native.ts`, `${stem}.native.tsx`].find(path => known.has(path))
+    if (sibling !== undefined) {
+      siblings.set(file.path, sibling)
+    }
+  }
+  const reached = new Set<string>()
+  if (siblings.size === 0) {
+    return reached
+  }
+  const parsed = new Map<string, ts.SourceFile>()
+  const parse = (file: SourceFile): ts.SourceFile => {
+    let source = parsed.get(file.path)
+    if (source === undefined) {
+      source = ts.createSourceFile(
+        file.path,
+        file.source,
+        ts.ScriptTarget.Latest,
+        true,
+        file.path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+      )
+      parsed.set(file.path, source)
+    }
+    return source
+  }
+  const exported = new Map<string, Set<string>>()
+  const nativePaths = new Set(siblings.values())
+  for (const file of files) {
+    if (siblings.has(file.path) || nativePaths.has(file.path)) {
+      exported.set(file.path, namedExports(parse(file)))
+    }
+  }
+  for (const file of files) {
+    if (
+      (!file.source.includes('import') && !file.source.includes('export'))
+      || /\.web\.tsx?$/.test(file.path) || file.path.endsWith('.d.ts')
+    ) {
+      continue
+    }
+    const source = parse(file)
+    let hasRuntimeReference: ((name: ts.Identifier | ts.StringLiteral) => boolean) | undefined
+    for (const statement of source.statements) {
+      if (
+        (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement))
+        || statement.moduleSpecifier === undefined || !ts.isStringLiteral(statement.moduleSpecifier)
+        || (ts.isImportDeclaration(statement) ? statement.importClause?.isTypeOnly : statement.isTypeOnly)
+      ) {
+        continue
+      }
+      const specifier = statement.moduleSpecifier.text
+      if (!/^\.{1,2}\//.test(specifier) || /\.(?:native|web|ios|android|tsx?|jsx?)$/.test(specifier)) {
+        continue
+      }
+      const target = resolveModulePath(file.path, specifier, known)
+      const sibling = target === undefined ? undefined : siblings.get(target)
+      const bindings = ts.isImportDeclaration(statement)
+        ? statement.importClause?.namedBindings
+        : statement.exportClause
+      if (
+        target === undefined || sibling === undefined || bindings === undefined
+        || (!ts.isNamedImports(bindings) && !ts.isNamedExports(bindings))
+      ) {
+        continue
+      }
+      const imports = ts.isImportDeclaration(statement)
+      const candidates = bindings.elements.filter(binding => {
+        const name = (binding.propertyName ?? binding.name).text
+        return !binding.isTypeOnly && exported.get(target)?.has(name) && exported.get(sibling)?.has(name)
+      })
+      if (imports && candidates.length > 0 && hasRuntimeReference === undefined) {
+        hasRuntimeReference = usedImportBindings(source)
+      }
+      for (const binding of candidates) {
+        if (imports && !hasRuntimeReference?.(binding.name)) {
+          continue
+        }
+        const name = (binding.propertyName ?? binding.name).text
+        reached.add(`${sibling}#${name}`)
+      }
+    }
+  }
+  return reached
+}
+
+/** Bind only candidate importers; no dependency resolution, libraries, or filesystem reads. */
+function usedImportBindings(source: ts.SourceFile): (name: ts.Identifier | ts.StringLiteral) => boolean {
+  const filename = `/${source.fileName}`
+  const host: ts.CompilerHost = {
+    fileExists: path => path === filename,
+    getCanonicalFileName: path => path,
+    getCurrentDirectory: () => '/',
+    getDefaultLibFileName: () => '',
+    getNewLine: () => '\n',
+    getSourceFile: path => path === filename ? source : undefined,
+    readFile: path => path === filename ? source.text : undefined,
+    useCaseSensitiveFileNames: () => true,
+    writeFile: () => {},
+  }
+  const checker = ts.createProgram([filename], { noLib: true, noResolve: true }, host).getTypeChecker()
+  const used = new Set<ts.Symbol>()
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.canHaveModifiers(node)
+      && ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.DeclareKeyword)
+    ) {
+      return
+    }
+    if (
+      ts.isExpressionWithTypeArguments(node) && ts.isHeritageClause(node.parent)
+      && node.parent.token === ts.SyntaxKind.ExtendsKeyword
+      && (ts.isClassDeclaration(node.parent.parent) || ts.isClassExpression(node.parent.parent))
+    ) {
+      visit(node.expression)
+      return
+    }
+    if (
+      ts.isImportDeclaration(node) || ts.isTypeNode(node) || ts.isInterfaceDeclaration(node)
+      || ts.isTypeAliasDeclaration(node)
+    ) {
+      return
+    }
+    if (ts.isExportDeclaration(node)) {
+      if (!node.isTypeOnly && !node.moduleSpecifier && node.exportClause && ts.isNamedExports(node.exportClause)) {
+        for (const binding of node.exportClause.elements) {
+          const symbol = binding.isTypeOnly ? undefined : checker.getExportSpecifierLocalTargetSymbol(binding)
+          if (symbol !== undefined) {
+            used.add(symbol)
+          }
+        }
+      }
+      return
+    }
+    if (ts.isIdentifier(node)) {
+      const parent = node.parent
+      if (
+        (ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent)
+          || ts.isFunctionDeclaration(parent) || ts.isClassDeclaration(parent) || ts.isClassExpression(parent)
+          || ts.isFunctionExpression(parent) || ts.isMethodDeclaration(parent) || ts.isPropertyDeclaration(parent))
+        && parent.name === node
+      ) {
+        return
+      }
+      const symbol = ts.isShorthandPropertyAssignment(node.parent)
+        ? checker.getShorthandAssignmentValueSymbol(node.parent)
+        : checker.getSymbolAtLocation(node)
+      if (symbol !== undefined) {
+        used.add(symbol)
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  return name => {
+    const symbol = checker.getSymbolAtLocation(name)
+    return symbol !== undefined && used.has(symbol)
+  }
+}
+
+function namedExports(source: ts.SourceFile): Set<string> {
+  const names = new Set<string>()
+  const bind = (name: ts.BindingName): void => {
+    if (ts.isIdentifier(name)) {
+      names.add(name.text)
+    } else {
+      for (const element of name.elements) {
+        if (ts.isBindingElement(element)) {
+          bind(element.name)
+        }
+      }
+    }
+  }
+  for (const statement of source.statements) {
+    if (ts.isExportDeclaration(statement) && statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+      for (const element of statement.exportClause.elements) {
+        names.add(element.name.text)
+      }
+    } else if (
+      ts.canHaveModifiers(statement)
+      && ts.getModifiers(statement)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)
+      && !ts.getModifiers(statement)?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)
+    ) {
+      if (ts.isVariableStatement(statement)) {
+        for (const declaration of statement.declarationList.declarations) {
+          bind(declaration.name)
+        }
+      } else if (
+        (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isInterfaceDeclaration(statement)
+          || ts.isTypeAliasDeclaration(statement) || ts.isEnumDeclaration(statement)
+          || ts.isModuleDeclaration(statement))
+        && statement.name && ts.isIdentifier(statement.name)
+      ) {
+        names.add(statement.name.text)
+      }
+    }
+  }
+  return names
+}
+
 /** DeadExportReview is one run's outcome: what to report, what was explained, and what went stale. */
 export type DeadExportReview = {
   facadeReached: number
+  nativeImported: number
   reported: readonly UnusedExport[]
   staleness: readonly string[]
   taoBound: number
@@ -591,9 +871,11 @@ export function reviewUnusedExports(
   reachedKeys: ReadonlySet<string>,
   typeImportedKeys: ReadonlySet<string>,
   staleness: readonly string[] = [],
+  nativeImportedKeys: ReadonlySet<string> = new Set(),
 ): DeadExportReview {
   const reported: UnusedExport[] = []
   let facadeReached = 0
+  let nativeImported = 0
   let taoBound = 0
   let typeImported = 0
   for (const entry of unused) {
@@ -604,11 +886,13 @@ export function reviewUnusedExports(
       facadeReached++
     } else if (typeImportedKeys.has(key)) {
       typeImported++
+    } else if (nativeImportedKeys.has(key)) {
+      nativeImported++
     } else {
       reported.push(entry)
     }
   }
-  return { facadeReached, reported, staleness: [...staleness].sort(), taoBound, typeImported }
+  return { facadeReached, nativeImported, reported, staleness: [...staleness].sort(), taoBound, typeImported }
 }
 
 type NativeBindingInspection = {
@@ -679,6 +963,7 @@ export async function runDeadExports(options: DeadExportsOptions = {}): Promise<
     facadeReachedMembers(typescriptFiles, namespaceFacadeAliases(typescriptFiles)),
     typeImportedMembers(typescriptFiles),
     bound.staleness,
+    nativeImportedMembers(typescriptFiles),
   )
 
   for (const entry of review.reported) {
@@ -688,7 +973,8 @@ export async function runDeadExports(options: DeadExportsOptions = {}): Promise<
     `dead exports: ${review.reported.length} unused, `
       + `${review.taoBound} bound from .tao sources, `
       + `${review.facadeReached} reached through a namespace facade, `
-      + `${review.typeImported} republished by an import-type query.`,
+      + `${review.typeImported} republished by an import-type query, `
+      + `${review.nativeImported} reached through a native module sibling.`,
   )
   if (review.reported.length > 0) {
     HCI.writeErrorLine(

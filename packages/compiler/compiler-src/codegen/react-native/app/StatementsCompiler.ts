@@ -2,6 +2,7 @@ import { AST } from '@parser'
 import { Switch } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { hasAssociatedWitnessPublication } from './AssociatedMethodsCompiler'
 import { isRuntimeConfigurableDeclaration } from './ConfigurationCompiler'
 
 export const StatementsCompiler = {
@@ -86,14 +87,17 @@ export const StatementsCompiler = {
     if (AST.isCaseSetTypeExpression(declaration.type)) {
       return Compile.CaseSetDeclaration(declaration)
     }
+    if (hasAssociatedWitnessPublication(declaration)) {
+      return Compile.AssociatedMethodsDeclaration(declaration)
+    }
     return isRuntimeConfigurableDeclaration(declaration)
       ? Compile.ConfigurableDeclaration(declaration)
       : gen.noop()
   },
 
-  /** PrimitiveDeclaration is parsed semantic input and emits no runtime binding. */
-  PrimitiveDeclaration(): Compiled {
-    return gen.noop()
+  /** Primitive implementations publish their authored witnesses without creating nominal bindings. */
+  PrimitiveDeclaration(declaration: AST.PrimitiveDeclaration): Compiled {
+    return hasAssociatedWitnessPublication(declaration) ? Compile.AssociatedMethodsDeclaration(declaration) : gen.noop()
   },
 
   /** FixtureDeclaration is Studio/test setup metadata and emits no production app binding. */

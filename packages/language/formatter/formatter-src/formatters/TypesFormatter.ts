@@ -12,9 +12,12 @@ export const TypesFormatter = {
   /** TypeDeclaration formats nominal definitions and transparent package-member aliases. */
   TypeDeclaration(f) {
     f.visibilityOnOwnLine()
+    f.oneSpaceAfter('abstract')
     f.oneSpaceAfter('type')
+    f.oneSpaceAfter('can')
     f.oneSpaceAround('is')
     f.oneSpaceAround('=')
+    f.oneSpaceAround('with')
   },
 
   /** CaseSetTypeExpression formats `one of A, B, C`. */
@@ -32,6 +35,11 @@ export const TypesFormatter = {
     f.oneSpaceBefore('no')
   },
 
+  AssociatedConverterDeclaration(f) {
+    f.oneSpaceAround('as', 'fails')
+    f.commaSpacedList()
+  },
+
   /** ItemTypeExpression formats item type property blocks. */
   ItemTypeExpression(f) {
     const entries = [
@@ -41,13 +49,25 @@ export const TypesFormatter = {
       ...f.node.accepts,
       ...f.node.supports,
       ...f.node.implementations,
+      ...f.node.methods,
+      ...f.node.views,
+      ...f.node.converters,
     ]
       .toSorted((left, right) => (left.$cstNode?.offset ?? 0) - (right.$cstNode?.offset ?? 0))
     f.indentedBraceBlock(entries)
     f.commaLineList()
     f.separateIndentedLines(
       entries,
-      (_previous, next) => AST.isConfigurationImplementation(next) ? 2 : 1,
+      (previous, next) =>
+        AST.isConfigurationImplementation(next)
+          || AST.isAssociatedFunctionDeclaration(previous)
+          || AST.isAssociatedFunctionDeclaration(next)
+          || AST.isAssociatedViewDeclaration(previous)
+          || AST.isAssociatedViewDeclaration(next)
+          || AST.isAssociatedConverterDeclaration(previous)
+          || AST.isAssociatedConverterDeclaration(next)
+          ? 2
+          : 1,
     )
   },
 

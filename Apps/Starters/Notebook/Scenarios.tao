@@ -4,15 +4,15 @@ use NoteRow from ./Notes
 // Deterministic data for Studio previews and the device matrix.
 fixture Sample {
    Groceries = create Note {
-      Title: "Groceries"
+      Title: "Groceries",
       Body: "Milk, eggs, bread"
    }
    Ideas = create Note {
-      Title: "Ideas"
+      Title: "Ideas",
       Pinned: true
    }
    CallThePlumber = create Note {
-      Title: "Call the plumber"
+      Title: "Call the plumber",
       Body: "Ask about the kitchen tap."
 }  }
 

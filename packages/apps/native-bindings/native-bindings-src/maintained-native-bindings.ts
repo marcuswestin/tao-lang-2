@@ -78,7 +78,9 @@ async function inBatches<T, R>(items: readonly T[], read: (item: T) => Promise<R
   return values
 }
 
-async function generatorIdentity(): Promise<{ identity: string; paths: string[]; directory: string }> {
+async function generatorIdentity(
+  beforeRead?: (paths: readonly string[]) => Promise<void>,
+): Promise<{ identity: string; paths: string[]; directory: string }> {
   const resourceRoot = TaoResources.declaredRoot()
   const directory = await FS.isFile(FS.resolvePath('generate.ts', import.meta.dir))
     ? import.meta.dir
@@ -90,12 +92,16 @@ async function generatorIdentity(): Promise<{ identity: string; paths: string[];
     'The maintained native binding generator inputs are missing from this installation. Repair the Tao installation.',
   )
   const paths: string[] = []
-  for await (const path of FS.walk(directory)) {
-    if (path.endsWith('.ts')) {
+  await beforeRead?.([directory])
+  for await (const path of FS.walk(directory, { includeDirectories: true })) {
+    if (await FS.isDirectory(path)) {
+      await beforeRead?.([path])
+    } else if (path.endsWith('.ts')) {
       paths.push(path)
     }
   }
   paths.sort()
+  await beforeRead?.(paths)
   const entries = await inBatches(paths, async path => ({
     path: FS.relativePath(directory, path),
     hash: Platform.sha256Hex(await FS.readText(path)),
@@ -144,14 +150,17 @@ async function packageRoot(
 
 async function inventory(
   directory: string,
+  beforeRead?: (paths: readonly string[]) => Promise<void>,
 ): Promise<{ entries: Entry[]; paths: string[]; directories: string[]; files: Record<string, string> }> {
   const paths: string[] = []
   const directories: string[] = [directory]
+  await beforeRead?.([directory])
   for await (
     const path of FS.walk(directory, { includeDirectories: true, excludeDirectory: name => name === 'node_modules' })
   ) {
     if (await FS.isDirectory(path)) {
       directories.push(path)
+      await beforeRead?.([path])
       continue
     }
     const relative = FS.relativePath(directory, path)
@@ -161,6 +170,7 @@ async function inventory(
     paths.push(path)
   }
   paths.sort()
+  await beforeRead?.(paths)
   const contents = await inBatches(paths, async path => {
     Assert.input(!await FS.isSymbolicLink(path), `Native declaration input '${path}' must not be a symlink.`)
     return await FS.readText(path)
@@ -195,18 +205,26 @@ function memoKey(options: MaintainedBindingOptions, location: Locations): string
  * though only files are hashed. An in-place rewrite that preserves size and timestamp is the one
  * change this cannot see; callers that need that guarantee bypass the memo with explicit roots.
  */
-async function fingerprint(watched: readonly string[], manifests: ReadonlyMap<string, Uint8Array>): Promise<string> {
-  const stats = await inBatches(watched, async path => {
-    try {
-      const entry = await FS.entryMetadata(path)
-      return `${path}\0${entry.kind}\0${entry.size}\0${entry.modifiedMs}\0${entry.inode}`
-    } catch {
-      return `${path}\0missing`
-    }
-  })
+async function pathFingerprint(path: string): Promise<string> {
+  try {
+    const entry = await FS.entryMetadata(path)
+    return `${path}\0${entry.kind}\0${entry.size}\0${entry.modifiedMs}\0${entry.inode}`
+  } catch {
+    return `${path}\0missing`
+  }
+}
+
+function capturedFingerprint(stats: readonly string[], manifests: ReadonlyMap<string, Uint8Array | null>): string {
   const captured = [...manifests.entries()].sort(([a], [b]) => a.localeCompare(b))
-    .map(([path, bytes]) => `${path}\0${Platform.sha256Hex(bytes)}`)
+    .map(([path, bytes]) => `${path}\0${bytes === null ? 'missing' : Platform.sha256Hex(bytes)}`)
   return Platform.sha256Hex([...stats, ...captured].join('\n'))
+}
+
+async function fingerprint(
+  watched: readonly string[],
+  manifests: ReadonlyMap<string, Uint8Array | null>,
+): Promise<string> {
+  return capturedFingerprint(await inBatches(watched, pathFingerprint), manifests)
 }
 
 /** memoisedInspectionPasses counts inspections answered from the memo; a test seam for the hashing step. */
@@ -233,9 +251,9 @@ function entries(value: unknown): value is Entry[] {
   )
 }
 
-async function readManifest(path: string, captured?: Uint8Array): Promise<Manifest> {
+async function readManifest(path: string, captured?: Uint8Array | null): Promise<Manifest> {
   Assert.input(
-    !await FS.isSymbolicLink(path) && await FS.isFile(path),
+    captured !== null && (captured !== undefined || !await FS.isSymbolicLink(path) && await FS.isFile(path)),
     `Maintained native binding manifest is missing at '${path}'.`,
   )
   const value = Json.tryParse(
@@ -260,6 +278,8 @@ async function readManifest(path: string, captured?: Uint8Array): Promise<Manife
 export async function inspectMaintainedNativeBindings(
   options: MaintainedBindingOptions = {},
   observers: {
+    /** Observe that inspection must cross the publication barrier, before waiting on its lock. */
+    beforePublicationBarrier?: () => Promise<void>
     /** Test seam for races after capture; it cannot substitute the bytes or the validation result. */
     afterManifestCapture?: () => Promise<void>
     /** Observe completed hashing before the final snapshot guards, without changing its verdict. */
@@ -269,51 +289,91 @@ export async function inspectMaintainedNativeBindings(
   const location = locations(options)
   const first = roots(location.root, maintainedNativeSources[0]!)[0]
   const parent = FS.dirname(first)
-  const inspect = () => inspectUnlocked(location)
   if (!await FS.isDirectory(parent)) {
-    return await inspect()
+    return await inspectUnlocked(location)
   }
-  // Match the publisher's canonical boundary and target, without claiming its exclusive lock.
-  // Missing roots and every interrupted snapshot retain the lock's wait/reclaim behavior.
-  if (await FS.isDirectory(first) && !await FS.isSymbolicLink(first) && !await FS.isSymbolicLink(parent)) {
-    const canonicalParent = await FS.realPath(parent)
-    const canonicalFirst = FS.resolvePath(FS.relativePath(parent, first), canonicalParent)
-    const lock = `${canonicalFirst}.tao-file-mutation.lock`
-    const paths = maintainedNativeSources.map(source => FS.resolvePath(manifestName, roots(location.root, source)[1]))
-    const capture = async () =>
-      new Map(
-        await Promise.all(paths.map(async path => {
-          Assert.input(
-            !await FS.isSymbolicLink(path) && await FS.isFile(path),
-            `Maintained native binding manifest is missing at '${path}'.`,
-          )
-          return [path, await FS.readFile(path)] as const
-        })),
-      )
-    try {
-      if (!await FS.exists(lock)) {
-        const before = await capture()
-        await observers.afterManifestCapture?.()
-        const { result, remember } = await inspectMemoised(memoKey(options, location), location, before)
-        await observers.afterInspection?.()
-        const after = await capture()
-        if (
-          !await FS.exists(lock)
-          && paths.every(path => {
-            const previous = before.get(path)!
-            const current = after.get(path)!
-            return previous.length === current.length && previous.every((byte, index) => byte === current[index])
-          })
-        ) {
-          remember?.()
-          return result
-        }
-      }
-    } catch {
-      // Re-read under the publisher lock to report the existing actionable diagnostics.
+  const canInspectOptimistically = await FS.isDirectory(first)
+    && !await FS.isSymbolicLink(first) && !await FS.isSymbolicLink(parent)
+  const lock = `${FS.resolvePath(FS.relativePath(parent, first), await FS.realPath(parent))}.tao-file-mutation.lock`
+  const paths = maintainedNativeSources.map(source => FS.resolvePath(manifestName, roots(location.root, source)[1]))
+  const capture = async () =>
+    new Map(
+      await Promise.all(paths.map(async path =>
+        [
+          path,
+          !await FS.isSymbolicLink(path) && await FS.isFile(path) ? await FS.readFile(path) : null,
+        ] as const
+      )),
+    )
+  const sameSnapshot = (
+    before: ReadonlyMap<string, Uint8Array | null>,
+    after: ReadonlyMap<string, Uint8Array | null>,
+  ) =>
+    paths.every(path => {
+      const previous = before.get(path)!
+      const current = after.get(path)!
+      return previous === null || current === null
+        ? previous === current
+        : previous.length === current.length && previous.every((byte, index) => byte === current[index])
+    })
+  let observedCapture = false
+  let observedInspection = false
+  const notifyCapture = async () => {
+    if (!observedCapture) {
+      observedCapture = true
+      await observers.afterManifestCapture?.()
     }
   }
-  return await FS.withFileMutationLock(first, parent, inspect, { timeoutMs: INSPECTION_LOCK_WAIT_MS })
+  const notifyInspection = async () => {
+    if (!observedInspection) {
+      observedInspection = true
+      await observers.afterInspection?.()
+    }
+  }
+  let firstAttempt = true
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const barrierRequired = !firstAttempt || !canInspectOptimistically || await FS.exists(lock)
+    firstAttempt = false
+    if (barrierRequired) {
+      await observers.beforePublicationBarrier?.()
+      // Let the publication lock validate the canonical boundary and reclaim stale ownership.
+      await FS.withFileMutationLock(first, parent, async () => undefined, { timeoutMs: INSPECTION_LOCK_WAIT_MS })
+    }
+    let before: Map<string, Uint8Array | null>
+    try {
+      before = await capture()
+    } catch {
+      continue
+    }
+    await notifyCapture()
+    let pass: Awaited<ReturnType<typeof inspectMemoised>>
+    try {
+      // A reader that crossed a publisher barrier must rebuild its snapshot cold.
+      pass = await inspectMemoised(barrierRequired ? undefined : memoKey(options, location), location, before)
+    } catch {
+      // A concurrent publication can interrupt hashing; retry from a fresh barrier.
+      continue
+    }
+    await notifyInspection()
+    let after: Map<string, Uint8Array | null>
+    try {
+      after = await capture()
+    } catch {
+      continue
+    }
+    if (sameSnapshot(before, after) && await pass.accept?.() !== false && !await FS.exists(lock)) {
+      if (pass.result.status === 'fresh') {
+        pass.remember?.()
+        return pass.result
+      }
+      return await FS.withFileMutationLock(first, parent, () => inspectUnlocked(location), {
+        timeoutMs: INSPECTION_LOCK_WAIT_MS,
+      })
+    }
+  }
+  Errors.throwHostEnvironment(
+    'Maintained native binding files kept changing during inspection. Retry the check after publication finishes.',
+  )
 }
 
 /**
@@ -324,34 +384,65 @@ export async function inspectMaintainedNativeBindings(
 async function inspectMemoised(
   key: string | undefined,
   location: Locations,
-  manifests: ReadonlyMap<string, Uint8Array>,
-): Promise<{ result: Inspection; remember?: () => void }> {
+  manifests: ReadonlyMap<string, Uint8Array | null>,
+): Promise<{ result: Inspection; accept?: () => Promise<boolean>; remember?: () => void }> {
   if (key === undefined) {
     return { result: await inspectUnlocked(location, manifests) }
   }
   const memo = memos.get(key)
   if (memo !== undefined && await fingerprint(memo.watched, manifests) === memo.fingerprint) {
     memoisedPasses += 1
-    return { result: memo.result }
+    return {
+      result: memo.result,
+      accept: async () => {
+        if (await fingerprint(memo.watched, manifests) === memo.fingerprint) {
+          return true
+        }
+        memos.delete(key)
+        return false
+      },
+    }
   }
   memos.delete(key)
   const watched = new Set<string>()
-  const result = await inspectUnlocked(location, manifests, watched)
+  const beforeHash = new Map<string, string>()
+  const result = await inspectUnlocked(location, manifests, watched, beforeHash)
   if (result.status !== 'fresh') {
     return { result }
   }
   const sorted = [...watched].sort()
-  const candidate: Memo = { fingerprint: await fingerprint(sorted, manifests), result, watched: sorted }
+  // Metadata is captured before each inventory walk and content read. Reject a memo
+  // whose inputs changed during hashing rather than attaching old contents to new stats.
+  const candidate: Memo = {
+    fingerprint: capturedFingerprint(sorted.map(path => beforeHash.get(path)!), manifests),
+    result,
+    watched: sorted,
+  }
   // Remembered only once the caller's snapshot guards accept the pass; a publication that began
   // during the pass is discarded there and must not be remembered here.
-  return { result, remember: () => memos.set(key, candidate) }
+  return {
+    result,
+    accept: async () => await fingerprint(sorted, manifests) === candidate.fingerprint,
+    remember: () => memos.set(key, candidate),
+  }
 }
 
 async function inspectUnlocked(
   location: Locations,
-  manifests?: ReadonlyMap<string, Uint8Array>,
+  manifests?: ReadonlyMap<string, Uint8Array | null>,
   watched: Set<string> = new Set(),
+  beforeHash?: Map<string, string>,
 ): Promise<Inspection> {
+  const watch = async (paths: readonly string[]) => {
+    await inBatches(paths, async path => {
+      if (!watched.has(path)) {
+        watched.add(path)
+        if (beforeHash !== undefined) {
+          beforeHash.set(path, await pathFingerprint(path))
+        }
+      }
+    })
+  }
   // These snapshots are shared only within this inspection, never with a later check
   // or generation's independent publication guard.
   const inventories = new Map<string, ReturnType<typeof inventory>>()
@@ -360,7 +451,7 @@ async function inspectUnlocked(
     const canonical = await FS.realPath(directory)
     let pending = inventories.get(canonical)
     if (pending === undefined) {
-      pending = inventory(canonical)
+      pending = inventory(canonical, watch)
       inventories.set(canonical, pending)
     }
     return await pending
@@ -369,6 +460,7 @@ async function inspectUnlocked(
     const canonical = await FS.realPath(path)
     let pending = engines.get(canonical)
     if (pending === undefined) {
+      await watch([canonical])
       pending = FS.readText(canonical).then(contents => Platform.sha256Hex(contents))
       engines.set(canonical, pending)
     }
@@ -377,7 +469,7 @@ async function inspectUnlocked(
   const diagnostics: Diagnostic[] = []
   const inputPaths = new Set<string>(location.sourceRoots)
   const outputPaths = new Set<string>()
-  location.sourceRoots.forEach(path => watched.add(path))
+  await watch(location.sourceRoots)
   const identities: unknown[] = [location.root, location.sourceRoots, registryIdentity()]
   const stale = (error: unknown, path?: string) =>
     diagnostics.push({
@@ -389,11 +481,10 @@ async function inspectUnlocked(
     })
   let generator: Awaited<ReturnType<typeof generatorIdentity>> | undefined
   try {
-    generator = await generatorIdentity()
+    generator = await generatorIdentity(watch)
     identities.push(generator.identity)
     generator.paths.forEach(path => inputPaths.add(path))
-    generator.paths.forEach(path => watched.add(path))
-    watched.add(generator.directory)
+    await watch(generator.paths)
   } catch (error) {
     stale(error)
   }
@@ -401,7 +492,7 @@ async function inspectUnlocked(
     const [taoRoot, tsRoot] = roots(location.root, source)
     const manifestPath = FS.resolvePath(manifestName, tsRoot)
     outputPaths.add(manifestPath)
-    watched.add(manifestPath)
+    await watch([manifestPath])
     try {
       const manifest = await readManifest(manifestPath, manifests?.get(manifestPath))
       identities.push(manifest)
@@ -424,7 +515,7 @@ async function inspectUnlocked(
       const engineRoot = FS.dirname(FS.dirname(enginePath))
       const engine = await inspectEngine(enginePath)
       inputPaths.add(enginePath)
-      watched.add(enginePath)
+      await watch([enginePath])
       identities.push(engine)
       Assert.input(engine === manifest.engine, 'The pinned TypeScript engine for maintained native bindings changed.')
       for (const item of manifest.packages) {
@@ -438,8 +529,7 @@ async function inspectUnlocked(
         inputPaths.add(resolved.directory)
         const actual = await inspectInventory(resolved.directory)
         actual.paths.forEach(path => inputPaths.add(path))
-        actual.paths.forEach(path => watched.add(path))
-        actual.directories.forEach(path => watched.add(path))
+        await watch([...actual.paths, ...actual.directories])
         identities.push([item.name, actual.entries])
         Assert.input(
           JSON.stringify(actual.entries) === JSON.stringify(item.files),
@@ -464,10 +554,10 @@ async function inspectUnlocked(
           `Native binding output is missing at '${directory}'.`,
         )
         const paths: string[] = []
-        watched.add(directory)
+        await watch([directory])
         for await (const path of FS.walk(directory, { includeHidden: true, includeDirectories: true })) {
           paths.push(path)
-          watched.add(path)
+          await watch([path])
         }
         const inspected = await inBatches(paths.sort(), async path => {
           Assert.input(!await FS.isSymbolicLink(path), `Native binding output '${path}' must not be a symlink.`)

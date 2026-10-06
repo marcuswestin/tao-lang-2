@@ -1,0 +1,88 @@
+use Account, Session, SignInFlow, SignOut from @tao/auth
+use StackNav from @tao/nav
+use Col, Text, TextInput, TextMultiline from @tao/ui
+use FormButton from @tao/ui/basic
+use ItemList from ./Items
+
+folder
+nav FirebaseLiveAcceptanceAuthNavigator = StackNav {
+   Initial FirebaseLiveAcceptanceAccountGate
+}
+
+scene FirebaseLiveAcceptanceAccountGate() {
+   Title "Firebase Live Acceptance"
+   action Leave() {
+      do SignOut()
+   }
+   render Col() [fill] {
+      when Session.State
+         | SignedIn -> {
+            #signOut
+            FormButton("Sign out") {
+               on press Leave
+            }
+            when Account {
+               loading -> Text("Opening account…")
+               missing -> Text("Account data is missing")
+               unauthorized -> Text("You do not have access")
+               error -> Text("Account data could not be loaded")
+               otherwise -> { ItemList() }
+         }  }
+         | Restoring -> Text("Restoring session…")
+         | otherwise -> FirebaseLiveAcceptanceSignIn()
+}  }
+
+view FirebaseLiveAcceptanceSignIn() {
+   state Flow = SignInFlow()
+   action ExistingAccount() {
+      set Flow.Registration = false
+      do Flow.Submit()
+   }
+   action CreateAccount() {
+      set Flow.Registration = true
+      do Flow.Submit()
+   }
+   // TODO: Remove this synthetic validation shortcut after hosted acceptance.
+   action FillCrudAccount() {
+      set Flow.Email = "narcvs+crud@gmail.com"
+      set Flow.Password = "123456789"
+   }
+   action FillMainAccount() {
+      set Flow.Email = "narcvs@gmail.com"
+      set Flow.Password = "123456789"
+   }
+   render Col() [fill] {
+      Text("Sign in to Firebase Live Acceptance")
+
+      #email
+      TextInput(Value: Flow.Email, Label: "Email") {
+         on submit ExistingAccount
+      }
+
+      #password
+      TextInput(Value: Flow.Password, Label: "Password", Secure: true) {
+         on submit ExistingAccount
+      }
+
+      #signIn
+      FormButton("Sign in", Disabled: Flow.Running) {
+         on press ExistingAccount
+      }
+
+      #createAccount
+      FormButton("Create account", Disabled: Flow.Running) {
+         on press CreateAccount
+      }
+      if Flow.Problem is not empty {
+         TextMultiline(Flow.Problem)
+      }
+
+      #fillCrudAccount
+      FormButton("narcvs+crud@gmail.com") {
+         on press FillCrudAccount
+      }
+
+      #fillMainAccount
+      FormButton("narcvs@gmail.com") {
+         on press FillMainAccount
+}  }  }

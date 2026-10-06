@@ -1,15 +1,11 @@
 import TR from '@runtime/TR'
-import {
-  createSlotRenderer,
-  type RenderSlotBodyProps,
-  RenderSlotFrame,
-  selectRenderSlot,
-  type TaoSlotRenderer,
-} from '@runtime/TR-render-slots'
+import type { RenderSlotBodyProps, TaoSlotRenderer } from '@runtime/TR-render-slots'
 import type { TaoProps } from '@runtime/TR-TaoProps'
 import { Assert } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { isValidElement, type ReactNode } from 'react'
+
+const { create: createSlotRenderer, select: selectRenderSlot, Frame: RenderSlotFrame } = TR.RenderSlots
 
 function bodyProps<Args, Environment>(node: ReactNode): RenderSlotBodyProps<Args, Environment> {
   Assert(isValidElement<RenderSlotBodyProps<Args, Environment>>(node), 'Expected a mounted slot body element.')

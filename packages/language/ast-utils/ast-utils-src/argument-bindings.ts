@@ -33,6 +33,16 @@ export type ArgumentBindingResult = {
   diagnostics: ArgumentBindingDiagnostic[]
 }
 
+/** Invocation callers can supply phase-local domains and compatibility without replacing binding. */
+export type ArgumentBindingMetadata = {
+  argumentLabel?(argument: AST.Argument): string | undefined
+  parameterName?(parameter: AST.ParameterDeclaration): string
+  parameterType?(parameter: AST.ParameterDeclaration): TaoType
+  parameterOmissible?(parameter: AST.ParameterDeclaration): boolean
+  argumentType?(argument: AST.Argument): TaoType
+  accepts?(actual: TaoType, expected: TaoType): boolean
+}
+
 /** resolveArgumentBindings binds Tao arguments to parameters by exact type and unambiguous lineage. */
 export function resolveArgumentBindings(
   declaration: AST.ParameterizedDeclaration,
@@ -45,28 +55,39 @@ export function resolveArgumentBindings(
     | AST.ContextualPresentStatement
     | AST.ViewBinding
     | AST.AskStatement,
+  metadata?: ArgumentBindingMetadata,
 ): ArgumentBindingResult {
-  return resolveParameterArgumentBindings(AST.parametersOf(declaration), AST.argumentsOf(invocation))
+  return resolveParameterArgumentBindings(AST.parametersOf(declaration), AST.argumentsOf(invocation), metadata)
 }
 
 /** resolveParameterArgumentBindings shares binding without extracting storage or effect metadata. */
 export function resolveParameterArgumentBindings(
   parameters: readonly AST.ParameterDeclaration[],
   arguments_: readonly AST.Argument[],
-  metadata: {
-    parameterName?(parameter: AST.ParameterDeclaration): string
-    parameterType?(parameter: AST.ParameterDeclaration): TaoType
-    parameterOmissible?(parameter: AST.ParameterDeclaration): boolean
-  } = {},
+  metadata: ArgumentBindingMetadata = {},
 ): ArgumentBindingResult {
   const resolution = resolveBindings<AST.Argument, AST.ParameterDeclaration>({
     candidates: arguments_,
     targets: parameters,
-    candidateLabel: argument => argument.label,
+    candidateLabel: argument => {
+      if (metadata.argumentLabel) {
+        return metadata.argumentLabel(argument)
+      }
+      const role = Type.genericRoleConstructor(argument)
+      return argument.label ?? (role ? Type.parameterName(role.parameter) : undefined)
+    },
     targetName: metadata.parameterName ?? Type.parameterName,
-    candidateType: argument => Type.ofArgument(argument),
+    candidateType: metadata.argumentType ?? Type.ofArgument,
     targetType: metadata.parameterType ?? Type.ofParameter,
-    namedTypeAccepts: (actual, expected) => Type.isAssignable(actual, expected),
+    namedTypeAccepts: metadata.accepts ?? Type.isAssignable,
+    compatibleTypeAccepts: metadata.accepts ?? Type.isAssignable,
+    pairAccepts: metadata.accepts
+      ? (argument, parameter) =>
+        metadata.accepts!(
+          (metadata.argumentType ?? Type.ofArgument)(argument),
+          (metadata.parameterType ?? Type.ofParameter)(parameter),
+        )
+      : undefined,
     duplicateTargetTypesOnlyWithCandidates: true,
     afterNamedBinding: ({ remainingTargets }) => {
       // Optional parameters are explicit-only for type-based view/action binding. This keeps a

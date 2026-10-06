@@ -1,3 +1,4 @@
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { HCI, Platform } from '@shared'
 import { NodeValidation, type NodeValidationChecks, type NodeValidationReuse } from './node-validation'
@@ -6,7 +7,9 @@ import { accessValidationChecks } from './validators/access-validator'
 import { ActionsValidator } from './validators/ActionsValidator'
 import { AliasesValidator } from './validators/aliases-validator'
 import { AppValidator } from './validators/app-validator'
+import { associatedMethodsValidationChecks } from './validators/associated-methods-validator'
 import { bridgeValidationChecks, validateBridgedSidecarFiles } from './validators/bridge-validator'
+import { capabilityTransportValidationChecks } from './validators/capability-transport-validator'
 import { colorValueValidationChecks } from './validators/color-values-validator'
 import { commandValidationChecks } from './validators/commands-validator'
 import { completenessValidationChecks } from './validators/completeness-validator'
@@ -29,12 +32,15 @@ import { InteractionValidator } from './validators/interaction-validator'
 import { InvocationsValidator } from './validators/invocations-validator'
 import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
+import { numericUnitReadingsValidationChecks } from './validators/numeric-unit-readings-validator'
+import { numericUnitsValidationChecks } from './validators/numeric-units-validator'
 import { packageValidationChecks, validatePackageFile } from './validators/package-validator'
 import { pairingValidationChecks, validateAppPairing } from './validators/pairing-validator'
 import { PhrasesValidator } from './validators/phrases-validator'
 import { preludeValidationChecks, validatePreludeFile } from './validators/prelude-validator'
 import { ReactiveParametersValidator } from './validators/ReactiveParametersValidator'
 import { validateReleaseCapabilities } from './validators/release-capabilities-validator'
+import { rendererSlotsValidationChecks } from './validators/renderer-slots-validator'
 import { ResponsesValidator } from './validators/responses-validator'
 import {
   scenarioValidationChecks,
@@ -65,6 +71,8 @@ const nodeValidationChecks = NodeValidation.compile(
     InteractionValidator.checks,
     testValidationChecks,
     typeValidationChecks,
+    associatedMethodsValidationChecks,
+    capabilityTransportValidationChecks,
     InvocationsValidator.checks,
     FunctionalCoreValidator.checks,
     PhrasesValidator.checks,
@@ -81,6 +89,9 @@ const nodeValidationChecks = NodeValidation.compile(
     ResponsesValidator.checks,
     navigationValidationChecks,
     unitsValidationChecks,
+    numericUnitsValidationChecks,
+    numericUnitReadingsValidationChecks,
+    rendererSlotsValidationChecks,
     bridgeValidationChecks,
     usePackageValidationChecks,
     configuredValueValidationChecks,
@@ -120,8 +131,12 @@ const reusableNodeChecks = new Set([
 function validateTaoFile(
   file: AST.TaoFile,
   ctx: ValidationContext,
+  effects?: ASTUtils.AssociatedEffectsContext,
   documentReuse?: Pick<NodeValidationReuse, 'run'>,
 ): readonly AST.Node[] {
+  if (effects) {
+    return ASTUtils.withAssociatedEffects(effects, () => validateTaoFile(file, ctx, undefined, documentReuse))
+  }
   const nodeReuse = documentReuse ? { ...documentReuse, checks: reusableNodeChecks } : undefined
   const profileEnabled = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
   if (!profileEnabled) {
@@ -194,7 +209,15 @@ function validateTaoFile(
   }
 }
 
-function validateTypes(file: AST.TaoFile, nodes: readonly AST.Node[], ctx: ValidationContext): void {
+function validateTypes(
+  file: AST.TaoFile,
+  nodes: readonly AST.Node[],
+  ctx: ValidationContext,
+  effects?: ASTUtils.AssociatedEffectsContext,
+): void {
+  if (effects) {
+    return ASTUtils.withAssociatedEffects(effects, () => validateTypes(file, nodes, ctx))
+  }
   NodeValidation.validate(nodes, file, ctx, typeInferenceChecks)
 }
 

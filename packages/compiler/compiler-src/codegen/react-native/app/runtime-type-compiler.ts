@@ -1,9 +1,15 @@
-import { ASTUtils } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { Switch } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
 
 /** compileRuntimeType returns the generated wrapper type for one statically resolved Tao value. */
 export function compileRuntimeType(type: ASTUtils.TaoType): Compiled {
+  if (
+    Type.quantityOwner(type)
+    || (type.kind === 'primitive' && type.primitive === 'numeric' && Type.isAbstractDomain(type))
+  ) {
+    return gen`TR.Value<TR.QuantityPayload>`
+  }
   return Switch.kind(type, {
     primitive: type =>
       Switch(type.primitive, {
@@ -19,6 +25,7 @@ export function compileRuntimeType(type: ASTUtils.TaoType): Compiled {
         boolean: () => gen`TR.Value<boolean>`,
         none: () => gen`TR.Value<null>`,
         number: () => gen`TR.Value<number>`,
+        numeric: () => gen`TR.Value<number>`,
         text: () => gen`TR.Value<string>`,
         time: () => gen`TR.Value<number>`,
         duration: () => gen`TR.Value<number>`,
@@ -27,6 +34,7 @@ export function compileRuntimeType(type: ASTUtils.TaoType): Compiled {
         command: () => gen`TR.CommandValue`,
         design: () => gen`TR.Evaluable`,
         view: () => gen`TR.Presentable`,
+        rendered: () => gen`TR.Value<TR.Rendered>`,
         scene: () => gen`TR.Presentable`,
         nav: () => gen`TR.NavigationValue`,
         datasource: () => gen`TR.Evaluable`,
@@ -39,6 +47,7 @@ export function compileRuntimeType(type: ASTUtils.TaoType): Compiled {
     item: () => gen`TR.Value<Record<string, any>>`,
     entity: () => gen`TR.Value<Record<string, any>>`,
     enum: () => gen`TR.Value<TR.EnumCaseIdentity>`,
+    capability: () => gen`TR.Capability`,
     unresolved: () => gen`TR.Value<Record<string, any>>`,
     union: () => gen`TR.Evaluable`,
   })

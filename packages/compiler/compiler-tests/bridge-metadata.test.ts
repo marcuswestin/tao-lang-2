@@ -1,11 +1,71 @@
-import { Packages } from '@ast-utils'
-import { type ModuleOrigin } from '@parser'
+import { Packages, Type } from '@ast-utils'
+import { AST, Langium, type ModuleOrigin, Parser } from '@parser'
 import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { BridgeMetadata } from '../compiler-src/bridge-metadata'
+import { compileRuntimeType } from '../compiler-src/codegen/react-native/app/runtime-type-compiler'
 import { Workspace } from '../compiler-src/workspace'
 
 Describe('compiler: generated TypeScript contracts', () => {
+  Test('keeps abstract numeric families opaque and publishes factories only for concrete descendants', async () => {
+    const parsed = await Parser.parseCode(
+      `
+      public abstract type Family is numeric
+      public type Span is Family with { units { seconds 1 (default), minutes 60 } }
+      func Inspect(Value Family) fails never -> text { return NativeInspect(Value) from ./Native.ts }
+      func NativeInspect(Value Family) fails never -> text { return "" }
+    `,
+      { validation: false },
+    )
+    Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
+    const family = parsed.entry.ast.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'Family')
+    const span = parsed.entry.ast.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'Span')
+    Expect.Is(family, AST.isTypeDeclaration)
+    Expect.Is(span, AST.isTypeDeclaration)
+    Expect(Langium.toString(compileRuntimeType(Type.ofDefinition(family)))).toBe('TR.Value<TR.QuantityPayload>')
+    Expect(Langium.toString(compileRuntimeType(Type.ofDefinition(span)))).toBe('TR.Value<TR.QuantityPayload>')
+    const surface = BridgeMetadata.quantitySurfaceFor(parsed.entry.ast)
+    Expect(surface?.declarations.map(row => row.declaration.name)).toEqual(['Span'])
+    const module = BridgeMetadata.collect([parsed.entry], FS.dirname(parsed.entry.path))[0]!
+    Expect(module.code).toContain('(arg0: TR.Value<TR.QuantityPayload>) => string')
+    Expect(module.quantityModule?.code).toContain('export const Span')
+    Expect(module.quantityModule?.code).not.toContain('export const Family')
+  })
+
+  Test('checks native associated methods and converters against their actual return contracts', async () => {
+    const parsed = await Parser.parseCode(
+      `
+      type Source is text with {
+        func ToText() fails never -> text { return NativeText(Source) from ./Host.ts }
+        static func Create(Value text) fails never -> Source { return NativeSource(Value) from ./Host.ts }
+        Source as Target fails Invalid { return NativeTarget(Source) from ./Host.ts }
+      }
+      type Target is text
+      func NativeText(Source) -> text { return Source }
+      func NativeSource(Value text) -> Source { return Source Value }
+      func NativeTarget(Source) -> Target { return Target "" }
+    `,
+      { validation: false },
+    )
+    Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
+    const module = BridgeMetadata.collect([parsed.entry], FS.dirname(parsed.entry.path))
+      .find(item => item.sourcePath === parsed.entry.path)
+    Expect(module?.code).toContain('(arg0: string) => string')
+    Expect(module?.code).toContain('typeof Sidecar.NativeText')
+    Expect(module?.code).toContain('typeof Sidecar.NativeSource')
+    Expect(module?.code).toContain('typeof Sidecar.NativeTarget')
+    const bridges = AST.streamAllContents(parsed.entry.ast).filter(AST.isFromExpression)
+    Expect(bridges.map(bridge => Type.displayName(BridgeMetadata.bridgeResultType(bridge)!))).toEqual([
+      'text',
+      'Source',
+      'Target',
+    ])
+    const converter = AST.streamAllContents(parsed.entry.ast).find(AST.isAssociatedConverterDeclaration)
+    Expect.Is(converter, AST.isAssociatedConverterDeclaration)
+    Expect(module?.sourceMappings.some(mapping => mapping.source.start.line === converter.$cstNode?.range.start.line))
+      .toBe(true)
+  })
+
   Test('publishes erased case signatures from an unselected dependency file', async () => {
     await withTaoFiles('tao-bridge-private-case-', {
       'Main.tao': 'type HapticKind is one of Light, Heavy',

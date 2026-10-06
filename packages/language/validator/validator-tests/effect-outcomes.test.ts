@@ -31,6 +31,19 @@ const declarations = `
       rejected -> { }
     }
   }
+  action ExportPartly() {
+    do ExportDocument(Format: "pdf") then { Offline -> { } }
+  }
+  action ExportHandled() {
+    do ExportDocument(Format: "pdf") then {
+      Offline -> { }
+      TooLarge -> { }
+      error -> Message { }
+    }
+  }
+  action Cleanup() { fail Full "The cleanup failed." }
+  action CleanupAtExit() { defer Cleanup() }
+  action CleanupInBlock() { defer { do Cleanup() } }
   action Quiet() { }
 `
 
@@ -68,6 +81,70 @@ Describe('validator: effect outcomes', () => {
     `))
     Expect(found).toEqual({ errors: [], warnings: [] })
   })
+
+  Test('accepts selected `then` outcomes and requires no payload on cancelled', async () => {
+    const found = await validated(outcomesApp(`
+      render Stack() {
+        Button(Title: "Press") {
+          on press -> {
+            do ExportDocument(Format: "pdf") then {
+              done -> { set Failure = "" }
+              Offline -> { set Failure = "offline" }
+              error -> Message { set Failure = Message.Message }
+              cancelled -> { set Failure = "cancelled" }
+              otherwise -> { set Failure = "other" }
+            }
+          }
+        }
+      }
+    `))
+    Expect(found).toEqual({ errors: [], warnings: [] })
+  })
+
+  Test('accepts a left-bound action result and error payload', async () => {
+    const found = await validated(outcomesApp(
+      `
+      action Run() {
+        do Read() then {
+          done Result -> { do Consume(Result) }
+          error Problem -> { do Consume(Problem.Message) }
+        }
+      }
+      render Text("Ready")
+    `,
+      `
+      action Read() returns text from ./Bindings.ts
+      action Consume(Value text) { }
+    `,
+    ))
+    Expect(found).toEqual({ errors: [], warnings: [] })
+  })
+
+  Test(
+    'rejects a payload on canonical `otherwise`',
+    rejects(
+      outcomesApp(`
+        action Run() {
+          do ExportDocument(Format: "pdf") then {
+            otherwise Problem -> { }
+          }
+        }
+        render Text("Ready")
+      `),
+      messages.otherwisePayload,
+    ),
+  )
+
+  Test(
+    'rejects a legacy outcome word in a `then` continuation',
+    rejects(
+      outcomesApp(`
+        action Run() { do Save() then { saved -> { } } }
+        render Text("Ready")
+      `),
+      messages.unknownOutcome('saved', '`Save`', true),
+    ),
+  )
 
   Test(
     'rejects a case the verb does not declare',
@@ -163,6 +240,29 @@ Describe('validator: effect outcomes', () => {
       }
     `))
     Expect(found).toEqual([messages.unhandledFailure('`ExportOrQueue`', ['TooLarge'])])
+  })
+
+  Test('subtracts named `then` failures and keeps the open remainder until error or otherwise', async () => {
+    const found = await warnings(outcomesApp(`
+      render Stack() {
+        Button(Title: "Press") { on press ExportPartly }
+        Button(Title: "Press") { on press ExportHandled }
+      }
+    `))
+    Expect(found).toEqual([messages.unhandledFailure('`ExportPartly`', ['TooLarge'])])
+  })
+
+  Test('includes failures from both defer forms in the owning action contract', async () => {
+    const found = await warnings(outcomesApp(`
+      render Stack() {
+        Button(Title: "Press") { on press CleanupAtExit }
+        Button(Title: "Press") { on press CleanupInBlock }
+      }
+    `))
+    Expect(found).toEqual([
+      messages.unhandledFailure('`CleanupAtExit`', ['Full']),
+      messages.unhandledFailure('`CleanupInBlock`', ['Full']),
+    ])
   })
 
   Test('warns at a root when do for the cases it leaves unhandled', async () => {

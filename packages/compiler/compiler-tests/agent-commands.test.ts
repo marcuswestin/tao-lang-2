@@ -67,7 +67,7 @@ Describe('compiler: explicit app agent commands', () => {
       command Safe(Value text) { Title "Safe" do Run() }
       command Private() { Title "Private" do Run() }
       app Main { id "com.tao.test.main" version "1.0.0" name "Main"  AgentCommands [Safe] view Home() }
-      app Restricted = Main with { id "com.tao.test.restricted"  AgentCommands [] }
+      app Restricted = Main with { id "com.tao.test.restricted", AgentCommands [] }
     `,
       { appName: 'Restricted' },
     )

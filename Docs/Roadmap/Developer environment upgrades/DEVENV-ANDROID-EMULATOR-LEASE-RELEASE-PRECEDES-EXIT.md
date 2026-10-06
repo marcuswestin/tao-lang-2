@@ -134,6 +134,13 @@
   Shared liveness classification must accept only ESRCH as absence; unexpected inspection errors
   remain errors. Final validation and retained owners are recorded in the
   [execution handoff](<../Managed development loops - Execution plan.md>).
+  Fixture follow-up (2026-10-05): complete verification reproduced a retained-AVD assertion in
+  `failed startup and boot timeout use the same bounded shutdown and release only after close`.
+  Its synthetic 10ms shutdown deadline can expire before the promise reaction observes fake
+  child close under contention. The test now uses the adjacent escalation case's 1000ms
+  close-delivery budget, preserving the 10ms fake boot timeout and every signal, lease and
+  retained-ownership assertion. Production cleanup and the deferred host acceptance are unchanged.
+  Failure receipt: `.artifacts/logs/verify/2026-10-05T03-04-11-928Z-55146-a3275570/cli_dev-cli.log`.
 - **Workaround:** Use the printed generation with `./agent unsandboxed android recover --avd <name>
   --generation <id>` for retained, identifiable owned processes. Quarantined ownership requires
   investigation; do not force-release it from age or ADB absence.

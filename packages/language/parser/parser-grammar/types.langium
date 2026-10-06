@@ -3,18 +3,46 @@ grammar TaoTypes
 import "./visibility"
 import "./expressions"
 import "./imports"
+import "./numeric-units"
 import "./terminals"
+import "./views"
 
 entry TypesGrammarEntrypoint:
     // Includes type helper rules consumed from imported grammar modules so Langium marks them reachable.
-    PrimitiveDeclaration | TypeDeclaration | ParameterTypeDeclaration | ConstructablePrimitiveTypeReference | TraitList;
+    PrimitiveDeclaration | TypeDeclaration | ParameterTypeDeclaration | ConstructablePrimitiveTypeReference | GenericTypeParameter | TraitList;
+
+GenericTypeParameter:
+    'type' name=ID 'is' bounds+=TypeReference ('and' bounds+=TypeReference)*;
 
 PrimitiveDeclaration:
     'primitive' name=PrimitiveType ('is' base=PrimitiveType)? ('with' slots=ItemTypeExpression)?;
 
 TypeDeclaration:
-    visibility=DeclarationVisibility? 'type' name=ID
-    ('is' type=TypeExpression | '=' aliasTarget=PackageMemberReference);
+    visibility=DeclarationVisibility?
+    (abstract?='abstract'? 'type' name=ID ('is' type=TypeExpression | '=' aliasTarget=PackageMemberReference)
+      | 'can' name=ID type=CapabilityTypeExpression)
+    ('with' associated=RecordAssociatedBody)?;
+
+RecordAssociatedBody infers ItemTypeExpression:
+    '{' ((actions+=ActionDeclaration | methods+=AssociatedFunctionDeclaration | views+=AssociatedViewDeclaration
+      | converters+=AssociatedConverterDeclaration) ','?)* '}';
+
+CapabilityTypeExpression:
+    '{' ((methods+=CapabilityMethodDeclaration | actions+=CapabilityActionDeclaration) ','?)* '}';
+
+// Failure bounds are contextual names; `never` remains available as an ordinary identifier.
+CapabilityMethodDeclaration:
+    name=AssociatedFunctionName parameterList=ParameterList ('fails' failureBound=ID (',' additionalFailureBounds+=ID)*)? '->' returnType=TypeExpression;
+
+// Action requirements remain actions so matching cannot satisfy a command contract with a pure function.
+CapabilityActionDeclaration:
+    static?='static'? 'action' name=ID parameterList=ParameterList
+    ('fails' failureBound=ID (',' additionalFailureBounds+=ID)*)? ('->' returnType=TypeExpression)?;
+
+// Explicit converters are function bodies with source/target contracts and no value slots.
+AssociatedConverterDeclaration:
+    conversionSource=TypeReference 'as' conversionTarget=TypeReference
+    ('fails' failureBounds+=ID (',' failureBounds+=ID)*)? block=FunctionBlock;
 
 TypeExpression:
     ProjectedItemTypeExpression | DerivedTypeExpression | UnionTypeExpression | CaseSetTypeExpression | YesNoTypeExpression | ItemTypeExpression | TypeReference;
@@ -35,14 +63,18 @@ CaseSetTypeExpression:
 CaseSetCase:
     name=ID | literal=STRING;
 
+type FailureDeclaration = CaseSetCase | TypeDeclaration;
+
 // The alias precedes `no`, so the keyword terminates it and no contextual lexer token is needed.
 YesNoTypeExpression:
-    'yes' '/' negativeName=ID? 'no';
+    'yes/no' | 'yes' '/' negativeName=ID? 'no';
 
 // The structural record type. No `item` keyword: `item { ... }` constructs a value.
 ItemTypeExpression:
     '{' ((properties+=TypeProperty | keys+=ConfigurationKeyDeclaration | implementations+=ConfigurationImplementation
-      | issues+=ConfigurationIssues | accepts+=ConfigurationAccepts | supports+=ConfigurationSupports) ','?)* '}';
+      | issues+=ConfigurationIssues | accepts+=ConfigurationAccepts | supports+=ConfigurationSupports
+      | unitBlocks+=NumericUnitBlock | methods+=AssociatedFunctionDeclaration | views+=AssociatedViewDeclaration
+      | actions+=ActionDeclaration | converters+=AssociatedConverterDeclaration) ','?)* '}';
 
 // A postfix `?` carries optionality. Item fields take no trait list.
 TypeProperty:
@@ -74,7 +106,7 @@ ParameterTypeDeclaration:
     name=ID type=TypeExpression optional?='?'?;
 
 TypeReference:
-    ActionTypeReference | ListTypeReference | PrimitiveTypeReference | NamedTypeReference;
+    YesNoTypeExpression | ActionTypeReference | ListTypeReference | PrimitiveTypeReference | NamedTypeReference;
 
 ActionTypeReference:
     'action' '(' (parameterTypes+=TypeReference (',' parameterTypes+=TypeReference)*)? ')';
@@ -89,15 +121,15 @@ ConstructablePrimitiveTypeReference:
     primitive=ConstructablePrimitiveType;
 
 NamedTypeReference:
-    root=ID ('.' members+=ID)*;
+    root=(ID | 'type') ('.' members+=ID)*;
 
 PrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'duration' | 'color' | 'item' | 'list' | 'action' | 'shortcut'
-    | 'command' | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'data' | 'app';
+    'text' | 'number' | 'numeric' | 'boolean' | 'time' | 'duration' | 'color' | 'item' | 'list' | 'action' | 'shortcut'
+    | 'command' | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'data' | 'app' | 'rendered';
 
 NonListPrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'duration' | 'color' | 'item' | 'action' | 'shortcut' | 'command'
-    | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'data' | 'app';
+    'text' | 'number' | 'numeric' | 'boolean' | 'time' | 'duration' | 'color' | 'item' | 'action' | 'shortcut' | 'command'
+    | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'data' | 'app' | 'rendered';
 
 ConstructablePrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'item' | 'list';

@@ -1,0 +1,1 @@
+exports.firestoreOrigin = () => 'fake:firestore'; exports.identityOrigin = () => 'fake:identity';

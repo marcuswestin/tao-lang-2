@@ -21,6 +21,7 @@ type TaoDevCommandOptions = {
   runLoop?: (selection: DevAppSelection, device?: string) => Promise<DevLoopOutcome>
   startupTargets?: readonly DevStartupTarget[]
   control?: DevLoopControlHooks
+  acquireSession?: typeof ProjectDevSession.acquire
 }
 
 /** runTaoDev discovers, selects, and runs apps until the dev loop exits. */
@@ -76,7 +77,29 @@ export async function runTaoDev(
         return exitTaoDev(0, options)
       }
       if (lease === undefined) {
-        lease = await ProjectDevSession.acquire(currentApp.projectRoot, 'cli')
+        const foregroundInteractive = !managedRequest && control === undefined && HCI.isInteractive(options)
+        lease = await (options.acquireSession ?? ProjectDevSession.acquire)(currentApp.projectRoot, 'cli', {
+          ...(!managedRequest && control === undefined ? { foregroundInteractive } : {}),
+          ...(foregroundInteractive
+            ? {
+              confirmOrphan: async owner =>
+                await HCI.askConfirm({
+                  ...options,
+                  defaultValue: true,
+                  message: `Stop orphaned Tao run ${owner.id} (PID ${owner.pid}) and continue?`,
+                }),
+            }
+            : {}),
+          onOrphanCleanup: (phase, owner) => {
+            if (phase === 'stopping') {
+              HCI.writeLine(`Stopping confirmed orphaned Tao run (PID ${owner.pid})…`, options)
+            } else if (phase === 'stopped') {
+              HCI.writeLine(`Stopped orphaned Tao run (PID ${owner.pid}).`, options)
+            } else {
+              HCI.writeErrorLine(`Could not stop orphaned Tao run (PID ${owner.pid}).`, options)
+            }
+          },
+        })
         await TaoAppModules.ensureProject(currentApp.projectRoot)
         toolingWatch = await ProjectTooling.watch(currentApp.projectRoot, {
           runtimeRoot: TaoAppModules.runtimeRoot(),

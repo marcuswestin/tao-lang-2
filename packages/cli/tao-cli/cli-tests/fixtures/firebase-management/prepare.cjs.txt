@@ -1,0 +1,13 @@
+// Runs in plain Node against installed vendor CommonJS modules. The process boundary
+// deliberately excludes Tao aliases and local account objects; no authentication or
+// command action runs. Only public project/account/root/alias identity is returned.
+const path = require('node:path');
+const [root, cwd, configPath] = process.argv.slice(1);
+const auth = require(path.join(root, 'auth.js'));
+auth.selectAccount = () => undefined;
+require(path.join(root, 'requireAuth.js')).requireAuth = async () => { throw 'network forbidden'; };
+const { Command } = require(path.join(root, 'command.js'));
+const command = new Command('firestore:delete [path]');
+command.configstoreProject = () => '777777777';
+const options = { cwd, project: 'saved-project', account: 'first@example.test', nonInteractive: true, ...(configPath ? { config: configPath } : {}) };
+command.prepare(options).then(() => console.log(JSON.stringify({ projectId: options.projectId, account: options.account, projectRoot: options.projectRoot, aliases: options.rc.projects }))).catch(() => process.exitCode = 1);

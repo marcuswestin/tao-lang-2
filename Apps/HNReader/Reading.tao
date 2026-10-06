@@ -35,10 +35,10 @@ view ReadingHistoryRow(ReadingEntry) {
          loading -> { Col() [storyCard] {
             Text("Loading story…") [notice]
          } }
-         missing -> { Col() [storyCard] {
+         none -> { Col() [storyCard] {
             Text("This story is not in the feed right now.") [notice]
          } }
-         error -> Message { Col() [storyCard] {
+         error Message -> { Col() [storyCard] {
             Text(Message) [notice]
          } }
          otherwise -> { loop [ReadingEntry] / AvailableEntry {

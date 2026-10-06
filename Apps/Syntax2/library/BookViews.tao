@@ -1,0 +1,50 @@
+use Duration from @tao/core
+use Wait from @tao/time
+use Button, Col, Row from @tao/ui
+use Export from ./BookActions
+use MarkSeen, NotifyExport, ObservedRevision from ./BookIO
+use Book, Person from ./Library
+
+package
+view BookRow(Book) {
+   let Revision = ObservedRevision(Book)
+
+   #book
+   render Col {
+      Book.Title
+      AuthorName(Book.Author)
+      if (Book.Returned) {
+         "Available"
+      }
+      Book.Note
+      Row {
+         if (Revision.Unseen) {
+            "●"
+         }
+
+         accessible label "Seen { Book.Id }"
+         Button("Seen") {
+            on press -> do MarkSeen(Revision)
+         }
+
+         accessible label "Return { Book.Id }"
+         Button("Return") {
+            on press -> do Book.Return()
+         }
+
+         accessible label "Export { Book.Id }"
+         Button("Export") {
+            on press -> do Export(Book) then {
+               done Duration -> async {
+                  do Wait(2 seconds)
+                  do NotifyExport(Book, Duration)
+}  }  }  }  }  }
+
+// A matched guard stops this helper while preserving the enclosing Book row.
+view AuthorName(Person?) {
+   render Col {
+      guard Person {
+         none -> { "Unknown author" }
+      }
+      "{ Person.Name }"
+}  }

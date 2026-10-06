@@ -1618,12 +1618,18 @@ Describe('Studio source-action patch bus', () => {
     Expect(stringLiteralValues(updated)).toContain('Captured {draft}')
   })
 
-  for (const scope of ['plural-import', 'singular-import', 'folder', 'local'] as const) {
+  for (
+    const scope of ['plural-import', 'singular-import', 'singular-alias', 'plural-alias', 'folder', 'local'] as const
+  ) {
     Test(`resolves captured entity rows with ${scope} scope`, async () => {
       const imported = scope === 'plural-import'
         ? 'use Notes from ./Data.tao'
         : scope === 'singular-import'
         ? 'use Note, Notes from ./Data.tao'
+        : scope === 'singular-alias'
+        ? 'use Note as Item, Notes from ./Data.tao'
+        : scope === 'plural-alias'
+        ? 'use Notes as Note from ./Data.tao'
         : ''
       await withTaoFiles('tao-captured-fixture-import-', {
         'Data.tao': `${scope === 'folder' ? 'folder' : 'project'} data Notes / Note { Title text }`,
@@ -1631,7 +1637,7 @@ Describe('Studio source-action patch bus', () => {
           ${imported}
           ${scope === 'local' ? 'data Notes / Note { Title text }' : ''}
           view List() {
-            query Notes = Notes
+            query Notes = ${scope === 'plural-alias' ? 'Note' : 'Notes'}
             render Empty()
           }
           view Empty() { render inject \`\`\`ts return null \`\`\` }
@@ -1658,9 +1664,15 @@ Describe('Studio source-action patch bus', () => {
           scope === 'local' ? paths['View.tao'] : paths['Data.tao'],
         )
         const imports = validated.entry.ast.statements.filter(AST.isUseStatement)
-        Expect(imports.flatMap(use => use.importedDeclarations.map(reference => reference.$refText))).toEqual(
-          scope === 'plural-import' || scope === 'singular-import' ? ['Note', 'Notes'] : [],
-        )
+        const expected = {
+          'plural-import': ['Note', 'Notes'],
+          'singular-import': ['Note', 'Notes'],
+          'singular-alias': ['Note', 'Note as Item', 'Notes'],
+          'plural-alias': ['Note', 'Notes as Note'],
+          folder: [],
+          local: [],
+        }[scope]
+        Expect(imports.flatMap(use => use.importedDeclarations.map(AST.importSpecifierText))).toEqual(expected)
         if (imports.length !== 0) {
           Expect(imports[0]!.importPath).toBe('./Data.tao')
         }
@@ -2124,8 +2136,8 @@ Describe('Studio source-action patch bus', () => {
           )
           const entityImport = updated.entry.ast.statements.filter(AST.isUseStatement)
             .flatMap(statement => statement.importedDeclarations)
-            .find(reference => reference.$refText === 'Playlist')
-          Expect.Is(entityImport?.ref, AST.isEntityDataDeclaration)
+            .find(specifier => AST.importSourceName(specifier) === 'Playlist')
+          Expect.Is(entityImport?.target.ref, AST.isEntityDataDeclaration)
           Expect(patch.content).toContain('public\nview View1(Playlist)')
           Expect(patch.content).toContain('fixture Sketches\n   device phone')
           Expect(patch.content).toContain('scenario "first" {\n      render (Playlist: ChillVibes)')

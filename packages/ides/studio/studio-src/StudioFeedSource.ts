@@ -203,12 +203,16 @@ function requireGroup(document: AST.Document, view: AST.ViewDeclaration): AST.Sc
 function importFixture(document: AST.Document): string {
   const file = document.parseResult.value
   const uses = file.statements.filter(AST.isUseStatement)
-  const existing = uses.filter(use => use.importedDeclarations.some(reference => reference.$refText === 'Sketches'))
+  const existing = uses.filter(use =>
+    use.importedDeclarations.some(specifier => AST.importLocalName(specifier) === 'Sketches')
+  )
   Assert.input(
     !file.statements.some(statement => AST.isFixtureDeclaration(statement) && statement.name === 'Sketches')
       && existing.every(use =>
-        use.importPath === './Sketches.tao' || use.importPath === './Sketches'
-        || use.importPath === '@/studio/Sketches.tao' || use.importPath === '@/studio/Sketches'
+        use.importedDeclarations.filter(specifier => AST.importLocalName(specifier) === 'Sketches')
+          .every(specifier => AST.importSourceName(specifier) === 'Sketches')
+        && (use.importPath === './Sketches.tao' || use.importPath === './Sketches'
+          || use.importPath === '@/studio/Sketches.tao' || use.importPath === '@/studio/Sketches')
       ),
     'Feed sketch already declares or imports another Sketches fixture.',
   )

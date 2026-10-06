@@ -6,6 +6,11 @@ import type { ValidationContext } from '../validation'
 
 const messages = {
   duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this function.`,
+  duplicateGenericParameter: (name: string) => `Type parameter '${name}' is declared more than once in this function.`,
+  uninferredGeneric: (name: string, parameter: string) =>
+    `Function '${name}' needs a typed input to infer type parameter '${parameter}'.`,
+  incompatibleGeneric: (name: string, parameter: string) =>
+    `Function '${name}' cannot infer type parameter '${parameter}' from these inputs within all its bounds.`,
   functionMissingArgument: (name: string, parameter: string) =>
     `Function '${name}' is missing argument for parameter '${parameter}'.`,
   functionUnmatchedArgument: (name: string) =>
@@ -27,6 +32,7 @@ const messages = {
   functionLabelType: (name: string, label: string, expected: string, actual: string) =>
     `Labeled argument '${label}:' of function '${name}' expects ${expected}, got ${actual}.`,
   functionPlacement: 'Pure functions must be declared at file level.',
+  functionPurity: (name: string) => `Function '${name}' requires a complete pure effect contract.`,
   functionMissingReturn: (name: string) => `Function '${name}' must end with a return so every path produces a value.`,
   functionReturn: (name: string, expected: string, actual: string) =>
     `Function '${name}' returns ${expected}, but a return produces ${actual}.`,
@@ -37,16 +43,34 @@ const messages = {
 export const FunctionsValidator = {
   checks: {
     [AST.FunctionDeclaration.$type]: validateFunction,
+    [AST.AssociatedFunctionDeclaration.$type]: validateFunction,
     [AST.FunctionCallExpression.$type]: validateFunctionCall,
   } satisfies NodeValidationChecks,
   messages,
+  reportBindingDiagnostics,
 } as const
 
-function validateFunction(fn: AST.FunctionDeclaration, ctx: ValidationContext): void {
-  if (!AST.isTaoFile(fn.$container)) {
+function validateFunction(
+  fn: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+  ctx: ValidationContext,
+): void {
+  if (AST.isFunctionDeclaration(fn)) {
+    const analysis = ASTUtils.associatedCallableAnalysis(fn)
+    if (!analysis || analysis.effects.purity.open || analysis.effects.purity.violations.length > 0) {
+      ctx.error(fn, messages.functionPurity(fn.name))
+    }
+  }
+  if (AST.isFunctionDeclaration(fn) && !AST.isTaoFile(fn.$container)) {
     ctx.error(fn, messages.functionPlacement)
   }
   const seen = new Set<string>()
+  for (const parameter of fn.genericParameters) {
+    if (seen.has(parameter.name)) {
+      ctx.error(parameter, messages.duplicateGenericParameter(parameter.name))
+    }
+    seen.add(parameter.name)
+  }
+  seen.clear()
   for (const parameter of AST.parametersOf(fn)) {
     const name = Type.parameterName(parameter)
     if (seen.has(name)) {
@@ -66,7 +90,7 @@ function validateFunction(fn: AST.FunctionDeclaration, ctx: ValidationContext): 
 }
 
 function validateExplicitReturnType(
-  fn: AST.FunctionDeclaration,
+  fn: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
   returns: readonly AST.ReturnStatement[],
   ctx: ValidationContext,
 ): void {
@@ -86,7 +110,7 @@ function validateExplicitReturnType(
 }
 
 function validateInferredReturnType(
-  fn: AST.FunctionDeclaration,
+  fn: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
   returns: readonly AST.ReturnStatement[],
   ctx: ValidationContext,
 ): void {
@@ -113,48 +137,77 @@ function validateInferredReturnType(
 }
 
 function validateFunctionCall(call: AST.FunctionCallExpression, ctx: ValidationContext): void {
+  // A foreign head names the sidecar export, independently of a same-named Tao declaration.
+  if (AST.isFromExpression(call.$container) && call.$container.expression === call) {
+    return
+  }
   const resolved = ASTUtils.resolveFunctionInvocation(call)
   const fn = resolved.function
   // A call shares its one shape with a phrase call (Decisions §14); phrases-validator owns those.
   if (!fn || !AST.isFunctionDeclaration(fn)) {
     return
   }
-  for (const diagnostic of resolved.diagnostics) {
+  reportBindingDiagnostics(
+    call,
+    fn.name,
+    resolved.diagnostics,
+    ctx,
+    parameter => resolved.parameterTypes?.get(parameter) ?? Type.ofParameter(parameter),
+  )
+  for (const diagnostic of resolved.genericDiagnostics ?? []) {
+    ctx.error(
+      call,
+      diagnostic.kind === 'uninferred-generic'
+        ? messages.uninferredGeneric(fn.name, diagnostic.parameter.name)
+        : messages.incompatibleGeneric(fn.name, diagnostic.parameter.name),
+    )
+  }
+}
+
+/** Ordinary and associated calls report the same shared argument binder's diagnostics. */
+function reportBindingDiagnostics(
+  call: AST.FunctionCallExpression | AST.MethodCallExpression,
+  name: string,
+  diagnostics: readonly ASTUtils.ArgumentBindingDiagnostic[],
+  ctx: ValidationContext,
+  expectedType: (parameter: AST.ParameterDeclaration) => ASTUtils.TaoType = Type.ofParameter,
+): void {
+  for (const diagnostic of diagnostics) {
     Switch.kind(diagnostic, {
       'missing-argument': diagnostic => {
-        ctx.error(call, messages.functionMissingArgument(fn.name, Type.parameterName(diagnostic.parameter)))
+        ctx.error(call, messages.functionMissingArgument(name, Type.parameterName(diagnostic.parameter)))
       },
       'unmatched-argument': diagnostic => {
-        ctx.error(diagnostic.argument, messages.functionUnmatchedArgument(fn.name))
+        ctx.error(diagnostic.argument, messages.functionUnmatchedArgument(name))
       },
       'ambiguous-argument': diagnostic => {
-        ctx.error(diagnostic.argument, messages.functionAmbiguousArgument(fn.name, diagnostic.parameters))
+        ctx.error(diagnostic.argument, messages.functionAmbiguousArgument(name, diagnostic.parameters))
       },
       'ambiguous-parameter': diagnostic => {
-        ctx.error(call, messages.functionAmbiguousParameter(fn.name, Type.parameterName(diagnostic.parameter)))
+        ctx.error(call, messages.functionAmbiguousParameter(name, Type.parameterName(diagnostic.parameter)))
       },
       'duplicate-argument-type': diagnostic => {
-        ctx.error(diagnostic.argument, messages.functionDuplicateArgumentType(fn.name))
+        ctx.error(diagnostic.argument, messages.functionDuplicateArgumentType(name))
       },
       'duplicate-parameter-type': diagnostic => {
-        ctx.error(call, messages.functionDuplicateParameterType(fn.name, Type.parameterName(diagnostic.parameter)))
+        ctx.error(call, messages.functionDuplicateParameterType(name, Type.parameterName(diagnostic.parameter)))
       },
       'unknown-named-argument': diagnostic => {
-        ctx.error(diagnostic.argument, messages.functionUnknownLabel(fn.name, diagnostic.name))
+        ctx.error(diagnostic.argument, messages.functionUnknownLabel(name, diagnostic.name))
       },
       'duplicate-named-argument': diagnostic => {
         ctx.error(
           diagnostic.argument,
-          messages.functionDuplicateLabel(fn.name, Type.parameterName(diagnostic.parameter)),
+          messages.functionDuplicateLabel(name, Type.parameterName(diagnostic.parameter)),
         )
       },
       'named-argument-type': diagnostic => {
         ctx.error(
           diagnostic.argument,
           messages.functionLabelType(
-            fn.name,
+            name,
             Type.parameterName(diagnostic.parameter),
-            Type.displayName(Type.ofParameter(diagnostic.parameter)),
+            Type.displayName(expectedType(diagnostic.parameter)),
             Type.displayName(Type.ofArgument(diagnostic.argument)),
           ),
         )

@@ -212,9 +212,15 @@ async function addMissingImports(
   const missing: StudioSharedFixtureEntityImport[] = []
   for (const entry of imports) {
     const matchingName = uses.filter(use =>
-      use.importedDeclarations.some(declaration => declaration.$refText === entry.entity)
+      use.importedDeclarations.some(specifier => AST.importLocalName(specifier) === entry.entity)
     )
-    if (matchingName.some(use => use.importPath !== entry.source)) {
+    if (
+      matchingName.some(use =>
+        use.importPath !== entry.source
+        || !use.importedDeclarations.filter(specifier => AST.importLocalName(specifier) === entry.entity)
+          .every(specifier => AST.importSourceName(specifier) === entry.entity)
+      )
+    ) {
       Errors.throwUserInput(`Studio shared fixture import conflicts for ${entry.entity}.`)
     }
     if (matchingName.length === 0) {
