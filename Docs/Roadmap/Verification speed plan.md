@@ -39,8 +39,21 @@ diagnostic handoff from the Studio preview task, and DEVENV-094 / DEVENV-113.
 - One agent per slice, each orchestrating its own subagents; the file ownership below is the
   conflict boundary. A slice that must touch another slice's file asks the Developer first.
 - Iterate with `verify-changed` and focused test files (narrow lanes never wait on the machine lock).
-  Prove on GitHub with `open-pr`; land with `open-pr --auto-merge` once the Developer authorizes.
-  Local `verify-full` only where a slice changes host lanes, and then only queued as usual.
+- Land through the split route the Developer decided on 2026-10-05, once authorized. The repository
+  now lives at `tao-dev-org/tao-lang` behind a `main` ruleset that requires the `Verify` check and
+  the merge queue (squash, groups of up to five); the repository-admin bypass keeps
+  `./agent unsandboxed land` working during the transition only.
+  1. `./agent open-pr` opens the pull request, which starts hosted `Verify` on everything CI can run.
+  2. Immediately, in the same worktree, run the local complement: the `verify-full` gates CI does
+     not admit (today the unsandboxed browser Studio gates and the two macOS GUI gates), queued on
+     the machine lock as usual. The complement is derived from the workflow's admitted-gate list,
+     never maintained by hand, so admitting a gate on CI removes it from the local run.
+  3. When the complement passes, `./agent merge-pr` lands: if `Verify` already passed it enqueues
+     the pull request at once, otherwise it turns auto-merge on so the queue takes it the moment
+     `Verify` passes. Either way the landing is pinned to the head the complement proved; a head
+     that moved in between is refused and both halves run again.
+  Until the complement lane and that `merge-pr` behaviour exist (slice E), the order is the same
+  with today's commands: `open-pr`, the complement by hand, then `open-pr --auto-merge`.
 - Every slice records before/after evidence from CI (`./agent ci-timings`) and, where a local run
   happens anyway, the landing's `summary.json` schedule and contention blocks. No slice claims a
   speed-up from a narrow run.
@@ -124,16 +137,25 @@ diagnostic handoff from the Studio preview task, and DEVENV-094 / DEVENV-113.
 
 ## Group 2 — after Group 1 lands (or in parallel if the Developer accepts the policy decisions)
 
-### E. Path-gate the host lanes locally
-- **Why:** §9/§10: 432 slot-s and up to 193 s of tail; removing them helps every width ≤12; they
-  prove Studio, keyboard emit and the release export, which validator/parser/cli/docs changes never touch.
-- **Owns:** host-lane entries in `GateCatalog.ts` (`studioLane`, `studioSmoke`, ship-bundle), the
-  GUI branch of `TestSelection.ts`, `MachineLanes` GUI lease.
-- **Do:** run host lanes when `packages/ides/**`, `packages/apps/**`, compiler emit, or
-  `Apps/HNReader|WordFlower` changed since the last green on main; otherwise record them as
-  inherited from main's last green. Needs the Developer's policy decision; §12 estimates 75% of
-  commits would still run them, so the saving is for the quarter that would not.
-- **Effort:** small-medium. **Verification:** local `verify-full`, queued.
+### E. The local complement lane and `merge-pr` when ready
+- **Why:** the split landing route above needs a lane that runs exactly what CI does not, and a
+  landing command that finishes the job whichever half completes first. Decided 2026-10-05; this
+  slice moves to Group 1.
+- **Owns:** a `verify-complement` lane (name open) in `GateCatalog.ts`/`Justfile`/`dev.ts` that
+  takes the workflow's admitted-gate list (`CI_HOST_GATES` in `.github/workflows/verify.yml`, read
+  by `CiGateAdmission.ts`) and runs `verify-full`'s remaining gates under the usual machine lock;
+  `MergePrCommand.ts` (enqueue when `Verify` is green, else enable auto-merge, both pinned to the
+  head the complement proved, refusing a moved head); `PrChecksCommand.ts` awareness of a queued
+  pull request; `open-pr` keeps `--auto-merge` for callers that already hold local proof; the
+  `verification-lanes` and `git-workflow` skills and the landing bullet in `AGENTS.md`.
+- **Do:** write a complement receipt beside the lane's `summary.json` naming the head SHA and the
+  gates run, and have `merge-pr` require it for that SHA; post the same fact as a commit status
+  (`Verify (host)`) so the ruleset can require it once the Developer wants machine enforcement.
+- **Later, not now:** path-gating the host lanes (§9/§10: 432 slot-s, up to 193 s of tail; run them
+  only when `packages/ides/**`, `packages/apps/**`, compiler emit or the demo apps changed) is a
+  separate policy decision and stays out of this slice.
+- **Effort:** small-medium. **Verification:** local `verify-full`, queued, plus one landing through
+  the new route.
 
 ### B. Caches that cannot hit
 - **Owns:** `packages/cli/tao-cli/cli-src/test-cache.ts`, `TaoAppSharedRun.ts`,
