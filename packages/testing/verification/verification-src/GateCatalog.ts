@@ -614,7 +614,10 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // its public recipe.
     [
       'studio-smoke',
-      studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts'),
+      {
+        ...studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts'),
+        runsOnHostedLinux: true,
+      },
     ],
     [
       'studio-proof-real-app',
