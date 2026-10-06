@@ -1,0 +1,145 @@
+name: CI macOS
+
+# The host gates on a hosted macOS runner, one gate at a time: `CI_HOST_GATES` below names the host
+# gates this runner has been admitted to run, the job runs exactly those (with the prepare nodes
+# they read), and the local complement runs the rest, so each host gate is proved in one place.
+# `verify-complement` reads that one line to leave the admitted gates out of the local lane.
+#
+# A workflow of its own rather than a job in `Verify`: a job there kept the whole `Verify` run in
+# progress for the macOS wall (16 min on PR 31's run against under 10 for the Linux partitions),
+# and both `open-pr`'s admission queue and the `plan` job's partition count read a run that is in
+# progress as one holding the pool. Not required; `Verify` stays the one verdict until every host
+# gate is admitted here and proved reliable, and then it is the ruleset, not this file, that makes
+# `CI macOS` required.
+#
+# Runs on pushes to `main` and on dispatch. With nothing admitted it proves no gate, so a pull
+# request does not start it; add `pull_request` here in the same change that admits the first
+# gate, since a gate it proves must be proved on the pull request's head. A dispatched run's
+# `host_gates` input tries one admission for that run only, which is how a gate is measured before
+# it is admitted.
+#
+# The same devenv bootstrap and caches as `Companion hosts`: the portable Linux profile does not
+# exist for Darwin, and the Nix store is what makes a devenv shell affordable on a fresh runner.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      host_gates:
+        description: Host gates to run for this run only, comma-separated; blank uses CI_HOST_GATES below.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # A dispatched run is an experiment and gets its own group; a newer push to `main` replaces an
+  # older one still waiting or running, since nothing reads an older head's result.
+  group: ci-macos-${{ (github.event_name == 'workflow_dispatch' && github.run_id) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+env:
+  # The host gates this workflow is admitted to run, comma-separated, single-quoted on this one
+  # line: `verify-complement` reads exactly this line to leave them out of the local lane. Empty
+  # admits none. Admit one gate at a time, after its dispatched run (`host_gates` above) proved
+  # reliable.
+  CI_HOST_GATES: ''
+  TAO_GREEN_STORE: /Users/runner/tao-green
+  BUN_INSTALL_CACHE_DIR: /Users/runner/tao-cache/bun
+  npm_config_cache: /Users/runner/tao-cache/npm
+  # Verify's installed-tree paths and key, so the cache is shared per runner OS.
+  NODE_MODULES_PATHS: |
+    node_modules
+    packages/*/node_modules
+    packages/*/*/node_modules
+    packages/apps/providers/*/node_modules
+    Apps/Hosted CRUD/node_modules
+    !node_modules/.bun/jazz-rn-android@*/node_modules/jazz-rn-android/android
+    !node_modules/.bun/jazz-rn-ios@*/node_modules/jazz-rn-ios/*.xcframework
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.darwin-*.node
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.win32-*.node
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.linux-arm64-*.node
+
+jobs:
+  macos:
+    name: CI macOS
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+
+      - name: Cache the Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: tao-devenv-nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml', 'packages/cli/dev-cli/dev-cli-src/environment/toolchain-packages.nix', '.config/nix/hutch.nix') }}
+          restore-prefixes-first-match: tao-devenv-nix-${{ runner.os }}-${{ runner.arch }}-
+          gc-max-store-size-macos: 6G
+
+      - uses: cachix/cachix-action@v16
+        with:
+          name: devenv
+      - name: Install devenv
+        run: nix profile add nixpkgs#devenv
+
+      - name: Restore the installed node_modules
+        id: macos-node-modules
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.NODE_MODULES_PATHS }}
+          key: tao-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'devenv.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'packages/apps/providers/*/package.json', 'Apps/Hosted CRUD/package.json') }}
+
+      - name: Set up Tao
+        run: devenv shell -- ./agent setup
+
+      - name: Save the installed node_modules
+        if: steps.macos-node-modules.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.NODE_MODULES_PATHS }}
+          key: ${{ steps.macos-node-modules.outputs.cache-primary-key }}
+
+      - name: Seed the plan with the committed durations
+        run: |
+          mkdir -p .artifacts/timings .artifacts/testing
+          cp .github/verify/durations.json .artifacts/timings/durations.json
+          cp .github/verify/ledger.json .artifacts/testing/ledger.json
+
+      - name: Run the admitted host gates
+        env:
+          # The dispatch input tries one admission for one run; the workflow's own line is the default.
+          # (`env` is a step-level context only, so this cannot sit on the job.)
+          HOST_GATES: ${{ inputs.host_gates || env.CI_HOST_GATES }}
+        run: |
+          echo "Admitted host gates: '${HOST_GATES}'"
+          devenv shell -- ./agent unsandboxed verify-full-ci --ci-host-gates "$HOST_GATES"
+
+      - name: Require the prepare phase to leave the tree unchanged
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "The prepare phase rewrote tracked files; run ./agent fix and commit the result:"
+            git status --porcelain
+            git diff --stat
+            exit 1
+          fi
+
+      - name: Collect the run's summary and logs
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/macos-logs"
+          latest=.artifacts/logs/verify-full-ci/latest
+          if [ -e "$latest" ]; then
+            cp -RL "$latest/." "$RUNNER_TEMP/macos-logs/"
+          fi
+
+      - name: Upload the run's summary and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-macos
+          path: ${{ runner.temp }}/macos-logs
+          if-no-files-found: warn
+          retention-days: 7
