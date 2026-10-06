@@ -8,7 +8,7 @@ const APPLE_BUILD = /^[0-9]{1,3}[A-Z][0-9]{1,5}[a-z]?$/
 const SHA256 = /^[0-9a-f]{64}$/
 const ARCHITECTURES = new Set(['arm64', 'aarch64', 'x86_64', 'amd64'])
 const KERNELS = new Set(['Darwin', 'Linux', 'Windows_NT'])
-const ISSUE_ROOT = 'https://github.com/marcuswestin/tao-lang-2/issues/new?template='
+const ISSUE_ROOT = 'https://github.com/tao-dev-org/tao-lang/issues/new?template='
 
 type Component = { hash?: string; name: string; present: boolean; version?: string }
 export type VisitorFingerprint = {

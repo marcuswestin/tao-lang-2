@@ -9,10 +9,10 @@ Four doors, depending on how far you got:
 
 | You | Where |
 | --- | --- |
-| Tried to build something and could not | [Issue: I tried to build something and could not](https://github.com/marcuswestin/tao-lang-2/issues/new?template=could-not-build-it.yml) |
-| Read or wrote something that did not mean what you thought | [Issue: This confused me](https://github.com/marcuswestin/tao-lang-2/issues/new?template=this-confused-me.yml) |
-| Can see the app you want, but not how Tao would say it | [Discussion: Ideas](https://github.com/marcuswestin/tao-lang-2/discussions/new?category=ideas) |
-| Are not stuck yet, just unsure how to say something | [Discussion: Q&A](https://github.com/marcuswestin/tao-lang-2/discussions/new?category=q-a) |
+| Tried to build something and could not | [Issue: I tried to build something and could not](https://github.com/tao-dev-org/tao-lang/issues/new?template=could-not-build-it.yml) |
+| Read or wrote something that did not mean what you thought | [Issue: This confused me](https://github.com/tao-dev-org/tao-lang/issues/new?template=this-confused-me.yml) |
+| Can see the app you want, but not how Tao would say it | [Discussion: Ideas](https://github.com/tao-dev-org/tao-lang/discussions/new?category=ideas) |
+| Are not stuck yet, just unsure how to say something | [Discussion: Q&A](https://github.com/tao-dev-org/tao-lang/discussions/new?category=q-a) |
 
 If you cannot tell which one fits, pick either issue form. Sorting them is our job.
 
