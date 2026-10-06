@@ -95,6 +95,7 @@ Describe('verify-complement', () => {
       'studio-smoke',
       'studio-network-simulation',
       'keyboard-navigation-smoke',
+      'studio-smoke-simulated-user',
     ]
     for (const name of hostedLinux) {
       Expect(VerifyComplement.isHostGate(name)).toBe(false)

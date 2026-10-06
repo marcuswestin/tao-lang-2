@@ -634,10 +634,14 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ],
     [
       'studio-smoke-simulated-user',
-      studioSmoke(
-        'studio-smoke-simulated-user',
-        'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts',
-      ),
+      {
+        ...studioSmoke(
+          'studio-smoke-simulated-user',
+          'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts',
+        ),
+        cost: HOSTED_BROWSER_LANE_COST,
+        runsOnHostedLinux: true,
+      },
     ],
     [
       'keyboard-navigation-smoke',
