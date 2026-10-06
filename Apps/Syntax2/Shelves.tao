@@ -1,0 +1,36 @@
+use Col, LazyList, Occurrence, Row from @tao/ui
+use GroupedRows from ./library/GroupedRows
+use Book, Title from ./library/Library
+
+// Repeated types, renderer defaults, repeated placement and forwarding.
+package
+view Heading(Title) {
+   render Title [caption]
+}
+
+package
+view NumberedBook(Book, Occurrence) {
+   render Row {
+      "{ Occurrence.Ordinal }."
+      Book
+}  }
+
+package
+view Shelf(Items list of Book) {
+   @header(Title): Heading
+   @item(Book, Occurrence): NumberedBook
+   @footer: "Loaded snapshot" [caption]
+   render Col {
+      @header(Title "Library")
+      LazyList(Items) [claim 2] {
+         @item: @item
+      }
+      @header(Title "End")
+      @footer
+}  }
+
+package
+view GroupedShelf(Items list of Book) {
+   render LazyList(GroupedRows(Items)) [claim 2] {
+      @item Entry, Occurrence -> Entry
+}  }

@@ -1,6 +1,7 @@
 import { reportPostLandingResources } from '@cli-kit/ResourceCommands'
 import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { CiGateAdmission } from '@verification/CiGateAdmission'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
 import {
   FinalizeCommand,
@@ -57,6 +58,7 @@ type TestChangedCommandOptions = TestCommandOptions & {
 }
 
 type GatesCommandOptions = {
+  ciHostGates?: string
   showStudio?: boolean
   /**
    * Commander reads `--no-cache` as the negation of a `cache` option that defaults to true, so the
@@ -165,6 +167,17 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('firebase-auth')
+    .description('List, log in, or log out of the pinned Firebase CLI. Logout signs out all local CLI accounts.')
+    .argument('<action>', 'list, login, or logout. Google sign-in happens locally in your browser.')
+    .action(async (action: string) => {
+      await runExitCommand(async () => {
+        const { runFirebaseAuthCommand } = await import('./firebase/FirebaseAuthCommand')
+        return await runFirebaseAuthCommand(action)
+      })
+    })
+
+  commands
     .command('app-dev')
     .description('Run the agent dev loop with reserved iOS/Android devices and owned Chrome.')
     .argument(
@@ -182,7 +195,10 @@ await runWithCommands(commands => {
   commands
     .command('dev-loop')
     .description('Manage recorded background app development loops without a runtime timer.')
-    .argument('[args...]', 'start, status, logs, stop, restart, or reload; use --help for options.')
+    .argument(
+      '[args...]',
+      'start, status, logs, stop, restart, reload, or retire-retained-mobile; use --help for options.',
+    )
     .allowUnknownOption()
     .action(async (args: string[]) => {
       await runExitCommand(async () => {
@@ -463,6 +479,10 @@ await runWithCommands(commands => {
       "Run this machine's share of the lane's readers, one-based, e.g. 2/8; the prepare phase runs in full.",
     )
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
+    .option(
+      '--ci-host-gates <names>',
+      'verify-full-ci only: run these comma-separated host gates and the prepare nodes they read; empty runs none.',
+    )
     .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
     .option(
       '--green-tree <lanes...>',
@@ -474,15 +494,29 @@ await runWithCommands(commands => {
     // uncaught stack with a code frame from inside the error helper.
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       await runExitCommand(async () => {
+        const hostedCi = options.lane === VerificationLanes.VERIFY_FULL_CI
+        if (hostedCi !== (options.ciHostGates !== undefined)) {
+          Errors.throwUserInput('--ci-host-gates and the verify-full-ci lane go together; neither without the other.')
+        }
+        if (hostedCi && (options.skipUnsandboxed === true || options.greenTree !== undefined)) {
+          Errors.throwUserInput(
+            'verify-full-ci runs the admitted host gates as given and never reads or records a green tree.',
+          )
+        }
+        // The hosted macOS lane is the admitted host gates and their prepare closure, nothing else;
+        // the host gates still pending are reported, so a summary never looks fuller than it is.
+        const admission = hostedCi ? CiGateAdmission.select(gates, options.ciHostGates ?? '') : undefined
+        const lane = admission === undefined ? gates : admission.gates
         const runnable = options.skipUnsandboxed === true
-          ? gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
-          : gates
+          ? lane.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
+          : lane
         UiVisibility.preflightGates(runnable, options.showStudio)
         // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
         // Gate children inherit it; the invoking shell and landing process keep their priority.
         if (
           VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)
           || options.lane === VerificationLanes.VERIFY_COMPLEMENT
+          || hostedCi
         ) {
           const { WatchmanCommand } = await import('./doctor/WatchmanCommand')
           const watchmanStart = await WatchmanCommand.startBeforeLoweringPriority(
@@ -492,10 +526,13 @@ await runWithCommands(commands => {
           if (watchmanStart !== undefined && watchmanStart !== 0) {
             HCI.logProcessWarn('verify', 'Could not start Watchman at normal priority; Studio gates may refuse it.')
           }
-          try {
-            Platform.lowerProcessPriority()
-          } catch (error) {
-            HCI.logProcessWarn('verify', `${Errors.formatForUser(error)} Continuing at inherited priority.`)
+          // A hosted runner has nothing interactive to yield to; only local verification steps aside.
+          if (Platform.runtimeProcess.env['CI'] !== 'true') {
+            try {
+              Platform.lowerProcessPriority()
+            } catch (error) {
+              HCI.logProcessWarn('verify', `${Errors.formatForUser(error)} Continuing at inherited priority.`)
+            }
           }
         }
         const outputMode = WorkReporter.resolveMode({ requested: options.output })
@@ -503,7 +540,7 @@ await runWithCommands(commands => {
         return await holdingLandingLock(options.lane ?? 'verify', async () => {
           const summary = await runGates({
             showStudio: options.showStudio,
-            gates,
+            gates: lane,
             greenTree: options.greenTree === undefined || options.greenTree.length === 0
               ? undefined
               : { lanes: options.greenTree, noCache: options.cache === false, sharedRoot: GreenTree.sharedRoot() },
@@ -514,7 +551,7 @@ await runWithCommands(commands => {
             outputMode,
             partition: options.partition === undefined ? undefined : VerifyPartition.parse(options.partition),
             skipUnsandboxed: options.skipUnsandboxed === true,
-            skipped: options.skipped,
+            skipped: [...(options.skipped ?? []), ...(admission?.skipped ?? [])],
           })
           if (summary.greenTree !== undefined) {
             // A lane that ran nothing still states its verdict, and states it the same way: the record
@@ -884,26 +921,38 @@ await runWithCommands(commands => {
   commands
     .command('open-pr')
     .description(
-      'Push this feat/, claude/, or codex/ branch, open or reuse its pull request titled by the reviewed merge message, then stream its checks; auto-merge stays off unless --auto-merge is specified.',
+      'Wait for admission to the Verify runner pool, push this feat/, claude/, or codex/ branch, open or reuse its pull request titled by the reviewed merge message, then stream its checks; auto-merge stays off unless --auto-merge is specified.',
     )
     .option(
       '--auto-merge',
       'Enable GitHub auto-merge after checks start for authorized ready landing; omitted keeps it off and refuses an already enabled pull request.',
     )
-    .option('--poll-interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
+    .option(
+      '--poll-interval-ms <ms>',
+      'Poll the checks at a fixed interval; by default 30 s while queued, 15 s while partitions run, 10 s once any finished.',
+    )
     .option(
       '--no-complement',
       'With --auto-merge, do not start the local complement lane; run verify-complement separately.',
     )
-    .action(async (options: { autoMerge?: boolean; complement?: boolean; pollIntervalMs?: string } = {}) => {
-      await runExitCommand(async () =>
-        (await OpenPrCommand.run({
-          autoMerge: options.autoMerge,
-          complement: options.complement,
-          pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
-        })).exitCode
-      )
-    })
+    .option(
+      '--jump-queue',
+      'Push without admission: by default open-pr waits while two other Verify runs are in flight, or while the one in flight changed the same files.',
+    )
+    .action(
+      async (
+        options: { autoMerge?: boolean; complement?: boolean; jumpQueue?: boolean; pollIntervalMs?: string } = {},
+      ) => {
+        await runExitCommand(async () =>
+          (await OpenPrCommand.run({
+            autoMerge: options.autoMerge,
+            complement: options.complement,
+            jumpQueue: options.jumpQueue,
+            pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
+          })).exitCode
+        )
+      },
+    )
 
   commands
     .command('cancel-verify')
@@ -911,8 +960,9 @@ await runWithCommands(commands => {
       "Cancel the Verify runs still in flight for this worktree's HEAD, after a local gate decided the landing.",
     )
     .option('--sha <commit>', 'The commit whose runs to cancel; by default HEAD.')
-    .action(async (options: { sha?: string } = {}) => {
-      await runExitCommand(async () => (await CancelVerifyCommand.run({ sha: options.sha })).exitCode)
+    .option('--all-workflows', 'Also cancel other workflows on this failed commit.')
+    .action(async (options: { sha?: string; allWorkflows?: boolean } = {}) => {
+      await runExitCommand(async () => (await CancelVerifyCommand.run(options)).exitCode)
     })
 
   commands
@@ -940,7 +990,10 @@ await runWithCommands(commands => {
     )
     .option('--pr <number>', "The pull request; by default, the open one for this worktree's branch.")
     .option('--wait', 'Follow the checks until every one has concluded.')
-    .option('--interval-ms <ms>', 'How often --wait polls GitHub (default 60000).')
+    .option(
+      '--interval-ms <ms>',
+      'Poll at a fixed interval with --wait; by default 30 s while queued, 15 s while partitions run, 10 s once any finished.',
+    )
     .action(async (options: { intervalMs?: string; pr?: string; wait?: boolean } = {}) => {
       await runExitCommand(async () =>
         (await PrChecksCommand.run({
@@ -1015,7 +1068,11 @@ await runWithCommands(commands => {
       '--device <name-or-udid>',
       'Launch on this connected iPhone or iPad and pair in Terminal without opening a browser.',
     )
-    .option('--host <ipv4>', 'The Mac LAN IPv4 address reachable from the phone; detected when omitted.')
+    .option(
+      '--host <ipv4>',
+      'Mac LAN IPv4: System Settings > Network > active connection > Details > TCP/IP.'
+        + ' Keep phone and Mac on the same LAN; use the Mac address, not localhost. Detected when omitted.',
+    )
     .option('--instant-url <origin>', 'Local InstantDB API origin.', 'http://127.0.0.1:9020')
     .option('--no-browser', 'Start Studio without opening the Mac browser.')
     .action(async (options: { host?: string; instantUrl?: string; browser?: boolean; device?: string }) => {
@@ -1398,7 +1455,11 @@ await runWithCommands(commands => {
     .command('prepare-release')
     .description('Prepare a Studio or IDE extension release locally; does not publish.')
     .argument('<target>', 'studio or ide-extension.')
-    .option('--repo <owner/name>', 'Public GitHub repository for Studio release assets.')
+    .option(
+      '--repo <owner/name>',
+      'Existing public GitHub repository: use owner/name from https://github.com/owner/name.'
+        + ' Requires GitHub CLI and gh auth login with repository write access.',
+    )
     .option('--version <version>', 'Three-part Studio version (defaults to 0.0.1).')
     .option('--phase <number>', 'Public release phase; defaults to 3 for Studio and 1 for the extension.')
     .action(async (target: string, options: { repo?: string; version?: string; phase?: string }) => {
@@ -1437,7 +1498,11 @@ await runWithCommands(commands => {
   commands
     .command('release-studio-prepare')
     .description('Build and locally validate a signed Studio release for a GitHub Releases host.')
-    .requiredOption('--repo <owner/name>', 'Public GitHub repository that will hold Studio releases.')
+    .requiredOption(
+      '--repo <owner/name>',
+      'Existing public GitHub repository: use owner/name from https://github.com/owner/name.'
+        + ' Requires GitHub CLI and gh auth login with repository write access.',
+    )
     .option('--version <version>', 'Three-part Studio version.', '0.0.1')
     .option('--phase <number>', 'Public release phase 3, 4, or 5.', '3')
     .action(async (options: { repo: string; version: string; phase: string }) => {
@@ -1454,7 +1519,11 @@ await runWithCommands(commands => {
   commands
     .command('release-studio-publish')
     .description('Upload prepared Studio artifacts to GitHub and verify public downloads.')
-    .requiredOption('--repo <owner/name>', 'Public GitHub repository that will hold Studio releases.')
+    .requiredOption(
+      '--repo <owner/name>',
+      'Existing public GitHub repository: use owner/name from https://github.com/owner/name.'
+        + ' Requires GitHub CLI and gh auth login with repository write access.',
+    )
     .action(async (options: { repo: string }) => {
       const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
       await runReleaseAction(async () => await ReleaseWorkflow.publishStudio(options.repo))
@@ -1471,7 +1540,10 @@ await runWithCommands(commands => {
 
   commands
     .command('release-ide-publish')
-    .description('Publish the prepared VSIX to Marketplace, Open VSX, or both.')
+    .description(
+      'Publish the prepared VSIX to Marketplace, Open VSX, or both.'
+        + ' Requires publisher/namespace access and local VSCE_PAT/OVSX_PAT for the selected registries.',
+    )
     .option('--target <target>', 'all, marketplace, or open-vsx.', 'all')
     .action(async (options: { target: string }) => {
       const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')

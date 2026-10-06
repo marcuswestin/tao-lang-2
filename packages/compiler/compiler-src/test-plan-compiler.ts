@@ -428,7 +428,7 @@ function compileRun(run: AST.RunStep): TaoTestRun {
 function compileExpectation(expectation: AST.ExpectTextStep): TaoTestExpectation {
   return {
     kind: 'expect',
-    missing: expectation.missing,
+    missing: expectation.missing === 'missing',
     selector: expectation.selector,
     text: expectation.text,
     source: sourceLocation(expectation),
@@ -575,7 +575,7 @@ function compileExpectationGroup(
       expectation.selector
         ? {
           kind: 'match' as const,
-          missing: expectation.missing,
+          missing: expectation.missing === 'missing',
           selector: expectation.selector,
           target: expectation.value,
         }

@@ -1,8 +1,11 @@
 name: Companion hosts
 
-# Build and check the host kit when a pull request that can change it opens; later pushes to the
-# branch start no run, and `workflow_dispatch` reruns it by hand. Release publication stays separate
-# until the repository and its compatible hosts are public.
+# Build and check the host kit nightly on `main` and on demand through `workflow_dispatch`. Pull
+# requests no longer start it: each job ran about twenty-five minutes against a commit that was
+# usually not the one that merged, the result gated nothing (`Verify` is the only required check),
+# and the Android job took a runner from Verify's pool for the whole build. The native-kit parity
+# test it also ran lives in the verification tests, which `Verify` runs on every pull request.
+# Release publication stays separate until the repository and its compatible hosts are public.
 #
 # Both jobs run under devenv rather than Verify's portable bootstrap, because the Android SDK and
 # CocoaPods come from `devenv.nix` and the portable profile has neither. They still share Verify's
@@ -12,16 +15,8 @@ name: Companion hosts
 # the generated projects, `Pods/` and derived data cannot be reused across runs without
 # `--no-clean`; see the Companion hosts entry in the verification speed research.
 on:
-  pull_request:
-    types: [opened]
-    paths:
-      - '.github/workflows/companion-hosts.yml'
-      - 'bun.lock'
-      - 'devenv.*'
-      - 'packages/apps/expo-host/**'
-      - 'packages/ides/studio-companion-app/**'
-      - 'packages/ides/studio-tooling/studio-tooling-src/CompanionHostBuild.ts'
-      - 'packages/testing/verification/verification-tests/companion-native-parity.test.ts'
+  schedule:
+    - cron: '0 9 * * *'
   workflow_dispatch:
 
 permissions:

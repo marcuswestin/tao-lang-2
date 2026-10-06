@@ -1,3 +1,4 @@
+import { ASTUtils } from '@ast-utils'
 import { AST, Langium } from '@parser'
 import { Validate } from './Validate'
 import { Validation, type ValidationRunContext } from './validation'
@@ -21,8 +22,9 @@ export function registerTaoValidationChecks(
       if (editorRelease && !await validateEditorRelease(file, ctx)) {
         return
       }
-      const nodes = Validate.TaoFile(file, ctx)
-      Validate.Types(file, nodes, ctx)
+      const effects = ctx.memo('associated-source-effects', () => ASTUtils.createAssociatedEffects(ctx.workspaceFiles))
+      const nodes = Validate.TaoFile(file, ctx, effects)
+      Validate.Types(file, nodes, ctx, effects)
       await Validate.ForeignImplementationFiles(file, ctx)
     },
   }

@@ -19,6 +19,53 @@ Describe('HostDependencies', () => {
     })
   })
 
+  Test('copies patch files before install and includes their bytes in the install identity', async () => {
+    await withHost(async host => {
+      const patchPath = 'patches/@expo__metro-file-map@57.0.3.patch'
+      const source = FS.resolvePath(patchPath, host.hostFiles)
+      const captured: string[] = []
+      await FS.mkdir(FS.resolvePath('patches', host.hostFiles))
+      await FS.writeText(source, 'first patch contents\n')
+      await FS.writeJson(FS.resolvePath('package.json', host.hostFiles), {
+        name: 'tao-expo-host',
+        patchedDependencies: { '@expo/metro-file-map@57.0.3': patchPath },
+      })
+      const install = host.install
+      host.install = async installRoot => {
+        captured.push(await FS.readText(FS.resolvePath(patchPath, installRoot)))
+        await install(installRoot)
+      }
+
+      await HostDependencies.ensureIn(host, approved)
+      await FS.writeText(source, 'second patch contents\n')
+      await HostDependencies.ensureIn(host, approved)
+
+      Expect(captured).toEqual(['first patch contents\n', 'second patch contents\n'])
+      Expect(host.installs).toHaveLength(2)
+      Expect(await FS.readText(FS.resolvePath('bun.lock', host.installRoot))).toBe('lock one\n')
+    })
+  })
+
+  Test('rejects traversing and missing patch paths before invoking the installer', async () => {
+    for (
+      const scenario of [
+        { path: 'patches/../outside.patch', error: 'invalid patched dependency path' },
+        { path: 'patches/missing.patch', error: 'missing or outside patches/' },
+      ]
+    ) {
+      await withHost(async host => {
+        await FS.writeJson(FS.resolvePath('package.json', host.hostFiles), {
+          name: 'tao-expo-host',
+          patchedDependencies: { 'metro@0.84.5': scenario.path },
+        })
+
+        await Expect(HostDependencies.ensureIn(host, approved)).rejects.toThrow(scenario.error)
+
+        Expect(host.installs).toEqual([])
+      })
+    }
+  })
+
   Test('repairs a missing owned launcher on a stamped install and preserves unexpected entries', async () => {
     await withHost(async host => {
       await HostDependencies.ensureIn(host, approved)

@@ -1,5 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode, testParseSyntax } from './test-parse'
 
@@ -119,6 +120,8 @@ Describe('parser: core language syntax', () => {
     const [_localAlias, firstChild, secondChild] = AST.statementsOf(render.block)
     Expect.Is(firstChild, AST.isViewRender)
     Expect.Is(secondChild, AST.isViewRender)
+    Assert.defined(firstChild.view, 'the first content child has a named view reference')
+    Assert.defined(secondChild.view, 'the second content child has a named view reference')
     Expect(firstChild.view.$refText).toBe('Text')
     Expect(secondChild.view.$refText).toBe('Text')
   })
@@ -398,7 +401,7 @@ Describe('parser: core language syntax', () => {
     Expect.Is(expectedText, AST.isExpectTextStep)
     Expect(expectedText.selector).toBe('text')
     Expect(expectedText.text).toBe('Hello')
-    Expect(expectedText.missing).toBe(false)
+    Expect(expectedText.missing).toBeUndefined()
     Expect.Is(pressText, AST.isPressTextStep)
     Expect(pressText.selector).toBeUndefined()
     Expect(pressText.text).toBe('Add')
@@ -412,7 +415,7 @@ Describe('parser: core language syntax', () => {
     Expect.Is(missingText, AST.isExpectTextStep)
     Expect(missingText.selector).toBe('text')
     Expect(missingText.text).toBe('Loading')
-    Expect(missingText.missing).toBe(true)
+    Expect(missingText.missing).toBe('missing')
     Expect.Is(inputValue, AST.isExpectInputValueStep)
     Expect(inputValue.selector).toBe('placeholder')
     Expect(inputValue.target).toBe('Title')
@@ -484,6 +487,11 @@ Describe('parser: core language syntax', () => {
       Expect.Is(check, AST.isTestDeclaration)
       Expect(check.block.statements.some(AST.isExpectGroupStep)).toBe(true)
       Expect(check.block.statements.some(AST.isExpectScopeStep)).toBe(true)
+      const expectGroup = check.block.statements.find(AST.isExpectGroupStep)
+      Expect.Is(expectGroup, AST.isExpectGroupStep)
+      const missingExpectation = expectGroup.block.expectations.find(expectation => expectation.missing !== undefined)
+      Expect.Is(missingExpectation, AST.isTestExpectation)
+      Expect(missingExpectation.missing).toBe('missing')
       const select = check.block.statements.find(AST.isSelectStep)
       Expect.Is(select, AST.isSelectStep)
       Expect(select.tag).toBe('#rows')
@@ -1011,7 +1019,7 @@ function layoutEntryTerms(entry: AST.LayoutEntry): Array<string | number> {
   return ASTUtils.layoutEntryValues(entry)
 }
 
-function valueDeclarationName(declaration: AST.ValueDeclaration | undefined): string | undefined {
+function valueDeclarationName(declaration: AST.ValueReferenceTarget | undefined): string | undefined {
   if (!declaration) {
     return undefined
   }

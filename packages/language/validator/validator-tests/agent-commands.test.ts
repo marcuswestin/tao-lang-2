@@ -15,7 +15,7 @@ Describe('validator: explicit app agent commands', () => {
     accepts(`
     ${base}
     app Main { id "main" version "1.0.0" name "Main" AgentCommands [Safe, Plain] view Home() }
-    app Restricted = Main with { id "restricted" AgentCommands [] }
+    app Restricted = Main with { id "restricted", AgentCommands [] }
   `),
   )
   Test(
@@ -24,7 +24,7 @@ Describe('validator: explicit app agent commands', () => {
     ${base}
     use StackNav from @tao/nav
     nav Navigation = StackNav { Initial Home }
-    let Main = app { id "main" version "1.0.0" name "Main" Navigator Navigation AgentCommands [Safe, Plain] }
+    let Main = app { id "main", version "1.0.0", name "Main", Navigator Navigation, AgentCommands [Safe, Plain] }
   `),
   )
   Test(
@@ -114,7 +114,7 @@ Describe('validator: explicit app agent commands', () => {
       `
     ${base}
     app Main { id "main" version "1.0.0" name "Main" AgentCommands [Safe] view Home() }
-    app Patched = Main with { id "patched" AgentCommands with { Value "x" } }
+    app Patched = Main with { id "patched", AgentCommands with { Value "x" } }
   `,
       messages.literal,
     ),

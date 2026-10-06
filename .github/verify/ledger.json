@@ -4579,6 +4579,906 @@
       "name": "seeded file cost",
       "outcome": "passed",
       "suite": "testing/host-control"
+    },
+    "apps/expo-host::packages/apps/expo-host/expo-host-tests/dev-runtime.test.ts::seeded file cost": {
+      "durationMs": 1,
+      "file": "packages/apps/expo-host/expo-host-tests/dev-runtime.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/expo-host::packages/apps/expo-host/expo-host-tests/dev-runtime.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/expo-host"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/union-projection.test.ts::seeded file cost": {
+      "durationMs": 11274,
+      "file": "packages/apps/native-bindings/native-bindings-tests/union-projection.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/union-projection.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/bridge-types-emission.test.ts::seeded file cost": {
+      "durationMs": 10894,
+      "file": "packages/apps/native-bindings/native-bindings-tests/bridge-types-emission.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/bridge-types-emission.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/native-binding-resources.test.ts::seeded file cost": {
+      "durationMs": 10894,
+      "file": "packages/apps/native-bindings/native-bindings-tests/native-binding-resources.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/native-binding-resources.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/capability-emission.test.ts::seeded file cost": {
+      "durationMs": 2153,
+      "file": "packages/apps/native-bindings/native-bindings-tests/capability-emission.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/capability-emission.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/native-bridge-origins.test.ts::seeded file cost": {
+      "durationMs": 2153,
+      "file": "packages/apps/native-bindings/native-bindings-tests/native-bridge-origins.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/native-bridge-origins.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/catalog-emission.test.ts::seeded file cost": {
+      "durationMs": 11579,
+      "file": "packages/apps/native-bindings/native-bindings-tests/catalog-emission.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/catalog-emission.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/object-emission.test.ts::seeded file cost": {
+      "durationMs": 11579,
+      "file": "packages/apps/native-bindings/native-bindings-tests/object-emission.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/object-emission.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/global-emission.test.ts::seeded file cost": {
+      "durationMs": 18153,
+      "file": "packages/apps/native-bindings/native-bindings-tests/global-emission.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/global-emission.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/object-extraction.test.ts::seeded file cost": {
+      "durationMs": 18153,
+      "file": "packages/apps/native-bindings/native-bindings-tests/object-extraction.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/object-extraction.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/maintained-native-bindings.test.ts::seeded file cost": {
+      "durationMs": 31339,
+      "file": "packages/apps/native-bindings/native-bindings-tests/maintained-native-bindings.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/maintained-native-bindings.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/origin-emission.test.ts::seeded file cost": {
+      "durationMs": 31339,
+      "file": "packages/apps/native-bindings/native-bindings-tests/origin-emission.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/origin-emission.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/native-binding-publication.test.ts::seeded file cost": {
+      "durationMs": 11002,
+      "file": "packages/apps/native-bindings/native-bindings-tests/native-binding-publication.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/native-binding-publication.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/signature-relocation.test.ts::seeded file cost": {
+      "durationMs": 11002,
+      "file": "packages/apps/native-bindings/native-bindings-tests/signature-relocation.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/native-bindings::packages/apps/native-bindings/native-bindings-tests/signature-relocation.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/native-bindings"
+    },
+    "apps/providers/convex::packages/apps/providers/convex/convex-tests/Convex.test.ts::seeded file cost": {
+      "durationMs": 1,
+      "file": "packages/apps/providers/convex/convex-tests/Convex.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/convex::packages/apps/providers/convex/convex-tests/Convex.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/convex"
+    },
+    "apps/providers/firebase::packages/apps/providers/firebase/firebase-tests/Firebase.test.ts::seeded file cost": {
+      "durationMs": 12,
+      "file": "packages/apps/providers/firebase/firebase-tests/Firebase.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/firebase::packages/apps/providers/firebase/firebase-tests/Firebase.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/firebase"
+    },
+    "apps/providers/firebase::packages/apps/providers/firebase/firebase-tests/FirebaseAuth.test.ts::seeded file cost": {
+      "durationMs": 12,
+      "file": "packages/apps/providers/firebase/firebase-tests/FirebaseAuth.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/firebase::packages/apps/providers/firebase/firebase-tests/FirebaseAuth.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/firebase"
+    },
+    "apps/providers/firebase::packages/apps/providers/firebase/firebase-tests/firebase-replica.test.ts::seeded file cost": {
+      "durationMs": 12,
+      "file": "packages/apps/providers/firebase/firebase-tests/firebase-replica.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/firebase::packages/apps/providers/firebase/firebase-tests/firebase-replica.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/firebase"
+    },
+    "apps/providers/firebase::packages/apps/providers/firebase/firebase-tests/firebase-rules.test.ts::seeded file cost": {
+      "durationMs": 12,
+      "file": "packages/apps/providers/firebase/firebase-tests/firebase-rules.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/firebase::packages/apps/providers/firebase/firebase-tests/firebase-rules.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/firebase"
+    },
+    "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/instant-rows.test.ts::seeded file cost": {
+      "durationMs": 1,
+      "file": "packages/apps/providers/instantdb/instantdb-tests/instant-rows.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/instant-rows.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/instantdb"
+    },
+    "apps/providers/jazz::packages/apps/providers/jazz/jazz-tests/Jazz.test.ts::seeded file cost": {
+      "durationMs": 1,
+      "file": "packages/apps/providers/jazz/jazz-tests/Jazz.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/jazz::packages/apps/providers/jazz/jazz-tests/Jazz.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/jazz"
+    },
+    "apps/providers/pylon::packages/apps/providers/pylon/pylon-tests/Pylon.test.ts::seeded file cost": {
+      "durationMs": 1,
+      "file": "packages/apps/providers/pylon/pylon-tests/Pylon.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/pylon::packages/apps/providers/pylon/pylon-tests/Pylon.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/pylon"
+    },
+    "apps/providers/pylon::packages/apps/providers/pylon/pylon-tests/PylonAuth.test.ts::seeded file cost": {
+      "durationMs": 1,
+      "file": "packages/apps/providers/pylon/pylon-tests/PylonAuth.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/pylon::packages/apps/providers/pylon/pylon-tests/PylonAuth.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/pylon"
+    },
+    "apps/providers/pylon::packages/apps/providers/pylon/pylon-tests/PylonBackend.test.ts::seeded file cost": {
+      "durationMs": 1,
+      "file": "packages/apps/providers/pylon/pylon-tests/PylonBackend.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/pylon::packages/apps/providers/pylon/pylon-tests/PylonBackend.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/pylon"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-defer-actions.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-defer-actions.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-defer-actions.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-native-abort.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-native-abort.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-native-abort.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-native-action.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-native-action.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-native-action.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-native-async-callbacks.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-native-async-callbacks.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-native-async-callbacks.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-native-bytes.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-native-bytes.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-native-bytes.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-native-call-callbacks.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-native-call-callbacks.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-native-call-callbacks.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-native-declaration-types.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-native-declaration-types.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-native-declaration-types.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-native-events.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-native-events.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-native-events.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-native-pending.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-native-pending.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-native-pending.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-native-receiver-callbacks.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-native-receiver-callbacks.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-native-receiver-callbacks.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-native-references.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-native-references.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-native-references.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-native-values.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-native-values.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-native-values.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-quantity-values.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-quantity-values.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-quantity-values.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-render-prefixes.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-render-prefixes.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-render-prefixes.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/TR-render-slots.test.ts::seeded file cost": {
+      "durationMs": 72,
+      "file": "packages/apps/runtime/TR-tests/TR-render-slots.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/TR-render-slots.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "cli/tao-cli::packages/cli/tao-cli/cli-tests/check-cache-controls.test.ts::seeded file cost": {
+      "durationMs": 115793,
+      "file": "packages/cli/tao-cli/cli-tests/check-cache-controls.test.ts",
+      "fileIdentity": "seeded",
+      "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/check-cache-controls.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "cli/tao-cli"
+    },
+    "cli/tao-cli::packages/cli/tao-cli/cli-tests/check-cache-external.test.ts::seeded file cost": {
+      "durationMs": 111919,
+      "file": "packages/cli/tao-cli/cli-tests/check-cache-external.test.ts",
+      "fileIdentity": "seeded",
+      "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/check-cache-external.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "cli/tao-cli"
+    },
+    "cli/tao-cli::packages/cli/tao-cli/cli-tests/check-cache-replay.test.ts::seeded file cost": {
+      "durationMs": 97804,
+      "file": "packages/cli/tao-cli/cli-tests/check-cache-replay.test.ts",
+      "fileIdentity": "seeded",
+      "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/check-cache-replay.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "cli/tao-cli"
+    },
+    "cli/tao-cli::packages/cli/tao-cli/cli-tests/connect-command.test.ts::seeded file cost": {
+      "durationMs": 1536,
+      "file": "packages/cli/tao-cli/cli-tests/connect-command.test.ts",
+      "fileIdentity": "seeded",
+      "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/connect-command.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "cli/tao-cli"
+    },
+    "cli/tao-cli::packages/cli/tao-cli/cli-tests/creation-firebase.test.ts::seeded file cost": {
+      "durationMs": 143640,
+      "file": "packages/cli/tao-cli/cli-tests/creation-firebase.test.ts",
+      "fileIdentity": "seeded",
+      "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/creation-firebase.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "cli/tao-cli"
+    },
+    "cli/tao-cli::packages/cli/tao-cli/cli-tests/firebase-build-snapshot.test.ts::seeded file cost": {
+      "durationMs": 55421,
+      "file": "packages/cli/tao-cli/cli-tests/firebase-build-snapshot.test.ts",
+      "fileIdentity": "seeded",
+      "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/firebase-build-snapshot.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "cli/tao-cli"
+    },
+    "cli/tao-cli::packages/cli/tao-cli/cli-tests/firebase-hosted-generate.test.ts::seeded file cost": {
+      "durationMs": 10250,
+      "file": "packages/cli/tao-cli/cli-tests/firebase-hosted-generate.test.ts",
+      "fileIdentity": "seeded",
+      "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/firebase-hosted-generate.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "cli/tao-cli"
+    },
+    "cli/tao-cli::packages/cli/tao-cli/cli-tests/hosted-crud-qr.test.ts::seeded file cost": {
+      "durationMs": 1,
+      "file": "packages/cli/tao-cli/cli-tests/hosted-crud-qr.test.ts",
+      "fileIdentity": "seeded",
+      "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/hosted-crud-qr.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "cli/tao-cli"
+    },
+    "cli/tao-cli::packages/cli/tao-cli/cli-tests/hosted-provider-generate.test.ts::seeded file cost": {
+      "durationMs": 17030,
+      "file": "packages/cli/tao-cli/cli-tests/hosted-provider-generate.test.ts",
+      "fileIdentity": "seeded",
+      "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/hosted-provider-generate.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "cli/tao-cli"
+    },
+    "cli/tao-cli::packages/cli/tao-cli/cli-tests/install-offer.test.ts::seeded file cost": {
+      "durationMs": 182,
+      "file": "packages/cli/tao-cli/cli-tests/install-offer.test.ts",
+      "fileIdentity": "seeded",
+      "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/install-offer.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "cli/tao-cli"
+    },
+    "cli/tao-cli::packages/cli/tao-cli/cli-tests/maintained-bindings-cache.test.ts::seeded file cost": {
+      "durationMs": 34475,
+      "file": "packages/cli/tao-cli/cli-tests/maintained-bindings-cache.test.ts",
+      "fileIdentity": "seeded",
+      "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/maintained-bindings-cache.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "cli/tao-cli"
+    },
+    "ides/studio::packages/ides/studio/studio-tests/studio-preferences-client.test.ts::seeded file cost": {
+      "durationMs": 1,
+      "file": "packages/ides/studio/studio-tests/studio-preferences-client.test.ts",
+      "fileIdentity": "seeded",
+      "id": "ides/studio::packages/ides/studio/studio-tests/studio-preferences-client.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "ides/studio"
+    },
+    "ides/studio::packages/ides/studio/studio-tests/studio-preferences.test.ts::seeded file cost": {
+      "durationMs": 478,
+      "file": "packages/ides/studio/studio-tests/studio-preferences.test.ts",
+      "fileIdentity": "seeded",
+      "id": "ides/studio::packages/ides/studio/studio-tests/studio-preferences.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "ides/studio"
+    },
+    "ides/studio::packages/ides/studio/studio-tests/studio-preview-matrix-activation.test.ts::seeded file cost": {
+      "durationMs": 2648,
+      "file": "packages/ides/studio/studio-tests/studio-preview-matrix-activation.test.ts",
+      "fileIdentity": "seeded",
+      "id": "ides/studio::packages/ides/studio/studio-tests/studio-preview-matrix-activation.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "ides/studio"
+    },
+    "ides/studio::packages/ides/studio/studio-tests/studio-session-writer.test.ts::seeded file cost": {
+      "durationMs": 1,
+      "file": "packages/ides/studio/studio-tests/studio-session-writer.test.ts",
+      "fileIdentity": "seeded",
+      "id": "ides/studio::packages/ides/studio/studio-tests/studio-session-writer.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "ides/studio"
+    },
+    "language/ast-utils::packages/language/ast-utils/ast-utils-tests/callable-signatures.test.ts::seeded file cost": {
+      "durationMs": 621,
+      "file": "packages/language/ast-utils/ast-utils-tests/callable-signatures.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/ast-utils::packages/language/ast-utils/ast-utils-tests/callable-signatures.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/ast-utils"
+    },
+    "language/ast-utils::packages/language/ast-utils/ast-utils-tests/type-inference-memo.test.ts::seeded file cost": {
+      "durationMs": 621,
+      "file": "packages/language/ast-utils/ast-utils-tests/type-inference-memo.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/ast-utils::packages/language/ast-utils/ast-utils-tests/type-inference-memo.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/ast-utils"
+    },
+    "language/formatter::packages/language/formatter/formatter-tests/bare-render.test.ts::seeded file cost": {
+      "durationMs": 168,
+      "file": "packages/language/formatter/formatter-tests/bare-render.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/formatter::packages/language/formatter/formatter-tests/bare-render.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/formatter"
+    },
+    "language/formatter::packages/language/formatter/formatter-tests/native-event-controls.test.ts::seeded file cost": {
+      "durationMs": 168,
+      "file": "packages/language/formatter/formatter-tests/native-event-controls.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/formatter::packages/language/formatter/formatter-tests/native-event-controls.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/formatter"
+    },
+    "language/formatter::packages/language/formatter/formatter-tests/render-prefixes.test.ts::seeded file cost": {
+      "durationMs": 168,
+      "file": "packages/language/formatter/formatter-tests/render-prefixes.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/formatter::packages/language/formatter/formatter-tests/render-prefixes.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/formatter"
+    },
+    "language/formatter::packages/language/formatter/formatter-tests/wildcard-imports.test.ts::seeded file cost": {
+      "durationMs": 168,
+      "file": "packages/language/formatter/formatter-tests/wildcard-imports.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/formatter::packages/language/formatter/formatter-tests/wildcard-imports.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/formatter"
+    },
+    "language/parser::packages/language/parser/parser-tests/validation-dependencies.test.ts::seeded file cost": {
+      "durationMs": 2045,
+      "file": "packages/language/parser/parser-tests/validation-dependencies.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/parser::packages/language/parser/parser-tests/validation-dependencies.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/parser"
+    },
+    "language/parser::packages/language/parser/parser-tests/bare-render.test.ts::seeded file cost": {
+      "durationMs": 914,
+      "file": "packages/language/parser/parser-tests/bare-render.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/parser::packages/language/parser/parser-tests/bare-render.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/parser"
+    },
+    "language/parser::packages/language/parser/parser-tests/wildcard-imports.test.ts::seeded file cost": {
+      "durationMs": 914,
+      "file": "packages/language/parser/parser-tests/wildcard-imports.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/parser::packages/language/parser/parser-tests/wildcard-imports.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/parser"
+    },
+    "language/parser::packages/language/parser/parser-tests/incremental-documents.test.ts::seeded file cost": {
+      "durationMs": 1489,
+      "file": "packages/language/parser/parser-tests/incremental-documents.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/parser::packages/language/parser/parser-tests/incremental-documents.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/parser"
+    },
+    "language/parser::packages/language/parser/parser-tests/native-event-controls.test.ts::seeded file cost": {
+      "durationMs": 607,
+      "file": "packages/language/parser/parser-tests/native-event-controls.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/parser::packages/language/parser/parser-tests/native-event-controls.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/parser"
+    },
+    "language/parser::packages/language/parser/parser-tests/render-prefixes.test.ts::seeded file cost": {
+      "durationMs": 650,
+      "file": "packages/language/parser/parser-tests/render-prefixes.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/parser::packages/language/parser/parser-tests/render-prefixes.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/parser"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingInventory.test.ts::seeded file cost": {
+      "durationMs": 48794,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingInventory.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingInventory.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingModules.test.ts::seeded file cost": {
+      "durationMs": 48794,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingModules.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingModules.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts::seeded file cost": {
+      "durationMs": 48794,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsWatch.integration.test.ts::seeded file cost": {
+      "durationMs": 48794,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsWatch.integration.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsWatch.integration.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts::seeded file cost": {
+      "durationMs": 48794,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts::seeded file cost": {
+      "durationMs": 48794,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceipt.test.ts::seeded file cost": {
+      "durationMs": 153330,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceipt.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceipt.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptInputs.test.ts::seeded file cost": {
+      "durationMs": 207698,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptInputs.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptInputs.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptResolution.test.ts::seeded file cost": {
+      "durationMs": 109388,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptResolution.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptResolution.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptHost.test.ts::seeded file cost": {
+      "durationMs": 140460,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptHost.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptHost.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRaces.test.ts::seeded file cost": {
+      "durationMs": 142185,
+      "file": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRaces.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRaces.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/project-tooling"
+    },
+    "language/source-actions::packages/language/source-actions/source-actions-tests/bare-render.test.ts::seeded file cost": {
+      "durationMs": 1898,
+      "file": "packages/language/source-actions/source-actions-tests/bare-render.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/source-actions::packages/language/source-actions/source-actions-tests/bare-render.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/source-actions"
+    },
+    "language/source-actions::packages/language/source-actions/source-actions-tests/native-event-controls.test.ts::seeded file cost": {
+      "durationMs": 810,
+      "file": "packages/language/source-actions/source-actions-tests/native-event-controls.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/source-actions::packages/language/source-actions/source-actions-tests/native-event-controls.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/source-actions"
+    },
+    "language/source-actions::packages/language/source-actions/source-actions-tests/render-prefixes.test.ts::seeded file cost": {
+      "durationMs": 1901,
+      "file": "packages/language/source-actions/source-actions-tests/render-prefixes.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/source-actions::packages/language/source-actions/source-actions-tests/render-prefixes.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/source-actions"
+    },
+    "language/source-actions::packages/language/source-actions/source-actions-tests/value-entry-actions.test.ts::seeded file cost": {
+      "durationMs": 1664,
+      "file": "packages/language/source-actions/source-actions-tests/value-entry-actions.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/source-actions::packages/language/source-actions/source-actions-tests/value-entry-actions.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/source-actions"
+    },
+    "language/source-actions::packages/language/source-actions/source-actions-tests/wildcard-imports.test.ts::seeded file cost": {
+      "durationMs": 25106,
+      "file": "packages/language/source-actions/source-actions-tests/wildcard-imports.test.ts",
+      "fileIdentity": "seeded",
+      "id": "language/source-actions::packages/language/source-actions/source-actions-tests/wildcard-imports.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "language/source-actions"
+    },
+    "shared::packages/shared/shared-tests/project-local.test.ts::seeded file cost": {
+      "durationMs": 372,
+      "file": "packages/shared/shared-tests/project-local.test.ts",
+      "fileIdentity": "seeded",
+      "id": "shared::packages/shared/shared-tests/project-local.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "shared"
+    },
+    "shared::packages/shared/shared-tests/firebase-connections.test.ts::seeded file cost": {
+      "durationMs": 316,
+      "file": "packages/shared/shared-tests/firebase-connections.test.ts",
+      "fileIdentity": "seeded",
+      "id": "shared::packages/shared/shared-tests/firebase-connections.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "shared"
+    },
+    "shared::packages/shared/shared-tests/tao-home.test.ts::seeded file cost": {
+      "durationMs": 316,
+      "file": "packages/shared/shared-tests/tao-home.test.ts",
+      "fileIdentity": "seeded",
+      "id": "shared::packages/shared/shared-tests/tao-home.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "shared"
+    },
+    "runtime-jest::packages/apps/expo-host/expo-host-tests/native-event-controls.jest-test.tsx::seeded file cost": {
+      "durationMs": 4699,
+      "file": "packages/apps/expo-host/expo-host-tests/native-event-controls.jest-test.tsx",
+      "fileIdentity": "seeded",
+      "id": "runtime-jest::packages/apps/expo-host/expo-host-tests/native-event-controls.jest-test.tsx::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "runtime-jest"
+    },
+    "runtime-jest::packages/apps/expo-host/expo-host-tests/render-prefixes-e2e.jest-test.tsx::seeded file cost": {
+      "durationMs": 4699,
+      "file": "packages/apps/expo-host/expo-host-tests/render-prefixes-e2e.jest-test.tsx",
+      "fileIdentity": "seeded",
+      "id": "runtime-jest::packages/apps/expo-host/expo-host-tests/render-prefixes-e2e.jest-test.tsx::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "runtime-jest"
+    },
+    "runtime-jest::packages/apps/expo-host/expo-host-tests/render-slots-runtime.jest-test.tsx::seeded file cost": {
+      "durationMs": 4699,
+      "file": "packages/apps/expo-host/expo-host-tests/render-slots-runtime.jest-test.tsx",
+      "fileIdentity": "seeded",
+      "id": "runtime-jest::packages/apps/expo-host/expo-host-tests/render-slots-runtime.jest-test.tsx::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "runtime-jest"
+    },
+    "runtime-jest::packages/apps/expo-host/expo-host-tests/studio-preview-suspense-ack.jest-test.tsx::seeded file cost": {
+      "durationMs": 4699,
+      "file": "packages/apps/expo-host/expo-host-tests/studio-preview-suspense-ack.jest-test.tsx",
+      "fileIdentity": "seeded",
+      "id": "runtime-jest::packages/apps/expo-host/expo-host-tests/studio-preview-suspense-ack.jest-test.tsx::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "runtime-jest"
+    },
+    "performance-checks::packages/cli/dev-cli/performance-checks/performance-check.test.ts::seeded file cost": {
+      "durationMs": 1,
+      "file": "packages/cli/dev-cli/performance-checks/performance-check.test.ts",
+      "fileIdentity": "seeded",
+      "id": "performance-checks::packages/cli/dev-cli/performance-checks/performance-check.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "performance-checks"
     }
   },
   "version": 1

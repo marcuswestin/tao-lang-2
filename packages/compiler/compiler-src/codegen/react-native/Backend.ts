@@ -4,10 +4,20 @@ import { Assert, Errors, FS, Platform, ProjectIdentity, Time } from '@shared'
 import type { ValidationResult } from '@validator'
 import { appMetadata } from '../../app-metadata'
 import { authPolicy } from '../../auth-policy'
-import { BridgeMetadata, type BridgeTypeOriginResolver } from '../../bridge-metadata'
+import {
+  BridgeMetadata,
+  type BridgeTypeOriginResolver,
+  type QuantityCanonicalLeaf,
+  type QuantityPublicationModule,
+} from '../../bridge-metadata'
 import { CompilerDependencies } from '../../compiler-dependencies'
+import { rewriteQuantityNativeImports } from '../../quantity-native-imports'
 import { sidecarModuleSpecifiers } from '../../sidecar-module-specifiers'
-import { inspectSidecarSourceGraph, sidecarSourceBelongsToProject } from '../../sidecar-source-graph'
+import {
+  inspectSidecarSourceGraph,
+  relativeSidecarCandidates,
+  sidecarSourceBelongsToProject,
+} from '../../sidecar-source-graph'
 import { storedDataSchemaFile, storedDataSchemas } from '../../stored-data-schema'
 import {
   compileStudioPreviewManifest,
@@ -15,6 +25,13 @@ import {
 } from '../../studio-preview-manifest'
 import { withActionInstrumentation } from './app/action-control-flow'
 import { withActionResultBridgeTypes } from './app/action-result-bridge-types'
+import {
+  associatedOperatorWitnessKeys,
+  associatedWitnessExports,
+  planAssociatedWitnessBindings,
+  referencedAssociatedWitnessOwners,
+} from './app/associated-witness-plan'
+import { hasAssociatedWitnessPublication, withAssociatedWitnessBindings } from './app/AssociatedMethodsCompiler'
 import {
   configurationAliasTargetTypeBindingName,
   configurationRuntimeBindingName,
@@ -31,12 +48,14 @@ import {
   bridgeBindingName,
   bridgeExportName,
   foreignActionBindingName,
+  foreignActionExportName,
   foreignViewBindingName,
   type InlineInjection,
   withInlineInjectionBindings,
 } from './app/injection-plan'
+import { withQuantityFactoryBindings } from './app/NumericUnitsCompiler'
 import { RuntimeGen } from './app/RuntimeGen'
-import { LocalDataBindings } from './codegen-util'
+import { LocalDataBindings, withImportedDeclarationBindings } from './codegen-util'
 
 import type { CompiledFile, CompileOptions, CompilerContext, CompileResult } from '../../compiler'
 import type { Backend } from '../Backend'
@@ -53,6 +72,7 @@ const localCatalogBindings = [LocalDataBindings.catalog, LocalDataBindings.datas
 type ResolvedImports = {
   bySource: Map<string, Set<string>>
   scopeBindings: Map<string, string>
+  declarationBindings: Map<AST.Declaration, string>
 }
 
 type DataCatalogPlan = {
@@ -84,6 +104,8 @@ type PlannedSourceOutputs = {
   declarationsPath?: string
   sidecars: PlannedSidecar[]
   sidecarCopies: PlannedSidecarCopy[]
+  quantityPath?: string
+  quantityModule?: QuantityPublicationModule
 }
 
 type PlannedInjection = {
@@ -95,6 +117,8 @@ type PlannedInjection = {
 type PlannedOutputs = {
   bySourcePath: ReadonlyMap<string, PlannedSourceOutputs>
   modulePathBySourcePath: ReadonlyMap<string, string>
+  canonicalQuantities: ReadonlyMap<AST.TypeDeclaration, QuantityCanonicalLeaf>
+  sidecarPathBySourcePath: ReadonlyMap<string, string>
 }
 
 /** ReactNativeBackend owns TypeScript planning and Expo-compatible output. */
@@ -165,11 +189,38 @@ function compileReactNative(
         .map(file => file.path)
       : []),
   ])
+  // Private/type-only quantity owners still need their singleton leaf, independently of runtime selection.
+  const availableSources = new Map(validationResult.files.map(file => [file.path, file]))
+  const quantityOnlyDeclarations = new Map<string, Set<AST.TypeDeclaration>>()
+  const quantitySources = [...selectedSources]
+  for (let index = 0; index < quantitySources.length; index++) {
+    const file = availableSources.get(quantitySources[index]!)
+    if (file === undefined) {
+      continue
+    }
+    for (const owner of BridgeMetadata.quantityReferencedOwnersOf(file.ast)) {
+      const ownerPath = AST.getDocument(owner).uri.path
+      if (!selectedSources.has(ownerPath)) {
+        selectedSources.add(ownerPath)
+        quantitySources.push(ownerPath)
+        const projectRoot = Packages.projectRootForPath(context.packagesContext.index, ownerPath)
+        if (
+          projectRoot !== undefined && projectRoot !== graph.projectRoot
+          && !FS.pathIsWithin(ownerPath, context.packagesContext.stdlibRoot)
+        ) {
+          dependencyOwnerBySourcePath.set(ownerPath, projectRoot)
+          quantityOnlyDeclarations.set(ownerPath, new Set())
+        }
+      }
+      quantityOnlyDeclarations.get(ownerPath)?.add(owner)
+    }
+  }
   const sourceFiles = validationResult.files.filter(file =>
     (selectedSources.has(file.path) || FS.pathIsWithin(file.path, context.packagesContext.stdlibRoot))
     && (sidecarTaoSources.projectRootBySourcePath.has(file.path) || file.ast.statements.length === 0
       || !file.ast.statements.every(statement =>
-        AST.isPrimitiveDeclaration(statement) || AST.isPackageDeclaration(statement)
+        (AST.isPrimitiveDeclaration(statement) && !hasAssociatedWitnessPublication(statement))
+        || AST.isPackageDeclaration(statement)
       ))
   )
   const identityProjects = declarationIdentityProjects(
@@ -179,13 +230,16 @@ function compileReactNative(
     dependencyOwnerBySourcePath,
   )
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
+  const operatorWitnessKeys = associatedOperatorWitnessKeys(sourceFiles.map(file => file.ast))
   const selectedStatements = (file: ParsedFile): readonly AST.Statement[] =>
     selectedPublications.declarationsBySourcePath.has(file.path) || accessBySourcePath.has(file.path)
       || sidecarTaoSources.projectRootBySourcePath.has(file.path)
+      || quantityOnlyDeclarations.has(file.path)
       ? file.ast.statements.filter(statement =>
         selectedPublications.declarationsBySourcePath.get(file.path)?.has(statement as AST.Declaration)
         || sidecarTaoSources.runtimeDeclarationsBySourcePath.get(file.path)?.has(statement as AST.Declaration)
         || (AST.isAccessDeclaration(statement) && accessBySourcePath.get(file.path)?.has(statement))
+        || (AST.isTypeDeclaration(statement) && quantityOnlyDeclarations.get(file.path)?.has(statement))
       )
       : file.ast.statements
   const dataCatalog = planDataCatalog(sourceFiles, entryPath, selectedStatements)
@@ -234,6 +288,7 @@ function compileReactNative(
     const sourceOptions: CompileSourceFileOptions = {
       dataCatalog,
       sourceByPath,
+      operatorWitnessKeys,
       selectedStatements: selectedStatements(file),
       selectedStatementsFor: selectedStatements,
       sidecarRuntimeExports: sidecarTaoSources.runtimeExportsBySourcePath.get(file.path),
@@ -412,7 +467,11 @@ function selectedSidecarTaoSources(
             continue
           }
           projectRootBySourcePath.set(target.path, owner)
-          const seeds = CompilerDependencies.taoSidecarValueDeclarations(target.ast, edge)
+          const seeds = CompilerDependencies.taoSidecarValueDeclarations(
+            target.ast,
+            edge,
+            BridgeMetadata.quantitySurfaceFor(target.ast),
+          )
           if (seeds.length === 0) {
             continue
           }
@@ -498,6 +557,14 @@ function planOutputPaths(
     // declaration references that type. Emit its type companion without selecting its runtime
     // implementation or copying that implementation's sidecar.
     const declarations = file.ast.statements.filter(isRuntimeConfigurableDeclaration)
+    const quantitySurface = BridgeMetadata.quantitySurfaceFor(file.ast)
+    const quantityPath = quantitySurface === undefined ? undefined : reserveOutputPath(
+      outputPathInDirectory(
+        outputDirectory(modulePath),
+        `${FS.basename(modulePath, FS.extname(modulePath))}.quantities.ts`,
+      ),
+      usedOutputPaths,
+    )
     const hasErasedCaseSets = options.dependencyRootBySourcePath.has(file.path)
       && file.ast.statements.some(statement =>
         AST.isTypeDeclaration(statement) && AST.isCaseSetTypeExpression(statement.type)
@@ -506,7 +573,7 @@ function planOutputPaths(
     const companionDirectory = declarations.length === 0
       ? outputDirectory(modulePath)
       : companionOutputDirectory(file.path, modulePath, usedOutputPaths)
-    const declarationsPath = declarations.length === 0 && !hasErasedCaseSets
+    const declarationsPath = declarations.length === 0 && !hasErasedCaseSets && quantitySurface === undefined
       ? undefined
       : reserveOutputPath(
         outputPathInDirectory(companionDirectory, `${FS.basename(file.path)}.d.ts`),
@@ -551,7 +618,7 @@ function planOutputPaths(
           allowUnmarkedOutside,
         )
         const plannedGraph = planSidecarGraphOutputs(
-          graph,
+          graph.filter(path => !sidecarPathBySourcePath.has(path)),
           sourcePath,
           companionDirectory,
           usedOutputPaths,
@@ -562,7 +629,9 @@ function planOutputPaths(
           relativePath: graphRelativePath,
           sourcePath: graphSourcePath,
         })))
-        sidecarPathBySourcePath.set(sourcePath, relativePath)
+        for (const [graphSourcePath, graphRelativePath] of plannedGraph) {
+          sidecarPathBySourcePath.set(graphSourcePath, graphRelativePath)
+        }
       }
       return { binding, exportName, sourcePath, relativePath }
     }
@@ -593,7 +662,7 @@ function planOutputPaths(
       ...nodes.filter(AST.isActionDeclaration).filter(action => action.foreign !== undefined).map(action => {
         const foreign = action.foreign
         Assert.defined(foreign, 'planned foreign action has a sidecar implementation')
-        return planSidecar(action, foreign.path, action.name, foreignActionBindingName(action))
+        return planSidecar(action, foreign.path, foreignActionExportName(action), foreignActionBindingName(action))
       }),
       ...(options.localDataProvider?.ownerPath === file.path
         ? [planSidecar(
@@ -605,14 +674,43 @@ function planOutputPaths(
         )]
         : []),
     ]
-    bySourcePath.set(file.path, { injections, modulePath, declarationsPath, sidecars, sidecarCopies })
+    bySourcePath.set(file.path, { injections, modulePath, declarationsPath, sidecars, sidecarCopies, quantityPath })
   }
-  return { bySourcePath, modulePathBySourcePath }
+  const canonicalQuantities = new Map<AST.TypeDeclaration, QuantityCanonicalLeaf>()
+  for (const file of sourceFiles) {
+    const planned = bySourcePath.get(file.path)!
+    const surface = BridgeMetadata.quantitySurfaceFor(file.ast)
+    if (surface === undefined || planned.quantityPath === undefined) {
+      continue
+    }
+    const linkageByOwner = new Map(
+      surface.declarations.filter(row => row.declaration === row.owner).map(row => [row.owner, row] as const),
+    )
+    const leaf: QuantityCanonicalLeaf = {
+      path: planned.quantityPath,
+      namespaceExport: surface.namespaceExport,
+      linkageByOwner,
+    }
+    linkageByOwner.forEach((_link, owner) => canonicalQuantities.set(owner, leaf))
+  }
+  for (const file of sourceFiles) {
+    const planned = bySourcePath.get(file.path)!
+    if (planned.quantityPath !== undefined) {
+      planned.quantityModule = BridgeMetadata.quantityModuleFor(
+        file.ast,
+        planned.quantityPath,
+        { modulePrefix: '@runtime' },
+        canonicalQuantities,
+      )
+    }
+  }
+  return { bySourcePath, modulePathBySourcePath, canonicalQuantities, sidecarPathBySourcePath }
 }
 
 type CompileSourceFileOptions = {
   dataCatalog: DataCatalogPlan | undefined
   sourceByPath: Map<string, ParsedFile>
+  operatorWitnessKeys: ReadonlyMap<ASTUtils.AssociatedOperatorWitnessDeclaration, string>
   selectedStatements: readonly AST.Statement[]
   selectedStatementsFor: (file: ParsedFile) => readonly AST.Statement[]
   sidecarRuntimeExports: ReadonlySet<AST.Declaration> | undefined
@@ -637,6 +735,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const {
     dataCatalog,
     sourceByPath,
+    operatorWitnessKeys,
     selectedStatements,
     selectedStatementsFor,
     sidecarRuntimeExports,
@@ -687,6 +786,30 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   }
   const planned = outputPaths.bySourcePath.get(file.path)
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
+  const associatedExports = new Map(
+    [...associatedWitnessExports(file.ast)].filter(([owner]) => selectedStatements.includes(owner)),
+  )
+  const factoryBindings = new Map<AST.TypeDeclaration, string>()
+  const quantityImports: string[] = []
+  for (const [owner, leaf] of outputPaths.canonicalQuantities) {
+    const link = leaf.linkageByOwner.get(owner)
+    Assert.defined(link, 'compiled canonical quantity owner has its exact linkage')
+    const binding = `__tao_quantity_factory_${factoryBindings.size + 1}__`
+    factoryBindings.set(owner, binding)
+    quantityImports.push(
+      `import { ${link.factoryExport} as ${binding} } from ${
+        JSON.stringify(relativeImportPath(planned.modulePath, leaf.path))
+      }`,
+    )
+  }
+  const emitWithQuantityTypes = <Result>(path: string, emit: () => Result): Result => {
+    const bindings = new Map([...outputPaths.canonicalQuantities].map(([owner, leaf]) => {
+      const link = leaf.linkageByOwner.get(owner)
+      Assert.defined(link, 'compiled quantity type owner has its exact linkage')
+      return [owner, `import(${JSON.stringify(relativeImportPath(path, leaf.path))}).${link.valueTypeExport}`] as const
+    }))
+    return BridgeMetadata.withQuantityTypeBindings(bindings, emit)
+  }
   const nativeOrigins = new Map(
     (options.nativeBridgeTypeOrigins ?? []).map(origin =>
       [`${FS.resolvePath(origin.sourcePath)}#${origin.name}`, origin] as const
@@ -719,7 +842,31 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     const target = statement.aliasTarget?.member.ref
     return target !== undefined && outputPaths.modulePathBySourcePath.has(AST.getDocument(target).uri.path)
   })
+  const witnessPlan = planAssociatedWitnessBindings(
+    file.ast,
+    associatedExports,
+    referencedAssociatedWitnessOwners(selectedStatements),
+    new Map(
+      [...sourceByPath.values()].flatMap(source =>
+        [...associatedWitnessExports(source.ast)].filter(([owner]) => selectedStatementsFor(source).includes(owner))
+      ),
+    ),
+    [
+      ...factoryBindings.values(),
+      ...imports.scopeBindings.values(),
+      ...planned.injections.map(injection => injection.binding),
+      ...planned.sidecars.map(sidecar => sidecar.binding),
+    ],
+  )
   const importLines = [
+    ...witnessPlan.imports.map(witness => {
+      const sourcePath = outputPaths.modulePathBySourcePath.get(witness.sourcePath)
+      Assert.defined(sourcePath, 'referenced associated owner has a selected emitted source module')
+      return `import { ${witness.exported} as ${witness.binding} } from ${
+        JSON.stringify(relativeImportPath(planned.modulePath, sourcePath))
+      }`
+    }),
+    ...quantityImports,
     ...importLinesForCompiledFile(imports, planned.modulePath, outputPaths.modulePathBySourcePath),
     ...configurationAliasImportLines(file, planned.modulePath, outputPaths, typeStatements),
     ...planned.injections.map(injection =>
@@ -749,65 +896,97 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const emitted = (relativePath: string, code: string): CompiledFile => ({ code, relativePath, sourcePath: file.path })
   const module = emitted(
     planned.modulePath,
-    withDataStorePlan(
-      dataCatalog?.stores,
+    withImportedDeclarationBindings(
+      imports.declarationBindings,
       () =>
-        withDeclarationIdentityContext(identityProjects, identityOwnerBySourcePath, () =>
-          withInlineInjectionBindings(
-            new Map(planned.injections.map(injection => [injection.node, injection.binding])),
+        withAssociatedWitnessBindings(witnessPlan.bindings, () =>
+          withQuantityFactoryBindings(
+            factoryBindings,
             () =>
-              withActionResultBridgeTypes(bridgeTypeOptions, () =>
-                withActionInstrumentation(debug, () =>
-                  RuntimeGen.TaoFile(file.ast, {
-                    bridgeTypes: BridgeMetadata.typesFor(file.ast, selectedStatements, bridgeTypeOptions),
-                    configurationTypes: planned.declarationsPath === undefined
-                      ? undefined
-                      : RuntimeGen.ConfigurationTypes(file.ast, typeStatements),
-                    dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
-                    dataAccess: ownsDataCatalog ? dataCatalog.access : [],
-                    emitDataCatalog: ownsDataCatalog,
-                    importLines,
-                    localDataCatalog: usesLocalDataCatalog,
-                    journeyObservations,
-                    scopeBindings,
-                    exportedBindings,
-                    selectedAppDatasourceConfiguration,
-                    selectedAppFirebaseConfiguration,
-                    selectedAppAuthConfiguration,
-                    selectedAppName,
-                    projectRoot,
-                    studioDataCatalog: studio && dataCatalog !== undefined
-                      && (ownsDataCatalog || needsStudioDataCatalog),
-                    studio,
-                    debug,
-                    studioViews: studio && selectedAppName !== undefined ? studioViews : [],
-                    studioSourceEpochs,
-                    studioDesignEpochs,
-                    viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }, selectedStatements),
-                    selectedStatements,
-                  }))),
-          )),
+              emitWithQuantityTypes(planned.modulePath, () =>
+                withDataStorePlan(
+                  dataCatalog?.stores,
+                  () =>
+                    withDeclarationIdentityContext(identityProjects, identityOwnerBySourcePath, () =>
+                      withInlineInjectionBindings(
+                        new Map(planned.injections.map(injection => [injection.node, injection.binding])),
+                        () =>
+                          withActionResultBridgeTypes(bridgeTypeOptions, () =>
+                            withActionInstrumentation(debug, () =>
+                              RuntimeGen.TaoFile(file.ast, {
+                                bridgeTypes: BridgeMetadata.typesFor(file.ast, selectedStatements, bridgeTypeOptions),
+                                configurationTypes: planned.declarationsPath === undefined
+                                  ? undefined
+                                  : RuntimeGen.ConfigurationTypes(file.ast, typeStatements),
+                                dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
+                                dataAccess: ownsDataCatalog ? dataCatalog.access : [],
+                                emitDataCatalog: ownsDataCatalog,
+                                importLines,
+                                localDataCatalog: usesLocalDataCatalog,
+                                journeyObservations,
+                                scopeBindings,
+                                exportedBindings,
+                                selectedAppDatasourceConfiguration,
+                                selectedAppFirebaseConfiguration,
+                                selectedAppAuthConfiguration,
+                                selectedAppName,
+                                projectRoot,
+                                studioDataCatalog: studio && dataCatalog !== undefined
+                                  && (ownsDataCatalog || needsStudioDataCatalog),
+                                studio,
+                                debug,
+                                studioViews: studio && selectedAppName !== undefined ? studioViews : [],
+                                studioSourceEpochs,
+                                studioDesignEpochs,
+                                viewRegistrations: RuntimeGen.ViewRegistrations(
+                                  file.ast,
+                                  { studio },
+                                  selectedStatements,
+                                ),
+                                selectedStatements,
+                              }))),
+                      )),
+                )),
+          ), operatorWitnessKeys),
     ),
   )
+  if (associatedExports.size > 0) {
+    module.code += `\nexport { ${[...associatedExports.values()].join(', ')} }\n`
+  }
+  if (planned.quantityModule !== undefined) {
+    module.code += `\n${BridgeMetadata.quantityExportsFor(file.ast, planned.modulePath, planned.quantityModule)}\n`
+  }
   const declarationsPath = planned.declarationsPath
   const declarations = declarationsPath === undefined ? [] : [emitted(
     declarationsPath,
-    RuntimeGen.ConfigurationDeclarations(
-      file.ast,
-      configurationAliasImportLines(file, declarationsPath, outputPaths, typeStatements),
-      [
-        BridgeMetadata.typesFor(file.ast, selectedStatements, { ...bridgeTypeOptions, modulePath: declarationsPath }),
-        identityOwnerBySourcePath.has(file.path)
-          ? BridgeMetadata.caseSetTypesFor(file.ast.statements)
-          : '',
-      ].filter(Boolean).join('\n'),
-      typeStatements,
-    ),
+    emitWithQuantityTypes(declarationsPath, () =>
+      RuntimeGen.ConfigurationDeclarations(
+        file.ast,
+        configurationAliasImportLines(file, declarationsPath, outputPaths, typeStatements),
+        [
+          BridgeMetadata.typesFor(file.ast, selectedStatements, { ...bridgeTypeOptions, modulePath: declarationsPath }),
+          identityOwnerBySourcePath.has(file.path)
+            ? BridgeMetadata.caseSetTypesFor(file.ast.statements)
+            : '',
+        ].filter(Boolean).join('\n'),
+        typeStatements,
+      )),
   )]
+  if (planned.quantityModule !== undefined && declarations[0] !== undefined) {
+    declarations[0].code += `\n${
+      BridgeMetadata.quantityExportsFor(file.ast, declarationsPath!, planned.quantityModule)
+    }\n`
+  }
   const injections = planned.injections.map(injection =>
-    emitted(injection.relativePath, RuntimeGen.InjectionBoundary(injection.node))
+    emitted(
+      injection.relativePath,
+      emitWithQuantityTypes(injection.relativePath, () => RuntimeGen.InjectionBoundary(injection.node)),
+    )
   )
-  return [module, ...injections, ...declarations, ...copySidecars(file.path, outputPaths)]
+  const quantityFiles = planned.quantityModule === undefined ? [] : [
+    emitted(planned.quantityModule.path, planned.quantityModule.code),
+  ]
+  return [module, ...injections, ...declarations, ...quantityFiles, ...copySidecars(file.path, outputPaths)]
 }
 
 function copySidecars(sourcePath: string, outputPaths: PlannedOutputs): CompiledFile[] {
@@ -1120,22 +1299,38 @@ function rewriteSidecarTaoImports(
   relativePath: string,
   outputPaths: PlannedOutputs,
 ): string {
+  source = rewriteQuantityNativeImports(source, sourcePath, relativePath, path => {
+    const planned = outputPaths.bySourcePath.get(path)
+    const quantity = planned?.quantityModule
+    return planned === undefined || quantity === undefined ? undefined : {
+      modulePath: planned.modulePath,
+      declarationsPath: planned.declarationsPath,
+      quantity: { path: quantity.path, ...quantity.surface },
+    }
+  })
   let rewritten = source
   for (const specifier of sidecarModuleSpecifiers(source, sourcePath).toReversed()) {
     if (!specifier.value.startsWith('./') && !specifier.value.startsWith('../')) {
       continue
     }
-    if (!specifier.value.endsWith('.tao')) {
+    const planned = specifier.value.endsWith('.tao')
+      ? outputPaths.bySourcePath.get(FS.resolvePath(specifier.value, FS.dirname(sourcePath)))
+      : undefined
+    const sidecarPath = planned === undefined
+      ? relativeSidecarCandidates(sourcePath, specifier.value).find(path =>
+        outputPaths.sidecarPathBySourcePath.has(path)
+      )
+      : undefined
+    const target = planned
+      ? specifier.runtimeNamespace || specifier.valueNames.length > 0
+        ? planned.modulePath
+        : planned.declarationsPath ?? planned.modulePath
+      : sidecarPath === undefined
+      ? undefined
+      : outputPaths.sidecarPathBySourcePath.get(sidecarPath)
+    if (target === undefined) {
       continue
     }
-    const taoSourcePath = FS.resolvePath(specifier.value, FS.dirname(sourcePath))
-    const planned = outputPaths.bySourcePath.get(taoSourcePath)
-    if (!planned) {
-      continue
-    }
-    const target = specifier.runtimeNamespace || specifier.valueNames.length > 0
-      ? planned.modulePath
-      : planned.declarationsPath ?? planned.modulePath
     const quote = source[specifier.start]
     rewritten = `${rewritten.slice(0, specifier.start)}${quote}${relativeImportPath(relativePath, target)}${quote}${
       rewritten.slice(specifier.end)
@@ -1373,14 +1568,43 @@ function resolveImports(
 ): ResolvedImports {
   const bySource = new Map<string, Set<string>>()
   const scopeBindings = new Map<string, string>()
+  const declarationBindings = new Map<AST.Declaration, string>()
+  const referencedNames = ASTUtils.referencedNames(file, { statements })
+  const reservedBindings = new Set(referencedNames)
+  for (const node of AST.streamAllContents(file)) {
+    if ('name' in node && typeof node.name === 'string') {
+      reservedBindings.add(node.name)
+    }
+  }
+  for (const use of file.statements.filter(AST.isUseStatement)) {
+    use.importedDeclarations.forEach(specifier => reservedBindings.add(AST.importLocalName(specifier)))
+  }
+  const bindAliasedImport = (declaration: AST.Declaration, targetPath: string) => {
+    if (declarationBindings.has(declaration)) {
+      return
+    }
+    const preferred = `__tao_imported_${declarationBindings.size + 1}__`
+    let binding = preferred
+    for (let suffix = 1; reservedBindings.has(binding); suffix++) {
+      binding = `${preferred}${suffix}`
+    }
+    reservedBindings.add(binding)
+    declarationBindings.set(declaration, binding)
+    addImportedName(bySource, targetPath, `${runtimeBindingName(declaration)} as ${binding}`)
+    scopeBindings.set(binding, binding)
+  }
   // A `folder` declaration is in scope without a `use` statement, so the generated module still
   // has to import it by name from the sibling file that declares it.
   const currentDirectory = FS.dirname(filePath)
   // Only what this file actually names: importing every folder-visible sibling declaration would
   // make each file in the folder import every other one, dead bindings and cycles included.
-  const referencedNames = ASTUtils.referencedNames(file, { statements })
-  for (const render of statements.flatMap(statement => AST.streamAllContents(statement)).filter(AST.isQuotedRender)) {
-    const target = render.view?.ref
+  for (const render of statements.flatMap(statement => AST.streamAllContents(statement)).filter(AST.isRender)) {
+    const target = AST.isQuotedRender(render)
+      ? render.view?.ref
+      : ASTUtils.resolveRenderTarget(render)?.kind === 'text'
+      ? [...sourceByPath.values()].find(source => source.path.endsWith('/@tao/ui/Views.tao'))
+        ?.ast.statements.find(statement => AST.isViewDeclaration(statement) && statement.name === 'Text')
+      : undefined
     if (AST.isViewDeclaration(target)) {
       const path = AST.getDocument(target).uri.path
       addImportedName(bySource, path, `${runtimeBindingName(target)} as __tao_quoted_Text$`)
@@ -1439,21 +1663,13 @@ function resolveImports(
     ? ASTUtils.referencedNames(file, { runtimeOnly: true, statements })
     : referencedNames
   for (const useStatement of file.statements.filter(AST.isUseStatement)) {
-    const declarations = AST.resolvedImportedDeclarations(useStatement)
-    const importedNames = new Set(
-      useStatement.all
-        ? declarations.map(declaration => declaration.name)
-        : useStatement.importedDeclarations.map(reference => reference.$refText),
-    )
-    for (const declaration of declarations) {
+    for (const imported of AST.resolvedImportedBindings(useStatement)) {
+      const declaration = imported.declaration
       const importedName = declaration.name
-      if (!importedNames.has(importedName)) {
+      if ((useStatement.all || statements !== file.statements) && !referencedNames.has(imported.localName)) {
         continue
       }
-      if ((useStatement.all || statements !== file.statements) && !referencedNames.has(importedName)) {
-        continue
-      }
-      if (pairingIssuers.has(importedName) && !runtimeNames.has(importedName)) {
+      if (pairingIssuers.has(imported.localName) && !runtimeNames.has(imported.localName)) {
         continue
       }
       if (!declarationEmitsRuntimeBinding(declaration)) {
@@ -1467,6 +1683,10 @@ function resolveImports(
         const declarations = selectedStatementsFor(targetFile).filter(declarationEmitsRuntimeBinding)
           .filter(candidate => candidate.name === importedName)
         for (const candidate of declarations) {
+          if (imported.localName !== imported.sourceName) {
+            bindAliasedImport(candidate, targetPath)
+            continue
+          }
           const binding = runtimeBindingName(candidate)
           addImportedName(bySource, targetPath, binding)
           scopeBindings.set(binding, binding)
@@ -1474,7 +1694,7 @@ function resolveImports(
       }
     }
   }
-  return { bySource, scopeBindings }
+  return { bySource, scopeBindings, declarationBindings }
 }
 
 function relativeImportPath(fromOutputPath: string, toOutputPath: string): string {

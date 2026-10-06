@@ -18,7 +18,7 @@ Describe('Tao formatter typed values', () => {
 
         let Names is list of text = ["Ada", "Grace"]
 
-        function Count(Value text) returns number {
+        func Count(Value text) -> number {
            return Count(Value) from ./Text.ts
         }
       `,

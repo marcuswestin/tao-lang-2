@@ -141,13 +141,14 @@ Describe('validator: nominal admission', () => {
       await withValidationParse(
         `
         ${family}
-        function Mixed(Flag boolean) {
+        func Mixed(Flag boolean) fails never {
           if Flag { return LeafValue }
           return SiblingValue
         }
       `,
         ({ result }) => {
           Expect(validationErrorMessages(result)).toEqual([
+            FunctionsValidator.messages.functionPurity('Mixed'),
             FunctionsValidator.messages.functionReturnInference('Mixed', 'Leaf', 'Sibling'),
           ])
         },

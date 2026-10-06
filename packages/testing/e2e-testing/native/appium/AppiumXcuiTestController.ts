@@ -113,6 +113,14 @@ export type AppiumSessionReceipt = Readonly<{
   lifecycle: 'failed' | 'open' | 'opening' | 'closed'
   sessionId?: string
   source: string
+  startup?: Readonly<{
+    authority: 'managed-firebase-owned-simulator'
+    operation: 'activate-or-launch-granted-application'
+    bundleId: string
+    loopSession: string
+    loopGeneration: string
+    runtimeNonce: string
+  }>
   target: Readonly<{ kind: AppiumTarget['kind']; udid: string }>
   version: 1
 }>
@@ -156,12 +164,15 @@ export function createManagedAppiumXcuiTestController(
   options: Omit<AppiumXcuiTestControllerOptions, 'preheldTargetLease' | 'publishRevision'> & {
     grant: ManagedMobileGrant
     beforeDriverDeletion?: () => Promise<void>
+    firebaseStartupGuard?: () => Promise<void>
   },
 ): HostController {
   if (
     options.target.kind !== 'simulator' || options.grant.identity.target.platform !== 'ios'
     || options.target.udid !== options.grant.identity.target.id
     || options.target.appId !== options.grant.identity.runtime.appId
+    || (options.firebaseStartupGuard !== undefined
+      && options.grant.identity.runtime.appName !== 'FirebaseLiveAcceptance')
   ) {
     Errors.throwUserInput('Managed iOS attachment must use the granted simulator and dispatched runtime.')
   }
@@ -169,6 +180,7 @@ export function createManagedAppiumXcuiTestController(
     { ...options, preheldTargetLease: options.grant.lease },
     options.grant,
     options.beforeDriverDeletion,
+    options.firebaseStartupGuard,
   )
 }
 
@@ -202,6 +214,8 @@ export function appiumXcuiTestCapabilities(
 class AppiumXcuiTestController implements HostController {
   readonly #managed?: ManagedMobileGrant
   readonly #beforeDriverDeletion?: () => Promise<void>
+  readonly #firebaseStartupGuard?: () => Promise<void>
+  readonly #startup?: AppiumSessionReceipt['startup']
   readonly #client: AppiumXcuiTestClient
   readonly #leases: AppiumLeaseManager
   readonly #receipts: AppiumReceiptSink
@@ -214,9 +228,19 @@ class AppiumXcuiTestController implements HostController {
     options: AppiumXcuiTestControllerOptions,
     managed?: ManagedMobileGrant,
     beforeDriverDeletion?: () => Promise<void>,
+    firebaseStartupGuard?: () => Promise<void>,
   ) {
     this.#managed = managed
     this.#beforeDriverDeletion = beforeDriverDeletion
+    this.#firebaseStartupGuard = firebaseStartupGuard
+    this.#startup = firebaseStartupGuard === undefined ? undefined : {
+      authority: 'managed-firebase-owned-simulator',
+      operation: 'activate-or-launch-granted-application',
+      bundleId: managed!.identity.runtime.appId,
+      loopSession: managed!.identity.session,
+      loopGeneration: managed!.identity.loopGeneration,
+      runtimeNonce: managed!.identity.runtime.nonce,
+    }
     this.#client = options.client
     this.#leases = options.leases ?? machineLeases()
     this.#preheldTargetLease = options.preheldTargetLease
@@ -257,23 +281,27 @@ class AppiumXcuiTestController implements HostController {
           lifecycle,
           ...(session === undefined ? {} : { sessionId: session.id }),
           source: revision.source,
+          ...(this.#startup === undefined ? {} : { startup: this.#startup }),
           target: { kind: this.#target.kind, udid: this.#target.udid },
           version: 1,
         })
       }
       await writeReceipt('opening')
       await this.#managed?.assertOwnerCurrent()
+      await this.#firebaseStartupGuard?.()
       creationAttempted = true
       session = await this.#client.createSession({
         ...appiumXcuiTestCapabilities(this.#target, allocation.value),
         ...(this.#managed === undefined ? {} : {
           'appium:noReset': true,
           'appium:fullReset': false,
-          'appium:autoLaunch': false,
+          'appium:autoLaunch': this.#firebaseStartupGuard !== undefined,
           'appium:shouldTerminateApp': false,
           'appium:forceAppLaunch': false,
+          ...(this.#firebaseStartupGuard === undefined ? {} : { 'appium:settings[respectSystemAlerts]': true }),
         }),
       })
+      await this.#firebaseStartupGuard?.()
       if (this.#managed === undefined) {
         await session.dismissAlertIfPresent?.()
       } else {
@@ -300,6 +328,7 @@ class AppiumXcuiTestController implements HostController {
         publishRevision: this.#publishRevision,
         receiptPath,
         receipts: this.#receipts,
+        startup: this.#startup,
         session,
         target: this.#target,
         targetLease,
@@ -325,6 +354,7 @@ class AppiumXcuiTestController implements HostController {
           lifecycle: 'failed',
           ...(session === undefined ? {} : { sessionId: session.id }),
           source: revision.source,
+          ...(this.#startup === undefined ? {} : { startup: this.#startup }),
           target: { kind: this.#target.kind, udid: this.#target.udid },
           version: 1,
         }).catch(() => {})
@@ -403,6 +433,7 @@ class AppiumXcuiTestSession implements HostSession {
   #screenshotSequence = 0
   readonly #receiptPath: string
   readonly #receipts: AppiumReceiptSink
+  readonly #startup?: AppiumSessionReceipt['startup']
   readonly #publishRevision?: AppiumRevisionPublisher
   #revision: HostRevision
   readonly #session: AppiumWebDriverSession
@@ -421,6 +452,7 @@ class AppiumXcuiTestSession implements HostSession {
       publishRevision?: AppiumRevisionPublisher
       receiptPath: string
       receipts: AppiumReceiptSink
+      startup?: AppiumSessionReceipt['startup']
       session: AppiumWebDriverSession
       target: AppiumTarget
       targetLease: AppiumLease
@@ -437,6 +469,7 @@ class AppiumXcuiTestSession implements HostSession {
     this.#publishRevision = options.publishRevision
     this.#receiptPath = options.receiptPath
     this.#receipts = options.receipts
+    this.#startup = options.startup
     this.#revision = this.#descriptor.revision
     this.#session = options.session
     this.#target = options.target
@@ -732,6 +765,7 @@ class AppiumXcuiTestSession implements HostSession {
         lifecycle: 'closed',
         sessionId: this.#descriptor.id,
         source: this.#revision.source,
+        ...(this.#startup === undefined ? {} : { startup: this.#startup }),
         target: { kind: this.#target.kind, udid: this.#target.udid },
         version: 1,
       })

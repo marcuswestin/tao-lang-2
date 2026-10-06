@@ -20,7 +20,7 @@ function notesSource(settings: DatasourceSettings = {}, datasource?: string): st
   const configured = [
     `      AppId ${settings.appId ?? '"app-1"'}`,
     ...(settings.apiURI === undefined ? [] : [`      ApiURI ${settings.apiURI}`]),
-  ].join('\n')
+  ].join(',\n')
   return `use TestAuth from @tao/auth/testing
 use InstantDB from @tao/data/providers/instantdb
 use Text from @tao/ui
@@ -297,15 +297,50 @@ Describe('tao instantdb push', () => {
         'Bearer typed-token',
       ])
       Expect(terminal.text()).toContain('Schema already current.')
+      Expect(terminal.text()).toContain('https://instantdb.com/dash')
+      Expect(terminal.text()).toContain('Select the existing app whose App ID is app-1')
+      Expect(terminal.text().indexOf('copy its Admin token')).toBeLessThan(
+        terminal.text().indexOf('InstantDB app admin token:'),
+      )
       Expect(terminal.text().includes('typed-token')).toBe(false)
     })
   })
+
+  Test(
+    'explains a self-hosted token source before requesting it without directing the user to Instant Cloud',
+    async () => {
+      await withNotesApp(notesSource({ apiURI: '"http://localhost:9020"' }), async appPath => {
+        const instant = fakeInstant({ 'current-attrs': [], steps: [] })
+        const terminal = captured()
+        const pushed = runInstantDBPush(appPath, {
+          env: {},
+          fetch: instant.fetcher,
+          input: terminal.input,
+          interactive: true,
+          output: terminal.output,
+        })
+        terminal.input.write('local-token-canary\r')
+        await pushed
+        Expect(terminal.text()).toContain('local or self-hosted InstantDB service at http://localhost:9020')
+        Expect(terminal.text()).toContain('dashboard with access to App ID app-1')
+        Expect(terminal.text()).toContain("that installation's dashboard")
+        Expect(terminal.text().indexOf('select that app')).toBeLessThan(
+          terminal.text().indexOf('InstantDB app admin token:'),
+        )
+        Expect(terminal.text()).not.toContain('instantdb.com/dash')
+        Expect(terminal.text()).not.toContain('local-token-canary')
+      })
+    },
+  )
 
   Test('says how to supply the token when there is none and no terminal, before any request', async () => {
     await withNotesApp(notesSource(), async appPath => {
       const instant = fakeInstant({ 'current-attrs': [], steps: [] })
       const push = runInstantDBPush(appPath, { env: {}, fetch: instant.fetcher, interactive: false })
       await Expect(push).rejects.toBeInstanceOf(Errors.UserInputError)
+      await Expect(push).rejects.toThrow(
+        'Get the Admin token for app app-1 from that app in https://instantdb.com/dash.',
+      )
       await Expect(push).rejects.toThrow(
         'Store INSTANT_APP_ADMIN_TOKEN with `tao secrets set`, set the environment variable, or run this command in a terminal to enter it.',
       )

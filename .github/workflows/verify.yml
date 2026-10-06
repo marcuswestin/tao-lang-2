@@ -9,14 +9,19 @@ name: Verify
 # What this does not prove: the host-only lanes (Studio smokes, browser, native shell, canary),
 # which need a window server and an unsandboxed host. The landing route runs those locally while
 # this workflow runs (`agents/skills/verification-lanes/references/hosted-verification.md`).
+# `CI macOS` below is where they move, one gate at a time: `CI_HOST_GATES` names the host gates a
+# hosted macOS runner has been admitted to run, the job runs exactly those (with the prepare nodes
+# they read), and the local complement runs the rest, so each host gate is proved in one place.
+# The job is not required and the aggregate `Verify` does not wait for it; admit a gate only once
+# its hosted run is reliable, because admission takes it out of the local complement.
 #
 # The contributor-agreement check is a job here rather than a workflow of its own, so a push to a
 # pull request shows as one run in the Actions list instead of two. It runs on the same token as
 # the partitions, which a fork's pull request receives read-only; the job then still decides, and
 # only its explanatory comment is lost (`CONTRIBUTING.md` says the same thing).
 #
-# The partition count is one number, `PARTITIONS` below, read by the `plan` job; nothing else in
-# this file states it. Never cache `.artifacts`: the plan reads recorded timings, and partitions
+# The partition count is two numbers, `PARTITIONS` and `PARTITIONS_SHARED` below, between which
+# the `plan` job chooses; nothing else in this file states them. Never cache `.artifacts`: the plan reads recorded timings, and partitions
 # that restored different ones would place nodes differently. Each partition instead seeds them
 # from `.github/verify/durations.json` and `ledger.json`.
 
@@ -30,7 +35,11 @@ on:
   workflow_dispatch:
     inputs:
       partitions:
-        description: Partition count for this run only; blank uses the repository variable or the default below.
+        description: Partition count for this run only; blank lets the plan job choose the alone or shared count below.
+        required: false
+        type: string
+      host_gates:
+        description: Host gates CI macOS runs for this run only, comma-separated; blank uses CI_HOST_GATES below.
         required: false
         type: string
 
@@ -46,42 +55,49 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # How many Linux runners split the readers. The number comes from measurements, not a guess:
-  # `Docs/Roadmap/Verification speed research.md` §16 and `.github/verify/durations.json`.
+  # How many Linux runners split the readers. The numbers come from measurements, not a guess:
+  # `Docs/Roadmap/Verification speed research.md` and `.github/verify/durations.json`.
   #
-  # The lane's portable work is about 2,900 s of suite and gate time, and every partition first
-  # pays about 115 s on its own: checkout and cache restores (about 25 s), a warm bootstrap
-  # (about 35 s), and the prepare phase (about 50 s). A run's wall time is therefore about
-  # ceil(N / concurrency) waves of (115 + 2,900 / N) seconds, times the imbalance of the plan (the
-  # slowest partition ran 2.2x the median on 2026-10-06), bounded below by the longest
-  # unsplittable node (runtime-jest, about 110 s) plus the fixed cost:
+  # The `plan` job uses PARTITIONS when no other Verify run is in flight and PARTITIONS_SHARED when
+  # one or more are, so two runs share the pool of about 25 runners instead of thrashing it. One
+  # 20-partition run (37423624990) took 390 s wall; its longest partition ran 288 s and the median
+  # 231 s, of which about 120 s is fixed cost every partition pays (checkout and caches about 70 s,
+  # prepare about 50 s). Two 20-partition runs together thrash the pool (on 2026-10-06, 22 of 25
+  # runs were cancelled); two 11-partition runs take 22 runners side by side, an estimated 7.5 min
+  # each until a run measures it, so a pair finishes in about 7.5 min instead of 13. `open-pr` makes
+  # a third lander wait, so there is no count for three runs.
   #
-  #   concurrency 11 (measured on 2026-10-06: 11 jobs start together, the twelfth queues):
-  #     N = 10  one wave, about 405 s, one slot left for the small jobs that share the limit
-  #             (the aggregate, the contributor agreement, Archive merged branch)
-  #     N = 11  one wave only while nothing else runs; any other job adds a second wave
-  #     N = 12  two waves, about 760 s (the second wave is one partition the others wait for)
-  #   concurrency 20 or more (the Team plan documents 60 total jobs):
-  #     N = 18  about 275 s;  N = 24  about 235 s, then the fixed cost dominates.
-  #
-  # Set the repository Actions variable VERIFY_PARTITIONS (Settings → Secrets and variables →
-  # Actions) to 18 once a run shows 19 or more jobs starting together, and leave this default as
-  # the documented fallback. A `workflow_dispatch` run takes a one-run override.
-  PARTITIONS: 10
+  # The repository Actions variables VERIFY_PARTITIONS and VERIFY_PARTITIONS_SHARED (Settings →
+  # Secrets and variables → Actions) override the two defaults; a `workflow_dispatch` input
+  # overrides both for that one run.
+  PARTITIONS: 20
+  PARTITIONS_SHARED: 11
+  # The host gates `CI macOS` is admitted to run, comma-separated, single-quoted on this one line:
+  # `verify-complement` reads exactly this line to leave them out of the local lane. Empty admits
+  # none. Admit one gate at a time, after its dispatched run (`host_gates` above) proved reliable.
+  CI_HOST_GATES: ''
   # Per-gate green records travel between runs of the same tree through the Actions cache, which
   # accepts only an absolute path with no `..` in it.
   TAO_GREEN_STORE: /home/runner/tao-green
-  # Bun's and npm's download caches, restored before the bootstrap installs from them.
+  # Bun's download cache, restored before the bootstrap installs from it. npm's is not cached: the
+  # Tao projects' pins install without their peers, a few hundred kilobytes downloaded in a second.
   BUN_INSTALL_CACHE_DIR: /home/runner/tao-cache/bun
-  npm_config_cache: /home/runner/tao-cache/npm
   # Every directory Bun's isolated linker writes: the root store and each workspace's own links,
   # which point into it by relative paths, so the tree restores intact at the same checkout path.
+  # Left out: the Android, iOS, and other-platform binaries of Jazz's native packages, about 1 GB of
+  # the 3.7 GB tree that only Gradle, Xcode, or another OS ever loads. The excluded paths are part of
+  # the cache's version, so a tree saved with them is never restored as one without them.
   NODE_MODULES_PATHS: |
     node_modules
     packages/*/node_modules
     packages/*/*/node_modules
     packages/apps/providers/*/node_modules
     Apps/Hosted CRUD/node_modules
+    !node_modules/.bun/jazz-rn-android@*/node_modules/jazz-rn-android/android
+    !node_modules/.bun/jazz-rn-ios@*/node_modules/jazz-rn-ios/*.xcframework
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.darwin-*.node
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.win32-*.node
+    !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.linux-arm64-*.node
 
 jobs:
   # Holds a pull request until its author has accepted CLA.md by posting the agreement sentence on a
@@ -162,13 +178,17 @@ jobs:
           fi
           exit 1
 
-  # Turns the one partition count into the matrix the partitions fan out over. A matrix cannot read
-  # `env`, so this job is the only place the count is resolved; it also records the override that
-  # applied, so a run's summary says how it was split.
+  # Turns the partition count into the matrix the partitions fan out over. A matrix cannot read
+  # `env`, so this job is the only place the count is resolved: the alone count, or the shared one
+  # when another Verify run already holds runners. It records the count, where it came from, and
+  # the runs it saw, so a run's summary says how it was split.
   plan:
     name: Plan the partitions
     runs-on: ubuntu-24.04
     timeout-minutes: 2
+    permissions:
+      actions: read
+      contents: read
     outputs:
       count: ${{ steps.plan.outputs.count }}
       partitions: ${{ steps.plan.outputs.partitions }}
@@ -176,15 +196,43 @@ jobs:
       - name: Resolve the partition count
         id: plan
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
           RUN_OVERRIDE: ${{ inputs.partitions }}
-          REPOSITORY_OVERRIDE: ${{ vars.VERIFY_PARTITIONS }}
+          ALONE_OVERRIDE: ${{ vars.VERIFY_PARTITIONS }}
+          SHARED_OVERRIDE: ${{ vars.VERIFY_PARTITIONS_SHARED }}
         run: |
+          set -o pipefail
+          # Other in-flight runs of this workflow, as "id branch" lines. Every event holds runners,
+          # but a run in this run's own concurrency group (same event and branch, except a dispatch,
+          # which gets a group of its own) is being cancelled or is waiting, so it is not counted.
+          other_runs() {
+            for status in in_progress queued; do
+              gh api "repos/$REPO/actions/workflows/verify.yml/runs?status=$status&per_page=100" || return 1
+            done | jq -r --argjson self "$RUN_ID" --arg event "$EVENT" --arg branch "$BRANCH" '
+              .workflow_runs[]
+              | select(.id != $self)
+              | select($event == "workflow_dispatch" or .event != $event or .head_branch != $branch)
+              | "\(.id) \(.head_branch)"' | sort -u
+          }
+          # choose <variable value> <variable name> <default name>
+          choose() {
+            if [ -n "$1" ]; then count=$1; source="the repository variable $2"
+            else count=${!3}; source="the workflow default $3"; fi
+          }
           if [ -n "$RUN_OVERRIDE" ]; then
-            count=$RUN_OVERRIDE; source="this run's dispatch input"
-          elif [ -n "$REPOSITORY_OVERRIDE" ]; then
-            count=$REPOSITORY_OVERRIDE; source="the repository variable VERIFY_PARTITIONS"
+            count=$RUN_OVERRIDE; source="this run's dispatch input"; seen="not counted"
+          elif ! others=$(other_runs); then
+            echo "::warning::Could not list in-flight Verify runs; using the alone partition count."
+            choose "$ALONE_OVERRIDE" VERIFY_PARTITIONS PARTITIONS; seen="unknown, the runs API failed"
+          elif [ -z "$others" ]; then
+            choose "$ALONE_OVERRIDE" VERIFY_PARTITIONS PARTITIONS; seen="none"
           else
-            count=$PARTITIONS; source="the workflow default"
+            choose "$SHARED_OVERRIDE" VERIFY_PARTITIONS_SHARED PARTITIONS_SHARED
+            seen=$(paste -sd, - <<<"$others" | sed 's/,/, /g')
           fi
           case "$count" in
             ''|*[!0-9]*|0) echo "::error::Partition count must be a positive integer, got '$count' from $source."; exit 1 ;;
@@ -193,7 +241,9 @@ jobs:
             echo "::error::Partition count $count from $source exceeds 40; fixed cost dominates long before that."
             exit 1
           fi
-          echo "Splitting the readers across $count partitions ($source)."
+          line="Splitting the readers across $count partitions ($source); other Verify runs in flight: $seen."
+          echo "$line"
+          echo "$line" >> "$GITHUB_STEP_SUMMARY"
           echo "count=$count" >> "$GITHUB_OUTPUT"
           echo "partitions=$(seq 1 "$count" | jq -cs .)" >> "$GITHUB_OUTPUT"
 
@@ -247,16 +297,6 @@ jobs:
           restore-keys: |
             tao-bun-${{ runner.os }}-${{ runner.arch }}-
 
-      # npm's, for the packages the Tao lock pins for Native Bridge, which setup installs every run.
-      - name: Restore npm's download cache
-        id: npm-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/tao-cache/npm
-          key: tao-npm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Apps/Test Apps/Native Bridge/.tao/store/lock.jsonc') }}
-          restore-keys: |
-            tao-npm-${{ runner.os }}-${{ runner.arch }}-
-
       # The Nix installation and the built locked profile, keyed on everything that decides them: the
       # pinned Nix release, the devenv lock, and the profile's expressions. On a hit the installer
       # finds Nix present and the bootstrap reuses the profile generation, so it neither downloads nor
@@ -276,10 +316,46 @@ jobs:
             ${{ github.workspace }}/.devenv/portable-generations
           key: tao-nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'packages/cli/dev-cli/dev-cli-src/environment/nix-bootstrap.sh', 'packages/cli/dev-cli/dev-cli-src/environment/portable-profile.nix', 'packages/cli/dev-cli/dev-cli-src/environment/toolchain-packages.nix') }}
 
-      # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then runs
-      # `./agent setup`; the same path the native Linux contributor acceptance proves.
+      # The maintained native bindings, a generated tree setup would otherwise write in 6–10 s. The
+      # generator checks every input and output identity first and rewrites only a stale tree, so a
+      # restore from another key, or none, costs a regeneration and never a stale binding.
+      - name: Restore the generated native bindings
+        id: native-bindings
+        uses: actions/cache/restore@v4
+        with:
+          path: packages/apps/stdlib/.tao-ts/native-bindings
+          key: tao-native-bindings-${{ runner.os }}-${{ hashFiles('bun.lock', 'packages/apps/native-bindings/native-bindings-src/**', 'packages/apps/stdlib/@tao/device/**') }}
+          restore-keys: |
+            tao-native-bindings-${{ runner.os }}-
+
+      # The built editor extension, the prepare phase's longest node and on every partition's critical
+      # path. The build hashes its own inputs and outputs and skips only when both match the record
+      # inside the restored tree, so a restore from any key, or none, costs at most a rebuild. The key
+      # is only a hit-rate hint; it is computed here, before setup writes anything under packages/.
+      - name: Restore the built editor extension
+        id: ide-extension
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            packages/ides/ide-extension/_gen_ide-extension
+            packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes
+          key: tao-ide-extension-${{ runner.os }}-${{ hashFiles('bun.lock', 'devenv.lock', 'packages/**', '!**/node_modules/**', '!**/_gen_*/**', '!**/.tao-ts/**', '!**/.tao/cache/**') }}
+          restore-keys: |
+            tao-ide-extension-${{ runner.os }}-
+
+      # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then prepares
+      # only what the lane reads (`--verify-setup`): the full `./agent setup` also writes agent
+      # configuration, Git hooks, and shell completion, which no gate reads.
       - name: Bootstrap Nix, the pinned toolchain, and Tao setup
-        run: ./.config/bootstrap-tao-dev-env --install-nix
+        run: ./.config/bootstrap-tao-dev-env --install-nix --verify-setup
+
+      - name: Save the generated native bindings
+        if: steps.native-bindings.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: packages/apps/stdlib/.tao-ts/native-bindings
+          key: ${{ steps.native-bindings.outputs.cache-primary-key }}
 
       # Saved straight after the bootstrap, so a partition that later fails still warms the caches,
       # and before verification writes any tool cache under node_modules. All partitions share one
@@ -301,14 +377,6 @@ jobs:
         with:
           path: /home/runner/tao-cache/bun
           key: ${{ steps.bun-cache.outputs.cache-primary-key }}
-
-      - name: Save npm's download cache
-        if: steps.npm-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/tao-cache/npm
-          key: ${{ steps.npm-cache.outputs.cache-primary-key }}
 
       # Collecting garbage first drops what only the build needed, chiefly the two unpacked nixpkgs
       # sources, so the cache holds Nix and the profile's closure. Both are rooted explicitly rather
@@ -348,6 +416,18 @@ jobs:
 
       - name: Verify partition ${{ env.PARTITION }}
         run: ./agent verify-full-sandbox --partition "$PARTITION"
+
+      # Saved only when the partition rebuilt the extension (its record is written last, on success).
+      # Every partition builds the same tree, so the first to finish saves and the rest are refused.
+      - name: Save the built editor extension
+        if: always() && steps.ide-extension.outputs.cache-hit != 'true' && hashFiles('packages/ides/ide-extension/_gen_ide-extension/.build-identity.json') != ''
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            packages/ides/ide-extension/_gen_ide-extension
+            packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes
+          key: ${{ steps.ide-extension.outputs.cache-primary-key }}
 
       # Locally the prepare phase fixes formatting and regenerates indexes in place; here a rewrite
       # means the pull request carries unformatted or stale files, which is a failure.
@@ -401,6 +481,99 @@ jobs:
         with:
           path: ${{ env.TAO_GREEN_STORE }}
           key: tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-${{ matrix.partition }}-of-${{ needs.plan.outputs.count }}
+
+  # The admitted host gates on a hosted macOS runner. Not required and not waited for: `Verify`
+  # stays the one verdict until every host gate is admitted here and proved reliable, and then it
+  # is the ruleset, not this file, that makes `CI macOS` required. One job today; a second
+  # partition needs an aggregate of its own, since the artifacts are kept apart from `Verify`'s.
+  # The same devenv bootstrap and caches as `Companion hosts`: the portable Linux profile does not
+  # exist for Darwin, and the Nix store is what makes a devenv shell affordable on a fresh runner.
+  macos:
+    name: CI macOS
+    runs-on: macos-26
+    timeout-minutes: 60
+    # The workflow's cache paths are under the Linux home; a macOS runner's is /Users/runner.
+    env:
+      TAO_GREEN_STORE: /Users/runner/tao-green
+      BUN_INSTALL_CACHE_DIR: /Users/runner/tao-cache/bun
+      npm_config_cache: /Users/runner/tao-cache/npm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+
+      - name: Cache the Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: tao-devenv-nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml', 'packages/cli/dev-cli/dev-cli-src/environment/toolchain-packages.nix', '.config/nix/hutch.nix') }}
+          restore-prefixes-first-match: tao-devenv-nix-${{ runner.os }}-${{ runner.arch }}-
+          gc-max-store-size-macos: 6G
+
+      - uses: cachix/cachix-action@v16
+        with:
+          name: devenv
+      - name: Install devenv
+        run: nix profile add nixpkgs#devenv
+
+      - name: Restore the installed node_modules
+        id: macos-node-modules
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.NODE_MODULES_PATHS }}
+          key: tao-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'devenv.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'packages/apps/providers/*/package.json', 'Apps/Hosted CRUD/package.json') }}
+
+      - name: Set up Tao
+        run: devenv shell -- ./agent setup
+
+      - name: Save the installed node_modules
+        if: steps.macos-node-modules.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.NODE_MODULES_PATHS }}
+          key: ${{ steps.macos-node-modules.outputs.cache-primary-key }}
+
+      - name: Seed the plan with the committed durations
+        run: |
+          mkdir -p .artifacts/timings .artifacts/testing
+          cp .github/verify/durations.json .artifacts/timings/durations.json
+          cp .github/verify/ledger.json .artifacts/testing/ledger.json
+
+      - name: Run the admitted host gates
+        env:
+          # The dispatch input tries one admission for one run; the workflow's own line is the default.
+          # (`env` is a step-level context only, so this cannot sit on the job.)
+          HOST_GATES: ${{ inputs.host_gates || env.CI_HOST_GATES }}
+        run: |
+          echo "Admitted host gates: '${HOST_GATES}'"
+          devenv shell -- ./agent unsandboxed verify-full-ci --ci-host-gates "$HOST_GATES"
+
+      - name: Require the prepare phase to leave the tree unchanged
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "The prepare phase rewrote tracked files; run ./agent fix and commit the result:"
+            git status --porcelain
+            git diff --stat
+            exit 1
+          fi
+
+      - name: Collect the run's summary and logs
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/macos-logs"
+          latest=.artifacts/logs/verify-full-ci/latest
+          if [ -e "$latest" ]; then
+            cp -RL "$latest/." "$RUNNER_TEMP/macos-logs/"
+          fi
+
+      - name: Upload the run's summary and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-macos
+          path: ${{ runner.temp }}/macos-logs
+          if-no-files-found: warn
+          retention-days: 7
 
   verify:
     name: Verify

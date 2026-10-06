@@ -1,3 +1,4 @@
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
@@ -8,6 +9,9 @@ export const bridgeValidationMessages = {
   untyped: 'A value bridged with `from` needs a declared type: a `returns` clause, or `let Name is Type =`.',
   path: (path: string) => `A bridged expression names a TypeScript sidecar; '${path}' is not one.`,
   missing: (path: string) => `Bridged TypeScript sidecar '${path}' does not exist.`,
+  abstractNumericResult:
+    'A native quantity result needs a concrete quantity type instead of an abstract numeric result contract.',
+  unanchoredSelfResult: 'A native Self quantity result needs a contextual receiver or an input declared as Self.',
 } as const
 
 /**
@@ -26,6 +30,13 @@ export const bridgeValidationChecks = {
     }
     if (!declaresBridgedType(bridge)) {
       ctx.error(bridge, bridgeValidationMessages.untyped)
+    }
+    const result = nativeReturnType(bridge)
+    if (result && containsAbstractNumeric(result)) {
+      ctx.error(bridge, bridgeValidationMessages.abstractNumericResult)
+    }
+    if (result && !nativeSelfResultHasAnchor(bridge, result)) {
+      ctx.error(bridge, bridgeValidationMessages.unanchoredSelfResult)
     }
   },
 } satisfies NodeValidationChecks
@@ -59,8 +70,10 @@ function bridgePathIsSidecar(path: string): boolean {
 function declaresBridgedType(bridge: AST.FromExpression): boolean {
   const container = bridge.$container
   if (AST.isReturnStatement(container)) {
-    const owner = AST.findOwningFunction(container)
-    return owner?.returnType !== undefined
+    const owner = nativeReturnOwner(container)
+    return AST.isAssociatedConverterDeclaration(owner)
+      ? owner.conversionTarget !== undefined
+      : owner?.returnType !== undefined
   }
   if (AST.isAliasDeclaration(container)) {
     return container.type !== undefined
@@ -70,4 +83,61 @@ function declaresBridgedType(bridge: AST.FromExpression): boolean {
     return container.type !== undefined
   }
   return AST.isConfigurationPropertyDeclaration(container)
+}
+
+/** A bridged return uses its nearest real callable's explicit result contract. */
+function nativeReturnOwner(
+  statement: AST.ReturnStatement,
+): AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | AST.AssociatedConverterDeclaration | undefined {
+  let owner: AST.Node | undefined = statement.$container
+  while (owner !== undefined) {
+    if (
+      AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner)
+      || AST.isAssociatedConverterDeclaration(owner)
+    ) {
+      return owner
+    }
+    owner = owner.$container
+  }
+  return undefined
+}
+
+function nativeReturnType(bridge: AST.FromExpression): ASTUtils.TaoType | undefined {
+  if (!AST.isReturnStatement(bridge.$container)) {
+    return undefined
+  }
+  const owner = nativeReturnOwner(bridge.$container)
+  if (AST.isAssociatedConverterDeclaration(owner)) {
+    return Type.associatedConverterDescriptor(owner)?.result
+  }
+  return owner?.returnType ? Type.ofFunctionReturn(owner) : undefined
+}
+
+function containsAbstractNumeric(type: ASTUtils.TaoType): boolean {
+  return type.kind === 'union'
+    ? type.members.some(containsAbstractNumeric)
+    : type.kind === 'primitive' && type.primitive === 'numeric' && Type.isAbstractDomain(type)
+      && type.selfOwner === undefined
+}
+
+/** A numeric Self result selects its exact concrete factory through a real receiver or Self input. */
+function nativeSelfResultHasAnchor(bridge: AST.FromExpression, result: ASTUtils.TaoType): boolean {
+  if (result.kind === 'union') {
+    return result.members.every(member => nativeSelfResultHasAnchor(bridge, member))
+  }
+  if (result.kind !== 'primitive' || result.primitive !== 'numeric' || !result.selfOwner) {
+    return true
+  }
+  if (!AST.isReturnStatement(bridge.$container)) {
+    return false
+  }
+  const owner = nativeReturnOwner(bridge.$container)
+  if (AST.isAssociatedFunctionDeclaration(owner) && !owner.static) {
+    return AST.associatedFunctionOwner(owner) === result.selfOwner
+  }
+  if (AST.isAssociatedConverterDeclaration(owner)) {
+    return AST.associatedConverterOwner(owner) === result.selfOwner
+  }
+  return owner !== undefined
+    && AST.parametersOf(owner).some(parameter => Type.ofParameter(parameter).selfOwner === result.selfOwner)
 }

@@ -157,7 +157,11 @@ function reportWritableArgument(
   if (!ASTUtils.parameterRequiresWritable(parameter)) {
     return
   }
-  if (ASTUtils.writableExpression(argument) || (allowsLiteral && ASTUtils.literalExpression(argument))) {
+  const writableArgument = AST.isArgument(node) ? node : argument
+  if (
+    ASTUtils.writableExpression(writableArgument, parameter)
+    || (allowsLiteral && ASTUtils.literalExpression(argument))
+  ) {
     return
   }
   ctx.error(node, reactiveParametersValidationMessages.readonlyArgument(Type.parameterName(parameter)))

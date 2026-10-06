@@ -127,6 +127,12 @@ async function prepare(options: PrepareOptions) {
   const forwardingRequests = new Set<AbortController>()
   let stopWdaCompletion: Promise<void> | undefined
   let cleanupCompletion: Promise<void> | undefined
+  // The bind that proved the port free after WDA stopped, held until the lease releases the port.
+  let stoppedPortHold: PortHold | undefined
+  function dropStoppedPortHold(): void {
+    stoppedPortHold?.stop(true)
+    stoppedPortHold = undefined
+  }
   function disableForwarding(): void {
     forwarding = false
     for (const request of forwardingRequests) {
@@ -162,6 +168,8 @@ async function prepare(options: PrepareOptions) {
     })
   }
   async function quarantine(reason: string): Promise<never> {
+    // Recovery must be able to rebind a retained port once this invocation has given up on it.
+    dropStoppedPortHold()
     if (!retained) {
       const retention = {
         owners: [reservation.lease.owner, ...(desktop !== undefined && !desktopReleased ? [desktop.owner] : [])],
@@ -291,7 +299,8 @@ async function prepare(options: PrepareOptions) {
     if (startupAttempted && rootIdentity === undefined) {
       return await quarantine('WDA startup process identity is unproved.')
     }
-    if (!await resourcesStopped(root, reservation.port, inspect)) {
+    stoppedPortHold = await holdStoppedResources(root, reservation.port, inspect)
+    if (stoppedPortHold === undefined) {
       return await quarantine('WDA shutdown is unproved by scoped process and port inspection.')
     }
     await registration?.close()
@@ -609,10 +618,16 @@ async function prepare(options: PrepareOptions) {
       // Ambiguous remote cleanup leaves physical input fenced; stopping Studio is independent.
       return await quarantine('WDA remote-session shutdown is unproved.')
     }
-    if (startupAttempted && (!serverStopped || !await resourcesStopped(root, reservation.port, inspect))) {
-      return await quarantine('WDA shutdown is unproved by server, process, and listener inspection.')
+    if (startupAttempted) {
+      if (serverStopped) {
+        stoppedPortHold = await holdStoppedResources(root, reservation.port, inspect, stoppedPortHold)
+      }
+      if (!serverStopped || stoppedPortHold === undefined) {
+        return await quarantine('WDA shutdown is unproved by server, process, and listener inspection.')
+      }
     }
     await reservation.lease.release()
+    dropStoppedPortHold()
     released = true
     await record('closed')
   }
@@ -661,25 +676,37 @@ async function reservePort(registryRoot?: string) {
   return Errors.throwHostEnvironment('No private WDA listener port is available for Studio Mac2 acceptance.')
 }
 
-async function resourcesStopped(root: string, port: number, inspect: typeof CLI.run): Promise<boolean> {
+type PortHold = ReturnType<typeof Bun.serve>
+
+/**
+ * holdStoppedResources proves no process runs from `root` and nothing listens on `port`, and returns
+ * the bind that proved the port free. Holding it keeps the proof true: once released, any ephemeral
+ * bind or dial on the machine may take the port and fail a later proof. `held` is reused, not rebound.
+ */
+async function holdStoppedResources(
+  root: string,
+  port: number,
+  inspect: typeof CLI.run,
+  held?: PortHold,
+): Promise<PortHold | undefined> {
+  let hold = held
   try {
+    // Bind before the slow file scan, so the port is ours for the whole inspection.
+    hold ??= Bun.serve({ hostname: '127.0.0.1', port, fetch: () => new Response(null, { status: 503 }) })
     const files = await inspect('/usr/sbin/lsof', { args: ['-nP', '-d', 'cwd,txt', '-Fpn'] })
-    if (files.error !== undefined || files.exitCode !== 0) {
-      return false
-    }
     if (
-      files.stdout.split(/\r?\n/).some(line =>
+      files.error === undefined && files.exitCode === 0
+      && !files.stdout.split(/\r?\n/).some(line =>
         line.startsWith('n') && FS.pathIsWithin(line.slice(1).replace(/ \(deleted\)$/, ''), root)
       )
     ) {
-      return false
+      return hold
     }
-    const guard = Bun.serve({ hostname: '127.0.0.1', port, fetch: () => new Response(null, { status: 503 }) })
-    guard.stop(true)
-    return true
   } catch {
-    return false
+    // Treated as unproved below.
   }
+  hold?.stop(true)
+  return undefined
 }
 
 /** Select only a bundle built in this invocation; the stable consent ID alone is insufficient. */

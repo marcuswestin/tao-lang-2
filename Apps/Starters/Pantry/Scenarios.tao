@@ -5,28 +5,28 @@ use RecipeRow from ./Recipes
 // Deterministic data for Studio previews and the device matrix.
 fixture Sample {
    OliveOil = create Ingredient {
-      Name: "Olive oil"
-      Quantity: 1
+      Name: "Olive oil",
+      Quantity: 1,
       InStock: true
    }
    Eggs = create Ingredient {
-      Name: "Eggs"
-      Quantity: 6
+      Name: "Eggs",
+      Quantity: 6,
       InStock: true
    }
    Basil = create Ingredient {
-      Name: "Basil"
+      Name: "Basil",
       Quantity: 0
    }
    TomatoPasta = create Recipe {
-      Title: "Tomato pasta"
-      Steps: "Boil pasta, warm the sauce, toss with basil."
-      Minutes: 25
+      Title: "Tomato pasta",
+      Steps: "Boil pasta, warm the sauce, toss with basil.",
+      Minutes: 25,
       Favorite: true
    }
    Omelette = create Recipe {
-      Title: "Omelette"
-      Steps: "Whisk eggs, cook slowly, fold."
+      Title: "Omelette",
+      Steps: "Whisk eggs, cook slowly, fold.",
       Minutes: 10
 }  }
 

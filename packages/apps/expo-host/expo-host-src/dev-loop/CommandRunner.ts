@@ -2,30 +2,30 @@ import { Errors } from '@shared'
 import { DevLoopOutput } from './DevLoopOutput'
 import Commands from './keyboard-input/Commands'
 
-let commandRunning = false
+let activeCommand: string | undefined
 
 /** isCommandRunning returns whether an exclusive dev-loop command is active. */
 function isCommandRunning(): boolean {
-  return commandRunning
+  return activeCommand !== undefined
 }
 
 /** beginCommand starts an exclusive dev-loop command when none is active. */
-function beginCommand(): boolean {
-  if (commandRunning) {
+function beginCommand(label: string): boolean {
+  if (activeCommand !== undefined) {
     return false
   }
-  commandRunning = true
+  activeCommand = label
   return true
 }
 
 /** endCommand finishes the active exclusive dev-loop command. */
 function endCommand(): void {
-  commandRunning = false
+  activeCommand = undefined
 }
 
 /** assertCommandRunning requires an exclusive dev-loop command to own the current operation. */
 function assertCommandRunning(operation: string): void {
-  if (!commandRunning) {
+  if (activeCommand === undefined) {
     Errors.throwUnexpected(`${operation} requires an active dev-loop command.`)
   }
 }
@@ -35,8 +35,8 @@ async function runNonInteractiveCommand(
   label: string,
   fn: () => Promise<boolean | void>,
 ): Promise<void> {
-  if (!beginCommand()) {
-    DevLoopOutput.logDevLoop('dev', `Command already running; ignored ${label}.`)
+  if (!beginCommand(label)) {
+    reportBusy(label)
     return
   }
   DevLoopOutput.logDevLoop('dev', label)
@@ -51,12 +51,18 @@ async function runNonInteractiveCommand(
   }
 }
 
+/** Name the operation holding the lock so a person knows what they are waiting for. */
+function reportBusy(ignored: string): void {
+  DevLoopOutput.logDevLoop('dev', `Command already running: ${activeCommand}; ignored ${ignored}.`)
+}
+
 /** CommandRunner coordinates exclusive dev-loop command execution. */
 const CommandRunner = {
   assertCommandRunning,
   beginCommand,
   endCommand,
   isCommandRunning,
+  reportBusy,
   runNonInteractiveCommand,
 }
 

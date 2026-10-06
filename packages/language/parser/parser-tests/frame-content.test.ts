@@ -22,7 +22,7 @@ Describe('parser: view content and render injection channels', () => {
       view Main() {
         render Card() {
           Button()
-          @actions Button() {
+          @actions: Button() {
             #resetSignedOut
             on press -> { }
           }
@@ -81,7 +81,7 @@ Describe('parser: view content and render injection channels', () => {
       }
       view Col() { render inject Content @@content \`\`\`ts return Content \`\`\` }
       view Button() { render inject \`\`\`ts return null \`\`\` }
-      view Main() { render Card() { @missing Button() } }
+      view Main() { render Card() { @missing: Button() } }
     `)
 
     Expect(Diagnostics.errorMessages(parsed.diagnostics)).toContain(

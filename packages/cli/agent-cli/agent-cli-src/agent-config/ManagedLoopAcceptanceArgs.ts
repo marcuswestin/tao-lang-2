@@ -10,6 +10,7 @@ const MANAGED_LOOP_ACCEPTANCE_CASES = [
   'chrome',
   'chrome-visible',
   'mobile-interaction',
+  'firebase-sync',
   'mobile-interaction-faults',
   'android-lifecycle',
   'android-visible',
@@ -54,16 +55,25 @@ export function parseManagedLoopAcceptanceArgs(args: readonly string[]): Managed
   if (session !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(session)) {
     Errors.throwUserInput('--session must name a recorded UUID.')
   }
-  if (session !== undefined && selected !== 'chrome' && selected !== 'mobile-interaction') {
+  if (
+    session !== undefined && selected !== 'chrome' && selected !== 'mobile-interaction' && selected !== 'firebase-sync'
+  ) {
     Errors.throwUserInput(
-      'Only Chrome or mobile interaction accepts an existing session; fault cases own their sessions.',
+      'Only Chrome, mobile interaction or Firebase sync accepts an existing session; fault cases own their sessions.',
     )
   }
-  if (target !== undefined && (selected !== 'mobile-interaction' || !['ios', 'android'].includes(target))) {
-    Errors.throwUserInput('--target ios|android is only supported for mobile-interaction.')
+  if (
+    target !== undefined
+    && !(selected === 'mobile-interaction' && ['ios', 'android'].includes(target))
+    && !(selected === 'firebase-sync' && target === 'ios')
+  ) {
+    Errors.throwUserInput('--target supports mobile-interaction (ios|android) or firebase-sync (ios).')
   }
   if (selected === 'mobile-interaction' && (session === undefined || target === undefined)) {
     Errors.throwUserInput('mobile-interaction requires --session <uuid> and --target ios|android.')
+  }
+  if (selected === 'firebase-sync' && (session === undefined || target !== 'ios')) {
+    Errors.throwUserInput('firebase-sync requires --session <uuid> and --target ios.')
   }
   return {
     case: selected as ManagedLoopAcceptanceRequest['case'],

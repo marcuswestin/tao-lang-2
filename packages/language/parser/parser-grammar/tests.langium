@@ -79,7 +79,7 @@ PressToolbarCommandStep:
     'press' surface=ID 'command' value=Expression;
 
 ExpectTextStep:
-    'expect' missing?='missing'? selector=TestSelector text=STRING;
+    'expect' missing=ID? selector=TestSelector text=STRING;
 
 ExpectNavigationTitleStep:
     'expect' 'navigation' subject=ID value=Expression;
@@ -111,7 +111,7 @@ TestExpectationBlock:
     '{' expectations+=TestExpectation* '}';
 
 TestExpectation:
-    (missing?='missing'? selector=('text' | 'label' | 'placeholder') value=STRING)
+    (missing=ID? selector=('text' | 'label' | 'placeholder') value=STRING)
     | ('input' 'value' value=STRING);
 
 EnterTextStep:

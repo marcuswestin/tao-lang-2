@@ -1,0 +1,92 @@
+use TestAuth from @tao/auth/testing
+use Memory from @tao/data/providers/memory
+use FirebaseLiveAcceptanceAuthNavigator from ./Auth
+use FirebaseLiveAcceptanceNavigator from ./Chrome
+use FirebaseLiveAcceptanceDesign from ./Design
+
+app FirebaseLiveAcceptanceTest {
+   id "firebase-live-acceptance-memory-test"
+   version "0.1.0"
+   name "Firebase Live Acceptance Memory Test"
+   Datasource Memory { }
+   Navigator FirebaseLiveAcceptanceNavigator
+   Design FirebaseLiveAcceptanceDesign
+}
+
+app FirebaseLiveAcceptanceSignInTest {
+   id "firebase-live-acceptance-sign-in-test"
+   version "0.1.0"
+   name "Firebase Live Acceptance Sign In Test"
+   Auth TestAuth { }
+   Datasource Memory { }
+   Navigator FirebaseLiveAcceptanceAuthNavigator
+   Design FirebaseLiveAcceptanceDesign
+}
+
+app FirebaseLiveAcceptanceSignOutTest {
+   id "firebase-live-acceptance-sign-out-test"
+   version "0.1.0"
+   name "Firebase Live Acceptance Sign Out Test"
+   Auth TestAuth {
+      State "SignedIn"
+   }
+   Datasource Memory { }
+   Navigator FirebaseLiveAcceptanceAuthNavigator
+   Design FirebaseLiveAcceptanceDesign
+}
+
+test "Firebase Live Acceptance" {
+   test "fills validation credentials without signing in" {
+      run FirebaseLiveAcceptanceSignInTest
+
+      expect text "Sign in to Firebase Live Acceptance"
+      press #fillCrudAccount
+      expect input label "Email" value "narcvs+crud@gmail.com"
+      expect input label "Password" value "123456789"
+      press #fillMainAccount
+      expect input label "Email" value "narcvs@gmail.com"
+      expect input label "Password" value "123456789"
+      expect text "Sign in to Firebase Live Acceptance"
+   }
+   test "signs in with an existing account" {
+      run FirebaseLiveAcceptanceSignInTest
+      enter "reader@example.test" into #email
+      enter "local-test-password" into #password
+      press #signIn
+      expect missing text "Sign in to Firebase Live Acceptance"
+      press #signOut
+      expect text "Sign in to Firebase Live Acceptance"
+   }
+   test "creates an account" {
+      run FirebaseLiveAcceptanceSignInTest
+      enter "new-reader@example.test" into #email
+      enter "local-test-password" into #password
+      press #createAccount
+      expect missing text "Sign in to Firebase Live Acceptance"
+      press #signOut
+      expect text "Sign in to Firebase Live Acceptance"
+   }
+   test "signs out" {
+      run FirebaseLiveAcceptanceSignOutTest
+      press #signOut
+      expect text "Sign in to Firebase Live Acceptance"
+   }
+   test "adds a item, opens it, and renames it" {
+      run FirebaseLiveAcceptanceTest
+
+      expect text "No items yet"
+      enter "First item" into #itemTitle
+      press #addItem
+      expect missing text "No items yet"
+      select #items[1] {
+         expect text "First item"
+         press #openItem
+      }
+      expect navigation title "First item"
+      enter "First item (updated)" into #itemTitleDraft
+      press #saveItem
+      expect navigation title "First item (updated)"
+      back
+      expect text "First item (updated)"
+   }
+}

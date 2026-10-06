@@ -1,0 +1,13 @@
+// The writable input keeps its caller's concrete text domain and field validation.
+public
+view TextField where type T is text (mutable Value T) {
+   render inject Value, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.TextInput({
+        layout: Layout,
+        tag: Tag,
+        value: Value.value,
+        label: '',
+        onChange: value => Value.change(value),
+      })
+   ```
+}

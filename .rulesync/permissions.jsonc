@@ -115,7 +115,7 @@
     // needed: the host-only complement, cancelling a Verify run a local gate has decided, pushing
     // a fix after GitHub merged, following checks, and refitting the partition seed from a green run
     // (its artifact download needs the host's GitHub token).
-    "verify-complement", "cancel-verify", "land-fix", "pr-checks", "ci-timings",
+    "verify-complement", "verify-full-ci", "cancel-verify", "land-fix", "pr-checks", "ci-timings",
     "test-host", "qa-capture", "studio-smoke", "studio-proof-real-app", "admission-experiment", "performance-check",
     "native-module-check", "reclaim --execute", "resources",
     "prepare-release studio", "prepare-release ide-extension", "ide-extension-acceptance",
@@ -135,7 +135,7 @@
     "pods install", "pods spec",
     "android devices", "android state", "android emulators", "android boot", "android ensure", "android recover",
     "remote fetch", "remote refs", "remote heads", "remote exists",
-    "processes list", "processes started", "start-branch", "take-branch",
+    "processes list", "processes started", "processes group", "start-branch", "take-branch",
     "storage sync", "storage qa", "storage push",
   ],
   "claudecode": {

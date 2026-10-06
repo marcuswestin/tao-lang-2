@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Text } from '@shared'
 import {
   Describe,
   Expect,
@@ -134,7 +134,35 @@ Describe('tao ship command', () => {
 
       Expect(result).toBe('shipped')
       Expect(executed).toBe(true)
-      Expect(terminal.outputText()).toContain('Accept bundle identifier com.devtao.notes?')
+      const output = Text.stripAnsi(terminal.outputText())
+      Expect(output).toContain('Accept bundle identifier com.devtao.notes?')
+      const keyPrompt = output.indexOf('App Store Connect Key ID:')
+      Expect(keyPrompt).toBeGreaterThanOrEqual(0)
+      for (
+        const instruction of [
+          'Reuse an existing App Store Connect API team key with Admin access',
+          'https://appstoreconnect.apple.com/access/integrations/api',
+          'Users and Access > Integrations > App Store Connect API > Team Keys',
+          'ask the Account Holder to request access',
+          'an Account Holder or Admin selects Generate API Key',
+          'selects Admin under Access',
+          'Copy the Key ID beside that key and the Issuer ID above the team keys table',
+          'private .p8 file only once',
+          `${FS.homeDir()}/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8`,
+        ]
+      ) {
+        const instructionIndex = output.indexOf(instruction)
+        Expect(instructionIndex).toBeGreaterThanOrEqual(0)
+        Expect(instructionIndex).toBeLessThan(keyPrompt)
+      }
+      Expect(output.indexOf('Reuse an existing')).toBeLessThan(output.indexOf('To create a team key'))
+      const keyPath = output.indexOf(`${FS.homeDir()}/.appstoreconnect/private_keys/AuthKey_KEY123.p8`)
+      Expect(keyPath).toBeGreaterThan(keyPrompt)
+      Expect(keyPath).toBeLessThan(output.indexOf('App Store Connect Issuer ID:'))
+      const namespaceGuide = output.indexOf('reverse a domain you own (yourcompany.com becomes com.yourcompany)')
+      Expect(namespaceGuide).toBeGreaterThanOrEqual(0)
+      Expect(namespaceGuide).toBeLessThan(output.indexOf('Owned reverse-DNS bundle namespace'))
+      Expect(output).toContain("Use the default 'com.devtao' only if you are authorized to use that namespace")
     })
   })
 })

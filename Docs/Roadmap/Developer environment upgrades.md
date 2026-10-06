@@ -22,6 +22,7 @@ change that addressed it.
 - [DEVENV-NATIVE-MODULE-CHECK-CANNOT-LIST-SWIFT-PACKAGE-PODS — native module check cannot list Swift package Pods](<Developer environment upgrades/DEVENV-NATIVE-MODULE-CHECK-CANNOT-LIST-SWIFT-PACKAGE-PODS.md>) — Candidate
 - [DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS — Nested Tao journeys run in overlapping shards](<Developer environment upgrades/DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS.md>) — Open
 - [DEVENV-NO-FRONT-DOOR-REPEATS-A-TEST-UNDER-CPU-LOAD — No front door repeats a test under CPU load](<Developer environment upgrades/DEVENV-NO-FRONT-DOOR-REPEATS-A-TEST-UNDER-CPU-LOAD.md>) — Candidate
+- [DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY — open-pr reports no checks while runners are busy](<Developer environment upgrades/DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY.md>) — Candidate
 - [DEVENV-PERSISTENT-UI-CONTROLLER-POST-MVP — Persistent UI controller after MVP](<Developer environment upgrades/DEVENV-PERSISTENT-UI-CONTROLLER-POST-MVP.md>) — Planned
 - [DEVENV-STANDALONE-SERVER-STARTUP-HIDES-CHILD-FAILURE — Standalone server startup hides child failure](<Developer environment upgrades/DEVENV-STANDALONE-SERVER-STARTUP-HIDES-CHILD-FAILURE.md>) — Candidate
 - [DEVENV-STUDIO-STARTUP-STAGES-NEED-MEASUREMENT — Studio startup stages need measurement](<Developer environment upgrades/DEVENV-STUDIO-STARTUP-STAGES-NEED-MEASUREMENT.md>) — Planned
@@ -105,15 +106,18 @@ change that addressed it.
 - [DEVENV-LOCAL-HOST-TESTS-FAIL-PORT-ZERO — Local host tests fail while binding port zero](<Developer environment upgrades/DEVENV-LOCAL-HOST-TESTS-FAIL-PORT-ZERO.md>) — Candidate
 - [DEVENV-MACOS-STARTUP-AFTER-CACHE-CLEANUP-NEEDS-VERIFICATION — macOS startup after cache cleanup needs verification](<Developer environment upgrades/DEVENV-MACOS-STARTUP-AFTER-CACHE-CLEANUP-NEEDS-VERIFICATION.md>) — Planned
 - [DEVENV-MANAGED-COMMIT-DENIES-WORKTREE-GIT-METADATA — Managed commit denies worktree Git metadata](<Developer environment upgrades/DEVENV-MANAGED-COMMIT-DENIES-WORKTREE-GIT-METADATA.md>) — Candidate
+- [DEVENV-MERGE-EXPOSES-LEGACY-GENERATED-CACHES — Merge exposes legacy generated caches](<Developer environment upgrades/DEVENV-MERGE-EXPOSES-LEGACY-GENERATED-CACHES.md>) — Candidate
 - [DEVENV-MERGE-WRITE-PROBE-REFUSES-READ-ONLY-SKETCHES — Merge write probe refuses read-only tracked sketches](<Developer environment upgrades/DEVENV-MERGE-WRITE-PROBE-REFUSES-READ-ONLY-SKETCHES.md>) — Candidate
 - [DEVENV-METRO-FAILS-TO-START-WITHIN-ITS-WAIT-UNDER-CONTENTION — Expo Metro intermittently fails to start within its wait under machine contention](<Developer environment upgrades/DEVENV-METRO-FAILS-TO-START-WITHIN-ITS-WAIT-UNDER-CONTENTION.md>) — Candidate
 - [DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP — iOS dev loop can stall after an Android loop stops](<Developer environment upgrades/DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP.md>) — Candidate
 - [DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG — Model routing trails the installed catalog](<Developer environment upgrades/DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG.md>) — Candidate
+- [DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES — Native kit omits provider transitives](<Developer environment upgrades/DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES.md>) — In progress
 - [DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME — Native session timestamps use monotonic time](<Developer environment upgrades/DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME.md>) — Candidate
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
 - [DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL — Output hook requires an unavailable read tool](<Developer environment upgrades/DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL.md>) — Candidate
 - [DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT — Following checks spends GitHub's anonymous API limit](<Developer environment upgrades/DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT.md>) — Candidate
 - [DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES — Profile lacks direnv while doctor passes](<Developer environment upgrades/DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES.md>) — Candidate
+- [DEVENV-PROJECT-TOOLING-RECEIPT-TESTS-BRUSH-THE-CI-TEST-BUDGET — Project-tooling receipt tests brush CI's 45-second test budget](<Developer environment upgrades/DEVENV-PROJECT-TOOLING-RECEIPT-TESTS-BRUSH-THE-CI-TEST-BUDGET.md>) — Candidate
 - [DEVENV-PROJECT-TOOLING-REFRESH-AND-WATCH-TESTS-TIME-OUT-UNDER-BROAD-LANES — Project-tooling refresh and watch tests time out under broad lanes](<Developer environment upgrades/DEVENV-PROJECT-TOOLING-REFRESH-AND-WATCH-TESTS-TIME-OUT-UNDER-BROAD-LANES.md>) — Candidate
 - [DEVENV-QUEUED-NODE-FIRST-WAIT-CHARGED-TO-LANE-NOT-MACHINE — A queued node's first wait is charged to the lane, not the machine](<Developer environment upgrades/DEVENV-QUEUED-NODE-FIRST-WAIT-CHARGED-TO-LANE-NOT-MACHINE.md>) — Candidate
 - [DEVENV-QUIET-UI-HOST-ACCEPTANCE — Quiet UI host acceptance](<Developer environment upgrades/DEVENV-QUIET-UI-HOST-ACCEPTANCE.md>) — Candidate
@@ -122,11 +126,13 @@ change that addressed it.
 - [DEVENV-RUNTIME-JOURNEY-OBSERVATION-TEST-TIMES-OUT — Runtime journey observation test can time out in a broad lane](<Developer environment upgrades/DEVENV-RUNTIME-JOURNEY-OBSERVATION-TEST-TIMES-OUT.md>) — Candidate
 - [DEVENV-SANDBOXED-GIT-XCRUN-CACHE-WARNING-FAILS-STDERR-ASSERTIONS — Sandboxed git's xcrun cache warning fails stderr assertions](<Developer environment upgrades/DEVENV-SANDBOXED-GIT-XCRUN-CACHE-WARNING-FAILS-STDERR-ASSERTIONS.md>) — Candidate
 - [DEVENV-SANDBOXED-LANES-CANNOT-REMOVE-ENV-FIXTURES — Sandboxed lanes cannot remove `.env` fixtures](<Developer environment upgrades/DEVENV-SANDBOXED-LANES-CANNOT-REMOVE-ENV-FIXTURES.md>) — Candidate
+- [DEVENV-SANDBOXED-TEST-CACHE-REGISTRATION-DENIED — Sandboxed test cache registration denied](<Developer environment upgrades/DEVENV-SANDBOXED-TEST-CACHE-REGISTRATION-DENIED.md>) — Candidate
 - [DEVENV-SANDBOXED-VERIFY-CHANGED-CANNOT-REMOVE-ENV-FIXTURES — Sandboxed verify-changed cannot remove `.env` fixtures](<Developer environment upgrades/DEVENV-SANDBOXED-VERIFY-CHANGED-CANNOT-REMOVE-ENV-FIXTURES.md>) — Candidate
 - [DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS — Sandboxed verification fails the dev-cli shell tests](<Developer environment upgrades/DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS.md>) — Candidate
 - [DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS — Secret materialization is missing from agent commands](<Developer environment upgrades/DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS.md>) — Candidate
 - [DEVENV-SETUP-SUCCEEDS-WHEN-RULESYNC-REJECTS-HOOKS — Setup succeeds when rulesync rejects the hooks file](<Developer environment upgrades/DEVENV-SETUP-SUCCEEDS-WHEN-RULESYNC-REJECTS-HOOKS.md>) — Candidate
 - [DEVENV-SIX-HOST-ONLY-GATES-HAVE-NO-UNSANDBOXED-SHAPE — Six host-only gates have no unsandboxed shape](<Developer environment upgrades/DEVENV-SIX-HOST-ONLY-GATES-HAVE-NO-UNSANDBOXED-SHAPE.md>) — Candidate
+- [DEVENV-STALE-MAINTAINED-BINDINGS-AFTER-MERGE — Maintained native bindings go stale after merging main](<Developer environment upgrades/DEVENV-STALE-MAINTAINED-BINDINGS-AFTER-MERGE.md>) — Candidate
 - [DEVENV-STRANDED-DEVELOPMENT-RESOURCE-DISCOVERY — Stranded development resource discovery](<Developer environment upgrades/DEVENV-STRANDED-DEVELOPMENT-RESOURCE-DISCOVERY.md>) — In progress
 - [DEVENV-STUDIO-AGENT-BROWSER-GATE-TIMES-OUT-UNDER-THE-COMPLEMENT-LANE — Studio agent browser gate times out under the complement lane](<Developer environment upgrades/DEVENV-STUDIO-AGENT-BROWSER-GATE-TIMES-OUT-UNDER-THE-COMPLEMENT-LANE.md>) — Candidate
 - [DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT — Studio legacy-lock test is intermittent](<Developer environment upgrades/DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT.md>) — Candidate

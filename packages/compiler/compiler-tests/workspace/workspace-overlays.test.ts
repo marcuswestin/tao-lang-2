@@ -1,9 +1,38 @@
+import { AST } from '@parser'
 import { Diagnostics, FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import SourceActions from '@source-actions'
 import { Workspace } from '../../compiler-src/workspace/index'
 
 Describe('workspace source overlays', () => {
+  Test('retains sealed capability transport evidence when compiling a union of entry graphs', async () => {
+    await withTaoFiles('tao-workspace-capability-evidence-', {
+      'Main.tao': `
+        public can Display { ToText() fails never -> text }
+        type Token is text with { func ToText() fails never -> text { return Token } }
+        view Native where type T is Display (Value T) { render inject Value \`\`\`ts return null \`\`\` }
+        view Main { let Provided = Token "original" render Native(.Value Provided) }
+        app Preview { id "com.tao.test.batchcapability" version "1.0.0" name "Preview" view Main }
+      `,
+      'Extra.tao': `use Display from ./Main
+        public can ExtraDisplay { Debug() fails never -> text }
+        public func Relay(Value Display) -> Display { return Value }
+      `,
+    }, async (paths, root) => {
+      const workspace = await Workspace.open(root)
+      const validation = await workspace.validateFiles([paths['Main.tao'], paths['Extra.tao']])
+      Expect(Diagnostics.errorMessages(validation.diagnostics)).toEqual([])
+      Expect(validation.associatedEffects).toBeDefined()
+      const extra = validation.files.find(file => file.path === paths['Extra.tao'])!
+      const requirement = AST.streamAllContents(extra.ast).find(AST.isCapabilityMethodDeclaration)!
+      Expect(requirement).toBeDefined()
+      Expect(validation.associatedEffects!.descriptors.has(requirement)).toBe(true)
+      const compiled = await workspace.compileFiles([paths['Main.tao'], paths['Extra.tao']])
+      Expect(compiled.code).toContain('TR.Capability.attach(')
+      Expect(compiled.files.map(file => file.code).join('\n')).toContain('"ToText"')
+    })
+  })
+
   Test('compiles virtual imports and shared fixtures from an immutable source snapshot', async () => {
     await withTaoFiles('tao-workspace-overlays-', {
       'Package.tao': 'package { version "1.0.0" license AGPL-3.0-only }',

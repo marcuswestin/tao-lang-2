@@ -82,6 +82,14 @@ export async function hostedCrudRunCommand(project: string): Promise<string> {
     : `tao connect run ${shellQuote(FS.displayPath(project))}`
 }
 
+/** Prints a runnable app command relative to the terminal's current directory. */
+export async function taoAppRunCommand(project: string, appName: string, cwd = FS.resolvePath('.')): Promise<string> {
+  const repository = await taoRepositoryRoot(project)
+  const executable = repository ? FS.relativePath(cwd, FS.resolvePath('tao', repository)) : 'tao'
+  const command = repository && !executable.includes('/') ? './' + executable : executable
+  return `${shellQuote(command)} run ${shellQuote(FS.relativePath(cwd, project) || '.')} --app ${shellQuote(appName)}`
+}
+
 /** taoRepositoryRoot finds the Tao development checkout holding a path, whose `./tao` runs the CLI from source. */
 async function taoRepositoryRoot(path: string): Promise<string | undefined> {
   for (let directory = FS.resolvePath(path);; directory = FS.dirname(directory)) {

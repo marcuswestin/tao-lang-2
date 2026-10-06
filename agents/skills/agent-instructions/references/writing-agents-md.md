@@ -19,7 +19,7 @@ so that a later reader disagrees with the argument rather than re-running the re
 
 ## Size, and why it is counted in characters
 
-- Budgets are enforced by `repo-lint` from `InstructionBudgets.ts`: root `AGENTS.md` 13,500
+- Budgets are enforced by `repo-lint` from `InstructionBudgets.ts`: root `AGENTS.md` 14,500
   characters, a nested `AGENTS.md` 6,000, each `SKILL.md` 12,000. `references/` files have no budget,
   because they load on demand — that is the whole mechanism the length argument is about.
 - Characters, not lines, because these files are long paragraph bullets. A line budget caps how many

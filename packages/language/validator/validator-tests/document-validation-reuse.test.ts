@@ -133,8 +133,8 @@ Describe('validator: workspace-owned document report reuse', () => {
     await withTaoFiles('tao-document-reports-imports-', {
       '.tao/.gitkeep': '',
       'Main.tao': 'use Echo from ./library/Echo\nlet Result is number = Echo()',
-      'library/Echo.tao': 'use Base from ./nested/Base\npublic function Echo() { return Base() }',
-      'library/nested/Base.tao': 'public function Base() { return 7 }',
+      'library/Echo.tao': 'use Base from ./nested/Base\npublic func Echo() { return Base() }',
+      'library/nested/Base.tao': 'public func Base() { return 7 }',
     }, async (paths, root) => {
       const workspace = await Workspace.open(root)
       const before = await workspace.validate(paths['Main.tao']!)
@@ -142,8 +142,8 @@ Describe('validator: workspace-owned document report reuse', () => {
       await workspace.validate(paths['Main.tao']!)
       for (
         const source of [
-          'public function Base() { return "changed" }',
-          'public function Base() returns number { return 9 }',
+          'public func Base() { return "changed" }',
+          'public func Base() -> number { return 9 }',
         ]
       ) {
         await FS.writeText(paths['library/nested/Base.tao']!, source)
@@ -158,7 +158,7 @@ Describe('validator: workspace-owned document report reuse', () => {
         )
           .toBe(source.includes('"changed"'))
       }
-      await FS.writeText(paths['library/Echo.tao']!, 'public function Echo() { return "direct" }')
+      await FS.writeText(paths['library/Echo.tao']!, 'public func Echo() { return "direct" }')
       const direct = await workspace.validate(paths['Main.tao']!)
       Expect(Diagnostics.messages(direct.diagnostics)).toContain(
         AliasesValidator.messages.ascriptionType('Result', 'number', 'text'),

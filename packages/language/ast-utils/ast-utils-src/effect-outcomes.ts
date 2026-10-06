@@ -1,5 +1,8 @@
 import { AST } from '@parser'
+import { type FailureContract, unionFailureContracts } from './failure-contracts'
 import { resolveActionTarget } from './invocations'
+
+export { type FailureContract, failureContractSatisfiesBound, unionFailureContracts } from './failure-contracts'
 
 /** EffectDeclaration is a verb whose failure contract a call site can read. */
 export type EffectDeclaration = AST.ActionDeclaration | AST.CommandDeclaration | AST.ActionExpression
@@ -11,22 +14,6 @@ export type EffectInvocation =
   | AST.EventHandler
   | AST.LoopSelectHandler
   | AST.CommandDoClause
-
-/** Known modeled failures and whether the complete propagated set remains unknown. */
-export type FailureContract = Readonly<{ cases: readonly string[]; open: boolean }>
-
-/** Union retains every known case in source order and never loses an open remainder. */
-export function unionFailureContracts(contracts: readonly FailureContract[]): FailureContract {
-  return {
-    cases: uniqueCases(contracts.flatMap(contract => contract.cases)),
-    open: contracts.some(contract => contract.open),
-  }
-}
-
-/** An unknown actual contract cannot satisfy a closed failure bound. */
-export function failureContractSatisfiesBound(actual: FailureContract, bound: FailureContract): boolean {
-  return bound.open || (!actual.open && actual.cases.every(failureCase => bound.cases.includes(failureCase)))
-}
 
 /** The three outcomes every `when do` may name, beside the cases its verb declares. */
 export const effectOutcomeWords = ['saved', 'rejected', 'error'] as const
@@ -40,6 +27,12 @@ type EffectBody =
   | AST.LoopSelectHandler
   | AST.AsyncActionStatement
 
+type FailureIdentity = Readonly<{ name: string; declaration?: AST.FailureDeclaration }>
+type FailureSummary = Readonly<{ contract: FailureContract; identities: readonly FailureIdentity[] }>
+type ResolvedInvocationFailureDeclaration =
+  | Readonly<{ kind: 'resolved'; declaration: AST.FailureDeclaration }>
+  | Readonly<{ kind: 'unresolved'; candidates: readonly AST.FailureDeclaration[]; open: boolean }>
+
 /**
  * effectFailureContract is an effect's effective failure contract in declaration order:
  * the cases its own `fail` or `fails` declare, plus the cases of every verb it reaches through a
@@ -49,34 +42,53 @@ export function effectFailureContract(
   effect: EffectDeclaration,
   seen: ReadonlySet<EffectDeclaration> = new Set(),
 ): FailureContract {
+  return effectFailureSummary(effect, seen).contract
+}
+
+function effectFailureSummary(
+  effect: EffectDeclaration,
+  seen: ReadonlySet<EffectDeclaration>,
+): FailureSummary {
   if (seen.has(effect)) {
-    return { cases: [], open: true }
+    return unknownFailureSummary()
   }
   const path = new Set(seen).add(effect)
   if (AST.isCommandDeclaration(effect)) {
     const clause = AST.commandDoClauseOf(effect)
-    return clause ? invocationFailureContract(clause, path) : { cases: [], open: true }
+    return clause ? invocationFailureSummary(clause, path) : unknownFailureSummary()
   }
   if (AST.isActionDeclaration(effect) && effect.foreign) {
     const cases = uniqueCases(effect.foreign.failures.map(failure => failure.case.$refText))
-    return { cases, open: cases.length === 0 }
+    return {
+      contract: { cases, open: cases.length === 0 },
+      identities: effect.foreign.failures.map(failure => ({
+        name: failure.case.$refText,
+        declaration: failure.case.ref,
+      })),
+    }
   }
   const block = effect.block
   if (!block) {
-    return { cases: [], open: true }
+    return unknownFailureSummary()
   }
-  const contracts = AST.streamAllContents(block)
+  const summaries = AST.streamAllContents(block)
     .filter(node => effectBodyOf(node) === effect)
-    .flatMap(node => {
+    .flatMap<FailureSummary>(node => {
       if (AST.isFailStatement(node)) {
-        return [{ cases: [node.case.$refText], open: false }]
+        return [{
+          contract: { cases: [node.case.$refText], open: false },
+          identities: [{ name: node.case.$refText, declaration: node.case.ref }],
+        }]
       }
       if (AST.isDoStatement(node) && !AST.isWhenDoStatement(node.$container)) {
-        return [invocationFailureContract(node, path)]
+        return [node.then ? unhandledOutcomeSummary(node, path) : invocationFailureSummary(node, path)]
       }
-      return AST.isWhenDoStatement(node) ? [unhandledOutcomeContract(node, path)] : []
+      return AST.isWhenDoStatement(node) ? [unhandledOutcomeSummary(node, path)] : []
     })
-  return unionFailureContracts(contracts)
+  return {
+    contract: unionFailureContracts(summaries.map(summary => summary.contract)),
+    identities: summaries.flatMap(summary => summary.identities),
+  }
 }
 
 /** A dynamic or unresolved verb has an open contract, rather than no failures. */
@@ -84,8 +96,29 @@ export function invocationFailureContract(
   invocation: EffectInvocation,
   seen: ReadonlySet<EffectDeclaration> = new Set(),
 ): FailureContract {
+  return invocationFailureSummary(invocation, seen).contract
+}
+
+function invocationFailureSummary(
+  invocation: EffectInvocation,
+  seen: ReadonlySet<EffectDeclaration>,
+): FailureSummary {
   const effect = invokedEffect(invocation)
-  return effect ? effectFailureContract(effect, seen) : { cases: [], open: true }
+  return effect ? effectFailureSummary(effect, seen) : unknownFailureSummary()
+}
+
+/** Resolve only an actual selected verb's unique linked failure declaration, never a caller name. */
+export function resolveInvocationFailureDeclaration(
+  invocation: EffectInvocation,
+  caseName: string,
+): ResolvedInvocationFailureDeclaration {
+  const summary = invocationFailureSummary(invocation, new Set())
+  const identities = summary.identities.filter(identity => identity.name === caseName)
+  const candidates = [...new Set(identities.flatMap(identity => identity.declaration ? [identity.declaration] : []))]
+  const open = summary.contract.open || identities.some(identity => identity.declaration === undefined)
+  return !open && candidates.length === 1
+    ? { kind: 'resolved', declaration: candidates[0]! }
+    : { kind: 'unresolved', candidates, open }
 }
 
 /** Compatibility projection for consumers that only name known cases, never prove completeness. */
@@ -119,18 +152,44 @@ export function invokedEffect(invocation: EffectInvocation): EffectDeclaration |
  * `otherwise` to close their remainder: `rejected` handles modeled cases, `error` undeclared faults.
  */
 export function unhandledOutcomeContract(
-  statement: AST.WhenDoStatement,
+  statement: AST.WhenDoStatement | AST.DoStatement,
   seen: ReadonlySet<EffectDeclaration> = new Set(),
 ): FailureContract {
-  const named = new Set(statement.outcomes.map(outcome => outcome.case))
-  if (statement.otherwise) {
-    return { cases: [], open: false }
+  return unhandledOutcomeSummary(statement, seen).contract
+}
+
+function unhandledOutcomeSummary(
+  statement: AST.WhenDoStatement | AST.DoStatement,
+  seen: ReadonlySet<EffectDeclaration>,
+): FailureSummary {
+  const outcomes = statement.outcomes
+  const otherwise = statement.otherwise || outcomes.some(outcome => outcome.case === 'otherwise')
+  const isThen = AST.isDoStatement(statement) && !!statement.then
+  const named = new Set(outcomes.map(outcome => outcome.case))
+  if (otherwise) {
+    return { contract: { cases: [], open: false }, identities: [] }
   }
-  const contract = invocationFailureContract(statement, seen)
+  const summary = invocationFailureSummary(statement, seen)
+  const contract = summary.contract
+  if (isThen && named.has('error')) {
+    return { contract: { cases: [], open: false }, identities: [] }
+  }
+  const cases = named.has('rejected') && !isThen
+    ? []
+    : contract.cases.filter(failureCase => !named.has(failureCase))
   return {
-    cases: named.has('rejected') ? [] : contract.cases.filter(failureCase => !named.has(failureCase)),
-    open: contract.open && !(named.has('rejected') && named.has('error')),
+    contract: {
+      cases,
+      open: isThen
+        ? contract.open && !named.has('error')
+        : contract.open && !(named.has('rejected') && named.has('error')),
+    },
+    identities: summary.identities.filter(identity => cases.includes(identity.name)),
   }
+}
+
+function unknownFailureSummary(): FailureSummary {
+  return { contract: { cases: [], open: true }, identities: [] }
 }
 
 /** Compatibility projection for the existing declared-case root warning policy. */

@@ -17,7 +17,7 @@ return null
 \`\`\`}
 view Main( ){
 render Card( ){
-@actions Button( )
+@actions: Button( )
 }
 }`,
       `
@@ -36,7 +36,7 @@ render Card( ){
 
         view Main() {
            render Card() {
-              @actions Button()
+              @actions: Button()
         }  }
       `,
     ),

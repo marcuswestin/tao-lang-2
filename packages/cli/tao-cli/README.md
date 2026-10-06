@@ -217,3 +217,43 @@ loopback RPC server in a separate process. It checks the received scalar argumen
 
 Repository acceptance: `./agent unsandboxed test-host agents` builds actual pinned-toolchain apps,
 checks background launch and RPC, and exercises the dedicated Local-backed command app.
+
+## Firebase management
+
+The commands below use the installed official Firebase CLI and locally signed-in Google accounts.
+Credentials remain local; `FIREBASE_TOKEN` is refused. Use `--account email` to select a signed-in
+account explicitly. Otherwise multiple accounts appear as `1`–`9`, then `a`–`z`; Enter selects the first.
+`--json` prints known public fields on stdout and progress/prompts on stderr. If no account is signed
+in, first run `tao firebase projects list` in an interactive local terminal, then retry with `--json`.
+Server management refuses emulator routing and endpoint overrides. Each official CLI request uses an
+isolated empty config and alias file, so local project aliases cannot change the requested project.
+
+```sh
+tao firebase projects list
+tao firebase projects info <project-id>
+tao firebase projects create [project-id]
+tao firebase apps list --project <project-id>
+tao firebase apps info <app-id> --project <project-id>
+tao firebase apps config <web-app-id> --project <project-id>
+tao firebase apps create "My App" --project <project-id>
+tao firebase data reset --project <project-id> --uid <uid> --store <StorageKey> --dry-run
+```
+
+Project creation proposes a globally unique ID when omitted; Enter accepts it. Creation still
+requires a local numbered confirmation. App listing includes all platforms; app creation registers
+WEB because Tao uses the Web SDK. Configuration contains public connection identity, including the
+Web SDK API key. Project, app registration, and Auth user deletion are not implemented; scoped server data deletion is provided by reset.
+
+Find the UID in the selected project at
+`https://console.firebase.google.com/project/<project-id>/authentication/users`, under
+**Authentication → Users → User UID**. Find the store in the authored Tao **Datasource Firebase
+StorageKey**, such as HostedFirebase’s `hosted-firebase-notes`; it is not the web app ID.
+
+Reset takes the original authored `StorageKey` text, including slashes or percent characters, and applies `s_` plus URI encoding, and recursively deletes
+exactly `users/<uid>/stores/s_<encoded StorageKey>` in the `(default)` database. The dry-run builds
+that plan locally without sign-in, network calls, confirmation, or changes. Remove `--dry-run` to
+review the exact plan and choose `1. Continue (default)` or `2. Stop`; Enter selects Continue.
+
+**Stop clients and clear their local stores before reconnecting.** Server reset does not clear local
+offline replicas, which can republish data. It preserves Auth users, other users and stores, project
+settings, app registrations, and indexes. It does not reset the whole project or all collections.

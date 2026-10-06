@@ -22,7 +22,7 @@ export type RenderSourceIdentity = {
 }
 
 /** renderSourceIdentity identifies one authored render and the exact source text it came from. */
-export function renderSourceIdentity(render: AST.Render): RenderSourceIdentity | undefined {
+export function renderSourceIdentity(render: AST.Render | AST.RenderSlotUse): RenderSourceIdentity | undefined {
   const location = renderSourceLocation(render)
   return location && {
     ...location,
@@ -34,7 +34,9 @@ export function renderSourceIdentity(render: AST.Render): RenderSourceIdentity |
  * renderSourceLocation locates one authored render without versioning its file. Hashing the whole
  * file per render made a Studio compile quadratic in file size, for a version nothing Studio-side read.
  */
-function renderSourceLocation(render: AST.Render): Omit<RenderSourceIdentity, 'sourceVersion'> | undefined {
+function renderSourceLocation(
+  render: AST.Render | AST.RenderSlotUse,
+): Omit<RenderSourceIdentity, 'sourceVersion'> | undefined {
   const cstNode = render.$cstNode
   if (cstNode === undefined) {
     return undefined
