@@ -641,10 +641,14 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ],
     [
       'keyboard-navigation-smoke',
-      studioSmoke(
-        'keyboard-navigation-smoke',
-        'packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts',
-      ),
+      {
+        ...studioSmoke(
+          'keyboard-navigation-smoke',
+          'packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts',
+        ),
+        cost: HOSTED_BROWSER_LANE_COST,
+        runsOnHostedLinux: true,
+      },
     ],
     [
       'studio-dialog-browser',
