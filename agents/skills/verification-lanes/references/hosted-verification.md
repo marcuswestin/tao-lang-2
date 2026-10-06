@@ -13,9 +13,12 @@ slice lands in three steps:
 
 1. Once `verify-changed` is green, open the pull request with plain `./agent unsandboxed open-pr`,
    so hosted `Verify` starts at once.
-2. While it runs, run the host gates CI does not cover (the browser Studio smokes,
-   `studio-smoke-native`, and `studio-canary`); until a lane runs exactly that complement,
-   `./agent unsandboxed verify-full` covers it.
+2. While it runs, run only the host-only gates `verify-full-sandbox` skips, each by its own recipe
+   unsandboxed: `./agent unsandboxed studio-smoke <file>` for the seven browser smokes `GateCatalog`
+   names (`studio-smoke`, `studio-proof-real-app`, `studio-smoke-simulated-user`,
+   `keyboard-navigation-smoke`, `studio-dialog-browser`, `studio-agent-browser`,
+   `studio-network-simulation`), `studio-smoke --native` for `studio-smoke-native`, and
+   `./agent unsandboxed studio-canary`. Do not rerun the sandbox-capable gates hosted `Verify` covers.
 3. When they pass: if `Verify` already passed on the head, run `./agent unsandboxed merge-pr`, which
    enqueues the pull request pinned to that head, waits for the merge group's own `Verify` run, and
    archives the branch; if `Verify` is still running, run `./agent unsandboxed open-pr --auto-merge`
