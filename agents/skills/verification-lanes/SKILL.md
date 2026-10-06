@@ -44,9 +44,10 @@ For a Developer-directed edit or commit in the primary `dev/<name>` checkout, do
 Use available focused checks, commit the exact reviewed paths when asked, and leave full verification
 to authorized landing. Other work may be in progress in that shared checkout.
 
-For the local route, it is the iteration-time readiness command when landing is not yet authorized, not a step of an
-already authorized landing — `./agent unsandboxed land` does
-its own preparation, integration and verification in one process. It brings a branch to ready:
+It is not a step of the hosted landing route, which needs only the reviewed message. For the local
+route, it is the iteration-time readiness command when landing is not yet authorized, not a step of
+an already authorized landing — `./agent unsandboxed land` does its own preparation, integration and
+verification in one process. It brings a branch to ready:
 asserts the branch and a clean tree, integrates `main`, runs a verification lane only when no green
 record already covers this exact tree, drafts the merge message from the branch's own commits when
 none exists, and prints what remains. An existing merge message is kept; `--redraft` is the explicit
@@ -70,8 +71,8 @@ on its size.
 - **Propose it as needing the Developer's eyes first** when the change reaches what no gate proves — Studio's or
   an app's visible behavior, a language surface the Developer has not seen, native or device paths, or anything
   covered only by the lanes a person runs: `./dev studio-manual-checks`, a device install, and
-  everything named in `FULL_VERIFY_SKIPPED`. Say exactly what needs looking at and why.
-- A green `full-verify` is not by itself an answer: a change can pass every gate and still be one the Developer
+  everything named in `VERIFY_FULL_SKIPPED`. Say exactly what needs looking at and why.
+- A green `Verify` is not by itself an answer: a change can pass every gate and still be one the Developer
   wants to see first, because the thing it changed is the thing the Developer is designing. When the two pull
   against each other, say so in the proposal.
 
@@ -120,7 +121,8 @@ waiting on it and a silent agent is indistinguishable from a stuck one. Backgrou
 in which to say something; it does not buy the right to say nothing.
 
 - Decide by how long the run is, not by which is tidier: a gate finishing inside a minute runs in the
-  foreground with a timeout, while `verify-full` and `./agent unsandboxed land` run backgrounded with a report.
+  foreground with a timeout, while the landing route's host-only gates, `verify-full`, and
+  `./agent unsandboxed land` run backgrounded with a report.
 - Report about every 20 seconds from start to verdict, one line each: what finished since the last
   note, what is running now, and anything that has already failed. A note that the same node is still
   running is the report the Developer wants, because it dates the silence — do not wait to be asked.

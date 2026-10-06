@@ -13,13 +13,13 @@ Root `AGENTS.md` owns branch and index constraints and standing authorization to
 branches, including its dependency-approval exception. Apply that authorization to all incoming
 file changes. The warn-only Git hooks
 `./agent setup` installs speak up on a detached HEAD, an unnamed branch, or an attribution trailer.
-`verification-lanes` owns `merge-with-main`'s evidence, flags, and message-file format.
+`verification-lanes` owns the landing route, its evidence, flags, and message-file format.
 
 ## Resource review after landing
 
 After every successful landing, inspect the single inventory with `./agent unsandboxed resources --json`.
-The ordinary landing command also saves `.artifacts/resources/after-land.json`; read its full
-entries and warnings. Include active sessions started by this task as well as stranded resources.
+A local `land` also saves `.artifacts/resources/after-land.json`; read its full entries and
+warnings. Include active sessions started by this task as well as stranded resources.
 Match this task's receipts and external-directory registrations; a checkout path alone does not
 prove task ownership in a shared checkout. Ask the Developer whether to clean the concrete
 task-owned items before doing so. If nothing is eligible, say so briefly.

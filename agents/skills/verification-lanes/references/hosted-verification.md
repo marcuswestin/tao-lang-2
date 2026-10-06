@@ -30,8 +30,8 @@ variations:
 
 Use local checks for focused iteration, diagnosis, and the host-only complement above. When CI is
 unavailable, local `land` is the fallback; offline proof does not establish remote integration or
-landing, and local `land` still requires a successful fetch and push. Reassess machine and CI
-contention before choosing an optional broad local lane.
+landing, and local `land` still requires a successful fetch and push. A broad local lane is a
+diagnostic, never merge evidence; reassess machine contention before starting one.
 
 ## Compare current contention
 
@@ -54,13 +54,11 @@ contention before choosing an optional broad local lane.
 - `./agent pr-checks --pr <number>` gives the current PR's check state, not the repository-wide
   runner queue. If queue observations are unavailable, report CI contention as unknown; do not
   infer free capacity from missing data or invent a repository command. State the local evidence,
-  CI evidence, coverage, and chosen route briefly. Compare expected queue plus execution time,
-  rather than preferring CI after any slow local check.
+  CI evidence, coverage, and chosen route briefly.
 
-For final portable proof, use CI unless a local lane is clearly faster and appropriate or CI is
-unavailable. If both local and CI capacity are constrained, wait or continue focused work and
-reassess. A failed check still needs diagnosis; switching machines is not permission to ignore a
-failure.
+Hosted `Verify` is the final portable proof even when a local lane would finish sooner; contention
+decides only when to run a diagnostic lane, never which machine proves the merge. A failed check
+still needs diagnosis; switching machines is not permission to ignore a failure.
 
 ## Coverage and readiness
 

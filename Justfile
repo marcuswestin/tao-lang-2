@@ -353,7 +353,7 @@ dev app_path="Apps" APP="":
 # A name pattern narrows the same default scope rather than replacing it: `just test "<name>"` is the
 # changed suites filtered to that name, not every suite filtered to it. Scope and filter compose, so
 # the fast default stays fast and only `test-all` widens it.
-# Run changed suites, fail fast; explicit file/name targets collect failures. Selection can miss a regression, so `test-all` before a merge
+# Run changed suites, fail fast; explicit file/name targets collect failures. Selection can miss a regression; hosted Verify runs every suite before a merge
 [group('Dev')]
 test target="": _compile-word-flower-app
     if [ {{ quote(target) }} = '' ]; then ./dev test-changed; elif [ -e {{ quote(target) }} ]; then printf 'Running tests in %s\n' {{ quote(target) }}; ./dev test-file {{ quote(target) }}; else printf 'Filtering the changed suites to tests matching "%s"\n' {{ quote(target) }}; ./dev test-changed --name {{ quote(target) }}; fi
@@ -455,7 +455,7 @@ my-land *ARGS:
 # came from: the merge itself never took more than 94s.
 # A conflict while integrating main is the one failure that gives the lock back and stops: resolve it
 # here, unlocked, commit the merge, and run `just land` again.
-# Land this feature branch: prepare unlocked, then integrate, verify, squash and push under one lock
+# Land a dev/* branch, or a feature branch while GitHub is unavailable: prepare unlocked, then integrate, verify, squash and push under one lock
 [arg('dry_run', long='dry-run', value='true')]
 [arg('message_file', long='message-file')]
 [arg('redraft', long='redraft', value='true')]
