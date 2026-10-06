@@ -1,0 +1,101 @@
+use Duration from @tao/core
+use Time, Timer, Wait from @tao/time
+use Button, Col from @tao/ui
+
+app NativeLifecycle {
+   id "com.tao.syntax2.native-lifecycle"
+   name "Syntax2 Native Lifecycle"
+   version "0.1.0"
+   view LifecycleView
+   guard {
+      error Problem -> { "Native timer failed: { Problem.Message }" }
+}  }
+
+type WorkResource is {
+   ID number
+}
+
+action AcquireWorkResource() -> WorkResource from ./Lifecycle.ts
+
+action WaitCancelable(WorkResource, Duration) from ./Lifecycle.ts
+
+action CancelCurrentWork() from ./Lifecycle.ts
+
+action ReleaseWorkResource(WorkResource) from ./Lifecycle.ts
+
+action WorkOutcomeHandled(WorkResource) from ./Lifecycle.ts
+
+func ReleasedWorkResourceCount() -> number {
+   return ReleasedWorkResourceCount() from ./Lifecycle.ts
+}
+
+view LifecycleView {
+   state Result = "Native timer ready"
+   state ClockSample = ""
+   state ActiveTimer is Timer = Time.StartTimer()
+   state TimerSnapshot is Duration = 0 seconds
+   action CompleteNativeTimer(Timer) {
+      do Wait(15 seconds)
+      if Timer.Duration() >= 15 seconds {
+         set Result = "Native timer done"
+   }  }
+   action StartNativeTimer() {
+      let Timer = Time.StartTimer()
+      set ActiveTimer = Timer
+      set TimerSnapshot = Timer.Duration()
+      set Result = "Native timer pending"
+      async {
+         do CompleteNativeTimer(Timer)
+   }  }
+   action SampleNativeTimer() {
+      let Elapsed = ActiveTimer.Duration()
+      set ClockSample = "Native timer stopped while backgrounded"
+      if Elapsed >= TimerSnapshot + 10 seconds {
+         set ClockSample = "Native timer advanced while backgrounded"
+   }  }
+   action CancelableWork(Resource WorkResource) {
+      defer ReleaseWorkResource(Resource)
+      do WaitCancelable(Resource, 5 seconds)
+   }
+   action StartCancelableWork() {
+      let Resource = do AcquireWorkResource()
+      set Result = "Native work pending"
+      async {
+         do CancelableWork(Resource) then {
+            done -> { set Result = "Unexpected native wait completion" }
+            cancelled -> {
+               let Released = ReleasedWorkResourceCount()
+               set Result = "Native cancellation cleanup missing"
+               if Released == 1 {
+                  set Result = "Native cancellation cleaned"
+            }  }
+            error Problem -> { set Result = "Native cancellation failed: { Problem.Message }" }
+         }
+         do WorkOutcomeHandled(Resource)
+   }  }
+   action CancelPendingWork() {
+      do CancelCurrentWork()
+   }
+   render Col {
+      Result
+      ClockSample
+
+      accessible label "Start native timer"
+      Button("Start native timer") {
+         on press -> do StartNativeTimer()
+      }
+
+      accessible label "Sample native timer"
+      Button("Sample native timer") {
+         on press -> do SampleNativeTimer()
+      }
+
+      accessible label "Start native work"
+      Button("Start native work") {
+         on press -> do StartCancelableWork()
+      }
+
+      accessible label "Cancel pending work"
+      Button("Cancel pending work") {
+         on press -> do CancelPendingWork()
+}  }  }

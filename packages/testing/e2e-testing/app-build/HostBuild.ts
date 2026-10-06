@@ -1,7 +1,7 @@
 import Runtime from '@expo-host'
 import { CLI, Errors, FS, Platform, Repo, Switch } from '@shared'
 
-export type HostSubject = 'clockwork' | 'hnreader' | 'native-navigation' | 'native-bridge'
+export type HostSubject = 'clockwork' | 'hnreader' | 'native-navigation' | 'native-bridge' | 'syntax2'
 export type HostApplicationFault = 'clockwork-countdown-frozen' | 'hnreader-reading-history-no-write'
 export type HostFaultProvenance = Readonly<{
   expectedVisibleAssertion: string
@@ -54,14 +54,25 @@ export async function prepareHostApp(options: PrepareHostAppOptions): Promise<Ho
   const fault = options.fault === undefined
     ? undefined
     : await applyApplicationFault(root, options.subject, options.fault)
-  const compiledArtifactDigest = await generatedArtifactDigest(FS.resolvePath('_gen_tao-app', root))
+  let compiledArtifactDigest = await generatedArtifactDigest(FS.resolvePath('_gen_tao-app', root))
+  if (options.subject === 'syntax2') {
+    const lifecycleRoot = FS.resolvePath('lifecycle', root)
+    await Runtime.generateApp(Repo.resolvePath('Apps/Syntax2/.host-tests/Lifecycle.tao'), {
+      appName: 'NativeLifecycle',
+      runtimePackageRoot: lifecycleRoot,
+    })
+    compiledArtifactDigest = Platform.sha256Hex([
+      compiledArtifactDigest,
+      await generatedArtifactDigest(FS.resolvePath('_gen_tao-app', lifecycleRoot)),
+    ].join('\n'))
+  }
   await FS.writeJson(FS.resolvePath('HostTestConfig.json', root), {
     epochMs: HOST_EPOCH_MS,
     runId: options.runId,
     seed: options.seed,
     subject: options.subject,
   })
-  await FS.writeText(FS.resolvePath('index.ts', root), hostEntrypoint(repositoryRoot))
+  await FS.writeText(FS.resolvePath('index.ts', root), hostEntrypoint(repositoryRoot, options.subject === 'syntax2'))
   await FS.writeText(FS.resolvePath('app.json', root), hostAppConfig(appId, options.runId, options.subject))
   return { appId, compiledArtifactDigest, entrySourceDigest, ...(fault === undefined ? {} : { fault }), root }
 }
@@ -113,6 +124,7 @@ function subjectSource(subject: HostSubject): { appName: string; sourcePath: str
       appName: 'NativeNavigation',
       sourcePath: 'Apps/Test Apps/Navigation/Native Navigation.tao',
     }),
+    syntax2: () => ({ appName: 'LibraryApp', sourcePath: 'Apps/Syntax2/Main.tao' }),
   })
 }
 
@@ -170,6 +182,7 @@ async function copyProductionHostFiles(runtimeToolchainRoot: string, root: strin
   for (const file of ['app-config.cjs', 'metro.config.cjs', 'package.json'] as const) {
     await FS.copyFile(FS.resolvePath(file, runtimeToolchainRoot), FS.resolvePath(file, root))
   }
+  await FS.copyDirectory(FS.resolvePath('plugins', runtimeToolchainRoot), FS.resolvePath('plugins', root))
   const manifestPath = FS.resolvePath('package.json', root)
   const manifest = await FS.readJson<{
     expo?: { autolinking?: { exclude?: string[]; ios?: { exclude?: string[] } } }
@@ -189,7 +202,7 @@ async function copyProductionHostFiles(runtimeToolchainRoot: string, root: strin
   }
   await FS.writeJson(manifestPath, manifest)
 }
-export function hostEntrypoint(repositoryRoot: string): string {
+export function hostEntrypoint(repositoryRoot: string, includeLifecycle = false): string {
   const nativeControl = FS.resolvePath(
     'packages/apps/runtime/TaoRuntime-src/host-testing/NativeHostTestControl.ts',
     repositoryRoot,
@@ -200,17 +213,19 @@ export function hostEntrypoint(repositoryRoot: string): string {
   )
   return `import { registerRootComponent } from 'expo'
 import { createElement, type ComponentType, useEffect, useState } from 'react'
-import { Platform, SafeAreaView as View, Text } from 'react-native'
+import { Button, Platform, SafeAreaView as View, Text, View as Pane } from 'react-native'
 import { captureNativeNavigationDiagnostics, installNativeHostTestControl, subscribeNativeNavigationDiagnostics } from ${
     JSON.stringify(nativeControl)
   }
 import { installRuntimeHostTestControl } from ${JSON.stringify(runtimeControl)}
 import config from './HostTestConfig.json'
+${includeLifecycle ? "import NativeLifecycle from './lifecycle/_gen_tao-app/App'" : ''}
 
-const environment = installRuntimeHostTestControl(config)
+// Installed timing acceptance must exercise the production clock and scheduler.
+const environment = config.subject === 'syntax2' ? undefined : installRuntimeHostTestControl(config)
 let latestNativeControlReceipt: string | undefined
 let publishNativeControlReceipt: ((receipt: string) => void) | undefined
-const nativeControl = Platform.OS === 'web'
+const nativeControl = Platform.OS === 'web' || environment === undefined
   ? undefined
   : installNativeHostTestControl(environment, {
     onAdvance(snapshot) {
@@ -255,6 +270,7 @@ const readiness = \`Host ready: run \${config.runId} · seed \${config.seed}\`
 const HostApp: ComponentType = () => {
   const [nativeControlReceipt, setNativeControlReceipt] = useState(latestNativeControlReceipt)
   const [navigationHostReceipt, setNavigationHostReceipt] = useState(navigationReceipt())
+  ${includeLifecycle ? "const [screen, setScreen] = useState<'library' | 'lifecycle'>('library')" : ''}
   useEffect(() => {
     const publish = (receipt: string): void => setNativeControlReceipt(receipt)
     const publishNavigation = (receipt: string): void => setNavigationHostReceipt(receipt)
@@ -286,7 +302,26 @@ const HostApp: ComponentType = () => {
         { accessibilityLabel: nativeControlReceipt, testID: 'tao-host-control-receipt' },
         nativeControlReceipt,
       ),
-    createElement(generatedApp.default),
+    ${
+    includeLifecycle
+      ? `// Keep both trees mounted: changing the acceptance screen must not reset timers or data.
+    createElement(Button, {
+      title: screen === 'library' ? 'Show native lifecycle' : 'Show Library',
+      accessibilityLabel: screen === 'library' ? 'Show native lifecycle' : 'Show Library',
+      onPress: () => setScreen(screen === 'library' ? 'lifecycle' : 'library'),
+    }),
+    createElement(Pane, {
+      style: { flex: 1, display: screen === 'lifecycle' ? 'flex' : 'none' },
+      accessibilityElementsHidden: screen !== 'lifecycle',
+      importantForAccessibility: screen === 'lifecycle' ? 'auto' : 'no-hide-descendants',
+    }, createElement(NativeLifecycle)),
+    createElement(Pane, {
+      style: { flex: 1, display: screen === 'library' ? 'flex' : 'none' },
+      accessibilityElementsHidden: screen !== 'library',
+      importantForAccessibility: screen === 'library' ? 'auto' : 'no-hide-descendants',
+    }, createElement(generatedApp.default)),`
+      : 'createElement(generatedApp.default),'
+  }
   )
 }
 
@@ -302,10 +337,13 @@ function hostAppConfig(appId: string, runId: string, subject: HostSubject): stri
           experiments: { autolinkingModuleResolution: true },
           ios: { bundleIdentifier: appId, ...(subject === 'native-navigation' ? { supportsTablet: true } : {}) },
           name: appId,
+          newArchEnabled: true,
           platforms: ['ios', 'android', 'web'],
           plugins: [
             // Keep the fixture deployment floor aligned with the Companion host.
             ['expo-build-properties', { ios: { deploymentTarget: '17.0', enableSceneSupport: true } }],
+            'jazz-rn',
+            './plugins/with-jazz-podfile-properties.cjs',
           ],
           scheme: `taohostpoc-${runId}`,
           slug: appId.replaceAll('.', '-'),

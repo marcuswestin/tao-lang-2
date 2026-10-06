@@ -112,9 +112,17 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
   }
   if (
     options.app !== 'hnreader' && options.app !== 'clockwork' && options.app !== 'native-navigation'
-    && options.app !== 'native-bridge'
+    && options.app !== 'native-bridge' && options.app !== 'syntax2'
   ) {
-    Errors.throwUserInput('--app must be hnreader, clockwork, native-navigation, or native-bridge.')
+    Errors.throwUserInput('--app must be hnreader, clockwork, native-navigation, native-bridge, or syntax2.')
+  }
+  if (options.app === 'syntax2' && !['ios', 'android', 'prepare'].includes(mode)) {
+    Errors.throwUserInput(
+      'syntax2 native acceptance requires ios or android with an explicit simulator or emulator; prepare is also available.',
+    )
+  }
+  if (options.app === 'syntax2' && options.fault === true) {
+    Errors.throwUserInput('--fault is not supported for syntax2.')
   }
   if (options.app === 'native-bridge') {
     if (options.fault === true) {
@@ -146,7 +154,8 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
   } as const
   if (mode === 'catalyst') {
     if (
-      (options.app === 'clockwork' || options.app === 'native-bridge') || options.fault === true
+      (options.app === 'clockwork' || options.app === 'native-bridge' || options.app === 'syntax2')
+      || options.fault === true
       || options.device !== undefined
     ) {
       Errors.throwUserInput('Catalyst builds require --app native-navigation or hnreader, without --device or --fault.')

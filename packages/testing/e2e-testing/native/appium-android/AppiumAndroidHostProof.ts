@@ -33,6 +33,7 @@ type AppiumAndroidHostControl = Readonly<{
 }>
 
 export type AppiumAndroidHostProofOptions = Readonly<{
+  afterOperation?: (operation: HostJourneyOperation) => Promise<void>
   artifactRoot: string
   control: AppiumAndroidHostControl
   controller: HostController
@@ -89,6 +90,7 @@ export async function runAppiumAndroidHostProof(
     await runHostJourney(
       options.journey,
       appiumAndroidJourneyAdapter(session, options.control, options.runId, timeline),
+      options.afterOperation,
     )
     screenshot = (await session.captureScreenshot('journey-passed')).artifactPath
     receipt = {

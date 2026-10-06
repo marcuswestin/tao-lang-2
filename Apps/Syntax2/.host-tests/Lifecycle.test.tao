@@ -1,0 +1,19 @@
+use NativeLifecycle from ./Lifecycle
+
+test "Syntax2 native lifecycle fixture" {
+   test "compiles and renders the native timer entry point" {
+      run NativeLifecycle
+
+      expect text "Native timer ready"
+      expect label "Start native timer"
+      expect label "Sample native timer"
+   }
+   test "cancels native work after joined resource cleanup" {
+      run NativeLifecycle
+      press label "Start native work"
+      expect text "Native work pending"
+      press label "Cancel pending work"
+      expect text "Native cancellation cleaned"
+      expect missing text "Unexpected native wait completion"
+   }
+}

@@ -134,7 +134,21 @@ function preflightHostJourney(
 }
 
 /** runHostJourney preflights an entire Tao check, then emits its lifecycle and scoped operations in order. */
-export async function runHostJourney(journey: HostJourney, adapter: HostJourneyAdapter): Promise<void> {
+export async function runHostJourney(
+  journey: HostJourney,
+  adapter: HostJourneyAdapter,
+  afterOperation?: (operation: HostJourneyOperation) => Promise<void>,
+): Promise<void> {
+  if (afterOperation !== undefined) {
+    const original = adapter
+    adapter = {
+      capabilities: original.capabilities,
+      async execute(operation) {
+        await original.execute(operation)
+        await afterOperation(operation)
+      },
+    }
+  }
   preflightHostJourney(journey, adapter.capabilities)
   await adapter.execute({
     appName: journey.check.run.appName,

@@ -715,7 +715,7 @@ class AppiumAndroidSession implements HostSession {
 }
 
 function assertIsolatedBuild(artifactRoot: string, target: AppiumAndroidTarget, build: AppiumAndroidBuild): void {
-  if (!/^dev\.tao\.taohost(?:clockwork|hnreader|nativenavigation)[a-z0-9]+$/u.test(target.appId)) {
+  if (!/^dev\.tao\.taohost(?:clockwork|hnreader|nativenavigation|syntax2)[a-z0-9]+$/u.test(target.appId)) {
     Errors.throwUserInput('Appium Android requires an isolated dev.tao.taohost application identifier.')
   }
   if (!/^[a-f0-9]{64}$/u.test(build.compiledArtifactDigest)) {

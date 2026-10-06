@@ -32,6 +32,29 @@ import {
 
 const revision: HostRevision = { build: 'build-a', source: 'source-a' }
 
+test('accepts the run-scoped Syntax2 APK and rejects an unrelated application', async () => {
+  const root = await Repo.mkScratchDir('tao-appium-android-syntax2-')
+  await FS.writeFile(FS.resolvePath('host.apk', root), new Uint8Array([1]))
+  try {
+    const client = new FakeClient('syntax2')
+    const owned = { ...target('emulator-5554'), appId: 'dev.tao.taohostsyntax2abc123' }
+    const host = controller(client, new FakeLeases(), owned, new FakeReceipts(), root)
+    const session = await open(host, root)
+    await session.close(session.descriptor().lease)
+    expect(client.capabilities[0]?.['appium:appPackage']).toBe(owned.appId)
+    const unrelated = controller(
+      new FakeClient('unrelated'),
+      new FakeLeases(),
+      { ...owned, appId: 'dev.tao.library' },
+      new FakeReceipts(),
+      root,
+    )
+    await expect(open(unrelated, root)).rejects.toThrow('isolated dev.tao.taohost')
+  } finally {
+    await FS.remove(root)
+  }
+})
+
 test('declares the isolated UiAutomator2 APK, emulator, and fenced-port capability contract', () => {
   expect(
     appiumAndroidCapabilities(target('emulator-5554'), build('/artifacts/host.apk'), {

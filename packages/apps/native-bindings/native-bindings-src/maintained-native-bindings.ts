@@ -43,10 +43,10 @@ const INSPECTION_LOCK_WAIT_MS = 60_000
 function locations(options: MaintainedBindingOptions): Locations {
   return {
     root: FS.resolvePath(
-      options.stdlibRoot ?? TaoStdlib.declaredRoot() ?? FS.resolvePath('../../stdlib', import.meta.dir),
+      options.stdlibRoot ?? TaoStdlib.declaredRoot() ?? FS.resolvePath('../../stdlib', import.meta.dirname),
     ),
     sourceRoots: (options.sourceRoots
-      ?? [FS.resolvePath('../../expo-host', import.meta.dir), FS.resolvePath('../../../..', import.meta.dir)])
+      ?? [FS.resolvePath('../../expo-host', import.meta.dirname), FS.resolvePath('../../../..', import.meta.dirname)])
       .map(path => FS.resolvePath(path)),
     explicitSources: options.sourceRoots !== undefined && options.sourceRoots.length > 0,
   }
@@ -82,8 +82,8 @@ async function generatorIdentity(
   beforeRead?: (paths: readonly string[]) => Promise<void>,
 ): Promise<{ identity: string; paths: string[]; directory: string }> {
   const resourceRoot = TaoResources.declaredRoot()
-  const directory = await FS.isFile(FS.resolvePath('generate.ts', import.meta.dir))
-    ? import.meta.dir
+  const directory = await FS.isFile(FS.resolvePath('generate.ts', import.meta.dirname))
+    ? import.meta.dirname
     : resourceRoot === undefined
     ? undefined
     : FS.resolvePath(TaoResources.NATIVE_BINDINGS_GENERATOR_DIRECTORY, resourceRoot)

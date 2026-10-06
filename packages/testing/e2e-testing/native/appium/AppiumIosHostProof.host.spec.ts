@@ -166,7 +166,7 @@ test('records navigation diagnostics separately from authored assertions and ret
   expect(timeline[1]).toMatchObject({ outcome: 'passed', diagnosticFailure: 'native diagnostic transport failed' })
 })
 
-test('treats only a typed Appium absent-element response as a passing missing-text assertion', async () => {
+test('treats typed leaf absence as missing text while preserving scope and transport failures', async () => {
   const adapter = appiumIosJourneyAdapter(new MissingElementSession(), { advance: async () => {} }, 'run-a')
 
   await expect(adapter.execute({
@@ -177,6 +177,34 @@ test('treats only a typed Appium absent-element response as a passing missing-te
     source: source(),
     text: 'No longer visible',
   })).resolves.toBeUndefined()
+
+  const missingScopedAdapter = appiumIosJourneyAdapter(
+    new MissingScopedElementSession(),
+    { advance: async () => {} },
+    'run-a',
+  )
+  await expect(missingScopedAdapter.execute({
+    kind: 'expect',
+    missing: true,
+    selector: 'text',
+    selections: [{ index: 2, source: source(), tag: 'book' }],
+    source: source(),
+    text: 'Export complete book-001',
+  })).resolves.toBeUndefined()
+
+  const missingScopeAdapter = appiumIosJourneyAdapter(
+    new MissingScopeSession(),
+    { advance: async () => {} },
+    'run-a',
+  )
+  await expect(missingScopeAdapter.execute({
+    kind: 'expect',
+    missing: true,
+    selector: 'text',
+    selections: [{ index: 2, source: source(), tag: 'book' }],
+    source: source(),
+    text: 'Export complete book-001',
+  })).rejects.toThrow('selected native scope is missing')
 
   const brokenAdapter = appiumIosJourneyAdapter(new BrokenLookupSession(), { advance: async () => {} }, 'run-a')
   await expect(brokenAdapter.execute({
@@ -501,6 +529,18 @@ class ScrollRevealSession extends RecordingSession {
 class MissingElementSession extends RecordingSession {
   override async observe(): Promise<HostObservation> {
     throw new AppiumNoSuchElementError('Appium found no matching element.')
+  }
+}
+
+class MissingScopedElementSession extends RecordingSession {
+  override async observe(): Promise<HostObservation> {
+    throw new HostControlError('assertion', 'The scoped child is missing.', { reason: 'element-not-found' })
+  }
+}
+
+class MissingScopeSession extends RecordingSession {
+  override async observe(): Promise<HostObservation> {
+    throw new HostControlError('assertion', 'The selected native scope is missing.', { scope: 'book' })
   }
 }
 

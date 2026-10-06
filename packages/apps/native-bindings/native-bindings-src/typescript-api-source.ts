@@ -24,6 +24,8 @@ import type {
 import { type NativeResourceContract, nativeTypeReader, type NativeTypeSubstitutions } from './typescript-api-types'
 import type { NativeDeferredContract, NativeOperationContract } from './typescript-native-contracts'
 
+const engineRequire = Platform.createModuleRequire(import.meta.url)
+
 export type NativeCallbackContract = {
   packageName: string
   declaration: string
@@ -62,7 +64,7 @@ export function resolveTypeScriptApiEngineInput(fromDirectory: string): string {
   }
   function runtimeInput(paths?: string[]): string | undefined {
     try {
-      const manifest = require.resolve('typescript/package.json', paths ? { paths } : undefined)
+      const manifest = engineRequire.resolve('typescript/package.json', paths ? { paths } : undefined)
       const runtime = FS.resolvePath('lib/typescript.js', FS.dirname(manifest))
       return FS.existsSync(runtime) ? runtime : undefined
     } catch {
@@ -79,7 +81,7 @@ export function resolveTypeScriptApiEngineInput(fromDirectory: string): string {
 
 function typescriptEngine(fromDirectory: string): typeof TS {
   const enginePath = resolveTypeScriptApiEngineInput(fromDirectory)
-  const engine = require(enginePath) as typeof TS
+  const engine = engineRequire(enginePath) as typeof TS
   Assert.input(
     engine.ScriptTarget?.ESNext !== undefined && engine.ModuleResolutionKind?.Bundler !== undefined
       && typeof engine.createProgram === 'function' && typeof engine.resolveModuleName === 'function'

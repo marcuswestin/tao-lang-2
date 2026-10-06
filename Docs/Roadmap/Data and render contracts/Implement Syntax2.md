@@ -66,12 +66,17 @@ that authorization's implementation scope.
    writes, continuation/refresh failures and cancellation. Do not restore eager all-row assumptions.
 2. **Native acceptance.** Compiled Export tests prove PDF bytes, checked Duration and cleanup on
    success/upload failure; native CompareTitles and grouped builder boundaries have focused proof.
-   iOS clock compilation has arm64/x86_64 evidence. Installed-device, suspend/resume and Android
-   behavior remain unproved. Use the existing managed native lanes and record their boundaries.
-3. **Future-source and coverage reconciliation.** Compare Main.tao.future, Library.test.tao.future
-   and library/GroupedRows.ts.future with active modules and the numbered obligations below. They
-   remain undiscovered design fixtures, not runtime dependencies or acceptance evidence. Account for
-   every obligation before retiring a fixture; update app documentation and coverage together.
+   Installed iOS simulator run `e0273806-5b60-46bc-8bd5-dd4bf416af82` passes real ten-second
+   background/resume timing, joined cancellation cleanup and actual Library export. Android run
+   `09b23526-c8cb-4b76-9824-5b1cc32e79f8` proves timing and cancellation but fails to reach the first
+   book below the wrapper viewport; fix reachability and finish export acceptance. Neither receipt
+   claims physical-device or operating-system file-service behavior.
+3. **Future-source and coverage reconciliation.** Complete: Main, the empty-result journey and the
+   grouped projection sketch are retired after case-by-case mapping to active modules and named
+   checks in the app README. The mounted query-presentation proof covers initial loading, refreshing
+   with retained rows and stale content after refresh failure. The shared conversion-failure family
+   has a cross-file effect check and an actual app rejection journey. Retired sketches are not runtime
+   dependencies or installed-platform acceptance evidence.
 4. **Final program acceptance.** Address failures from the combined journeys and applicable host
    checks, review the integrated seams, run the required final gates and land the acceptance slice.
    The broad deferred language investigations remain outside this task's completion criteria.
@@ -107,6 +112,13 @@ acceptance. Final reporting must preserve these distinctions.
 If CI fails, cancel the remaining run, inspect which relevant suites never completed, reproduce
 those suites locally and batch repairs before the next push. Local diagnostic runs do not replace
 hosted merge proof.
+
+The detailed future-fixture audit closed S61's shared `ConversionFailure` contract with an executable
+core family and Title-to-ValidTitle converter. A cross-file check proves declared leaf effects admit
+into the family contract; the fifth Library journey proves safe propagated conversion feedback.
+The fixture's explicit loading override is implemented and observed by a mounted acquisition test.
+Its typed app error branch reconciles to S61's selected generic app guard; this does not add typed
+app guard cases or implement A29's deferred state redesign.
 
 Use [Decisions](../Tao%20Revolution/Decisions.md) and the app README. S66's unit table, supplied-ancestor
 inference and explicit conversions, and S67's five integration choices are selected. The final

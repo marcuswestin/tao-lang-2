@@ -1,0 +1,29 @@
+use LibraryApp from ../Main
+
+// Run through the installed Release host, separately from JavaScript journeys.
+test "Syntax2 native acceptance" {
+   test "renders the installed Library" {
+      run LibraryApp
+
+      expect text "Library"
+      expect text "Ada Lovelace"
+      expect text "Quantity arithmetic ready."
+      press label "Show native lifecycle"
+      expect text "Native timer ready"
+      press label "Start native timer"
+      press label "Sample native timer"
+      expect text "Native timer advanced while backgrounded"
+      expect text "Native timer done"
+      press label "Start native work"
+      expect text "Native work pending"
+      press label "Cancel pending work"
+      expect text "Native cancellation cleaned"
+      expect missing text "Couldn't finish 'action.'"
+      press label "Show Library"
+      select #book[1] {
+         expect text "BOOK 1"
+         expect missing label "Export complete book-001"
+         press label "Export book-001"
+         expect label "Export complete book-001"
+      }
+}  }

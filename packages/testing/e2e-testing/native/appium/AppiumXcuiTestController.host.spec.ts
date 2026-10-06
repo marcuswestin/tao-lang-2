@@ -252,6 +252,77 @@ test('preserves scoped Tao selection when XCUITest flattens visual children in i
   }
 })
 
+test('marks a missing scoped child occurrence as an expected absent element', async () => {
+  const client = new FakeClient('scoped-missing-child')
+  client.sessions[0]!.findElementsFrom = async () => []
+  const session = await open(appiumController(client, new FakeLeases(), simulator('SIM-SCOPED-MISSING')))
+  try {
+    await expect(session.observe({
+      expectedRevision: revision,
+      target: {
+        kind: 'scoped',
+        scope: { kind: 'tag', occurrence: 2, value: 'reading' },
+        target: { kind: 'text', occurrence: 2, value: 'Export complete book-001' },
+      },
+    })).rejects.toMatchObject({
+      code: 'assertion',
+      details: {
+        occurrence: 2,
+        reason: 'element-not-found',
+        target: { kind: 'text', value: 'Export complete book-001' },
+      },
+    })
+  } finally {
+    await session.close(session.descriptor().lease)
+  }
+})
+
+test('keeps a missing nested selected scope distinct from an absent scoped child', async () => {
+  const client = new FakeClient('missing-nested-scope')
+  client.sessions[0]!.findElementsFrom = async () => []
+  const session = await open(appiumController(client, new FakeLeases(), simulator('SIM-MISSING-NESTED-SCOPE')))
+  try {
+    await expect(session.observe({
+      expectedRevision: revision,
+      target: {
+        kind: 'scoped',
+        scope: { kind: 'tag', value: 'reading' },
+        target: {
+          kind: 'scoped',
+          scope: { kind: 'tag', occurrence: 2, value: 'book' },
+          target: { kind: 'text', value: 'Export complete book-001' },
+        },
+      },
+    })).rejects.toMatchObject({
+      code: 'assertion',
+      details: { scope: { kind: 'tag', occurrence: 2, value: 'book' } },
+    })
+  } finally {
+    await session.close(session.descriptor().lease)
+  }
+})
+
+test('keeps a missing selected scope distinct from an absent scoped child', async () => {
+  const client = new FakeClient('missing-scope')
+  client.sessions[0]!.findElements = async () => []
+  const session = await open(appiumController(client, new FakeLeases(), simulator('SIM-MISSING-SCOPE')))
+  try {
+    await expect(session.observe({
+      expectedRevision: revision,
+      target: {
+        kind: 'scoped',
+        scope: { kind: 'tag', occurrence: 2, value: 'reading' },
+        target: { kind: 'text', value: 'Export complete book-001' },
+      },
+    })).rejects.toMatchObject({
+      code: 'assertion',
+      details: { scope: { kind: 'tag', occurrence: 2, value: 'reading' } },
+    })
+  } finally {
+    await session.close(session.descriptor().lease)
+  }
+})
+
 test('opens iOS control deep links through the current target application', async () => {
   const client = new FakeClient('deep-link')
   const session = await open(appiumController(client, new FakeLeases(), simulator('SIM-DEEP-LINK')))
@@ -696,6 +767,7 @@ class FakeClient {
 }
 
 class FakeSession implements AppiumWebDriverSession {
+  findElementsFrom?: (scope: AppiumElement, locator: AppiumLocator) => Promise<readonly AppiumElement[]>
   readonly revealed: string[] = []
   alertDismissals = 0
   deleted = false
