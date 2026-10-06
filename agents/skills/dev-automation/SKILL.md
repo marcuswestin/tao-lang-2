@@ -39,7 +39,7 @@ description: >-
 - A recipe that deletes and rewrites a `_gen_*` tree another gate reads declares that tree in `writes`. Node names key the timings store `.artifacts/timings/durations.json`; renaming a recipe cold-starts its measured history.
 - Every lane writes `.artifacts/logs/<lane>/<stamp-pid-id>/<node>.log` plus `summary.json` and refreshes the lane's `latest` symlink when the run ends. Give a lane node a catalog `timeoutMs` rather than letting a hang hold the lane open with nothing written.
 - Work-graph commands share one output contract: `--output tui|lines|quiet`, `TAO_OUTPUT_MODE` to pin a lane, and by default a terminal renders the dashboard while a pipe gets the quiet per-node report. `tao test` speaks the same contract, mapping `tui` to `lines`.
-- The six browser and native UI smoke/canary gates cannot run inside the managed Bash sandbox: `studio-smoke`, `studio-proof-real-app`, `keyboard-navigation-smoke`, `studio-smoke-native`, `studio-canary`, and the quarantined `studio-smoke-simulated-user`. `verification-lanes` owns which lane to run instead.
+- The five browser and native UI smoke/canary gates cannot run inside the managed Bash sandbox: `studio-smoke`, `studio-proof-real-app`, `keyboard-navigation-smoke`, `studio-canary`, and the quarantined `studio-smoke-simulated-user`. `verification-lanes` owns which lane to run instead.
 - Derive `./agent help` descriptions for passthrough commands from live `just help` output instead of duplicating recipe help.
 - Use `kebab-case` Just recipe names and `ALL_CAPS` Just variables when changing the human workflow surface.
 - Keep test selection, ledger, reporting, and merge usage in the `verification-lanes` skill rather than duplicating that workflow here.

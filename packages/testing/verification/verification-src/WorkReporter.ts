@@ -117,7 +117,20 @@ function createLinesReporter(options: ReporterOptions): WorkReporterHandle {
             }
           }),
         planned: ({ states }) => HCI.writeLine(headerText(options, states.length)),
-        start: ({ state }) => HCI.logProcessInfo(WorkGraph.nodeLabel(state.node), 'started'),
+        start: ({ state }) => {
+          HCI.logProcessInfo(WorkGraph.nodeLabel(state.node), 'started')
+          if (options.lane === 'diagnose-verification') {
+            const files = (state as WorkState & { selectedTestFiles?: readonly string[] }).selectedTestFiles
+            const command = state.resolvedCommand
+            HCI.logProcessInfo(
+              WorkGraph.nodeLabel(state.node),
+              `includes: ${
+                files?.join(', ')
+                  ?? (command === undefined ? state.name : `${command.command} ${command.args.join(' ')}`)
+              }`,
+            )
+          }
+        },
         waiting: ({ reason, state }) => HCI.logProcessInfo(WorkGraph.nodeLabel(state.node), reason),
       }),
   }

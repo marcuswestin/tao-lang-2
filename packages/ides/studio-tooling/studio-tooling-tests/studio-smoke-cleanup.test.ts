@@ -6,12 +6,10 @@ import { StudioMac2TestRun } from '../studio-tooling-src/StudioMac2TestRun'
 
 type SmokeEntry = 'studio-host-control' | 'studio-mac2-acceptance' | 'studio-simulated-user'
 type HarnessOptions = {
-  browser?: boolean
+  failBrowserStart?: boolean
   failCleanup?: string
-  failNativeStart?: boolean
   failProjectRealPath?: boolean
   failSecondServer?: boolean
-  journeyFailure?: boolean
 }
 
 /** Execute the actual entry callback with local dependencies, without registering or launching a host smoke. */
@@ -88,10 +86,7 @@ async function withSmokeEntry(
     HCI,
     Platform: {
       runtimeProcess: {
-        env: {
-          TAO_STUDIO_SMOKE_ARTIFACT_ROOT: root,
-          TAO_STUDIO_SMOKE_NATIVE: options.browser ? 'false' : 'true',
-        },
+        env: { TAO_STUDIO_SMOKE_ARTIFACT_ROOT: root },
       },
     },
     Repo: {
@@ -117,8 +112,11 @@ async function withSmokeEntry(
     },
     runCleanups,
     StudioCdp: {
-      launchChrome: async (options: { artifactRoot: string }) => {
-        Expect(options.artifactRoot).toBe(invocationRoot())
+      launchChrome: async (launch: { artifactRoot: string }) => {
+        Expect(launch.artifactRoot).toBe(invocationRoot())
+        if (options.failBrowserStart) {
+          Errors.throwHostEnvironment('Browser startup failed without a handle.')
+        }
         return {
           close: async () => stop('browser'),
           setViewport: async () => Errors.throwHostEnvironment('Journey failed.'),
@@ -127,21 +125,10 @@ async function withSmokeEntry(
     },
     StudioMac2TestRun,
     StudioNative: {
-      start: async () => {
-        if (options.failNativeStart) {
-          Errors.throwHostEnvironment('Native startup failed without a handle.')
-        }
-        return {
-          hostControl: async () => Errors.throwHostEnvironment('Journey failed.'),
-          stop: async () => stop('native Studio'),
-          waitForProbe: async () => {
-            if (options.journeyFailure) {
-              Errors.throwHostEnvironment('Journey failed.')
-            }
-            return { capabilities: { transport: { passed: true } }, passed: true }
-          },
-        }
-      },
+      start: async () => ({
+        hostControl: async () => Errors.throwHostEnvironment('Journey failed.'),
+        stop: async () => stop('native Studio'),
+      }),
     },
     StudioNativeTestRun: {
       create: async () => {
@@ -245,34 +232,29 @@ try {
     },
   )
 
-  for (const browser of [false, true]) {
-    Test(
-      `simulated-user preserves a retained ${browser ? 'browser' : 'native'} ledger across repeated runs`,
-      async () => {
-        await withSmokeEntry('studio-simulated-user', {
-          browser,
-          failCleanup: browser ? 'browser' : 'native Studio',
-          journeyFailure: true,
-        }, async ({ allocatedRoots, invocationRoots, run }) => {
-          await Expect(run()).rejects.toThrow('Journey failed.')
-          Expect(invocationRoots).toHaveLength(1)
-          const firstLedgerPath = FS.resolvePath('external-directories.json', invocationRoots[0]!)
-          const firstLedger = await FS.readText(firstLedgerPath)
-          Expect(JSON.parse(firstLedger)).toMatchObject({
-            directories: [{ path: allocatedRoots[0], state: 'retained' }, { state: 'retained' }],
-          })
-          await Expect(run()).rejects.toThrow('Journey failed.')
-          Expect(invocationRoots).toHaveLength(2)
-          Expect(invocationRoots[1]).not.toBe(invocationRoots[0])
-          Expect(allocatedRoots[1]).not.toBe(allocatedRoots[0])
-          Expect(await FS.readText(firstLedgerPath)).toBe(firstLedger)
-          Expect(await FS.readJson(FS.resolvePath('external-directories.json', invocationRoots[1]!))).toMatchObject({
-            directories: [{ path: allocatedRoots[1], state: 'retained' }, { state: 'retained' }],
-          })
+  Test('simulated-user preserves a retained browser ledger across repeated runs', async () => {
+    await withSmokeEntry(
+      'studio-simulated-user',
+      { failCleanup: 'browser' },
+      async ({ allocatedRoots, invocationRoots, run }) => {
+        await Expect(run()).rejects.toThrow('Journey failed.')
+        Expect(invocationRoots).toHaveLength(1)
+        const firstLedgerPath = FS.resolvePath('external-directories.json', invocationRoots[0]!)
+        const firstLedger = await FS.readText(firstLedgerPath)
+        Expect(JSON.parse(firstLedger)).toMatchObject({
+          directories: [{ path: allocatedRoots[0], state: 'retained' }, { state: 'retained' }],
+        })
+        await Expect(run()).rejects.toThrow('Journey failed.')
+        Expect(invocationRoots).toHaveLength(2)
+        Expect(invocationRoots[1]).not.toBe(invocationRoots[0])
+        Expect(allocatedRoots[1]).not.toBe(allocatedRoots[0])
+        Expect(await FS.readText(firstLedgerPath)).toBe(firstLedger)
+        Expect(await FS.readJson(FS.resolvePath('external-directories.json', invocationRoots[1]!))).toMatchObject({
+          directories: [{ path: allocatedRoots[1], state: 'retained' }, { state: 'retained' }],
         })
       },
     )
-  }
+  })
 
   Test('simulated-user records and removes the allocated raw directory when canonicalization fails', async () => {
     await withSmokeEntry(
@@ -331,9 +313,9 @@ try {
     'simulated-user records ownership before launch and removes both directories after complete shutdown',
     async () => {
       await withSmokeEntry('studio-simulated-user', {}, async ({ projectRoot, root, run, runtimeRoot, stopped }) => {
-        await run()
+        await Expect(run()).rejects.toThrow('Journey failed.')
         Expect(stopped).toEqual([
-          'native Studio',
+          'browser',
           'Studio server',
           'Studio sessions',
           'preview session',
@@ -352,33 +334,16 @@ try {
     },
   )
 
-  Test(
-    'simulated-user fails a successful journey when native shutdown fails and retains both directories',
-    async () => {
-      await withSmokeEntry(
-        'studio-simulated-user',
-        { failCleanup: 'native Studio' },
-        async ({ projectRoot, run, runtimeRoot }) => {
-          await Expect(run()).rejects.toThrow('cleanup operations failed')
-          Expect(await FS.exists(projectRoot)).toBe(true)
-          Expect(await FS.exists(runtimeRoot)).toBe(true)
-        },
-      )
-    },
-  )
-
   for (
-    const label of ['native Studio', 'Studio server', 'Studio sessions', 'preview session', 'preview server', 'browser']
+    const label of ['browser', 'Studio server', 'Studio sessions', 'preview session', 'preview server']
   ) {
     Test(`simulated-user retains its project and runtime after ${label} shutdown fails`, async () => {
       await withSmokeEntry('studio-simulated-user', {
-        browser: label === 'browser',
         failCleanup: label,
-        journeyFailure: true,
       }, async ({ projectRoot, root, run, runtimeRoot, stopped }) => {
         await Expect(run()).rejects.toThrow('Journey failed.')
         Expect(stopped).toEqual([
-          label === 'browser' ? 'browser' : 'native Studio',
+          'browser',
           'Studio server',
           'Studio sessions',
           'preview session',
@@ -398,17 +363,17 @@ try {
     })
   }
 
-  Test('simulated-user retains both directories when native startup leaves shutdown unproved', async () => {
+  Test('simulated-user retains both directories when browser startup leaves shutdown unproved', async () => {
     await withSmokeEntry(
       'studio-simulated-user',
-      { failNativeStart: true },
+      { failBrowserStart: true },
       async ({ projectRoot, root, run, runtimeRoot }) => {
-        await Expect(run()).rejects.toThrow('Native startup failed without a handle.')
+        await Expect(run()).rejects.toThrow('Browser startup failed without a handle.')
         Expect(await FS.exists(projectRoot)).toBe(true)
         Expect(await FS.exists(runtimeRoot)).toBe(true)
         Expect(await FS.readJson(FS.resolvePath('external-directories.json', root))).toMatchObject({
           directories: [{ state: 'retained' }, { state: 'retained' }],
-          pendingShutdown: ['native Studio'],
+          pendingShutdown: ['browser'],
         })
       },
     )

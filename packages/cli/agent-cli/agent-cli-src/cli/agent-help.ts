@@ -108,6 +108,11 @@ Examples:
   ./agent verify
   ./agent unsandboxed verify-full
   ./agent verify-full-sandbox
+  ./agent unsandboxed open-pr --auto-merge
+  ./agent unsandboxed verify-complement
+  ./agent unsandboxed cancel-verify
+  ./agent unsandboxed land-fix
+  ./agent unsandboxed merge-pr
   ./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
   ./agent unsandboxed prepare-release ide-extension
   ./agent unsandboxed ide-extension-acceptance
@@ -142,7 +147,6 @@ Examples:
   ./agent unsandboxed studio-manual-checks --show-studio
   ./agent unsandboxed test-host managed-loop --case lifecycle
   ./agent unsandboxed test-host managed-loop-recover --invocation <uuid>
-  ./agent unsandboxed studio-smoke --native packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts
   ./agent unsandboxed studio-smoke --native --show-studio packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts
   ./agent unsandboxed studio-smoke --native --show-studio packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
   ./agent unsandboxed local-instantdb start
@@ -174,10 +178,10 @@ Agent app-dev web opens Google Chrome with an isolated profile and no window. Ad
 printed DevTools URL for automation/screenshots of that Chrome session. For interactive in-app
 review, open the printed app URL; it uses a separate browser session. Chrome closes with the loop.
 Native Studio uses Electrobun and opens windows. Its --no-browser option is not a hidden mode.
-The three native smoke examples above exercise simulated-user behavior, semantic host control,
-and external accessibility/physical input respectively; Mac2 may activate the app and needs
+The two native smoke examples above exercise semantic host control and external
+accessibility/physical input respectively; Mac2 may activate the app and needs
 native automation/accessibility consent. Obtain permission for visible native testing, then pass
---show-studio. Hidden canary and simulated-user probes remain quiet without that option.
+--show-studio. The hidden canary probe remains quiet without that option.
 Verification and landing accept --show-studio and forward it only to scoped test children.
 Visible workflow warnings appear before execution and remain in final text/JSON reports.
 After failed Android cleanup, retained fences name a generation. Recover only stopped owned
@@ -218,8 +222,13 @@ lanes, two of which take a machine-wide lease on the window server for as long a
 verify-full-sandbox runs that same membership in a managed shell without claiming its host-only
 lanes passed. A lane whose tree is already recorded green prints that run's
 evidence and stops; --no-cache runs it anyway. When new CI is starting for an authorized, ready
-landing, prefer open-pr --auto-merge; an already green PR uses merge-pr directly. Plain open-pr
-keeps auto-merge off for verification before landing readiness. Offline local proof does not push or land.
+landing, run open-pr --auto-merge: it also runs verify-complement, the host-only gates hosted
+Verify does not admit, beside the hosted run, and cancels that run if the complement fails first
+(cancel-verify does the same by hand). merge-pr finishes from wherever the pull request stands:
+it archives one GitHub already merged, squash-merges one that is green with auto-merge off, and
+otherwise turns auto-merge on for this head. land-fix pushes a fix committed after GitHub merged
+straight to main, with a receipt and no full verification. Plain open-pr keeps auto-merge off for
+verification before landing readiness. Offline local proof does not push or land.
 
 Repository workflow commands capture the child's output rather than inheriting the terminal, write
 the full capture to .artifacts/logs/agent/<command>/, and print a

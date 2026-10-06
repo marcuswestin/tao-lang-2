@@ -13,13 +13,13 @@ Root `AGENTS.md` owns branch and index constraints and standing authorization to
 branches, including its dependency-approval exception. Apply that authorization to all incoming
 file changes. The warn-only Git hooks
 `./agent setup` installs speak up on a detached HEAD, an unnamed branch, or an attribution trailer.
-`verification-lanes` owns `merge-with-main`'s evidence, flags, and message-file format.
+`verification-lanes` owns the landing route, its evidence, flags, and message-file format.
 
 ## Resource review after landing
 
 After every successful landing, inspect the single inventory with `./agent unsandboxed resources --json`.
-The ordinary landing command also saves `.artifacts/resources/after-land.json`; read its full
-entries and warnings. Include active sessions started by this task as well as stranded resources.
+A local `land` also saves `.artifacts/resources/after-land.json`; read its full entries and
+warnings. Include active sessions started by this task as well as stranded resources.
 Match this task's receipts and external-directory registrations; a checkout path alone does not
 prove task ownership in a shared checkout. Ask the Developer whether to clean the concrete
 task-owned items before doing so. If nothing is eligible, say so briefly.
@@ -94,10 +94,10 @@ For landing a finished slice during a longer task, or `/merge-progress`, read
 `references/merge-progress.md` before preparing the partial landing.
 
 Require a clean feature branch with its merge message reviewed; `verification-lanes` owns the
-landing command's mechanics, evidence, message format, and CI-default route. After the Developer
-authorizes landing this slice, use that skill's route; merge an existing fully verified pull request
-directly with `merge-pr`. Personal `dev/<name>` branches keep their supported local `land` lifecycle.
-For the local route, run
+landing route, its evidence, and the message format. After the Developer authorizes landing this
+slice, follow that route exactly: `./agent unsandboxed open-pr --auto-merge`, which also runs the
+host-only `verify-complement` lane locally in parallel, GitHub merging on green `Verify`. Personal `dev/<name>` branches
+keep their supported local `land` lifecycle. For that local route, run
 `./agent unsandboxed land`: it fetches and integrates current `main`, verifies, and pushes while holding
 one lock. Every integration must attempt to fetch `origin/main` first and use the fetched tip when
 available, never prefer stale local `main`. If preparation falls back to local `main` because fetching
@@ -107,14 +107,13 @@ Do not fetch and merge `main` beforehand merely to satisfy a stale precondition.
 landing reports a conflict, resolve it outside the lock; after any merge of `main` into a branch,
 skim what arrived: `references/after-merging-main.md`.
 
-For a new hosted verification, use plain `open-pr` while host acceptance is pending or the slice is
-not ready to land; once landing is authorized and host acceptance is complete, prefer
-`./agent unsandboxed open-pr --auto-merge` and follow all checks through completion. An existing
-fully verified pull request goes directly through `merge-pr`, without reopening or rearming it
-(`verification-lanes` owns route details). GitHub refuses a pull
-request that conflicts with `main`, so bring `main` in with `./agent merge-main` and run `open-pr` again;
-the checks run on that push. After it merges, the remote `feat/<name>` is gone and `merged/<name>`
-holds its head; the local branch and worktree remain for the resource review below.
+Plain `open-pr` without `--auto-merge` is only for CI feedback before landing is authorized. If the
+local complement fails after GitHub already merged the pull request, fix it on the branch, commit,
+and run `./agent unsandboxed land-fix`, which merges the branch into fetched `origin/main` and
+pushes `main` without a full verification, as the route says. GitHub refuses a pull request that conflicts with `main`, so bring
+`main` in with `./agent merge-main` and run `open-pr --auto-merge` again; the checks run on that
+push. After it merges, the remote `feat/<name>` is gone and `merged/<name>` holds its head; the
+local branch and worktree remain for the resource review below.
 
 A person's branch is `dev/<name>`. `open-pr` and `merge-pr` do not support this branch shape; it
 uses the local `./agent unsandboxed land` lifecycle and verification, then the same name is created

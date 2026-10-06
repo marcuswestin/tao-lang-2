@@ -1,5 +1,5 @@
 import { OutputText } from '@cli-kit'
-import { Errors, FS, Platform, ProcessTree, type TrackedProcess } from '@shared'
+import { Errors, FS, Platform, ProcessTree, type TrackedProcess, VerificationTimeouts } from '@shared'
 
 /**
  * One scheduler for every parallel repository lane. A node says what must pass before it starts,
@@ -122,6 +122,8 @@ export type WorkWait = {
 
 /** WorkState tracks one node's output, status, and timing across a run. */
 export type WorkState = {
+  /** The command built with this node's actual admission, retained for diagnostic scope output. */
+  resolvedCommand?: WorkCommand
   /** Original and confirmation results, present when a node was retried. */
   attempts?: readonly WorkAttempt[]
   /** Presentation-only group for dashboards; scheduling and reporting still treat this node independently. */
@@ -201,6 +203,8 @@ export type WorkSlotBroker = {
 
 /** WorkRunOptions configures one graph run. */
 export type WorkRunOptions = {
+  /** Timeout behavior fixtures keep their deadline even during an unbounded diagnostic run. */
+  timeoutPolicy?: VerificationTimeouts.Policy
   /** Environment inherited by every child in this graph, such as the owning machine-lane id. */
   env?: Record<string, string>
   /** Measured duration per node, for critical-path ordering. Cold start falls back to `cost`. */
@@ -497,6 +501,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       },
     }
     state.slots = slots
+    state.resolvedCommand = run
     state.status = 'running'
     state.reason = undefined
     state.startedAt = Date.now()
@@ -508,20 +513,22 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         cancel()
       }
     }
-    const timeout = state.node.timeoutMs === undefined
+    const timeoutMs = VerificationTimeouts.resolve(state.node.timeoutMs, options.timeoutPolicy)
+    const timeout = timeoutMs === undefined
       ? undefined
-      : setTimeout(() => expire('wall-clock'), state.node.timeoutMs)
+      : setTimeout(() => expire('wall-clock'), timeoutMs)
     let idleTimeout: ReturnType<typeof setTimeout> | undefined
     // The idle bound is armed from the start, not from the first byte: a node that never prints
     // anything is exactly the case it exists for.
     function restartIdleTimer(): void {
-      if (state.node.idleTimeoutMs === undefined) {
+      const idleTimeoutMs = VerificationTimeouts.resolve(state.node.idleTimeoutMs, options.timeoutPolicy)
+      if (idleTimeoutMs === undefined) {
         return
       }
       if (idleTimeout !== undefined) {
         clearTimeout(idleTimeout)
       }
-      idleTimeout = setTimeout(() => expire('idle'), state.node.idleTimeoutMs)
+      idleTimeout = setTimeout(() => expire('idle'), idleTimeoutMs)
     }
     restartIdleTimer()
 
@@ -884,9 +891,23 @@ function nestedRunnerBudgetKeys(command: WorkCommand): readonly string[] {
   return subcommand === 'test' && runner === 'tao' ? [BUDGET_ENV_KEYS.taoTest] : []
 }
 
-/** resolveCapacity resolves the worker width of a run: `--jobs`, then the whole machine. */
+/**
+ * DEFAULT_WIDTH_CAP bounds a run's worker width when nothing asked for one. Replaying a recorded
+ * green `verify-full` through this scheduler (`Docs/Roadmap/Verification speed research.md`, §10)
+ * put the simulated makespan at 362 s at width 12 and 371 s at width 18 once per-slot inflation on
+ * the machine's twelve usable cores is counted: past twelve, every extra slot slows the slots already
+ * running by more than it adds. `--jobs` and `TAO_VERIFY_JOBS` still set any width explicitly.
+ */
+const DEFAULT_WIDTH_CAP = 12
+
+/** resolveCapacity resolves the worker width of a run: `--jobs`, then the machine up to the cap. */
 function resolveCapacity(requestedJobs: number | undefined): number {
-  return requestedJobs ?? Platform.cpuCount()
+  return requestedJobs ?? defaultCapacity(Platform.cpuCount())
+}
+
+/** defaultCapacity is the width a run takes on a machine of `cpuCount` cores when none was asked for. */
+function defaultCapacity(cpuCount: number): number {
+  return Math.max(1, Math.min(DEFAULT_WIDTH_CAP, cpuCount))
 }
 
 function watchProcessInterrupt(interrupt: () => void): () => void {
@@ -938,8 +959,10 @@ function exitCodeFor(result: WorkRunResult): number {
 /** WorkGraph owns dependency-aware, prioritized scheduling for every parallel repository lane. */
 export const WorkGraph = {
   BUDGET_ENV_KEYS,
+  DEFAULT_WIDTH_CAP,
   OUTPUT_LINE_LIMIT,
   createState,
+  defaultCapacity,
   elapsedMs,
   exitCodeFor,
   nodeLabel,

@@ -1,7 +1,10 @@
 # Landing Mechanics
 
 `git-workflow` owns the underlying Git commands; this covers what `./agent unsandboxed land` does, its flags, its
-message format, and how a red lane is classified.
+message format, and how a red lane is classified. The default landing route is hosted `Verify`
+with auto-merge plus the local complement (`hosted-verification.md`); `land` remains for
+`dev/<name>` branches and for when GitHub is unavailable, its push to `main` passing the ruleset
+through the repository admin bypass.
 
 Remote inspection and push run directly on the host through `./agent unsandboxed land`. The host
 process runs repository code and has the normal GitHub credential helper available. The final push

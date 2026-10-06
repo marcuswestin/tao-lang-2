@@ -237,7 +237,7 @@ Native reproductions for the future approved execution:
 
 ```sh
 cd "$HOME/code/tao-lang-2"
-./agent unsandboxed studio-smoke --native packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts
+./agent unsandboxed studio-canary
 ./agent unsandboxed studio-smoke --native --show-studio packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts
 ./agent unsandboxed studio-smoke --native --show-studio packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts --json
 ```

@@ -420,46 +420,6 @@
       "outcome": "passed",
       "suite": "apps/providers/icloud"
     },
-    "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantAuth-live.test.ts::seeded file cost": {
-      "durationMs": 0,
-      "file": "packages/apps/providers/instantdb/instantdb-tests/InstantAuth-live.test.ts",
-      "fileIdentity": "seeded",
-      "id": "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantAuth-live.test.ts::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "apps/providers/instantdb"
-    },
-    "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantAuth.test.ts::seeded file cost": {
-      "durationMs": 2,
-      "file": "packages/apps/providers/instantdb/instantdb-tests/InstantAuth.test.ts",
-      "fileIdentity": "seeded",
-      "id": "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantAuth.test.ts::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "apps/providers/instantdb"
-    },
-    "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts::seeded file cost": {
-      "durationMs": 0,
-      "file": "packages/apps/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts",
-      "fileIdentity": "seeded",
-      "id": "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "apps/providers/instantdb"
-    },
-    "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantDB.test.ts::seeded file cost": {
-      "durationMs": 158,
-      "file": "packages/apps/providers/instantdb/instantdb-tests/InstantDB.test.ts",
-      "fileIdentity": "seeded",
-      "id": "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantDB.test.ts::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "apps/providers/instantdb"
-    },
     "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/auth-review-live.test.ts::seeded file cost": {
       "durationMs": 0,
       "file": "packages/apps/providers/instantdb/instantdb-tests/auth-review-live.test.ts",
@@ -490,6 +450,26 @@
       "outcome": "passed",
       "suite": "apps/providers/instantdb"
     },
+    "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantAuth-live.test.ts::seeded file cost": {
+      "durationMs": 0,
+      "file": "packages/apps/providers/instantdb/instantdb-tests/InstantAuth-live.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantAuth-live.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/instantdb"
+    },
+    "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantAuth.test.ts::seeded file cost": {
+      "durationMs": 2,
+      "file": "packages/apps/providers/instantdb/instantdb-tests/InstantAuth.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantAuth.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/instantdb"
+    },
     "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/instantdb-live.test.ts::seeded file cost": {
       "durationMs": 0,
       "file": "packages/apps/providers/instantdb/instantdb-tests/instantdb-live.test.ts",
@@ -500,11 +480,41 @@
       "outcome": "passed",
       "suite": "apps/providers/instantdb"
     },
+    "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts::seeded file cost": {
+      "durationMs": 0,
+      "file": "packages/apps/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/instantdb"
+    },
+    "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantDB.test.ts::seeded file cost": {
+      "durationMs": 158,
+      "file": "packages/apps/providers/instantdb/instantdb-tests/InstantDB.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/providers/instantdb::packages/apps/providers/instantdb/instantdb-tests/InstantDB.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/providers/instantdb"
+    },
     "apps/runtime::packages/apps/runtime/TR-tests/NativeHostTestControl.test.ts::seeded file cost": {
       "durationMs": 1,
       "file": "packages/apps/runtime/TR-tests/NativeHostTestControl.test.ts",
       "fileIdentity": "seeded",
       "id": "apps/runtime::packages/apps/runtime/TR-tests/NativeHostTestControl.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "apps/runtime"
+    },
+    "apps/runtime::packages/apps/runtime/TR-tests/runtime-package.test.ts::seeded file cost": {
+      "durationMs": 21,
+      "file": "packages/apps/runtime/TR-tests/runtime-package.test.ts",
+      "fileIdentity": "seeded",
+      "id": "apps/runtime::packages/apps/runtime/TR-tests/runtime-package.test.ts::seeded file cost",
       "lastRunAt": "2026-10-05T00:00:00.000Z",
       "name": "seeded file cost",
       "outcome": "passed",
@@ -1080,16 +1090,6 @@
       "outcome": "passed",
       "suite": "apps/runtime"
     },
-    "apps/runtime::packages/apps/runtime/TR-tests/runtime-package.test.ts::seeded file cost": {
-      "durationMs": 21,
-      "file": "packages/apps/runtime/TR-tests/runtime-package.test.ts",
-      "fileIdentity": "seeded",
-      "id": "apps/runtime::packages/apps/runtime/TR-tests/runtime-package.test.ts::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "apps/runtime"
-    },
     "apps/stdlib::packages/apps/stdlib/stdlib-tests/auth-flow.test.ts::seeded file cost": {
       "durationMs": 4,
       "file": "packages/apps/stdlib/stdlib-tests/auth-flow.test.ts",
@@ -1565,16 +1565,6 @@
       "file": "packages/cli/tao-cli/cli-tests/ota-artifacts.test.ts",
       "fileIdentity": "seeded",
       "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/ota-artifacts.test.ts::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "cli/tao-cli"
-    },
-    "cli/tao-cli::packages/cli/tao-cli/cli-tests/project-command.test.ts::seeded file cost": {
-      "durationMs": 1093,
-      "file": "packages/cli/tao-cli/cli-tests/project-command.test.ts",
-      "fileIdentity": "seeded",
-      "id": "cli/tao-cli::packages/cli/tao-cli/cli-tests/project-command.test.ts::seeded file cost",
       "lastRunAt": "2026-10-05T00:00:00.000Z",
       "name": "seeded file cost",
       "outcome": "passed",
@@ -3630,16 +3620,6 @@
       "outcome": "passed",
       "suite": "performance-checks"
     },
-    "performance-checks::packages/dev/performance-checks/language-performance.test.ts::seeded file cost": {
-      "durationMs": 4,
-      "file": "packages/dev/performance-checks/language-performance.test.ts",
-      "fileIdentity": "seeded",
-      "id": "performance-checks::packages/dev/performance-checks/language-performance.test.ts::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "performance-checks"
-    },
     "runtime-jest::packages/apps/expo-host/expo-host-tests/adaptive-layout-e2e.jest-test.tsx::seeded file cost": {
       "durationMs": 1820,
       "file": "packages/apps/expo-host/expo-host-tests/adaptive-layout-e2e.jest-test.tsx",
@@ -3795,16 +3775,6 @@
       "file": "packages/apps/expo-host/expo-host-tests/frame-content-e2e.jest-test.tsx",
       "fileIdentity": "seeded",
       "id": "runtime-jest::packages/apps/expo-host/expo-host-tests/frame-content-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/apps/expo-host/expo-host-tests/injections-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 2142,
-      "file": "packages/apps/expo-host/expo-host-tests/injections-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/apps/expo-host/expo-host-tests/injections-e2e.jest-test.tsx::seeded file cost",
       "lastRunAt": "2026-10-05T00:00:00.000Z",
       "name": "seeded file cost",
       "outcome": "passed",
@@ -4110,306 +4080,6 @@
       "outcome": "passed",
       "suite": "runtime-jest"
     },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/adaptive-layout-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 1369,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/adaptive-layout-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/adaptive-layout-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/app-shell-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 3022,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/app-shell-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/app-shell-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/capture-restore-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 9523,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/capture-restore-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/capture-restore-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/checkbox-test-runtime.jest-test.tsx::seeded file cost": {
-      "durationMs": 2020,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/checkbox-test-runtime.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/checkbox-test-runtime.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/clock-lifecycle.jest-test.ts::seeded file cost": {
-      "durationMs": 3,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/clock-lifecycle.jest-test.ts",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/clock-lifecycle.jest-test.ts::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/data-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 1534,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/data-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/data-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/debugger-instrumentation-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 930,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/debugger-instrumentation-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/debugger-instrumentation-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/design-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 2361,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/design-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/design-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/frame-content-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 1639,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/frame-content-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/frame-content-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/injections-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 1044,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/injections-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/injections-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/interaction-layers.jest-test.tsx::seeded file cost": {
-      "durationMs": 128,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/interaction-layers.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/interaction-layers.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/interaction-outline-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 11483,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/interaction-outline-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/interaction-outline-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/language-values-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 7358,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/language-values-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/language-values-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/layout-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 4140,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/layout-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/layout-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/navigation-accessibility.jest-test.tsx::seeded file cost": {
-      "durationMs": 388,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/navigation-accessibility.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/navigation-accessibility.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/navigation-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 6991,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/navigation-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/navigation-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/navigation-root-view-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 1474,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/navigation-root-view-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/navigation-root-view-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/replay-host-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 67,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/replay-host-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/replay-host-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/runtime-containment.jest-test.tsx::seeded file cost": {
-      "durationMs": 3828,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/runtime-containment.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/runtime-containment.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/runtime-rendering-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 102,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/runtime-rendering-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/runtime-rendering-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/scheme-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 16,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/scheme-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/scheme-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/selectable-loops-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 1390,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/selectable-loops-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/selectable-loops-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/split-nav.jest-test.tsx::seeded file cost": {
-      "durationMs": 26,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/split-nav.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/split-nav.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 301,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/studio-journey-browser.jest-test.tsx::seeded file cost": {
-      "durationMs": 50,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/studio-journey-browser.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/studio-journey-browser.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/studio-scenario-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 13889,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/studio-scenario-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/studio-scenario-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/studio-subject-lifecycle.jest-test.tsx::seeded file cost": {
-      "durationMs": 59,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/studio-subject-lifecycle.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/studio-subject-lifecycle.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/tao-test-runtime.jest-test.tsx::seeded file cost": {
-      "durationMs": 16757,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/tao-test-runtime.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/tao-test-runtime.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/text-stdlib-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 1202,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/text-stdlib-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/text-stdlib-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
-    "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/ui-stdlib-surface-e2e.jest-test.tsx::seeded file cost": {
-      "durationMs": 3981,
-      "file": "packages/runtime-toolchain/runtime-toolchain-tests/ui-stdlib-surface-e2e.jest-test.tsx",
-      "fileIdentity": "seeded",
-      "id": "runtime-jest::packages/runtime-toolchain/runtime-toolchain-tests/ui-stdlib-surface-e2e.jest-test.tsx::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "runtime-jest"
-    },
     "services/account-server::packages/services/account-server/account-server-tests/account-persistence.test.ts::seeded file cost": {
       "durationMs": 696,
       "file": "packages/services/account-server/account-server-tests/account-persistence.test.ts",
@@ -4509,16 +4179,6 @@
       "name": "seeded file cost",
       "outcome": "passed",
       "suite": "services/update-server"
-    },
-    "shared::packages/shared/shared-tests/ReleaseCapabilities.test.ts::seeded file cost": {
-      "durationMs": 1,
-      "file": "packages/shared/shared-tests/ReleaseCapabilities.test.ts",
-      "fileIdentity": "seeded",
-      "id": "shared::packages/shared/shared-tests/ReleaseCapabilities.test.ts::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "shared"
     },
     "shared::packages/shared/shared-tests/command-lifetime.test.ts::seeded file cost": {
       "durationMs": 377,
@@ -4665,6 +4325,16 @@
       "file": "packages/shared/shared-tests/release-toolchain.test.ts",
       "fileIdentity": "seeded",
       "id": "shared::packages/shared/shared-tests/release-toolchain.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "shared"
+    },
+    "shared::packages/shared/shared-tests/ReleaseCapabilities.test.ts::seeded file cost": {
+      "durationMs": 1,
+      "file": "packages/shared/shared-tests/ReleaseCapabilities.test.ts",
+      "fileIdentity": "seeded",
+      "id": "shared::packages/shared/shared-tests/ReleaseCapabilities.test.ts::seeded file cost",
       "lastRunAt": "2026-10-05T00:00:00.000Z",
       "name": "seeded file cost",
       "outcome": "passed",
@@ -4890,21 +4560,21 @@
       "outcome": "passed",
       "suite": "testing/host-control"
     },
-    "testing/host-control::packages/testing/host-control/host-control-tests/MachineResources.test.ts::seeded file cost": {
-      "durationMs": 331,
-      "file": "packages/testing/host-control/host-control-tests/MachineResources.test.ts",
-      "fileIdentity": "seeded",
-      "id": "testing/host-control::packages/testing/host-control/host-control-tests/MachineResources.test.ts::seeded file cost",
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "testing/host-control"
-    },
     "testing/host-control::packages/testing/host-control/host-control-tests/machine-resource-admission.test.ts::seeded file cost": {
       "durationMs": 160,
       "file": "packages/testing/host-control/host-control-tests/machine-resource-admission.test.ts",
       "fileIdentity": "seeded",
       "id": "testing/host-control::packages/testing/host-control/host-control-tests/machine-resource-admission.test.ts::seeded file cost",
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "name": "seeded file cost",
+      "outcome": "passed",
+      "suite": "testing/host-control"
+    },
+    "testing/host-control::packages/testing/host-control/host-control-tests/MachineResources.test.ts::seeded file cost": {
+      "durationMs": 331,
+      "file": "packages/testing/host-control/host-control-tests/MachineResources.test.ts",
+      "fileIdentity": "seeded",
+      "id": "testing/host-control::packages/testing/host-control/host-control-tests/MachineResources.test.ts::seeded file cost",
       "lastRunAt": "2026-10-05T00:00:00.000Z",
       "name": "seeded file cost",
       "outcome": "passed",

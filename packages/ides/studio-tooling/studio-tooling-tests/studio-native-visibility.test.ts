@@ -6,7 +6,7 @@ import { StudioNative } from '../studio-tooling-src/StudioNative'
 import { StudioSmoke } from '../studio-tooling-src/StudioSmoke'
 
 const visibleSmokeFile = 'packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts'
-const quietSmokeFile = 'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts'
+const browserOnlySmokeFile = 'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts'
 
 const studioConsent = testOverrideSlot({
   read: () => Platform.runtimeProcess.env[UiVisibility.STUDIO_ENV_KEY],
@@ -23,7 +23,6 @@ Describe('native Studio test visibility', () => {
   for (
     const selection of [
       { probe: true },
-      { nativeHostCommand: 'studio-smoke-native' },
       { nativeHostCommand: 'studio-host-control-smoke' },
       { nativeHostCommand: 'studio-mac2-acceptance-smoke' },
       { nativeHostCommand: 'studio-canary' },
@@ -203,12 +202,12 @@ Describe('native Studio test visibility', () => {
     }
   })
 
-  Test('allows the known quiet native smoke without consent or warnings', async () => {
+  Test('allows a browser-only smoke under --native without consent or warnings', async () => {
     const root = await mkTestDir('tao-studio-quiet-smoke-')
     try {
       const captured = await withCapturedOutput(async () => {
         await Expect(StudioSmoke.run({
-          files: [quietSmokeFile],
+          files: [browserOnlySmokeFile],
           native: true,
           registryRoot: FS.resolvePath('registry', root),
           runId: '../invalid',

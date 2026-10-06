@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Repo, Time } from '@shared'
+import { Errors, FS, HCI, Repo, Time, VerificationTimeouts } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
@@ -83,7 +83,9 @@ Test('a fixture row stays on screen after the datasource file is edited', async 
     const selector = '.studio-preview-cell iframe[title*="DatasourceProbe"]'
     const previewUrl = await loadedPreviewUrl(browser, selector)
     const showsProbe = `document.body?.textContent?.includes(${JSON.stringify(probeTitle)}) === true`
-    await browser.waitForInFrame(previewUrl, showsProbe, { timeoutMs: 60_000 })
+    await browser.waitForInFrame(previewUrl, showsProbe, {
+      timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity,
+    })
     await browser.evaluate(`(() => {
         window.__taoFrameLoads = 0
         document.querySelector(${JSON.stringify(selector)})
@@ -100,7 +102,7 @@ Test('a fixture row stays on screen after the datasource file is edited', async 
     await FS.writeText(dataPath, source.replace('"HNReaderBookmarksDev"', '"HNReaderBookmarksEdited"'))
     const updated = await Time.pollUntil(async () => (await updatesDone()) > before || undefined, {
       intervalMs: 50,
-      timeoutMs: 30_000,
+      timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity,
     })
     Expect(updated).toBe(true)
     // The fixture reseeds asynchronously after the update commits.
@@ -142,7 +144,7 @@ async function loadedPreviewUrl(browser: StudioCdp, selector: string): Promise<s
           cell.scrollIntoView({ block: 'nearest' })
           return cell.src.startsWith('http') ? cell.src : ''
         })()`) || undefined,
-    { intervalMs: 100, timeoutMs: 60_000 },
+    { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(60_000) ?? Infinity },
   )
   if (previewUrl === undefined) {
     const titles = await browser.evaluate<string[]>(
