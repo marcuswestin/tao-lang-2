@@ -66,10 +66,11 @@ that authorization's implementation scope.
    writes, continuation/refresh failures and cancellation. Do not restore eager all-row assumptions.
 2. **Native acceptance.** Compiled Export tests prove PDF bytes, checked Duration and cleanup on
    success/upload failure; native CompareTitles and grouped builder boundaries have focused proof.
-   Installed iOS simulator run `e0273806-5b60-46bc-8bd5-dd4bf416af82` passes real ten-second
-   background/resume timing, joined cancellation cleanup and actual Library export. Android run
-   `09b23526-c8cb-4b76-9824-5b1cc32e79f8` proves timing and cancellation but fails to reach the first
-   book below the wrapper viewport; fix reachability and finish export acceptance. Neither receipt
+   Installed iOS simulator run `8075bfdd-c223-4ecf-8417-6e72d9df47ff` and Android emulator run
+   `39e509a5-7fdd-4822-a1d8-84528f4ea2eb` pass real ten-second background/resume timing,
+   immediate sampling of the same timer, joined cancellation cleanup and actual Library export.
+   Two mounted screens preserve Library state and virtualized row reachability; native assertions
+   retain accessibility-label selectors independently of visible text. Neither receipt
    claims physical-device or operating-system file-service behavior.
 3. **Future-source and coverage reconciliation.** Complete: Main, the empty-result journey and the
    grouped projection sketch are retired after case-by-case mapping to active modules and named

@@ -136,14 +136,15 @@ absent beforehand. This is publication/rendering proof, separate from native-clo
    grouping modes, creation of the first live row and zero app-error-guard invocations. Retain the
    focused virtualization and author/key proofs. The mounted query-presentation test proves loading,
    concurrent refreshing content and stale cached rows. Refresh failures report inline feedback.
-2. Finish installed Android acceptance. Installed iOS simulator run
-   `e0273806-5b60-46bc-8bd5-dd4bf416af82` passes a measured ten-second background/resume interval,
+2. Installed acceptance passes on iOS simulator run
+   `8075bfdd-c223-4ecf-8417-6e72d9df47ff` and Android emulator run
+   `39e509a5-7fdd-4822-a1d8-84528f4ea2eb`. Both prove a measured ten-second background/resume interval,
    immediate sampling of the same timer, completion, joined cancellation cleanup and actual Library
-   export. Android run `09b23526-c8cb-4b76-9824-5b1cc32e79f8` passes timing and cancellation but
-   cannot reach the first book row below the acceptance wrapper's viewport; export remains unproved.
+   export. The wrapper switches between two mounted screens to keep the virtualized Library reachable;
+   native assertions preserve accessibility-label selectors even when visible text differs.
    Receipts live under `.artifacts/host-testing/<run>/`; these are simulator/emulator proofs, not
    physical-device or operating-system file-service acceptance.
-3. Finalize documentation and coverage records against installed-platform receipts. Main, the empty
+3. Documentation and coverage records now include both installed-platform receipts. Main, the empty
    journey and the grouping algorithm fixtures are retired after their distinct cases were accounted for.
 4. Run the final integrated verification and authorized landing. Record the actual verdict and
    limitations rather than treating source validation as complete app acceptance.
