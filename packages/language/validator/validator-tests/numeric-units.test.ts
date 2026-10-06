@@ -2,6 +2,7 @@ import { NumericUnits, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
 import { configuredItemValidationMessages } from '../validator-src/validators/configured-item-validator'
+import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalCoreValidator'
 import { FunctionsValidator } from '../validator-src/validators/functions-validator'
 import { NumericUnitsValidationMessages as messages } from '../validator-src/validators/NumericUnitsValidationMessages'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
@@ -114,7 +115,9 @@ Describe('validator: numeric units', () => {
         ${measure}
         function Wrong(Left ${operand}, Right ${operand}) { return Left ${operator} Right }
       `,
-          messages.operator(operator),
+          operator === 'and' || operator === 'or'
+            ? messages.operator(operator)
+            : FunctionalCoreValidator.messages.authoredContract(operator, 'missing-operator'),
         ),
       )
     }
@@ -137,7 +140,7 @@ Describe('validator: numeric units', () => {
       ${measure}
       function Wrong(Value ${operand}) returns boolean { return Value == Value }
     `,
-        messages.operator('=='),
+        FunctionalCoreValidator.messages.authoredContract('==', 'missing-operator'),
       ),
     )
   }
@@ -151,7 +154,9 @@ Describe('validator: numeric units', () => {
         ${measure}
         function Wrong(Value ${operand}) { return ${operator} Value }
       `,
-          messages.operator(operator),
+          operator === 'not'
+            ? messages.operator(operator)
+            : FunctionalCoreValidator.messages.authoredContract(operator, 'missing-operator'),
         ),
       )
     }
@@ -165,7 +170,7 @@ Describe('validator: numeric units', () => {
     function Duration(Value numeric) { return 3.ms + Value }
     function Boolean(Value numeric) { return true or Value }
   `,
-      messages.operator('+'),
+      FunctionalCoreValidator.messages.authoredContract('+', 'missing-operator'),
       messages.operator('or'),
     ),
   )
@@ -177,7 +182,7 @@ Describe('validator: numeric units', () => {
     ${measure}
     let Wrong = -(2 seconds)
   `,
-      messages.operator('-'),
+      FunctionalCoreValidator.messages.authoredContract('-', 'missing-operator'),
     ),
   )
 
