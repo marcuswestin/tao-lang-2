@@ -28,17 +28,6 @@ export const AssociatedMethodsFormatter = {
     f.oneSpaceAround('->')
     f.commaSpacedList()
   },
-
-  /** AssociatedFunctionDeclaration formats an implementation inside its owning item type. */
-  AssociatedFunctionDeclaration(f) {
-    f.oneSpaceAfter('func')
-    f.noSpaceBefore('.')
-    f.noSpaceAfter('.')
-    f.oneSpaceAround('fails')
-    f.oneSpaceAround('->')
-    f.commaSpacedList()
-    f.noSpaceBefore('(')
-  },
 } satisfies Partial<FormatHandlers>
 
 /** canonicalFunctionSource migrates function keywords without touching comments or literal text. */

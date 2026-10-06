@@ -59,9 +59,14 @@ admits leaves the local list.
 The `CI macOS` workflow (`.github/workflows/ci-macos.yml`) is advisory and not required. It runs
 `verify-full-ci`: the host gates `CI_HOST_GATES` admits plus the prepare nodes they read, every
 other host gate reported as `Pending CI host admission`, no green record. It is a workflow of its
-own so a `Verify` run ends with its Linux partitions. A dispatched run's `host_gates` input tries
-one admission for that run without editing the file, which is how a gate is measured before it is
-admitted.
+own so a `Verify` run ends with its Linux partitions. It runs on pushes to `main` and on dispatch;
+a dispatched run's `host_gates` input tries one admission for that run without editing the file,
+which is how a gate is measured before it is admitted. Admitting a gate removes it from the local
+complement, and `CI macOS` is not required, so admit one only once its hosted run is reliable, in
+the same change that adds the `pull_request` trigger, and with the `main` ruleset requiring
+`CI macOS` by name; until then the complement stays the proof. `verify-complement` enforces the
+trigger half: without a `pull_request` trigger in that workflow it ignores `CI_HOST_GATES` and
+keeps every host gate.
 
 Local checks are for focused iteration, diagnosis, and the host-only complement. When CI is
 unavailable, local `land` is the fallback; offline proof does not establish remote integration or

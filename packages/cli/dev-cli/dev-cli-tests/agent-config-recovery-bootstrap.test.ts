@@ -113,6 +113,24 @@ Describe('agent-config recovery bootstrap', () => {
     }
   })
 
+  Test('a dependency patch edited after the last install marks the tree stale', async () => {
+    const test = await fixture()
+    try {
+      await FS.mkdir(FS.resolvePath('node_modules', test.root))
+      const stamp = FS.resolvePath('.artifacts/build/agent-dev/dev-deps.stamp', test.root)
+      const patch = FS.resolvePath('patches/metro@0.0.0.patch', test.root)
+      await FS.writeText(stamp, '')
+      await FS.writeText(patch, '')
+      await FS.setModifiedTimeMs(stamp, Date.now() - 10_000)
+      const stale = await runDependencyCheck(test)
+      Expect(stale.exitCode).not.toBe(0)
+      Expect(stale.stderr).toContain('found stale')
+      Expect(await bunCommands(test)).toEqual([])
+    } finally {
+      await FS.remove(test.root)
+    }
+  })
+
   Test('a healthy installed tree passes without an install', async () => {
     const test = await fixture()
     try {

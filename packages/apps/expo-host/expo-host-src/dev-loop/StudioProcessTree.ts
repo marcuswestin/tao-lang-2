@@ -130,11 +130,37 @@ export async function startStudioProcessTree(
     persist()
     shutdownCaptured = true
   }
+  // A root that exited by itself needs no signal: what is still verifiable is its process group.
+  // Survivors are recorded like a stop capture, so the record stays visible until they are gone.
+  const captureNaturalExit = () => {
+    if (shutdownCaptured || uncertain || child.pid === undefined) {
+      return
+    }
+    if (child.exitCode === null && child.signalCode === null) {
+      return
+    }
+    try {
+      if (ProcessTree.sameProcess(ProcessTree.identities([child.pid]).get(child.pid), rootIdentity!)) {
+        return
+      }
+      const members = ProcessTree.groupMembers(child.pid)
+      for (const process of members) {
+        owned.set(process.pid, process)
+      }
+      if (members.length !== 0) {
+        persist()
+      }
+      shutdownCaptured = true
+    } catch (error) {
+      reportRegistrationFailure(error)
+    }
+  }
   const retireRegistration = () => {
     if (registration === undefined || child.pid === undefined) {
       return
     }
     try {
+      captureNaturalExit()
       if (!shutdownCaptured) {
         markUncertain()
         return
@@ -215,6 +241,7 @@ export async function startStudioProcessTree(
   }
   return {
     assertCleanup() {
+      captureNaturalExit()
       if (uncertain || !shutdownCaptured) {
         Errors.throwHostEnvironment('Descendant cleanup remains uncertain; its resource record was retained.')
       }
