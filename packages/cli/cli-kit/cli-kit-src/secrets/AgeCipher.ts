@@ -5,8 +5,12 @@ function failureOf(result: CLI.CommandResult): string {
   return result.stderr.trim() || `exit code ${result.exitCode ?? 'unknown'}`
 }
 
-/** age owns the cryptography. The machine identity is used only to unwrap the store key. */
-export function createAgeCipher(identityPath: string, setupCommand: string): Cipher {
+/**
+ * age owns the cryptography. The machine identity is used only to unwrap the store key. `notices` receives the
+ * unlock notice, process stderr by default; a test that runs beside others passes its own stream, because
+ * process stderr is what a concurrently running test captures.
+ */
+export function createAgeCipher(identityPath: string, setupCommand: string, notices: HCI.OutputOptions = {}): Cipher {
   return {
     decrypt: async armor => {
       if (!await FS.exists(identityPath)) {
@@ -16,6 +20,7 @@ export function createAgeCipher(identityPath: string, setupCommand: string): Cip
       }
       HCI.writeStderr(
         'Unlocking the secret store with this machine’s identity. On macOS, a Secure Enclave identity may ask for Touch ID or login authorization in a native dialog.\n',
+        notices,
       )
       const result = await CLI.run('age', { args: ['--decrypt', '--identity', identityPath], stdin: armor })
       if (result.exitCode !== 0) {

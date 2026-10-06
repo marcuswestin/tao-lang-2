@@ -1201,8 +1201,27 @@ function requireCategory(category: string): string {
   return category
 }
 
+/**
+ * listDirectory reads a directory a concurrent prune may retire at any moment, so one that vanishes
+ * between the check and the read lists as empty, exactly as one already gone does.
+ */
 async function listDirectory(path: string): Promise<readonly string[]> {
-  return await FS.isDirectory(path) ? await FS.listDir(path) : []
+  if (!await FS.isDirectory(path)) {
+    return []
+  }
+  try {
+    return await FS.listDir(path)
+  } catch (error) {
+    if (isVanishedPathError(error)) {
+      return []
+    }
+    throw error
+  }
+}
+
+function isVanishedPathError(error: unknown): boolean {
+  const code = Json.isRecord(error) ? error['code'] : undefined
+  return code === 'ENOENT' || code === 'ENOTDIR'
 }
 
 /** Generated scratch is disposable: losing a cleanup race must never turn a passing suite red. */
