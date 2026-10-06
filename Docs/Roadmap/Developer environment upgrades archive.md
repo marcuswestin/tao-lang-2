@@ -113,6 +113,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-NODE-WORKER-TEARDOWN-LOADS-BUN-FFI — Node worker teardown loads Bun-only process inspection](<Developer environment upgrades/Archive/DEVENV-NODE-WORKER-TEARDOWN-LOADS-BUN-FFI.md>) — Resolved
 - [DEVENV-NONAUTH-FIXTURES-AUTOLINK-CLERK-SWIFT-PACKAGES — Non-auth fixtures autolink Clerk Swift packages](<Developer environment upgrades/Archive/DEVENV-NONAUTH-FIXTURES-AUTOLINK-CLERK-SWIFT-PACKAGES.md>) — Resolved
 - [DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY — open-pr reports no checks while runners are busy](<Developer environment upgrades/Archive/DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY.md>) — Resolved
+- [DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL — Output hook requires an unavailable read tool](<Developer environment upgrades/Archive/DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL.md>) — Resolved
 - [DEVENV-PACKAGE-DISCOVERY-FIXTURES-INHERIT-PROJECT — Package discovery fixtures inherit the worktree project](<Developer environment upgrades/Archive/DEVENV-PACKAGE-DISCOVERY-FIXTURES-INHERIT-PROJECT.md>) — Resolved
 - [DEVENV-PARSER-STAGING-USES-WORKTREE-DIRECTORIES — Parser staging uses worktree directories](<Developer environment upgrades/Archive/DEVENV-PARSER-STAGING-USES-WORKTREE-DIRECTORIES.md>) — Resolved
 - [DEVENV-PORT-REACQUISITION-ASSERTION-FAILS-INTERMITTENTLY — Port reacquisition assertion fails intermittently](<Developer environment upgrades/Archive/DEVENV-PORT-REACQUISITION-ASSERTION-FAILS-INTERMITTENTLY.md>) — Resolved

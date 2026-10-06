@@ -49,10 +49,15 @@ export async function runDevLoopCommand(
         if (!await FS.isDirectory(root)) {
           return { sessions: [] }
         }
-        const sessions = []
+        const sessions: (DevLoopReceipt | { session: string; state: 'unreadable'; message: string })[] = []
         for (const name of await FS.listDir(root)) {
           if (/^[0-9a-f-]{36}$/iu.test(name)) {
-            sessions.push(await statusOf(name))
+            // One unreadable session must not hide the others.
+            try {
+              sessions.push(await statusOf(name))
+            } catch (error) {
+              sessions.push({ session: name, state: 'unreadable', message: Errors.formatForUser(error) })
+            }
           }
         }
         return { sessions }
