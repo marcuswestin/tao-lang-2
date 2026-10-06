@@ -324,6 +324,8 @@ proves, so a public build must hide later surfaces and a reviewer must be able t
     Implementation: the QA inventory derives project/app surfaces and source/group/label channels
     from authored scenario manifests. A headless capture batch enforces a deadline per app and
     retains expected coverage, missing/failed cells and discovery failures in `coverage.json`.
+    Discovery includes unimported view scenarios and Studio sketch sources; capture activates
+    inactive previews through the existing Studio control before waiting for readiness.
     Capture evidence still requires visual judgment; the remaining element checks and language
     rules below are separate work.
   - Add element-tree checks to the browser capture: text contrast, tap-target size, overlapping

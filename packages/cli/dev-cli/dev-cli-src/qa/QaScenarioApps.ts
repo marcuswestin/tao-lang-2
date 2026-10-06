@@ -139,9 +139,25 @@ export class QaScenarioApps {
       }
       try {
         const workspace = await Workspace.open(projectRoot)
-        const entryPaths = [...new Set(appSources.map(source => source.absolutePath))].sort()
+        // Studio's project publication also reaches unimported scenario sources, including sketches.
+        const entryPaths = [
+          ...new Set(
+            [...appSources, ...scenarioMembers].map(source => source.absolutePath),
+          ),
+        ].sort()
         const parseResults = await workspace.parseFiles(entryPaths)
         const resultsByEntry = new Map(parseResults.map(result => [result.entry.path, result]))
+        const scenarioResults = scenarioMembers.map(source => resultsByEntry.get(source.absolutePath)!)
+        const scenarioErrors = scenarioResults.flatMap(result =>
+          result.diagnostics.filter(diagnostic => diagnostic.severity === 'error').map(diagnostic => ({
+            source: FS.relativePath(this.root, result.entry.path),
+            error: diagnostic.message,
+          }))
+        )
+        if (scenarioErrors.length > 0) {
+          discovery.failures.push(...scenarioErrors)
+          continue
+        }
         const failuresBefore = discovery.failures.length
         let projectAppCount = 0
         for (const source of appSources) {
@@ -163,7 +179,11 @@ export class QaScenarioApps {
           projectAppCount += apps.length
           for (const app of apps) {
             try {
-              const manifest = Compiler.compileStudioPreviewManifest(parsed.files, app.name, projectRoot)
+              const previewFiles = [...new Map(
+                [...parsed.files, ...scenarioResults.flatMap(result => result.files)]
+                  .map(file => [file.path, file]),
+              ).values()]
+              const manifest = Compiler.compileStudioPreviewManifest(previewFiles, app.name, projectRoot)
               const cells = manifest.scenarios
                 .filter(scenario => scenario.subject.kind === 'view' || scenario.subject.appName === app.name)
                 .map(scenario => ({

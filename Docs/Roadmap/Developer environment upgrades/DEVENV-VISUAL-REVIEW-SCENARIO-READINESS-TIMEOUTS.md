@@ -39,6 +39,14 @@
   `.artifacts/qa/pantry-discovery-smoke/review.json`, its `logs/studio.log`, and
   `.artifacts/logs/agent/qa-capture/2026-10-06T17-31-46-222Z-90049.log`.
   Discovery and bounded failure reporting are verified separately from successful browser capture.
+  The 2026-10-06 Pantry failure was traced to inactive cells: fresh staged projects have no saved
+  activated previews, but the review runner only scrolled cells and waited for readiness. The
+  runner now activates each inactive cell through Studio's existing control before waiting. With
+  that repair, `.artifacts/qa/pantry-activated-smoke/review.json` captured all six cells in 53.4
+  seconds with exit 0 and a complete source snapshot; its phone screenshot was inspected.
+  An expression-executing regression covers inactive and already active previews, and removing
+  the activation click makes the inactive case fail. This explains the fresh-session failure;
+  it does not establish the cause of the older missing-manifest or intermittent-cell failures.
 - **Workaround:** Inspect every manifest cell status and keep the affected visual dimension blocked.
   A fresh HNReader capture reached the manifest but still missed one cell, so retry is not a proven
   recovery. Preserve the original failure and any partial bundle when conducting a bounded recheck.

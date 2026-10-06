@@ -30,6 +30,29 @@ async function fixture(files: Record<string, string>): Promise<string> {
 }
 
 Describe('QA scenario app discovery', () => {
+  Test('includes unimported view scenarios for every app while keeping app scenarios scoped', async () => {
+    for (const source of ['@/studio/View5.tao', 'Scenes/Card.tao']) {
+      const root = await fixture({
+        'Apps/Sketch/.tao/.gitignore': 'local/\n',
+        'Apps/Sketch/First.tao':
+          'app First { id "first" }\nscenarios First "devices" { device phone scenario "first" {} }',
+        'Apps/Sketch/Second.tao':
+          'app Second { id "second" }\nscenarios Second "devices" { device phone scenario "second" {} }',
+        [`Apps/Sketch/${source}`]:
+          'public view Card() { render inject ```ts return null ``` }\nscenarios Card "sketch" { device phone scenario "draft" { render Card() } }',
+      })
+      const result = await new QaScenarioApps(root).discover()
+      Expect(result.failures).toEqual([])
+      Expect(result.apps.map(app => app.app)).toEqual(['First', 'Second'])
+      Expect(result.apps[0]?.cells).toHaveLength(2)
+      Expect(result.apps[0]?.cells).toContainEqual({ source, group: 'sketch', label: 'draft' })
+      Expect(result.apps[0]?.cells).toContainEqual({ source: 'First.tao', group: 'devices', label: 'first' })
+      Expect(result.apps[1]?.cells).toHaveLength(2)
+      Expect(result.apps[1]?.cells).toContainEqual({ source, group: 'sketch', label: 'draft' })
+      Expect(result.apps[1]?.cells).toContainEqual({ source: 'Second.tao', group: 'devices', label: 'second' })
+    }
+  })
+
   Test('reports view-only scenario projects whose alias candidates do not declare apps', async () => {
     const root = await fixture({
       'Apps/Views/.tao/.gitignore': 'local/\n',

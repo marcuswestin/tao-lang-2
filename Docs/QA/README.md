@@ -72,8 +72,9 @@ Capture all discovered apps from the repository root:
 ```
 
 The batch runs one headless app capture at a time, each in an isolated source snapshot, with a
-parent-enforced deadline in seconds. A timed-out child and its descendants are stopped before the
-next app runs. `coverage.json` records every expected app and cell before the first launch and is
+parent-enforced deadline in seconds. Each scenario is activated through Studio's existing control
+before the capture waits for its preview to settle. A timed-out child and its descendants are
+stopped before the next app runs. `coverage.json` records every expected app and cell before the first launch and is
 updated after each app, so an interrupted run retains missing coverage. It reports `captured`,
 `missing`, and `failed` cells, launch failures, discovery failures, and unexpected cells. Missing,
 empty or changed screenshots cannot count as captured. A partial batch exits unsuccessfully and
