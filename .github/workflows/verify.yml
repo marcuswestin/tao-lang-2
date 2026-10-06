@@ -432,6 +432,11 @@ jobs:
     name: CI macOS
     runs-on: macos-26
     timeout-minutes: 60
+    # The workflow's cache paths are under the Linux home; a macOS runner's is /Users/runner.
+    env:
+      TAO_GREEN_STORE: /Users/runner/tao-green
+      BUN_INSTALL_CACHE_DIR: /Users/runner/tao-cache/bun
+      npm_config_cache: /Users/runner/tao-cache/npm
     steps:
       - uses: actions/checkout@v4
 
