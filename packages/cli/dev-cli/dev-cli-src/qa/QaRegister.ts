@@ -189,7 +189,9 @@ export class QaRegister {
       }
       if (run.selected.includes('story:DOC1') && !await FS.exists(this.path(`${dir}/tutorial.json`))) {
         const result = await CLI.run('./agent', {
-          args: ['test-file', 'packages/cli/tao-cli/cli-tests/tutorials.test.ts'],
+          // The front door normally buffers test progress. Stream it into this captured log so
+          // a working tutorial replay does not look idle to the parent's output watchdog.
+          args: ['test-file', '--verbose', 'packages/cli/tao-cli/cli-tests/tutorials.test.ts'],
           cwd: this.root,
           processPolicy: 'test',
           timeoutMs: 600_000,
@@ -198,7 +200,7 @@ export class QaRegister {
         const log = `${dir}/tutorial.log`
         await FS.writeText(this.path(log), `${result.stdout}\n${result.stderr}`)
         await this.atomic(`${dir}/tutorial.json`, {
-          command: './agent test-file packages/cli/tao-cli/cli-tests/tutorials.test.ts',
+          command: './agent test-file --verbose packages/cli/tao-cli/cli-tests/tutorials.test.ts',
           outcome: result.exitCode === 0 ? 'pass' : CLI.isSandboxDenial(result) ? 'blocked' : 'fail',
           evidence: log,
           scope: 'source tests only; no text, visual, installed artifact, or human acceptance',

@@ -1,9 +1,9 @@
 {
   "version": 1,
   "phase": 1,
-  "commit": "3b92eb50faab8f50b9b66d32abf4ca171ef86ddb",
-  "dirty": false,
-  "treeDigest": "8a6f9c3b5d45a8fe5400a2accffe2409844592a4997825b0629ba0d39783e2cf",
+  "commit": "4bfb13da4d445e0bfe6eec755a0a2b7a75fccec4",
+  "dirty": true,
+  "treeDigest": "b5e1a9c2d7f3a92829d65dd2340ec15015c2019d5d507891bdaba79fa2736251",
   "surfaces": [
     {
       "id": "doc:.config/nix/hutch-proxy-tests/README.md",
@@ -140,7 +140,7 @@
           "source"
         ]
       },
-      "sourceHash": "82a54fc77065157f6d0900e250b6ae568f7949abc28fb00c749c4d5b21391fc3",
+      "sourceHash": "82bb9073f204bf3c4c953161bfc835f39307232f9c981f7707165b812395c6ca",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -2268,7 +2268,7 @@
           "source"
         ]
       },
-      "sourceHash": "ffc3e6c03b515e9bc39620988b438078d929cd6ec19705dfc72c00c6b8de318e",
+      "sourceHash": "8fc46de189ce3f7af1e350a8840f20af82340700905e98e49b9ec20e0438268e",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -2548,7 +2548,7 @@
           "source"
         ]
       },
-      "sourceHash": "732365d06452a0c79fccbba409cbcb2715edb4064258dbb51bd94866b428e6ca",
+      "sourceHash": "f224cb0c830b7328847f5fd401740ed3b0209b802d9baa94216e2004381296af",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -3472,7 +3472,7 @@
           "source"
         ]
       },
-      "sourceHash": "dd6b3483bcfc6d57df0586d6765227dbb714d35c2bcf2778ab28148de8ec07b5",
+      "sourceHash": "eb22ab35fc1581b1ab0ef17ee6af3c804e3ab07b630c34009c9adbdf3eae6eb2",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -3500,7 +3500,7 @@
           "source"
         ]
       },
-      "sourceHash": "8d56d52c343417784a8151a9ebfa1b93dd6977ca5458799eace2ce1e64ba2157",
+      "sourceHash": "d49f06e01c1aed91cccc7beab93a6df6dd237266c07aa35125400ee91c6dd57c",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -5522,6 +5522,34 @@
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
     },
     {
+      "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-EXPENSIVE-TEST-TRIMS-NEEDING-A-DECISION.md",
+      "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-EXPENSIVE-TEST-TRIMS-NEEDING-A-DECISION.md",
+      "kind": "document",
+      "source": "Docs/Roadmap/Developer environment upgrades/DEVENV-EXPENSIVE-TEST-TRIMS-NEEDING-A-DECISION.md",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "source"
+      ],
+      "dimensions": [
+        "text"
+      ],
+      "requirements": [
+        "agent"
+      ],
+      "dimensionChannels": {
+        "text": [
+          "source"
+        ]
+      },
+      "sourceHash": "d9f0366260254bbc5285c7298eec85ce2b0ba60803afd3dd4c0ebdc5d6e8d0cd",
+      "rendererHash": "not-applicable",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
+    },
+    {
       "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-FAILING-UNTIL-WAIT-STALLS-TEST-FILE.md",
       "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-FAILING-UNTIL-WAIT-STALLS-TEST-FILE.md",
       "kind": "document",
@@ -6082,34 +6110,6 @@
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
     },
     {
-      "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS.md",
-      "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS.md",
-      "kind": "document",
-      "source": "Docs/Roadmap/Developer environment upgrades/DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS.md",
-      "phase": 1,
-      "tags": [
-        "A"
-      ],
-      "channels": [
-        "source"
-      ],
-      "dimensions": [
-        "text"
-      ],
-      "requirements": [
-        "agent"
-      ],
-      "dimensionChannels": {
-        "text": [
-          "source"
-        ]
-      },
-      "sourceHash": "6ab2959f91658a485179436dd772aa79d155ed52c976f8e5652cc12eb5a1977a",
-      "rendererHash": "not-applicable",
-      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
-      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
-    },
-    {
       "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-NO-FRONT-DOOR-REPEATS-A-TEST-UNDER-CPU-LOAD.md",
       "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-NO-FRONT-DOOR-REPEATS-A-TEST-UNDER-CPU-LOAD.md",
       "kind": "document",
@@ -6161,34 +6161,6 @@
         ]
       },
       "sourceHash": "e8988f955057680b2079f7d36858ca2d3df894fa025fec5df623b373b109e1d7",
-      "rendererHash": "not-applicable",
-      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
-      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
-    },
-    {
-      "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY.md",
-      "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY.md",
-      "kind": "document",
-      "source": "Docs/Roadmap/Developer environment upgrades/DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY.md",
-      "phase": 1,
-      "tags": [
-        "A"
-      ],
-      "channels": [
-        "source"
-      ],
-      "dimensions": [
-        "text"
-      ],
-      "requirements": [
-        "agent"
-      ],
-      "dimensionChannels": {
-        "text": [
-          "source"
-        ]
-      },
-      "sourceHash": "cb23abf61063a145b8d412b8d4e2d8dc13453060f52aa79cabab79982137d3a3",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -6278,6 +6250,34 @@
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
     },
     {
+      "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-PROCESS-GROUP-PROBE-REJECTS-PS-SNAPSHOT.md",
+      "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-PROCESS-GROUP-PROBE-REJECTS-PS-SNAPSHOT.md",
+      "kind": "document",
+      "source": "Docs/Roadmap/Developer environment upgrades/DEVENV-PROCESS-GROUP-PROBE-REJECTS-PS-SNAPSHOT.md",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "source"
+      ],
+      "dimensions": [
+        "text"
+      ],
+      "requirements": [
+        "agent"
+      ],
+      "dimensionChannels": {
+        "text": [
+          "source"
+        ]
+      },
+      "sourceHash": "2340d4082e52212aafca04046180dca382dc925cfa349cc7106997d029c6e70c",
+      "rendererHash": "not-applicable",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
+    },
+    {
       "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES.md",
       "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES.md",
       "kind": "document",
@@ -6357,6 +6357,34 @@
         ]
       },
       "sourceHash": "5efe21f5a4335cd67051f4c96f311268a9fa39946bae0a4ce2932a692291e4cf",
+      "rendererHash": "not-applicable",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
+    },
+    {
+      "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-QA-CAPTURE-BLOCKS-RUNTIME-SDK-IMPORTS.md",
+      "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-QA-CAPTURE-BLOCKS-RUNTIME-SDK-IMPORTS.md",
+      "kind": "document",
+      "source": "Docs/Roadmap/Developer environment upgrades/DEVENV-QA-CAPTURE-BLOCKS-RUNTIME-SDK-IMPORTS.md",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "source"
+      ],
+      "dimensions": [
+        "text"
+      ],
+      "requirements": [
+        "agent"
+      ],
+      "dimensionChannels": {
+        "text": [
+          "source"
+        ]
+      },
+      "sourceHash": "f56acc115d17a8362e09ab41d1d8f6ddae8c0b4f634493899176d3e26821d8fa",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -6721,34 +6749,6 @@
         ]
       },
       "sourceHash": "177cb6571d936a181d15442d93f51f27e684a1b8c64f80685fc013fc1bf6a651",
-      "rendererHash": "not-applicable",
-      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
-      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
-    },
-    {
-      "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-STALE-MAINTAINED-BINDINGS-AFTER-MERGE.md",
-      "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-STALE-MAINTAINED-BINDINGS-AFTER-MERGE.md",
-      "kind": "document",
-      "source": "Docs/Roadmap/Developer environment upgrades/DEVENV-STALE-MAINTAINED-BINDINGS-AFTER-MERGE.md",
-      "phase": 1,
-      "tags": [
-        "A"
-      ],
-      "channels": [
-        "source"
-      ],
-      "dimensions": [
-        "text"
-      ],
-      "requirements": [
-        "agent"
-      ],
-      "dimensionChannels": {
-        "text": [
-          "source"
-        ]
-      },
-      "sourceHash": "57dc209d7cadb2cdc70c65675ab8b5a52a6eba7020453b99898aaea3b31b84de",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -7258,6 +7258,34 @@
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
     },
     {
+      "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-VERIFY-TRIMS-LEFT-TO-OTHER-BRANCHES-POST-MVP.md",
+      "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-VERIFY-TRIMS-LEFT-TO-OTHER-BRANCHES-POST-MVP.md",
+      "kind": "document",
+      "source": "Docs/Roadmap/Developer environment upgrades/DEVENV-VERIFY-TRIMS-LEFT-TO-OTHER-BRANCHES-POST-MVP.md",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "source"
+      ],
+      "dimensions": [
+        "text"
+      ],
+      "requirements": [
+        "agent"
+      ],
+      "dimensionChannels": {
+        "text": [
+          "source"
+        ]
+      },
+      "sourceHash": "dc16001244ddca37391a88f8abbde67f32460235706e1418bdca50e8a163917c",
+      "rendererHash": "not-applicable",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
+    },
+    {
       "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS.md",
       "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS.md",
       "kind": "document",
@@ -7280,7 +7308,7 @@
           "source"
         ]
       },
-      "sourceHash": "8d5b1c55eadeb67d0737453792a527ddb8aa8ce424b46e20e0bd7a017f5406cb",
+      "sourceHash": "746bbd399e550a8b37c576d5448c70c22f5f95263f30ce71acaa2b4ba1039c58",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -8904,7 +8932,7 @@
           "source"
         ]
       },
-      "sourceHash": "da2390b2d7951a9279f865f71cd6376ec9b64d764e9680c1793501df7e3f645e",
+      "sourceHash": "764088990f262e29980b9b59f53df3bd0bc9d551c64be57ff9907330b9112951",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9436,7 +9464,7 @@
           "source"
         ]
       },
-      "sourceHash": "b69538f97ad475ccc4f65f9c5d44780e56b067fed0135f7c6d0adef49597c547",
+      "sourceHash": "207ab6bfe7272c3c3c90aae144d961fb30488b2c29160252221e6b6d06e19e8c",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9493,34 +9521,6 @@
         ]
       },
       "sourceHash": "1c17dae28bd919461d90be1df437fae3577879657ac368df93822e8c91c1cd13",
-      "rendererHash": "not-applicable",
-      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
-      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
-    },
-    {
-      "id": "doc:agents/skills/browser-use/SKILL.md",
-      "title": "agents/skills/browser-use/SKILL.md",
-      "kind": "document",
-      "source": "agents/skills/browser-use/SKILL.md",
-      "phase": 1,
-      "tags": [
-        "A"
-      ],
-      "channels": [
-        "source"
-      ],
-      "dimensions": [
-        "text"
-      ],
-      "requirements": [
-        "agent"
-      ],
-      "dimensionChannels": {
-        "text": [
-          "source"
-        ]
-      },
-      "sourceHash": "37dc128494c9d4ff45d7c4f310e05fa5eefff6c1b8276ec4764c04d49965bc4b",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9716,7 +9716,7 @@
           "source"
         ]
       },
-      "sourceHash": "02a0919bca87bf8c4bad03c5d33a93379f8f512b4994d2ef1f0bde086064aa02",
+      "sourceHash": "e998c2fa20789d77fd80a2a0d6f5717e8f16e76d1723ccc9478d13d27b88c6d8",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9744,7 +9744,7 @@
           "source"
         ]
       },
-      "sourceHash": "9140b898f742bdc682a77463574e639f8dc6789eb1bf2a357c31bd78a635aca4",
+      "sourceHash": "b1cfe85e9eb12adc1b8442e7efc7b2f37e87e0dfaad9c740f9e7ff9f2f111178",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9856,7 +9856,7 @@
           "source"
         ]
       },
-      "sourceHash": "c2dc21765347da06ecf01fdefdfeba1469ace0c9bd526a0f6b4b1919f6d7e41f",
+      "sourceHash": "40f639b23039ce23875c07275a17e4e7fe11f0efaf6939c28a1ac645e35c8174",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9912,63 +9912,7 @@
           "source"
         ]
       },
-      "sourceHash": "94fb4eb619f31eaacc0881ca2eb8b59a9d08e2206ac73c7a4b0e25c8932a269c",
-      "rendererHash": "not-applicable",
-      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
-      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
-    },
-    {
-      "id": "doc:agents/skills/git-workflow/references/merge-progress.md",
-      "title": "agents/skills/git-workflow/references/merge-progress.md",
-      "kind": "document",
-      "source": "agents/skills/git-workflow/references/merge-progress.md",
-      "phase": 1,
-      "tags": [
-        "A"
-      ],
-      "channels": [
-        "source"
-      ],
-      "dimensions": [
-        "text"
-      ],
-      "requirements": [
-        "agent"
-      ],
-      "dimensionChannels": {
-        "text": [
-          "source"
-        ]
-      },
-      "sourceHash": "3ccc68ebac27c88572185d133ddfe133adf78109b5758dae1dc7a515756cef75",
-      "rendererHash": "not-applicable",
-      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
-      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
-    },
-    {
-      "id": "doc:agents/skills/git-workflow/references/personal-dev-branch.md",
-      "title": "agents/skills/git-workflow/references/personal-dev-branch.md",
-      "kind": "document",
-      "source": "agents/skills/git-workflow/references/personal-dev-branch.md",
-      "phase": 1,
-      "tags": [
-        "A"
-      ],
-      "channels": [
-        "source"
-      ],
-      "dimensions": [
-        "text"
-      ],
-      "requirements": [
-        "agent"
-      ],
-      "dimensionChannels": {
-        "text": [
-          "source"
-        ]
-      },
-      "sourceHash": "830c7b1a0c2a4e503e28eb954305e2f5bb18a9814d6d29ede692235aba7c51a1",
+      "sourceHash": "0c8d1ebb8d8a75ab9531dad9b737009d08dba67c58653fc333a6f7e75c346417",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -9997,6 +9941,118 @@
         ]
       },
       "sourceHash": "cd5c6e5807497515d90fbb5c548283c5fb3a5a65ce46e365b9e6355e377b1215",
+      "rendererHash": "not-applicable",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
+    },
+    {
+      "id": "doc:agents/skills/landing/SKILL.md",
+      "title": "agents/skills/landing/SKILL.md",
+      "kind": "document",
+      "source": "agents/skills/landing/SKILL.md",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "source"
+      ],
+      "dimensions": [
+        "text"
+      ],
+      "requirements": [
+        "agent"
+      ],
+      "dimensionChannels": {
+        "text": [
+          "source"
+        ]
+      },
+      "sourceHash": "0544d42bd9202fd1b2c94cd44b7256203c61327663639b411b111214c89e4530",
+      "rendererHash": "not-applicable",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
+    },
+    {
+      "id": "doc:agents/skills/landing/references/local-land.md",
+      "title": "agents/skills/landing/references/local-land.md",
+      "kind": "document",
+      "source": "agents/skills/landing/references/local-land.md",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "source"
+      ],
+      "dimensions": [
+        "text"
+      ],
+      "requirements": [
+        "agent"
+      ],
+      "dimensionChannels": {
+        "text": [
+          "source"
+        ]
+      },
+      "sourceHash": "e609588a1f684474c713ba3b2bdb5ef9605028cb8515ac952c0c36dfa52041f5",
+      "rendererHash": "not-applicable",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
+    },
+    {
+      "id": "doc:agents/skills/landing/references/merge-progress.md",
+      "title": "agents/skills/landing/references/merge-progress.md",
+      "kind": "document",
+      "source": "agents/skills/landing/references/merge-progress.md",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "source"
+      ],
+      "dimensions": [
+        "text"
+      ],
+      "requirements": [
+        "agent"
+      ],
+      "dimensionChannels": {
+        "text": [
+          "source"
+        ]
+      },
+      "sourceHash": "da435fb347c2c730eb4bae9a6585a78dd8472c8fc5d0a233bd5aa66ac6310925",
+      "rendererHash": "not-applicable",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
+    },
+    {
+      "id": "doc:agents/skills/landing/references/personal-dev-branch.md",
+      "title": "agents/skills/landing/references/personal-dev-branch.md",
+      "kind": "document",
+      "source": "agents/skills/landing/references/personal-dev-branch.md",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "source"
+      ],
+      "dimensions": [
+        "text"
+      ],
+      "requirements": [
+        "agent"
+      ],
+      "dimensionChannels": {
+        "text": [
+          "source"
+        ]
+      },
+      "sourceHash": "6516a2e944005053a4f409156582e39e8173a7477c7026945b8b614cdeb91da2",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -10136,7 +10192,7 @@
           "source"
         ]
       },
-      "sourceHash": "ab53285db0e7e192b88d845a982e98f122d72c096986772b6e9178fdbd8feae5",
+      "sourceHash": "05d22bbd1ab997c1c217e5cf9594a09617c8144f0ca6851347155f8cbf06ace7",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -10164,7 +10220,7 @@
           "source"
         ]
       },
-      "sourceHash": "1335f6fd8577d8212bee3fffd30a5ae5cccdae77c9e8760539f7f52ea24b5cc0",
+      "sourceHash": "39bf6306943c5dc31b7b23a35e469a65b65f1f22d215435e11fdf7ab30f30926",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -10248,7 +10304,7 @@
           "source"
         ]
       },
-      "sourceHash": "1e5b081567ace9a315bfb7a5af56c761a1494def26484745e92cf832841435b4",
+      "sourceHash": "2fc2e82ef42ee11f132e89a3ebcfa8ee73d2bf60af063fdf4be7b4e676d5d9b1",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -10332,7 +10388,7 @@
           "source"
         ]
       },
-      "sourceHash": "6b18d8c38d4badff24f1cae2c04bde8619b87d688ca1e97468a4ff3ee758a662",
+      "sourceHash": "fd95f44f0f5d56e6114107b151057b311c1a7d6275e0140aafa144175c733405",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -10388,7 +10444,7 @@
           "source"
         ]
       },
-      "sourceHash": "c6d9892fef6245ed12378801c6c92ec170e30cfe0501ef071a26b0071255592d",
+      "sourceHash": "d00aef31861cbbd426024deb41e3efbf2d8908de6d0be000e4f5c37485f58964",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -10444,7 +10500,7 @@
           "source"
         ]
       },
-      "sourceHash": "44d7936cead0bb5292fb427703cca1c636ed7fc47471175a602f6c625f16e5f4",
+      "sourceHash": "2f5c6895ac394af889f1eda889e13d0cf5b66a0a1ca299773594cf1be4765c75",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -10528,35 +10584,7 @@
           "source"
         ]
       },
-      "sourceHash": "e8af07d8bd2334c8a9feb333d998d4ad2dc337a5e676df5fd17370829f4b0750",
-      "rendererHash": "not-applicable",
-      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
-      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
-    },
-    {
-      "id": "doc:agents/skills/verification-lanes/references/landing.md",
-      "title": "agents/skills/verification-lanes/references/landing.md",
-      "kind": "document",
-      "source": "agents/skills/verification-lanes/references/landing.md",
-      "phase": 1,
-      "tags": [
-        "A"
-      ],
-      "channels": [
-        "source"
-      ],
-      "dimensions": [
-        "text"
-      ],
-      "requirements": [
-        "agent"
-      ],
-      "dimensionChannels": {
-        "text": [
-          "source"
-        ]
-      },
-      "sourceHash": "62afa5f4570c3f7ec6045f09196351144693eafd9b8b9490bcfddccae8eb6de8",
+      "sourceHash": "88575d2560492f66f0beed761388aba87ee46508557db92c4ce38889523f3a04",
       "rendererHash": "not-applicable",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -12135,8 +12163,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "acd382bd3a6d23437ea9c28ef916c005548a980830e127923860caaf1957afc3",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "b8628d9cab6e948f992a03e4573cff224205e88ab0dac8bff81f94927fc82da8",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12174,8 +12202,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "994a2f7baca5f03d361dffdc91304f624af0496e5be38f1833ac163b6cab3c89",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "cf8ed71145a7e603a15001fdaf0d61b0d99a63938649f3da9becf04325f7a68f",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12211,8 +12239,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "c81954608ceef00d2386b6ca7414a819791e6f63efbd8ecbe2df3af147b3652f",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "e57347e904d8424fd3bf6d65dbb66ad1d2fc0c71e41042f9177f880e675e65f9",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12247,8 +12275,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "c808b6210078c9be2ca26ca7241c353b5e3561d113dd70d07854ba0f054d8a69",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "21621396f84aadd568f593eaac76d6a7a712752269f81d107814a7b2b159e17b",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12283,8 +12311,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "eaa43b6ba1ca32a4c7eaa7b95bed1d5697c6087b0c01e1a5f1e49025d3ca70e2",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "9cd704a753aa88465a7483c58ae23f97799b39584419671ee369f40afcdb43fe",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12321,8 +12349,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "e681ecd060d47ccccc0c5b9a0baf340d4df31e8fd3a92d21b6d82f169190c8fa",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "a7c2307f9d1c8f36cd264358b0803ec6984b331c42fd2c1af30091672846bbcb",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12359,8 +12387,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "e43bd2bf72386ac3b8cc1c9c3d9a45f86f3c683d3bb82f2fecf001ab80ce419a",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "2b1fa84ed915d76313589818cbb849d360fc1ff41a792a08b44d3a6d82f7d5de",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12397,8 +12425,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "d4b53083c2cbc4d63b70999061f9464dfea5a5832dee7941d1c326da672c3d8f",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "66ac1094ef58c4be1ebda64a869ed5a7120afb807f009d7f13351d443fd1a03c",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12437,8 +12465,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "443206655d11f6602ecb645bf7e8fc2f25aeb037a2ae407ae2545ee28d6bb694",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "193c22cf58ebfb06892acc8a2e32d0e4929a63e1e15ec2e63ac8c6c34ab111f8",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12473,8 +12501,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "3d61f06f83888bce5bf3e21a89c3bb629134892aa85e29105d2366d590ae0f99",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "02709969b8b68906d6fc69dbce2b0901446824a984d6724127f0bbbc6fea3c2c",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12509,8 +12537,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "a3a9f629e01c603a5d0779aa8f0b2e2ac47e57d0198bc9206bb9bbfe85a2e1a7",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "7053e2b59364406803e1e1f2a98424535f3f19eef2e0d9e8211506ca5a3e0e28",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12545,8 +12573,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "a8d5a7afe29f70f5a54d501825c53b33fa866f3a9754c05962c380c55ad060f6",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "03835ccbaab7ab3461f2324ebd44e1b6cc69e5e94b2965d83056011d56928d7c",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12582,8 +12610,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "2209f32e97aa8066f9431c761a856c04e7975a2f6beac8c7ae69af9a81f99e2d",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "08176bbe9e8a733b300b08a8da6946bb9ce7fe9347ebbf6a6b675b7080af7fc7",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12618,8 +12646,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "f53f42f9c0b4b4abe5bba9067daef9b8530af88c09e5d90084d1e2bb4a204d5b",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "34f0f8773930bbd1a25bda8fb1068e5ecac3b84d96302c937eb33bbb7274504d",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12655,8 +12683,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "4a3a53d4e8c1db19ee78e3e88408cdbd6bf431819d4b894df8741df40565abb9",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "869eb7f68627149d67bf39ae9ffb53b5ebe0d1e10f7af6ed30cc386687ed92e7",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12696,8 +12724,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "9c64169219fadbcf707095589116a7c5e4e52385c9aa3c52db7cb9138b86763a",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "804440dd5861cf0a5da61d3f659e45f67c9f41b4329ff36699dc224e6b370db4",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12737,8 +12765,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "00d8b42929084210dd9239485de824301b82259ceae486ff20222b0f505abe0d",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "118f42f9b1b81405901683a64e61398d3e4284d83437e095a66d1b694807e6d7",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12777,8 +12805,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "e37f76d0194ca690b511e97b49a959f41cb3f9fc853d23b68639bed3e5160448",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "4f7af14ba8b88b7e86bd7cca0d958e3f778aa85fcbfa9ed9ee516b8b696c6285",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12817,8 +12845,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "d186cb6f5a173289bc321811e50527c210ef7c2641ef36b2bda41ef124bad00f",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "63650e11f75f459b8e4fd647cc5921abe44c3133ab27d9a2a401eaa21973a79b",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12857,8 +12885,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "d2f75a56b66d8388ce4884b1277ab8f0f23c3c87d9f40c0fe6dc02632da4c89a",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "b94f7292b542e10bcde4cfb80e6b6c806b8fb341a5afe07e9aad7af38e4f63c7",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12897,8 +12925,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "4be5b54dcb117402986f06ee309e7f47dab67ee66a6974136fd0cf2d1ef2a746",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "fbe7fe12c6b39d6a36a7dae164cf3ceac48c55669b47cf43044dd292a5d23d22",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12937,8 +12965,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "2961f98e91d6d61c2ad4e90da11cb26f075bbf57e301cd8bde852b17c3fe859e",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "584ac67cce84f47c0a9bfea82f13ec5b384a5ae40e6e88bd4d6032f8a2744dc7",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -12977,8 +13005,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "e8e3639f1ce518a93a2feefbb70e1f93cb82285d52340ee0c2103d01133c01e4",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "dec5fe825811382b91ba8b25326ccc10d843ec0af46445d718e71769f1791e41",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13017,8 +13045,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "3b14fa2783daf82cebe4a85b055eb6f725f843bbf9bf625a5ae8c2443aa63a4b",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "fd8da88d6bb5124b2a8c51e7d41af9375b7d9f518a4c7a94be99774b0bf7963f",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13057,8 +13085,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "ce1a5436d8dd9eb88bf9121a925eec725722683807d810c4eb99a068603100fb",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "7687065414b679cc4a998df2cb954231d67a39e0ed334a06b7e619ab4e6b5782",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13098,8 +13126,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "7d07266dd6e7ebe597e8d944632ea642f9597751d8dad685bda14bad3e004c75",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "7ba415ad3363c632b1d0f6bcba6219439a08d014d591e91ac6beee0ee38693c5",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13138,8 +13166,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "cfd360ab1c2ef567650c021f8d6e16cf683a036a8df3f8bb51a2e75f034f0dc4",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "de0a015f73f5bad4baeadb4203522cf9b055b9e6598cdad8d165066327e07c3e",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13178,8 +13206,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "eff5892d432738fd9bbfe98c49e9e6ee25d10918b3e0240f5ce5b0c013826191",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "4310129b287b423d76c6fcdff4bfc896ec997dc4091e6bcba094ef4bede842ba",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13218,8 +13246,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "6ac50da5803500974402446a8190cfa01a484b199656c0aaa8209f824f6482ed",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "30eed4241bb1b0e9b32576a62778d93edea65c099d83287d0d67db87a1e4b7a5",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13258,8 +13286,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "63df3e351df42873cc96531b996d3e22a0cb03f5afb288dce4faf640ae6fda12",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "3985cf0042f92c260e3a432e7e4b0c0a94e09b85941b3a785316f6755442ab27",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13298,8 +13326,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "dc393e64d828e8a8852f3a3dfb96e92e5cee39b685eee3afa3b0809a5abee001",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "668f064cdb72ab26aea7b1b90f6da4ca5c9ecc270f2f9f96a52844e58ba94d8e",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13338,8 +13366,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "73c06ff90f13a571d211c6b9f760fd5593e4cc28d81f6429109f96daa861ad27",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "e3390fc67114e770fe8dc2f431b226cd8e3d52697678b657ab1040361e43f468",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13378,8 +13406,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "a4267b607ed6e183a1d045b2f565eaf631fd5b41d09c30dcb703c598280acbe0",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "ea22c0a0a67e053a23a6fc7b989b09b530af7760bc8b6f5639793e6cc68ebe3f",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13417,8 +13445,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "b355576cc2df6d7462c2558f4079aff15ce166c42968bc49aa04c9395c3623e7",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "d60dfd6538a5eb218bae18e7bab506eb277a5c88a8fadc476a44c3dfe0e1d157",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13459,8 +13487,8 @@
         "human",
         "developer"
       ],
-      "sourceHash": "f53ce1ca9b148fd6583ae22d018d6eb42ad484efc69f0ebe299e38b09e280b2a",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "9d43546443f2c259e8d94b6dd40b5894f7f82f97bee2571e8bd6167d21d11410",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13499,8 +13527,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "badfaf20c4c9730d277878b941d55c2faf1a17e6eb359d6f5367efe4648f3051",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "b1cb186c2b26f2306c0c6c743b17b50d81eb7448f4c619344a0e680bac93dc32",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13539,8 +13567,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "65fe041c96ecd21e7bdf6eea0fd67fbd31abc54646e6e40f42a147e5198fa443",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "1dc8f5b23280aaa8ec25aca4f896686b7ab2e0f34887d2580843af3c285a063d",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13577,8 +13605,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "d159576ea1daf72de52d19f2b44478a84471de23a9c72dced90d5b1e8071dca3",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "c9816ce9525b4ab385b0acdf061127eae864c66db051396943519664ffd932eb",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13617,8 +13645,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "65cb3891947ab488e51c13bcecb57270464be515270ad35960e80e1ee7521be8",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "1c0cda6da2421b5bb7c763ca33005bec4d523cbb6b4d81ef2e25013bde5dbb15",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13657,8 +13685,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "4b9501ddf57ed768c709fa0461b2ffd29acd1bf36094a182d37c62c2ff6f3bd6",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "239b399eac801f71e24ce68578e1e85fab1de9a15a009444242164021d289558",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13694,8 +13722,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "5c15eb96641a9b5fd64a2eedafc6de120ae2101a0ccbea63acdfd8f666e605e4",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "9fd5514170ea6f57035b020cf2b16310a9fec59b96fcb9c5a270803876ca2d83",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13731,8 +13759,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "815f72d75622a157de5dca6bde19bdd7dc0d8fe571a6b9f23de460eaf407edf4",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "241f76bd4bf9f03632e0a4396460ca830b2cceb4016c2c4224cf3d8f2feed06c",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13768,8 +13796,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "684506281761662ad14ce71d597ea0f3eec0555e3d2097d0c5fdecdb76f35969",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "ec9391799960df211396479d5bc743cb9f929f89ac787817bbbde3bdf6b89cd5",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13805,8 +13833,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "cc591218d7059289ba45d4b42c717839a3efed952daeadd84270e88a589dad40",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "6489ecc0a1de0b199bf1edc187ea958189b6f872bfa22be29fa9a988ac127051",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13842,8 +13870,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "05d47ae320eaaebb8a9fa189cafe278d054136eb3b79521e51330c33fd9ce340",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "81ead7a06680f0ce4186e989da42fade47797529a0ac0da5987dda3fc7c0ad5b",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13879,8 +13907,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "b3aa34e5052accd32e955c3dec2da121c066f1cdfc2c2da592adb43281c9e131",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "8387fca3e37044613ae5ae7b45c80e658b4f7e3262a169b7f9b28aa24c34cbe4",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13916,8 +13944,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "edc27c7d27a51783053210f49046b056320137e97d61312d3ab4d61e8acf5ad6",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "35002894629814b10eca6b67151809a3c77665b9c8d38a0d1705dff2b3d0a81e",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13953,8 +13981,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "f1b63d8a564951caa28bf65306f168fb5a7b9105a9a45ee5f00ecacdd474261d",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "0440196a0a0f9bc9280e1e5362b28bc3f2ba3d04892a97128479b10caafaf67c",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -13991,8 +14019,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "bf9c70cc5d6ef023fdf7518f2680df4785e6b58eaabb9e4634e3a42a3888980e",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "7fad843bc750c01e2870c059796a9defa935cfab43fd82d14d6f6b6d2afbf71e",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
     },
     {
@@ -14029,8 +14057,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "d354f39b290ebed922493791eeadd8742ee371bc7d27cbc7110d3b748ee43399",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "4563bf867472abe0880bc8382eaea98b9025a7fbffc7cd260e755cdc21c4f69b",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Two real Apple devices with the same person: offline edit reconciliation, relaunch persistence and account-switch isolation. This does not accept the deferred hosted-data APP3 story."
     },
@@ -14070,8 +14098,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "d354f39b290ebed922493791eeadd8742ee371bc7d27cbc7110d3b748ee43399",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "4563bf867472abe0880bc8382eaea98b9025a7fbffc7cd260e755cdc21c4f69b",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Exercise adapter success/error/retry, datasource identity and writes, and references across sources."
     },
@@ -14111,8 +14139,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "d354f39b290ebed922493791eeadd8742ee371bc7d27cbc7110d3b748ee43399",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "4563bf867472abe0880bc8382eaea98b9025a7fbffc7cd260e755cdc21c4f69b",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Inspect adaptive design and interactive scenario identity in the native workbench; source tests remain supplementary."
     },
@@ -14140,8 +14168,8 @@
           "browser-preview"
         ]
       },
-      "sourceHash": "fad7480be7c1e76be5c333eec9c4cb2cd898c7d8af5db71605c77fc99478d1f1",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -14171,8 +14199,8 @@
           "browser-preview"
         ]
       },
-      "sourceHash": "fad7480be7c1e76be5c333eec9c4cb2cd898c7d8af5db71605c77fc99478d1f1",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -14192,6 +14220,12 @@
         "desktop": "QA views/desktop"
       },
       "captureApp": "ReadingList",
+      "captureProject": ".artifacts/qa/tutorial-review",
+      "captureSources": {
+        "phone-light": "ReadingList.tao",
+        "phone-dark": "ReadingList.tao",
+        "desktop": "ReadingList.tao"
+      },
       "kind": "screenshot-set",
       "phase": 1,
       "tags": [
@@ -14210,88 +14244,606 @@
           "desktop"
         ]
       },
-      "sourceHash": "fad7480be7c1e76be5c333eec9c4cb2cd898c7d8af5db71605c77fc99478d1f1",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
     {
-      "id": "visual:notebook",
-      "title": "Notebook starter captured initial states",
-      "source": "packages/cli/tao-cli",
-      "dimension": "visual",
-      "channels": [
-        "phone",
-        "tablet-dark",
-        "notes-groceries",
-        "notes-ideas"
-      ],
-      "captureCells": {
-        "phone": "devices/phone",
-        "tablet-dark": "devices/tabletDark",
-        "notes-groceries": "notes states/groceries",
-        "notes-ideas": "notes states/ideas"
-      },
-      "captureApp": "Notebook",
+      "id": "visual:Apps/Firebase Live Acceptance/FirebaseLiveAcceptancePreview",
+      "title": "FirebaseLiveAcceptancePreview scenario captures (Apps/Firebase Live Acceptance)",
       "kind": "screenshot-set",
+      "source": "Apps/Firebase Live Acceptance",
       "phase": 1,
       "tags": [
         "A"
       ],
-      "requirements": [
-        "agent"
+      "channels": [
+        "[\"Scenarios.tao\",\"devices\",\"phone\"]"
       ],
       "dimensions": [
         "visual"
       ],
       "dimensionChannels": {
         "visual": [
-          "phone",
-          "tablet-dark",
-          "notes-groceries",
-          "notes-ideas"
+          "[\"Scenarios.tao\",\"devices\",\"phone\"]"
         ]
       },
-      "sourceHash": "fad7480be7c1e76be5c333eec9c4cb2cd898c7d8af5db71605c77fc99478d1f1",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
-      "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
+      "captureApp": "FirebaseLiveAcceptancePreview",
+      "captureProject": "Apps/Firebase Live Acceptance",
+      "captureCells": {
+        "[\"Scenarios.tao\",\"devices\",\"phone\"]": "devices/phone"
+      },
+      "captureSources": {
+        "[\"Scenarios.tao\",\"devices\",\"phone\"]": "Scenarios.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
     },
     {
-      "id": "visual:hnreader",
-      "title": "HNReaderStub browser capture cells",
-      "source": "Apps/HNReader",
-      "dimension": "visual",
-      "channels": [
-        "rows-leading",
-        "rows-wrapping"
-      ],
-      "captureCells": {
-        "rows-leading": "rows/leading",
-        "rows-wrapping": "rows/wrapping"
-      },
-      "captureApp": "HNReaderStub",
+      "id": "visual:Apps/HNReader/HNReader",
+      "title": "HNReader scenario captures (Apps/HNReader)",
       "kind": "screenshot-set",
-      "phase": 2,
+      "source": "Apps/HNReader",
+      "phase": 1,
       "tags": [
         "A"
       ],
-      "requirements": [
-        "agent"
+      "channels": [
+        "[\"@/studio/View5.tao\",\"sketch\",\"draft\"]",
+        "[\"HNReader.scenarios.tao\",\"devices\",\"offline\"]",
+        "[\"HNReader.scenarios.tao\",\"devices\",\"phone\"]",
+        "[\"HNReader.scenarios.tao\",\"devices\",\"tabletDark\"]",
+        "[\"HNReader.scenarios.tao\",\"rows\",\"leading\"]",
+        "[\"HNReader.scenarios.tao\",\"rows\",\"wrapping\"]"
       ],
       "dimensions": [
         "visual"
       ],
       "dimensionChannels": {
         "visual": [
-          "rows-leading",
-          "rows-wrapping"
+          "[\"@/studio/View5.tao\",\"sketch\",\"draft\"]",
+          "[\"HNReader.scenarios.tao\",\"devices\",\"offline\"]",
+          "[\"HNReader.scenarios.tao\",\"devices\",\"phone\"]",
+          "[\"HNReader.scenarios.tao\",\"devices\",\"tabletDark\"]",
+          "[\"HNReader.scenarios.tao\",\"rows\",\"leading\"]",
+          "[\"HNReader.scenarios.tao\",\"rows\",\"wrapping\"]"
         ]
       },
-      "sourceHash": "fad7480be7c1e76be5c333eec9c4cb2cd898c7d8af5db71605c77fc99478d1f1",
-      "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
       "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
-      "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
+      "captureApp": "HNReader",
+      "captureProject": "Apps/HNReader",
+      "captureCells": {
+        "[\"@/studio/View5.tao\",\"sketch\",\"draft\"]": "sketch/draft",
+        "[\"HNReader.scenarios.tao\",\"devices\",\"offline\"]": "devices/offline",
+        "[\"HNReader.scenarios.tao\",\"devices\",\"phone\"]": "devices/phone",
+        "[\"HNReader.scenarios.tao\",\"devices\",\"tabletDark\"]": "devices/tabletDark",
+        "[\"HNReader.scenarios.tao\",\"rows\",\"leading\"]": "rows/leading",
+        "[\"HNReader.scenarios.tao\",\"rows\",\"wrapping\"]": "rows/wrapping"
+      },
+      "captureSources": {
+        "[\"@/studio/View5.tao\",\"sketch\",\"draft\"]": "@/studio/View5.tao",
+        "[\"HNReader.scenarios.tao\",\"devices\",\"offline\"]": "HNReader.scenarios.tao",
+        "[\"HNReader.scenarios.tao\",\"devices\",\"phone\"]": "HNReader.scenarios.tao",
+        "[\"HNReader.scenarios.tao\",\"devices\",\"tabletDark\"]": "HNReader.scenarios.tao",
+        "[\"HNReader.scenarios.tao\",\"rows\",\"leading\"]": "HNReader.scenarios.tao",
+        "[\"HNReader.scenarios.tao\",\"rows\",\"wrapping\"]": "HNReader.scenarios.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
+    },
+    {
+      "id": "visual:Apps/HNReader/HNReaderStub",
+      "title": "HNReaderStub scenario captures (Apps/HNReader)",
+      "kind": "screenshot-set",
+      "source": "Apps/HNReader",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "[\"@/studio/View5.tao\",\"sketch\",\"draft\"]",
+        "[\"HNReader.scenarios.tao\",\"rows\",\"leading\"]",
+        "[\"HNReader.scenarios.tao\",\"rows\",\"wrapping\"]"
+      ],
+      "dimensions": [
+        "visual"
+      ],
+      "dimensionChannels": {
+        "visual": [
+          "[\"@/studio/View5.tao\",\"sketch\",\"draft\"]",
+          "[\"HNReader.scenarios.tao\",\"rows\",\"leading\"]",
+          "[\"HNReader.scenarios.tao\",\"rows\",\"wrapping\"]"
+        ]
+      },
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "captureApp": "HNReaderStub",
+      "captureProject": "Apps/HNReader",
+      "captureCells": {
+        "[\"@/studio/View5.tao\",\"sketch\",\"draft\"]": "sketch/draft",
+        "[\"HNReader.scenarios.tao\",\"rows\",\"leading\"]": "rows/leading",
+        "[\"HNReader.scenarios.tao\",\"rows\",\"wrapping\"]": "rows/wrapping"
+      },
+      "captureSources": {
+        "[\"@/studio/View5.tao\",\"sketch\",\"draft\"]": "@/studio/View5.tao",
+        "[\"HNReader.scenarios.tao\",\"rows\",\"leading\"]": "HNReader.scenarios.tao",
+        "[\"HNReader.scenarios.tao\",\"rows\",\"wrapping\"]": "HNReader.scenarios.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
+    },
+    {
+      "id": "visual:Apps/Hosted Firebase/FirebaseNotesPreview",
+      "title": "FirebaseNotesPreview scenario captures (Apps/Hosted Firebase)",
+      "kind": "screenshot-set",
+      "source": "Apps/Hosted Firebase",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "[\"Scenarios.tao\",\"devices\",\"phone\"]"
+      ],
+      "dimensions": [
+        "visual"
+      ],
+      "dimensionChannels": {
+        "visual": [
+          "[\"Scenarios.tao\",\"devices\",\"phone\"]"
+        ]
+      },
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "captureApp": "FirebaseNotesPreview",
+      "captureProject": "Apps/Hosted Firebase",
+      "captureCells": {
+        "[\"Scenarios.tao\",\"devices\",\"phone\"]": "devices/phone"
+      },
+      "captureSources": {
+        "[\"Scenarios.tao\",\"devices\",\"phone\"]": "Scenarios.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
+    },
+    {
+      "id": "visual:Apps/Starters/Notebook/Notebook",
+      "title": "Notebook scenario captures (Apps/Starters/Notebook)",
+      "kind": "screenshot-set",
+      "source": "Apps/Starters/Notebook",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "[\"Scenarios.tao\",\"devices\",\"phone\"]",
+        "[\"Scenarios.tao\",\"devices\",\"tabletDark\"]",
+        "[\"Scenarios.tao\",\"notes states\",\"groceries\"]",
+        "[\"Scenarios.tao\",\"notes states\",\"ideas\"]"
+      ],
+      "dimensions": [
+        "visual"
+      ],
+      "dimensionChannels": {
+        "visual": [
+          "[\"Scenarios.tao\",\"devices\",\"phone\"]",
+          "[\"Scenarios.tao\",\"devices\",\"tabletDark\"]",
+          "[\"Scenarios.tao\",\"notes states\",\"groceries\"]",
+          "[\"Scenarios.tao\",\"notes states\",\"ideas\"]"
+        ]
+      },
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "captureApp": "Notebook",
+      "captureProject": "Apps/Starters/Notebook",
+      "captureCells": {
+        "[\"Scenarios.tao\",\"devices\",\"phone\"]": "devices/phone",
+        "[\"Scenarios.tao\",\"devices\",\"tabletDark\"]": "devices/tabletDark",
+        "[\"Scenarios.tao\",\"notes states\",\"groceries\"]": "notes states/groceries",
+        "[\"Scenarios.tao\",\"notes states\",\"ideas\"]": "notes states/ideas"
+      },
+      "captureSources": {
+        "[\"Scenarios.tao\",\"devices\",\"phone\"]": "Scenarios.tao",
+        "[\"Scenarios.tao\",\"devices\",\"tabletDark\"]": "Scenarios.tao",
+        "[\"Scenarios.tao\",\"notes states\",\"groceries\"]": "Scenarios.tao",
+        "[\"Scenarios.tao\",\"notes states\",\"ideas\"]": "Scenarios.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
+    },
+    {
+      "id": "visual:Apps/Starters/Pantry/Pantry",
+      "title": "Pantry scenario captures (Apps/Starters/Pantry)",
+      "kind": "screenshot-set",
+      "source": "Apps/Starters/Pantry",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "[\"Scenarios.tao\",\"devices\",\"phone\"]",
+        "[\"Scenarios.tao\",\"devices\",\"tabletDark\"]",
+        "[\"Scenarios.tao\",\"ingredients states\",\"eggs\"]",
+        "[\"Scenarios.tao\",\"ingredients states\",\"oliveOil\"]",
+        "[\"Scenarios.tao\",\"recipes states\",\"omelette\"]",
+        "[\"Scenarios.tao\",\"recipes states\",\"tomatoPasta\"]"
+      ],
+      "dimensions": [
+        "visual"
+      ],
+      "dimensionChannels": {
+        "visual": [
+          "[\"Scenarios.tao\",\"devices\",\"phone\"]",
+          "[\"Scenarios.tao\",\"devices\",\"tabletDark\"]",
+          "[\"Scenarios.tao\",\"ingredients states\",\"eggs\"]",
+          "[\"Scenarios.tao\",\"ingredients states\",\"oliveOil\"]",
+          "[\"Scenarios.tao\",\"recipes states\",\"omelette\"]",
+          "[\"Scenarios.tao\",\"recipes states\",\"tomatoPasta\"]"
+        ]
+      },
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "captureApp": "Pantry",
+      "captureProject": "Apps/Starters/Pantry",
+      "captureCells": {
+        "[\"Scenarios.tao\",\"devices\",\"phone\"]": "devices/phone",
+        "[\"Scenarios.tao\",\"devices\",\"tabletDark\"]": "devices/tabletDark",
+        "[\"Scenarios.tao\",\"ingredients states\",\"eggs\"]": "ingredients states/eggs",
+        "[\"Scenarios.tao\",\"ingredients states\",\"oliveOil\"]": "ingredients states/oliveOil",
+        "[\"Scenarios.tao\",\"recipes states\",\"omelette\"]": "recipes states/omelette",
+        "[\"Scenarios.tao\",\"recipes states\",\"tomatoPasta\"]": "recipes states/tomatoPasta"
+      },
+      "captureSources": {
+        "[\"Scenarios.tao\",\"devices\",\"phone\"]": "Scenarios.tao",
+        "[\"Scenarios.tao\",\"devices\",\"tabletDark\"]": "Scenarios.tao",
+        "[\"Scenarios.tao\",\"ingredients states\",\"eggs\"]": "Scenarios.tao",
+        "[\"Scenarios.tao\",\"ingredients states\",\"oliveOil\"]": "Scenarios.tao",
+        "[\"Scenarios.tao\",\"recipes states\",\"omelette\"]": "Scenarios.tao",
+        "[\"Scenarios.tao\",\"recipes states\",\"tomatoPasta\"]": "Scenarios.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
+    },
+    {
+      "id": "visual:Apps/Test Apps/Auth Review/AuthReviewClerk",
+      "title": "AuthReviewClerk scenario captures (Apps/Test Apps/Auth Review)",
+      "kind": "screenshot-set",
+      "source": "Apps/Test Apps/Auth Review",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "[\"Auth Review.tao\",\"Clerk and InstantDB\",\"iPhone\"]"
+      ],
+      "dimensions": [
+        "visual"
+      ],
+      "dimensionChannels": {
+        "visual": [
+          "[\"Auth Review.tao\",\"Clerk and InstantDB\",\"iPhone\"]"
+        ]
+      },
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "captureApp": "AuthReviewClerk",
+      "captureProject": "Apps/Test Apps/Auth Review",
+      "captureCells": {
+        "[\"Auth Review.tao\",\"Clerk and InstantDB\",\"iPhone\"]": "Clerk and InstantDB/iPhone"
+      },
+      "captureSources": {
+        "[\"Auth Review.tao\",\"Clerk and InstantDB\",\"iPhone\"]": "Auth Review.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
+    },
+    {
+      "id": "visual:Apps/Test Apps/Auth Review/AuthReviewConvexClerk",
+      "title": "AuthReviewConvexClerk scenario captures (Apps/Test Apps/Auth Review)",
+      "kind": "screenshot-set",
+      "source": "Apps/Test Apps/Auth Review",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "[\"Auth Review.tao\",\"Clerk and Convex\",\"iPhone\"]"
+      ],
+      "dimensions": [
+        "visual"
+      ],
+      "dimensionChannels": {
+        "visual": [
+          "[\"Auth Review.tao\",\"Clerk and Convex\",\"iPhone\"]"
+        ]
+      },
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "captureApp": "AuthReviewConvexClerk",
+      "captureProject": "Apps/Test Apps/Auth Review",
+      "captureCells": {
+        "[\"Auth Review.tao\",\"Clerk and Convex\",\"iPhone\"]": "Clerk and Convex/iPhone"
+      },
+      "captureSources": {
+        "[\"Auth Review.tao\",\"Clerk and Convex\",\"iPhone\"]": "Auth Review.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
+    },
+    {
+      "id": "visual:Apps/Test Apps/Auth Review/AuthReviewPylon",
+      "title": "AuthReviewPylon scenario captures (Apps/Test Apps/Auth Review)",
+      "kind": "screenshot-set",
+      "source": "Apps/Test Apps/Auth Review",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "[\"Auth Review.tao\",\"Pylon auth and data\",\"iPhone\"]"
+      ],
+      "dimensions": [
+        "visual"
+      ],
+      "dimensionChannels": {
+        "visual": [
+          "[\"Auth Review.tao\",\"Pylon auth and data\",\"iPhone\"]"
+        ]
+      },
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "captureApp": "AuthReviewPylon",
+      "captureProject": "Apps/Test Apps/Auth Review",
+      "captureCells": {
+        "[\"Auth Review.tao\",\"Pylon auth and data\",\"iPhone\"]": "Pylon auth and data/iPhone"
+      },
+      "captureSources": {
+        "[\"Auth Review.tao\",\"Pylon auth and data\",\"iPhone\"]": "Auth Review.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
+    },
+    {
+      "id": "visual:Apps/WordFlower/1 - Current/WordFlower",
+      "title": "WordFlower scenario captures (Apps/WordFlower/1 - Current)",
+      "kind": "screenshot-set",
+      "source": "Apps/WordFlower/1 - Current",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "[\"WordFlower.tao\",\"devices\",\"phone\"]",
+        "[\"WordFlower.tao\",\"devices\",\"tabletDark\"]",
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]"
+      ],
+      "dimensions": [
+        "visual"
+      ],
+      "dimensionChannels": {
+        "visual": [
+          "[\"WordFlower.tao\",\"devices\",\"phone\"]",
+          "[\"WordFlower.tao\",\"devices\",\"tabletDark\"]",
+          "[\"WordFlower.tao\",\"interaction\",\"held\"]",
+          "[\"WordFlower.tao\",\"states\",\"novel\"]"
+        ]
+      },
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "captureApp": "WordFlower",
+      "captureProject": "Apps/WordFlower/1 - Current",
+      "captureCells": {
+        "[\"WordFlower.tao\",\"devices\",\"phone\"]": "devices/phone",
+        "[\"WordFlower.tao\",\"devices\",\"tabletDark\"]": "devices/tabletDark",
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]": "interaction/held",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]": "states/novel"
+      },
+      "captureSources": {
+        "[\"WordFlower.tao\",\"devices\",\"phone\"]": "WordFlower.tao",
+        "[\"WordFlower.tao\",\"devices\",\"tabletDark\"]": "WordFlower.tao",
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]": "WordFlower.tao",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]": "WordFlower.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
+    },
+    {
+      "id": "visual:Apps/WordFlower/1 - Current/WordFlowerDark",
+      "title": "WordFlowerDark scenario captures (Apps/WordFlower/1 - Current)",
+      "kind": "screenshot-set",
+      "source": "Apps/WordFlower/1 - Current",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "[\"WordFlower.tao\",\"dark theme\",\"library\"]",
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]"
+      ],
+      "dimensions": [
+        "visual"
+      ],
+      "dimensionChannels": {
+        "visual": [
+          "[\"WordFlower.tao\",\"dark theme\",\"library\"]",
+          "[\"WordFlower.tao\",\"interaction\",\"held\"]",
+          "[\"WordFlower.tao\",\"states\",\"novel\"]"
+        ]
+      },
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "captureApp": "WordFlowerDark",
+      "captureProject": "Apps/WordFlower/1 - Current",
+      "captureCells": {
+        "[\"WordFlower.tao\",\"dark theme\",\"library\"]": "dark theme/library",
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]": "interaction/held",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]": "states/novel"
+      },
+      "captureSources": {
+        "[\"WordFlower.tao\",\"dark theme\",\"library\"]": "WordFlower.tao",
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]": "WordFlower.tao",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]": "WordFlower.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
+    },
+    {
+      "id": "visual:Apps/WordFlower/1 - Current/WordFlowerDrawer",
+      "title": "WordFlowerDrawer scenario captures (Apps/WordFlower/1 - Current)",
+      "kind": "screenshot-set",
+      "source": "Apps/WordFlower/1 - Current",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]"
+      ],
+      "dimensions": [
+        "visual"
+      ],
+      "dimensionChannels": {
+        "visual": [
+          "[\"WordFlower.tao\",\"interaction\",\"held\"]",
+          "[\"WordFlower.tao\",\"states\",\"novel\"]"
+        ]
+      },
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "captureApp": "WordFlowerDrawer",
+      "captureProject": "Apps/WordFlower/1 - Current",
+      "captureCells": {
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]": "interaction/held",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]": "states/novel"
+      },
+      "captureSources": {
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]": "WordFlower.tao",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]": "WordFlower.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
+    },
+    {
+      "id": "visual:Apps/WordFlower/1 - Current/WordFlowerInstantDB",
+      "title": "WordFlowerInstantDB scenario captures (Apps/WordFlower/1 - Current)",
+      "kind": "screenshot-set",
+      "source": "Apps/WordFlower/1 - Current",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]"
+      ],
+      "dimensions": [
+        "visual"
+      ],
+      "dimensionChannels": {
+        "visual": [
+          "[\"WordFlower.tao\",\"interaction\",\"held\"]",
+          "[\"WordFlower.tao\",\"states\",\"novel\"]"
+        ]
+      },
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "captureApp": "WordFlowerInstantDB",
+      "captureProject": "Apps/WordFlower/1 - Current",
+      "captureCells": {
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]": "interaction/held",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]": "states/novel"
+      },
+      "captureSources": {
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]": "WordFlower.tao",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]": "WordFlower.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
+    },
+    {
+      "id": "visual:Apps/WordFlower/1 - Current/WordFlowerLocalInstantDB",
+      "title": "WordFlowerLocalInstantDB scenario captures (Apps/WordFlower/1 - Current)",
+      "kind": "screenshot-set",
+      "source": "Apps/WordFlower/1 - Current",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]"
+      ],
+      "dimensions": [
+        "visual"
+      ],
+      "dimensionChannels": {
+        "visual": [
+          "[\"WordFlower.tao\",\"interaction\",\"held\"]",
+          "[\"WordFlower.tao\",\"states\",\"novel\"]"
+        ]
+      },
+      "requirements": [
+        "agent"
+      ],
+      "sourceHash": "972bfd310c2f628a1d6e99c6a87841af465e5ddae223b4a22e8ad428a3ea6382",
+      "rendererHash": "a3ed2d249a330c3afef87bc26d73a1d08967001d4f9e5dcebebcd90f32bb6ef0",
+      "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93",
+      "captureApp": "WordFlowerLocalInstantDB",
+      "captureProject": "Apps/WordFlower/1 - Current",
+      "captureCells": {
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]": "interaction/held",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]": "states/novel"
+      },
+      "captureSources": {
+        "[\"WordFlower.tao\",\"interaction\",\"held\"]": "WordFlower.tao",
+        "[\"WordFlower.tao\",\"states\",\"novel\"]": "WordFlower.tao"
+      },
+      "scopeNote": "Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance."
     }
   ],
   "dependencies": [
@@ -16193,7 +16745,7 @@
     },
     {
       "path": "Justfile",
-      "sha256": "e4ff4589175ebc5d4a952c7c64827a29d9a3a8a289eec909f85e36abca6df2f1"
+      "sha256": "1f5c053f9575b951287a30a015d1e7ae7d2ad2af6847574782f413bda63cacf0"
     },
     {
       "path": "agent",
@@ -19133,7 +19685,7 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/AgentCommands.ts",
-      "sha256": "9ea668d4320ed38df3629ec2fc28c08f3bca44ed6c85def6f8bcbc0454f28a4c"
+      "sha256": "a0dc7d6ed89ce9239e28ef24fc0349fd77744052b28edb80478f61e9ffed6e21"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/agent-config/AgentConfigFreshness.ts",
@@ -19245,7 +19797,7 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/agent-hooks/WorktreePlacement.ts",
-      "sha256": "014994824f7c08b33b68a543d3c93b4211ad0f7c8beb7fbade1860f026895820"
+      "sha256": "960b2f313b8be1f60905146000b35efc58509562b6e70253c483383c565c7762"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/attention/AttentionState.ts",
@@ -19309,7 +19861,7 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/cli/agent-worktree.zsh",
-      "sha256": "d0b93b5c1f65d905cb923c8957985a36febe2c9475a68ae4c96c3dcbce7b720f"
+      "sha256": "a427f0096279c9ba6c2a8cd50b2387b02ec6f12f1faa96f331cce1c26290d466"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/delegation/DelegationLog.ts",
@@ -19317,7 +19869,7 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/delegation/DelegationProfiles.ts",
-      "sha256": "a7ae7e63d80d40496b0858a72b8df5c2fbf652992936f38ba79a38c9e9727b48"
+      "sha256": "cce6afe4191673f7552218a91201c555e676446cff96bbdaedc55102854ba73f"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/delegation/DelegationReportCommand.ts",
@@ -19421,7 +19973,7 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-tests/delegation-profiles.test.ts",
-      "sha256": "bfdb2d25eb80078fa32304479142ac7eb71d5d937667a481ea08ebb5b1cb553b"
+      "sha256": "a949740f6a8ffc0bcd9008b8d0229ec1daabdfda065fba1c1415e0b06c01f005"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-tests/delegation-report.test.ts",
@@ -19469,7 +20021,7 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-tests/worktree-placement.test.ts",
-      "sha256": "bfbefb011b29c667346352bb33c986e773adb7675884c6c0202f4057e25509c6"
+      "sha256": "9e7a917d84dfed0528ccd450c9e669c7a2a6ce8b35304f8aad057e058de63979"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-tests/worktree-setup.test.ts",
@@ -19669,7 +20221,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/dev.ts",
-      "sha256": "b26290cc6656ac8fa7c0aca160e553700e28256cbcdfb3d0ae7e8f0ae07772cf"
+      "sha256": "7115f6a1f642370fb636ec027a8d3f8286dbaa39e77d98fc61b05b67ead9bb8c"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/doctor/AgentCapabilities.ts",
@@ -19764,6 +20316,10 @@
       "sha256": "734430e575f32057d6e603ce5df9b850eb4b0feca66aa9d0d80207874dbe53c1"
     },
     {
+      "path": "packages/cli/dev-cli/dev-cli-src/git/SyncLocalMain.ts",
+      "sha256": "91feb0fddf2b0cfe3dfb1646c2c8bf0b6c5ba3aecb87e1999f3eb0cffebd1117"
+    },
+    {
       "path": "packages/cli/dev-cli/dev-cli-src/instantdb/InstantReviewCommand.ts",
       "sha256": "86328221e570359ab142ee04ea27ae3e01c8b2eea3c06cb48d7e09219b6849c4"
     },
@@ -19809,19 +20365,19 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/pr/GitHubPulls.ts",
-      "sha256": "c1655cee7c0d5f5cfcbd7b3a0f585005d844298b509a69de76a86786cdaae5d6"
+      "sha256": "81cc3f1eb43a8bd09b026cc78ef13d51acf5178dba5fb3c9e5813c9a9efb94e3"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/pr/LandFixCommand.ts",
-      "sha256": "13ca923625e87f69855484c373678eb2527356e3877984318aa7b99114d4d2ae"
+      "sha256": "20fa1f3e6f5758ac27ee646554227f55d12f462309271429d25d20fa9418c50c"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/pr/MergePrCommand.ts",
-      "sha256": "e83700f8f94d38c9441c57426cfc652bd8cb7e01880b1b0ba00d10e13b32ed16"
+      "sha256": "7af222e915cd098175c40980ae05052b37a483d5867fb585371227ea6317033b"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/pr/OpenPrCommand.ts",
-      "sha256": "f7eae32ed5875916adc84c66711da127a5dd6760a92c483080234cb8f9cf69b9"
+      "sha256": "79dfd98e25d509ce325b6a63e4e43c4536b8cb5f83a031bfe4daf78ce495cea5"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/pr/PrChecksCommand.ts",
@@ -20069,7 +20625,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/land-fix.test.ts",
-      "sha256": "b8b5efb35212285a9c4f0cbb94de484b81180d1655d1cab3003ed8f6c769aba2"
+      "sha256": "4961aa4a77b60634e279a7546f06d70bdef8e630403139a004fb0a16370b7ddf"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/managed-firebase-acceptance.test.ts",
@@ -20141,7 +20697,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/merge-pr.test.ts",
-      "sha256": "6413e5c34a806fb38caded7f83fae0634a421beaed34872c5f2bf3c1ea3011e3"
+      "sha256": "e53af6824eab3f9c159eda991ab46f1ba20b293162fd7827d0c885c8d690406b"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/merge-recovery.test.ts",
@@ -20161,7 +20717,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/open-pr.test.ts",
-      "sha256": "a5159536964b4102a8d3071e9175e1debe465ea6445879fe93e18feba81438fa"
+      "sha256": "ab1d1a61f531a3f6a697ba6702522ef5b8c2378dd24925ae6f3236d080dddd6c"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/portable-bootstrap.test.ts",
@@ -20210,6 +20766,10 @@
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/subprocess-test-api.ts",
       "sha256": "4961203f9609eb9ec5e2910e69da168ade201eeacd6653449fff016af705fa9f"
+    },
+    {
+      "path": "packages/cli/dev-cli/dev-cli-tests/sync-main.test.ts",
+      "sha256": "50748141a6e8f124a53f241823a744d07154163d2ce02acd969b1166d9697714"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/tao-project-dependencies.test.ts",
@@ -21357,7 +21917,7 @@
     },
     {
       "path": "packages/compiler/compiler-src/workspace/LSPWorkspace.ts",
-      "sha256": "a84915777e77854897713205f6f102c80d7de303b7a3acee18da8ad534a03177"
+      "sha256": "4e267c22f917a3857744443d66f7ba648d4fa0033ea247d91ce6d010bc11e509"
     },
     {
       "path": "packages/compiler/compiler-src/workspace/ProjectSources.ts",
@@ -22281,7 +22841,7 @@
     },
     {
       "path": "packages/ides/studio-tooling/studio-tooling-src/StudioDev.ts",
-      "sha256": "0611f917905ab0df342c6a67e96f5d17fa2eb91cc1fa40acb5180aa857072960"
+      "sha256": "43f5bbc157b95184e90fc21159a4d54ae05bc8f6e8d48e65d63a15e379fa7e70"
     },
     {
       "path": "packages/ides/studio-tooling/studio-tooling-src/StudioDeviceCli.ts",
@@ -22377,7 +22937,7 @@
     },
     {
       "path": "packages/ides/studio-tooling/studio-tooling-src/StudioReview.ts",
-      "sha256": "3da73023f34835ce0f781261338456f6db1dad45565e1bb19187efdf1d921fcf"
+      "sha256": "e24c6418e3a54bbbeea27cfa3d10b2eb23a82694877151de3532e5403b527281"
     },
     {
       "path": "packages/ides/studio-tooling/studio-tooling-src/StudioSmoke.ts",
@@ -22453,7 +23013,7 @@
     },
     {
       "path": "packages/ides/studio-tooling/studio-tooling-tests/studio-dev.test.ts",
-      "sha256": "c7d00f9f48f6edb22871e4ea4a9b7745a2414fc13cf63e10ae0e858cbbdb1e87"
+      "sha256": "c4525e86ef4ba1555d2d3f6c992cac59523e1942e93408192ceadb20109f48d4"
     },
     {
       "path": "packages/ides/studio-tooling/studio-tooling-tests/studio-device-cli.test.ts",
@@ -22525,7 +23085,7 @@
     },
     {
       "path": "packages/ides/studio-tooling/studio-tooling-tests/studio-review.test.ts",
-      "sha256": "3ddb68c812068ebd306b135f9144ef867feb0181a3325f6e3351fb9b0699dcc1"
+      "sha256": "0067252dcbef7dcc3ea565344c3eb19d11fb6843b3593f471208028a549cb117"
     },
     {
       "path": "packages/ides/studio-tooling/studio-tooling-tests/studio-smoke-cleanup.test.ts",
@@ -23461,7 +24021,7 @@
     },
     {
       "path": "packages/ides/studio/studio-tests/studio-lsp.test.ts",
-      "sha256": "60ca8a3e523df73c2a947cf7241140108b09d38e1bba2983e4dd8c5e1fc00506"
+      "sha256": "2d64fbe9a41d5da1999334c9f6448a5bd31740130ffac7866938c0fe5d279235"
     },
     {
       "path": "packages/ides/studio/studio-tests/studio-matrix-session.test.ts",
@@ -24965,7 +25525,7 @@
     },
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsBodies.test.ts",
-      "sha256": "a1d772877f2cc229708dd54f09b358f6943a271fe86c8a6a8254559a04a64deb"
+      "sha256": "6d51940b7d92a237803a0b140aec800b7dc46eb757b71316dc156f547cbc6cc1"
     },
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts",
@@ -24978,10 +25538,6 @@
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts",
       "sha256": "55876887e86a13ecbe26df0124a9c9a804a22f6a4983e19ad27a89ad682a671b"
-    },
-    {
-      "path": "packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceiptSignatures.test.ts",
-      "sha256": "d25c5adc5f7683ad39f33ea280220f1482c7f3ab4109024658b8f237a4bd7127"
     },
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectNativeTestSupport.ts",
@@ -25013,11 +25569,11 @@
     },
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptInputs.test.ts",
-      "sha256": "4cc0cb7b1046a77ff0d63d6777c89b64982a72a72ce1f76cce2abc2650e2c1f9"
+      "sha256": "0a582fd29d42de5d94fa7019b5ef472b57c8d68f4d670fab3f91d95a9b4f55ef"
     },
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptOwnership.test.ts",
-      "sha256": "a050252dbd1ea6a44a17481517f570f8cc26032e6807da41ddf06375978197b2"
+      "sha256": "eaf64d0486e79494a5aef00bc2b9e1809d24fdc5b7ea6a354c2f377db9cd8670"
     },
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRaces.test.ts",
@@ -25025,7 +25581,7 @@
     },
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRepairs.test.ts",
-      "sha256": "707633135ab58a4252625f74b87fbc5c3e8936aa8a5231aa43d0cdc2b5b5def0"
+      "sha256": "f925e8906531d02e807393b18adb1f821038aa8d1007a6146c32e071b985eea5"
     },
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptResolution.test.ts",
@@ -25033,7 +25589,7 @@
     },
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptTestSupport.ts",
-      "sha256": "70b226bd62de752b4c911c55d84d93416cd5e4163ec8ffff1edeb171bff38df5"
+      "sha256": "f7965849bb33357f89df6b31961870b0a2b8a14e487381799f98b51f0e248eed"
     },
     {
       "path": "packages/language/project-tooling/project-tooling-tests/ProjectToolingService.test.ts",
@@ -26857,11 +27413,11 @@
     },
     {
       "path": "packages/testing/verification/verification-src/GateCatalog.ts",
-      "sha256": "dd98618afa63094a22c9c1c336638edc2625c9b2039b98811de3ebbe5d18a8e8"
+      "sha256": "066232c2ee9a0b4906b8c3587502aa09fc5dde318dfac2b3f42c89757125ec56"
     },
     {
       "path": "packages/testing/verification/verification-src/GateRunner.ts",
-      "sha256": "3d172200b831d359aa54e06b05abdc581966e1ad7c682566dc6d77d4d230df13"
+      "sha256": "ae6259489d2c99c12c9d822a70b710546f2f479bd448e1ea2e8ade24e643c8d5"
     },
     {
       "path": "packages/testing/verification/verification-src/GeneratedEvidence.ts",
@@ -26941,7 +27497,7 @@
     },
     {
       "path": "packages/testing/verification/verification-src/TestNodes.ts",
-      "sha256": "b7ab58bf0c2cce2fe2f21c4a3844b4fa54e45f4418791a2503e0ed35c0cc6d34"
+      "sha256": "4d1e5cef1d836b7a431832c317537ce0e2596eddb9682b68657dd19a02738beb"
     },
     {
       "path": "packages/testing/verification/verification-src/TestReport.ts",
@@ -26953,7 +27509,7 @@
     },
     {
       "path": "packages/testing/verification/verification-src/TestRunner.ts",
-      "sha256": "6b7cd80e06da76769cc800999fc7998129606a4d24987bb258c90e80f5184017"
+      "sha256": "0fc1f610591b3878db862c26829f58bd4f960983d3a51715f435b23a5129e4ab"
     },
     {
       "path": "packages/testing/verification/verification-src/TestSelection.ts",
@@ -26973,7 +27529,7 @@
     },
     {
       "path": "packages/testing/verification/verification-src/VerifyComplement.ts",
-      "sha256": "aebc40b662bd543bf2f92cc00b4c874567feeab1bf54aed3da384c239403dcfa"
+      "sha256": "82480b4974e19bd6c1ebd67ab6ef9d5138a92d69e09ae8888fcc3a211119cdad"
     },
     {
       "path": "packages/testing/verification/verification-src/VerifyPartition.ts",
@@ -27077,11 +27633,11 @@
     },
     {
       "path": "packages/testing/verification/verification-tests/gate-catalog.test.ts",
-      "sha256": "4371da86a904d2ddcbd0fa022c5396b553948d99397fd079dbbd632725afad13"
+      "sha256": "6d2b0360ff263ef5d37de20b0c8622d4480efec01a042e6cb12ced8b7f07c758"
     },
     {
       "path": "packages/testing/verification/verification-tests/gate-runner.test.ts",
-      "sha256": "555cdfe9d02a5c5c5474d12f16300263840f336fef8a2b35599a3a98746d5e12"
+      "sha256": "a25e17b4fd96ff2f9cfe1ad9fd4cfaa89e4f24faf51880723ade20beb997b05e"
     },
     {
       "path": "packages/testing/verification/verification-tests/green-record-policy.test.ts",
@@ -27152,6 +27708,10 @@
       "sha256": "66e78f7ca9f84c2ccaf3c4dbf739486088c169960878c9d74dc1ff35e784e4ee"
     },
     {
+      "path": "packages/testing/verification/verification-tests/tao-app-shard-ownership.test.ts",
+      "sha256": "cdfb39de46772fd641b48c19f900eec84c18e45aca29807f52b38c6b9abfeaa0"
+    },
+    {
       "path": "packages/testing/verification/verification-tests/tao-app-shared-run.test.ts",
       "sha256": "f7684537db846573cc98f1c227351fda8928ee777843787cbc53377a1d68331a"
     },
@@ -27173,7 +27733,7 @@
     },
     {
       "path": "packages/testing/verification/verification-tests/test-runner.test.ts",
-      "sha256": "e4cc9996a5930b8bab5d81b5bf501e862476bd150118a12dafd0e01d85d4a0f5"
+      "sha256": "f2a97cf78d3cba7739246d90cac8a3d4504f47afc706bf55752f2559c5c49f04"
     },
     {
       "path": "packages/testing/verification/verification-tests/test-selection.test.ts",
@@ -27197,7 +27757,7 @@
     },
     {
       "path": "packages/testing/verification/verification-tests/verify-complement.test.ts",
-      "sha256": "83e5b58e8f8ccd8de70afa3c84e3f939f34d83431ba0f910ee8d2948cf2daf0e"
+      "sha256": "30b04f21a8751f0189b79f0679bd1261b01ff017aa97d5646a8e189581817512"
     },
     {
       "path": "packages/testing/verification/verification-tests/verify-partition.test.ts",
@@ -27858,6 +28418,26 @@
       "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
     },
     {
+      "path": "Docs/QA/evidence/tutorial-first-hour/integrated/qa-source-flag-rejected.log.txt",
+      "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/integrated/qa-source-timeout.log.txt",
+      "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/integrated/source-contention-timeout.log.txt",
+      "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/integrated/source-direct.log.txt",
+      "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/integrated/source.log.txt",
+      "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
+    },
+    {
       "path": "Docs/QA/evidence/tutorial-first-hour/mutation-browser.log.txt",
       "reason": "QA evidence or generated register output; excluded from its own freshness inputs."
     },
@@ -28298,11 +28878,19 @@
       "reason": "Frozen archive; outside active-document review."
     },
     {
+      "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS.md",
+      "reason": "Frozen archive; outside active-document review."
+    },
+    {
       "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-NODE-WORKER-TEARDOWN-LOADS-BUN-FFI.md",
       "reason": "Frozen archive; outside active-document review."
     },
     {
       "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-NONAUTH-FIXTURES-AUTOLINK-CLERK-SWIFT-PACKAGES.md",
+      "reason": "Frozen archive; outside active-document review."
+    },
+    {
+      "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY.md",
       "reason": "Frozen archive; outside active-document review."
     },
     {
@@ -28319,6 +28907,10 @@
     },
     {
       "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-PORT-REUSE-ASSERTION-FAILS-DURING-CONCURRENT-VERIFICATION.md",
+      "reason": "Frozen archive; outside active-document review."
+    },
+    {
+      "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-QA-TUTORIAL-REPLAY-BUFFERS-PROGRESS.md",
       "reason": "Frozen archive; outside active-document review."
     },
     {
@@ -28343,6 +28935,10 @@
     },
     {
       "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-SANDBOXED-VERIFY-CHANGED-FAILS-THE-WDA-REGISTRATION-TESTS.md",
+      "reason": "Frozen archive; outside active-document review."
+    },
+    {
+      "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-STALE-MAINTAINED-BINDINGS-AFTER-MERGE.md",
       "reason": "Frozen archive; outside active-document review."
     },
     {
@@ -28413,5 +29009,6 @@
       "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-WORKFLOW-REPORTS-INCLUDE-CONCURRENT-TEST-FAILURES.md",
       "reason": "Frozen archive; outside active-document review."
     }
-  ]
+  ],
+  "scenarioDiscoveryFailures": []
 }

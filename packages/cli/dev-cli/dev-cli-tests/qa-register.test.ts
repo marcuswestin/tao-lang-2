@@ -32,7 +32,8 @@ scenarios Notebook "devices" {
         'Docs/MVP Roadmap/Plan - Initial release QA.md': await FS.readText(
           Repo.resolvePath('Docs/MVP Roadmap/Plan - Initial release QA.md'),
         ),
-        'agent': `#!/bin/sh\nprintf "fixture tutorial source check\\n"\nexit ${exitCode}\n`,
+        'agent':
+          `#!/bin/sh\nprintf "%s\\n" "$@" > .artifacts/tutorial-args.txt\nprintf "fixture tutorial source check\\n"\nexit ${exitCode}\n`,
       },
     },
   })
@@ -151,6 +152,9 @@ Describe('QA evidence register', () => {
       const run = await qa.run(1, 'all')
       const receipt = FS.resolvePath(`.artifacts/qa/runs/${run.runId}/tutorial.json`, root)
       const original = await FS.readText(receipt)
+      Expect(await FS.readText(FS.resolvePath('.artifacts/tutorial-args.txt', root))).toBe(
+        'test-file\n--verbose\npackages/cli/tao-cli/cli-tests/tutorials.test.ts\n',
+      )
       await qa.run(1, 'all', run.runId)
       Expect(await FS.readText(receipt)).toBe(original)
       Expect((await FS.readJson<{ outcome: string }>(receipt)).outcome).toBe('pass')

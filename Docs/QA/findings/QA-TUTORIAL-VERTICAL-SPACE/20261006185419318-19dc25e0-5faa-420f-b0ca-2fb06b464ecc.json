@@ -1,0 +1,35 @@
+{
+  "id": "QA-TUTORIAL-VERTICAL-SPACE",
+  "status": "verified-closed",
+  "phase": 1,
+  "surfaceId": "visual:reading-list",
+  "dimension": "visual",
+  "channel": "phone-light",
+  "severity": "minor",
+  "title": "phone sections are separated by a large empty area",
+  "observed": "A large empty area separates the single Reading row from the Finished heading.",
+  "impact": "Related lists feel disconnected on the small display; this is a design judgment.",
+  "location": "Docs/QA/evidence/pilot/reading-list-phone.png:between Reading and Finished",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "Short and long phone lists remain visually connected with intentional spacing while preserving useful adaptive desktop behavior.",
+  "recheck": "judge short and long lists on a phone; preserve useful adaptive behavior on desktop.",
+  "evidence": [
+    "Docs/QA/evidence/tutorial-first-hour/README.md",
+    "Docs/QA/evidence/tutorial-first-hour/capture-complete/source-snapshot.json",
+    "Docs/QA/evidence/tutorial-first-hour/browser/tutorial-phone-long-list.png"
+  ],
+  "evidenceHashes": [],
+  "createdAt": "2026-09-26T22:52:29.463Z",
+  "updatedAt": "2026-10-06T18:54:19.309Z",
+  "confidence": "design-judgment",
+  "requiredReviewer": "agent",
+  "relatedStories": [],
+  "notes": "Fresh recheck of integrated candidate passes; original human/native release boundaries retained.",
+  "passingResultId": "20261006185256212-d4a45f10-cbaa-48dc-b06c-b54b0bebb9b5"
+}

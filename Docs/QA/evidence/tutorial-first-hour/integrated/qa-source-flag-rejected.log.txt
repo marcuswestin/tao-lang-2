@@ -1,0 +1,3 @@
+
+error: unknown option '--verbose'
+Front-door flags (--verbose, --json, --max-lines) go after the command, not before it: `./agent <command> --verbose`.

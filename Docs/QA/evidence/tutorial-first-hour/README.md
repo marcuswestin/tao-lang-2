@@ -1,6 +1,41 @@
 # First-hour tutorial engineering replay
 
-Source candidate: `8d6e3ac40`, 2026-10-06; initial journey/layout repair `eb1c7f95a`.
+Initial source candidate: `8d6e3ac40`, 2026-10-06; journey/layout repair `eb1c7f95a`.
+
+## Integrated candidate recheck
+
+After integrating main `4f3b2ca44` into candidate `4bfb13da4`, the fresh
+[source replay](integrated/source.json) passed all three tests in 91.5 seconds;
+[its log](integrated/source.log.txt) includes the passing and deliberate-failure recovery exercises.
+Production browser replay `5ab707f1-98d5-4a81-b84c-fed5758f4828` passed all three journeys:
+[command](integrated/browser/browser.json), [run](integrated/browser/run.json),
+[build digests](integrated/browser/build.json), [export](integrated/browser/web-export.json), and
+[output](integrated/browser/browser.log). Its Markdown digest matches the current tutorial.
+All seven [fresh browser images](integrated/browser/) were inspected, including persisted edits,
+long-list scrolling, unavailable storage and recovery after Retry.
+
+The fresh staged capture completed all three cells in 99.6 seconds:
+[complete snapshot](integrated/capture/source-snapshot.json), [manifest](integrated/capture/review.json),
+inspected [phone](integrated/capture/screenshots/qa-views-phone-6156547a7ca5.png),
+[desktop](integrated/capture/screenshots/qa-views-desktop-d327f6b6de0f.png), and
+[dark-scheme phone](integrated/capture/screenshots/qa-views-dark-2b84c5e37826.png).
+Tabs remain distinct, phone lists compact, desktop columns aligned, and captures free of overlays.
+The inventory retains this Markdown-authored app beside automatic discovery of apps in `Apps/`,
+and validates its exact app, staged project, source file and cell identities.
+
+The [buffered automatic replay](integrated/qa-source-timeout.json) hit its 120-second idle-output
+bound. The child front door now streams progress into the captured log while retaining the same
+600-second total and 120-second idle deadlines. An intermediate invocation put the flag before
+the command and was [rejected](integrated/qa-source-flag-rejected.log.txt); it was corrected to
+`test-file --verbose` before the passing recheck. An unchanged overlapping direct run also hit the
+suite's per-test deadline; [its failure](integrated/source-contention-timeout.log.txt) is retained.
+That command's normal isolated retry then passed all three tests, recorded in its
+[summary](integrated/source-direct-summary.json) and [output](integrated/source-direct.log.txt).
+The repaired automatic recheck passed with five overlapping lanes; this does not establish the
+cause of the separate per-test timeout. Capture, preview and QA register regressions passed,
+and independent integration review found no actionable defect.
+
+Earlier receipts below remain historical evidence. Required human release acceptance stays separate.
 
 ## Repeat the journeys
 
@@ -86,7 +121,8 @@ The repaired capture completed all three cells in 46.6 seconds with no failed ce
 [dark-scheme phone](capture-complete/screenshots/qa-views-dark-d53ce3e07882.png): distinct navigation,
 compact lists, adaptive columns, intentional light colors, and no transient review overlay.
 
-To repeat this isolated capture, run from the checkout root, choosing unused output directories:
+To repeat this isolated capture, keep the derived project path below and choose an unused capture
+output directory:
 
 ```sh
 mkdir -p .artifacts/qa/tutorial-review/.tao
