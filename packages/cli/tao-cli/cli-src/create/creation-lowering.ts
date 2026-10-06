@@ -155,12 +155,12 @@ use ${names.app}AuthNavigator from ./Auth`
     : 'use Local from @tao/data/providers/local'
   const connection = firebase
     ? `   Auth FirebaseAuth {
-      ApiKey "REPLACE_WITH_FIREBASE_API_KEY"
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY",
       ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID"
    }
    Datasource Firebase {
-      ApiKey "REPLACE_WITH_FIREBASE_API_KEY"
-      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID"
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY",
+      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID",
       StorageKey ${taoString(plan.id)}
    }`
     : `   Datasource Local {

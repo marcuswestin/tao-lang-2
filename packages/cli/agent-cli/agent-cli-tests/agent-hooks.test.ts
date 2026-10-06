@@ -184,7 +184,7 @@ Describe('agent hooks', () => {
         'no agent author credit',
         'no `Co-Authored-By` text',
         'cover every provider in use',
-        'Messaging another agent',
+        'any other agent or session needs',
       ]
     ) {
       Expect(output.hookSpecificOutput.additionalContext).toContain(rule)

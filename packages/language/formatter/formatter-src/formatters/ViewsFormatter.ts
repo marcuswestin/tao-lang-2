@@ -59,7 +59,9 @@ export const ViewsFormatter = {
 
   /** RenderSlotUse separates a named slot fill from its visual value. */
   RenderSlotUse(f) {
-    f.oneSpaceBeforeProperty('render')
+    if (f.node.inputBindings.length === 0) {
+      f.oneSpaceBeforeProperty('render')
+    }
     f.noSpaceBefore('(')
     f.noSpaceBefore(':')
     if (AST.renderSlotBodyOf(f.node).kind === 'block') {

@@ -21,7 +21,7 @@ Describe('compiler: erased native bridge checks', () => {
     await withTaoFiles('tao-bridge-context-', {
       'Main.tao': `
         type Reading is number
-        function Read() returns Reading { return Read from ./Native.ts }
+        function Read() returns Reading { return Read() from ./Native.ts }
         let Sample is Reading = Sample from ./Native.ts
         type Settings is { Sample Reading is Sample from ./Native.ts }
         let Unknown = Unknown from ./Native.ts

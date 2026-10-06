@@ -49,8 +49,8 @@ export function promptTagsApp(): string {
 
     let StarterTags = PromptTags ["daily", "warmup"]
     let StarterPrompt = WritingPrompt {
-      PromptTitle: "Morning pages"
-      PromptMinutes: 10
+      PromptTitle: "Morning pages",
+      PromptMinutes: 10,
       StarterTags
     }
 

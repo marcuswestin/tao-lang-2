@@ -1,8 +1,9 @@
-import { Type } from '@ast-utils'
+import { ASTUtils, NumericUnits, Type } from '@ast-utils'
 import { AST, Langium, Parser } from '@parser'
 import { FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { withAssociatedWitnessBindings } from '../compiler-src/codegen/react-native/app/AssociatedMethodsCompiler'
+import { withQuantityFactoryBindings } from '../compiler-src/codegen/react-native/app/NumericUnitsCompiler'
 import { Compile } from '../compiler-src/codegen/react-native/Compile'
 
 async function compile(source: string) {
@@ -12,6 +13,8 @@ async function compile(source: string) {
     AST.isTypeDeclaration(node) || AST.isPrimitiveDeclaration(node)
   ).filter(owner => AST.isPrimitiveDeclaration(owner) ? !!owner.slots?.methods.length : !!owner.type)
   const bindings = new Map(owners.map((owner, index) => [owner, `_Witness${index}`]))
+  const quantityOwners = owners.filter(AST.isTypeDeclaration).filter(owner => !!NumericUnits.declarationPlan(owner))
+  const quantityBindings = new Map(quantityOwners.map((owner, index) => [owner, `_QuantityFactory${index}`]))
   const functions = parsed.entry.ast.statements.filter(AST.isFunctionDeclaration)
   for (const fn of functions) {
     const expression = AST.returnStatementsOf(fn)[0]!.value
@@ -22,14 +25,36 @@ async function compile(source: string) {
     )
     Expect(Type.associatedOperation(expression).problem).toBeUndefined()
   }
-  const code = withAssociatedWitnessBindings(bindings, () =>
-    [
-      ...owners.map(owner => Langium.toString(Compile.AssociatedMethodsDeclaration(owner))),
-      ...functions.map(fn => Langium.toString(Compile.FunctionDeclaration(fn))),
-    ].join('\n'))
-  const { default: TR } = await import(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts', Repo.getRoot()))
+  const effects = ASTUtils.createAssociatedEffects([parsed.entry.ast])
+  const code = ASTUtils.withAssociatedEffects(
+    effects,
+    () =>
+      withAssociatedWitnessBindings(bindings, () =>
+        withQuantityFactoryBindings(quantityBindings, () =>
+          [
+            ...owners.map(owner => Langium.toString(Compile.AssociatedMethodsDeclaration(owner))),
+            ...functions.map(fn => Langium.toString(Compile.FunctionDeclaration(fn))),
+          ].join('\n'))),
+  )
+  const [{ default: TR }, { makeQuantityType }] = await Promise.all([
+    import(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts', Repo.getRoot())),
+    import(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-quantity-values.ts', Repo.getRoot())),
+  ])
+  const quantityFactories = quantityOwners.map(owner => {
+    const plan = NumericUnits.declarationPlan(owner)!
+    return makeQuantityType({
+      domain: owner.name,
+      defaultUnit: plan.defaultUnit,
+      units: Object.fromEntries(plan.units.map(unit => [unit.name, unit.scale])),
+    }, TR.Value)
+  })
   const scope: Record<string, any> = {}
-  new Function('TR', '_Scope', new Bun.Transpiler({ loader: 'ts' }).transformSync(code))(TR, scope)
+  new Function(
+    'TR',
+    '_Scope',
+    ...quantityBindings.values(),
+    new Bun.Transpiler({ loader: 'ts' }).transformSync(code),
+  )(TR, scope, ...quantityFactories)
   return { TR, scope }
 }
 
@@ -78,6 +103,7 @@ Describe('compiler: authored operators', () => {
   Test('executes the inherited owner with the exact instance receiver and declared static operand order', async () => {
     const { TR, scope } = await compile(`
       type Scalar is numeric with {
+        units { scalar 1 (default) }
         static func +(Left Scalar, Right Delta) fails never -> Scalar { return Left }
         static func +(Left Scalar, Right Scalar) fails never -> Scalar { return Right }
         func -() fails never -> Scalar { return Scalar }

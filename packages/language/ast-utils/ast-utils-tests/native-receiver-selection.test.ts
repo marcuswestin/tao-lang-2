@@ -93,9 +93,11 @@ Describe('Native associated receiver selection', () => {
     }
   })
 
-  Test('admits scalar member reads but does not transport item members, nested arguments, static roots or another owner', async () => {
-    const file = await parse(
-      `
+  Test(
+    'admits scalar member reads but does not transport item members, nested arguments, static roots or another owner',
+    async () => {
+      const file = await parse(
+        `
       type Other is { Elapsed number }
       type Timer is {
         Elapsed number
@@ -108,26 +110,27 @@ Describe('Native associated receiver selection', () => {
       }
       func Identity(Value Timer) -> Timer { return Value }
     `,
-      true,
-    )
-    const timer = namedType(file, 'Timer')
-    const snapshot = publishCanonicalEffectSnapshot([file], { natives: nativeHeads(file) })
-    const scalar = AST.streamAllContents(method(timer, 'ScalarMember')).find(AST.isMemberAccessExpression)
-    Expect.Is(scalar, AST.isMemberAccessExpression)
-    Expect(snapshot.reads.get(scalar)?.classification).toBe('immutable')
-    Expect(snapshot.reads.get(scalar)?.proof?.kind).toBe('contextual-owner')
-    for (const name of ['Member', 'Nested', 'Static', 'Wrong']) {
-      const declaration = method(timer, name)
-      const reference = AST.streamAllContents(declaration).find(node =>
-        AST.isValueReference(node) || AST.isMemberAccessExpression(node)
+        true,
       )
-      Assert.defined(reference, 'the rejected forwarding shape has a real reference')
-      const read = snapshot.reads.get(reference)
-      Assert.defined(read, 'the rejected forwarding read remains published')
-      Expect(read.classification).toBe('unknown')
-      Expect(read.proof?.kind).not.toBe('contextual-owner')
-    }
-  })
+      const timer = namedType(file, 'Timer')
+      const snapshot = publishCanonicalEffectSnapshot([file], { natives: nativeHeads(file) })
+      const scalar = AST.streamAllContents(method(timer, 'ScalarMember')).find(AST.isMemberAccessExpression)
+      Expect.Is(scalar, AST.isMemberAccessExpression)
+      Expect(snapshot.reads.get(scalar)?.classification).toBe('immutable')
+      Expect(snapshot.reads.get(scalar)?.proof?.kind).toBe('contextual-owner')
+      for (const name of ['Member', 'Nested', 'Static', 'Wrong']) {
+        const declaration = method(timer, name)
+        const reference = AST.streamAllContents(declaration).find(node =>
+          AST.isValueReference(node) || AST.isMemberAccessExpression(node)
+        )
+        Assert.defined(reference, 'the rejected forwarding shape has a real reference')
+        const read = snapshot.reads.get(reference)
+        Assert.defined(read, 'the rejected forwarding read remains published')
+        Expect(read.classification).toBe('unknown')
+        Expect(read.proof?.kind).not.toBe('contextual-owner')
+      }
+    },
+  )
 
   Test('keeps named state, mutable, copy, alias and longer receiver paths under ordinary read evidence', async () => {
     const file = await parse(`
