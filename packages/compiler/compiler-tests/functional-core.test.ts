@@ -49,7 +49,7 @@ Describe('compiler: functional core', () => {
     `)
 
     Expect(compiled.files[0]?.code).toContain('TR.WhenCase(')
-    Expect(compiled.files[0]?.code).toContain('TR.WhenCaseRender(')
+    Expect(compiled.files[0]?.code).toContain('TR.WhenAllRender(')
     Expect(compiled.files[0]?.code).toContain('if (await TR.GuardAction(')
     Expect(compiled.files[0]?.code).toContain('if (TR.Check(')
     // An empty action body still reads the continuation its callback declares.
@@ -93,7 +93,7 @@ Describe('compiler: functional core', () => {
           loop Documents / Document {
             guard Document {
               loading -> { Text("Loading") }
-              missing -> { Text("Missing") }
+              none -> { Text("Missing") }
               unauthorized -> { Text("Unauthorized") }
               error -> Context { Text(Context.Message) }
             }
@@ -113,7 +113,7 @@ Describe('compiler: functional core', () => {
     Expect(code).toContain('TR.IsCase(TR.Member(_Scope.Document.evaluate(), ["Final"]), TR.Value(true))')
     Expect(code).toContain('TR.IsCase(TR.Member(_Scope.Document.evaluate(), ["Final"]), TR.Value(false))')
     Expect(code).toContain('TR.GuardRender(_Scope.Document.evaluate(), [')
-    Expect(code).toContain('["missing", _TaoCasePayload =>')
+    Expect(code).toContain('["none", _TaoCasePayload =>')
     Expect(code).toContain('["unauthorized", _TaoCasePayload =>')
     Expect(code).toMatch(/<_Scope\.Text\s+Value=\{[^}]*_Scope\.Context[^}]*\["Message"\]/)
     Expect(code.match(/TR\.If\(/g)).toHaveLength(4)
@@ -181,7 +181,7 @@ Describe('compiler: functional core', () => {
         `,
         'Net.tao': `
           project app Base { id "com.tao.test.base" version "1.0.0" name "Base" view Home
-            guard { missing -> { Gone() } } }
+            guard { none -> { Gone() } } }
           project view Gone() { render inject ${tsFence} return null ${fence} }
           project view Home() { render inject ${tsFence} return null ${fence} }
         `,
@@ -195,7 +195,7 @@ Describe('compiler: functional core', () => {
         Expect(app).toContain('_TaoBaseBinding.readNet?.(), TR.ReadNet({')
         Expect(app).toContain('readNet: _TaoBoundApp_NetApp.readNet,')
         Expect(app).toContain('"error": (_ViewProps, _TaoCasePayload) =>')
-        Expect(net).toContain('"missing": (_ViewProps, _TaoCasePayload) =>')
+        Expect(net).toContain('"none": (_ViewProps, _TaoCasePayload) =>')
       },
     )
   })
