@@ -42,8 +42,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gate: [studio-dialog-browser]
-        display: [headless, xvfb]
+        # Chrome launches `--headless=new`; run 37498890787 passed the dialog gate with and without
+        # a virtual display, so the display stays a dimension only for a gate that needs it.
+        gate:
+          - studio-smoke
+          - studio-proof-real-app
+          - studio-smoke-simulated-user
+          - keyboard-navigation-smoke
+          - studio-dialog-browser
+          - studio-agent-browser
+          - studio-network-simulation
+        display: [headless]
     steps:
       - uses: actions/checkout@v4
 
