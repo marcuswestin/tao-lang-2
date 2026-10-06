@@ -295,6 +295,8 @@ async function captureReviewCell(
         if (element instanceof HTMLElement) delete element.dataset.taoReviewCapture
       })
       frame.dataset.taoReviewCapture = ${JSON.stringify(marker)}
+      const activation = frame.querySelector('.studio-preview-activation-toggle[aria-pressed="false"]')
+      if (activation !== null && !activation.disabled) activation.click()
       frame.scrollIntoView({ block: 'center', inline: 'center' })
       return true
     })()`)
@@ -310,6 +312,8 @@ async function captureReviewCell(
         .find(candidate => candidate instanceof HTMLElement && candidate.dataset.taoReviewKey === key)
       if (!(frame instanceof HTMLElement)) return false
       if (['ready', 'failed'].includes(frame.dataset.taoReviewStatus ?? '')) return true
+      const activation = frame.querySelector('.studio-preview-activation-toggle[aria-pressed="false"]')
+      if (activation !== null && !activation.disabled) activation.click()
       frame.scrollIntoView({ block: 'center', inline: 'center' })
       return false
     })()`,

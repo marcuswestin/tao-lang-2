@@ -17,11 +17,18 @@ The last section is the finished file.
 
 This tutorial builds one file by hand; `tao create` generates a different, multi-file starter. Until
 the signed standalone CLI is published, use the repository-development setup in the [README](../../README.md#install).
-From the checkout root, save the first block below as `ReadingList.tao`, then run:
+From the checkout root, create a separate project directory:
 
 ```sh
-./tao check ReadingList.tao
-./tao run ReadingList.tao --app ReadingList --web
+mkdir -p ReadingList/.tao
+```
+
+The `.tao` directory marks the project's root. Save the first block below as
+`ReadingList/ReadingList.tao`, then run from the checkout root:
+
+```sh
+./tao check ReadingList/ReadingList.tao
+./tao run ReadingList/ReadingList.tao --app ReadingList --web
 ```
 
 The second command opens the browser app and watches the file. Keep it running as you replace and
@@ -636,7 +643,7 @@ test "Reading List" {
 Save the file and run this from the checkout root:
 
 ```sh
-./tao test ReadingList.tao
+./tao test ReadingList/ReadingList.tao
 ```
 
 To see a useful failure, temporarily change the test's `text "Reading: 1"` expectation to

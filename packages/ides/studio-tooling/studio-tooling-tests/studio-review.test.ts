@@ -121,6 +121,16 @@ Describe('Studio visual review', () => {
     }])
   })
 
+  Test('activates an inactive review cell once, waits through initialization, and preserves active cells', async () => {
+    const inactive = await reviewOneCell([], 'cell-frame', { initiallyActivated: false, initiallyDisabled: true })
+    Expect(inactive.activationClicks).toBe(1)
+    Expect(inactive.manifest.cells[0]?.status).toBe('captured')
+
+    const active = await reviewOneCell([], 'cell-frame', { initiallyActivated: true })
+    Expect(active.activationClicks).toBe(0)
+    Expect(active.manifest.cells[0]?.status).toBe('captured')
+  })
+
   Test('fails a screenshot whose own preview logged an error, without copying the message', async () => {
     const run = await reviewOneCell([
       { frameId: 'cell-frame', kind: 'console', level: 'warning', text: 'a dev warning' },
@@ -355,7 +365,11 @@ Describe('Studio visual review', () => {
   })
 })
 
-async function reviewOneCell(events: readonly StudioCdpBrowserEvent[], frameId: string | null = 'cell-frame') {
+async function reviewOneCell(
+  events: readonly StudioCdpBrowserEvent[],
+  frameId: string | null = 'cell-frame',
+  activation: { initiallyActivated?: boolean; initiallyDisabled?: boolean } = {},
+) {
   const root = await mkGitTestDir('tao-studio-review-test-')
   const projectRoot = FS.resolvePath('project', root)
   const artifactRoot = FS.resolvePath('output', root)
@@ -368,7 +382,7 @@ async function reviewOneCell(events: readonly StudioCdpBrowserEvent[], frameId: 
       key: '["Main.tao","states","phone"]',
       label: 'phone',
       renderInputs: { arguments: { State: 'ready' } },
-      status: 'ready',
+      status: activation.initiallyActivated === false ? 'pending' : 'ready',
     }],
     manifest: {
       appName: 'Cards',
@@ -379,6 +393,48 @@ async function reviewOneCell(events: readonly StudioCdpBrowserEvent[], frameId: 
     },
   } as const
   const captureSelectors: string[] = []
+  let activationClicks = 0
+  class MockHtmlElement {
+    readonly dataset: Record<string, string | undefined>
+    constructor(status: string) {
+      this.dataset = { taoReviewKey: surface.cells[0].key, taoReviewStatus: status }
+    }
+    querySelector(selector: string): MockHtmlButton | null {
+      return selector === '.studio-preview-activation-toggle[aria-pressed="false"]'
+          && activationButton.ariaPressed === 'false'
+        ? activationButton
+        : null
+    }
+    scrollIntoView(): void {}
+  }
+  class MockHtmlButton {
+    ariaPressed: string
+    disabled: boolean
+    constructor() {
+      this.ariaPressed = activation.initiallyActivated === false ? 'false' : 'true'
+      this.disabled = activation.initiallyDisabled ?? false
+    }
+    click(): void {
+      if (this.disabled) {
+        return
+      }
+      activationClicks += 1
+      this.ariaPressed = 'true'
+      this.disabled = true
+      frame.dataset['taoReviewStatus'] = 'ready'
+    }
+  }
+  const activationButton = new MockHtmlButton()
+  const frame = new MockHtmlElement(surface.cells[0].status)
+  const document = {
+    querySelectorAll: (selector: string) => selector === '.studio-preview-cell[data-tao-review-key]' ? [frame] : [],
+  }
+  const evaluateExpression = (expression: string): unknown =>
+    new Function('document', 'HTMLElement', 'HTMLButtonElement', `return ${expression}`)(
+      document,
+      MockHtmlElement,
+      MockHtmlButton,
+    )
   let browserClosed = false
   let studioStopped = false
   let navigatedTo = ''
@@ -394,14 +450,34 @@ async function reviewOneCell(events: readonly StudioCdpBrowserEvent[], frameId: 
         browserClosed = true
       },
       evaluate: async <Result>(expression: string) => {
-        return (expression.includes('rawManifest') ? surface : true) as Result
+        if (expression.includes('rawManifest')) {
+          return {
+            ...surface,
+            cells: surface.cells.map(cell => ({
+              ...cell,
+              status: frame.dataset['taoReviewStatus'] as 'ready' | 'pending',
+            })),
+          } as Result
+        }
+        return evaluateExpression(expression) as Result
       },
       frameIdOf: async () => frameId ?? undefined,
       goto: async url => {
         navigatedTo = url
       },
       rendererFingerprint: async () => renderer,
-      waitFor: async () => {},
+      waitFor: async (expression: string) => {
+        if (!expression.includes('const key =')) {
+          return
+        }
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          if (evaluateExpression(expression) === true) {
+            return
+          }
+          activationButton.disabled = false
+        }
+        Errors.throwHostEnvironment('Mock review cell did not settle.')
+      },
     }),
     now: () => new Date('2026-09-03T12:00:00.000Z'),
     randomId: () => '12345678-rest',
@@ -429,6 +505,7 @@ async function reviewOneCell(events: readonly StudioCdpBrowserEvent[], frameId: 
     artifactRoot,
     browserClosed,
     captureSelectors,
+    activationClicks,
     manifest: await FS.readJson<StudioReviewManifest>(result.manifestPath),
     navigatedTo,
     studioStopped,

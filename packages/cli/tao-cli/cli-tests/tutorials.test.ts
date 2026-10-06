@@ -93,12 +93,24 @@ Describe('Docs tutorials', () => {
   }, 60_000)
 
   Test('Your First Tao App runs its final journey, edits a title, and recovers from CLI failures', async () => {
-    const blocks = tutorialBlocks(await FS.readText(Repo.resolvePath(FIRST_APP_TUTORIAL)))
+    const tutorial = await FS.readText(Repo.resolvePath(FIRST_APP_TUTORIAL))
+    const blocks = tutorialBlocks(tutorial)
     const root = await mkTestDir('tao-tutorial-app-')
     try {
-      const directory = FS.resolvePath('reading-list', root)
-      await FS.writeText(FS.resolvePath('.tao/.gitkeep', directory), '')
-      const file = FS.resolvePath('ReadingList.tao', directory)
+      const marker = /^mkdir -p ([\w/.-]+)\n/mu.exec(tutorial)?.[1]
+      const entry = /^\.\/tao check ([\w/.-]+)\n/mu.exec(tutorial)?.[1]
+      Assert.defined(marker, 'The tutorial must tell readers how to mark their project root.')
+      Assert.defined(entry, 'The tutorial must name the first source file to check.')
+      const file = FS.resolvePath(entry, root)
+      const directory = FS.dirname(file)
+      Expect(FS.pathIsWithin(file, root)).toBe(true)
+      Expect(FS.resolvePath(marker, root)).toBe(FS.resolvePath('.tao', directory))
+      await FS.writeText(FS.resolvePath(`${marker}/.gitkeep`, root), '')
+      const first = blocks.find(block => block.directives.includes('program'))
+      Assert.defined(first, 'The tutorial needs its first program snippet.')
+      await FS.writeText(file, first.source)
+      const firstCheck = await withTaoHome(root, () => runTaoCliForTest(['check', file]))
+      Expect(firstCheck.exitCode).toBe(0)
       const finished = finishedFile(blocks)
       await FS.writeText(file, finished)
       const finalRun = await withTaoHome(root, () => runTaoCliForTest(['test', directory]))
