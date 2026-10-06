@@ -201,6 +201,10 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
         && document.querySelector('.chat-input')?.disabled === true
         && document.querySelector('.chat-send')?.disabled === true
     })()`)
+    // A model or tool may produce no bytes for longer than Bun's ten-second idle limit.
+    // Keep this real HTTP stream quiet long enough to prove the per-request lifetime override.
+    await Time.sleep(16_000)
+    Expect(await browser.evaluate<boolean>(`document.querySelector('.chat-input')?.disabled === true`)).toBe(true)
     Expect(model.calls).toBe(1)
     Expect(await browser.evaluate<string>("document.querySelector('.chat-announcer')?.textContent ?? ''")).toBe('')
     await browser.evaluate(`(() => {
