@@ -45,6 +45,14 @@ Four actual Library journeys passed again on 2026-10-05 after final lazy/grouped
 using the supported checkout-local TAO_HOME for test cache ownership. Final integrated landing gates own the baseline's
 merge verdict; preserve separate host/device limits below even when those gates pass.
 
+Integration on 2026-10-06 migrated remaining configured-field and renderer-slot fixtures without
+relaxing their behavior assertions. Runtime Studio action stand-ins now use the checked action
+facade; its environment suite (12 tests) and scenario suite (6 tests) pass. Host-read navigation
+fixtures pass all 19 tests after field separator migration. A host simulated-editor run failed
+with Outline still unselected and no browser errors; the unchanged isolated rerun passed all three
+tests and 102 assertions. Retain both results: an isolated rerun does not replace the final
+host complement and hosted CI proof.
+
 ## Handing over the rest
 
 The follow-up slice is `feat/syntax2-acceptance`, to start from the landed combined baseline. The
