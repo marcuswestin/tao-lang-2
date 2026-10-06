@@ -33,12 +33,21 @@ const MAIN_BRANCH = 'main'
  * the window in which it looks idle.
  */
 const PROTECTED_PATH_FRAGMENT = '/.artifacts/merge/'
+/**
+ * A worktree branched from `main` is clean, idle, task-less, and contained in `main` — exactly what
+ * a finished one looks like — so a freshly created or switched checkout is told apart by its age.
+ */
+const RECENT_ACTIVITY_MS = 24 * 60 * 60 * 1000
 
 export type ReclaimDependencies = {
   registryRoot?: string
   run?: typeof CLI.run
   readThreads?: (paths: readonly string[]) => Promise<WorktreeThreadInventory>
   inSandbox?: () => boolean
+  /** Epoch milliseconds, injected by tests that need the 24-hour window to move. */
+  now?: () => number
+  /** When the worktree's Git admin directory last saw its HEAD move, or undefined if unknown. */
+  readActivityMs?: (worktreePath: string) => Promise<number | undefined>
   /** The worktree asking. Injected by tests; nothing may reclaim the ground it is standing on. */
   thisRoot?: string
 }
@@ -102,14 +111,26 @@ export async function reclaim(dependencies: ReclaimDependencies = {}): Promise<R
   const threads = await (dependencies.readThreads ?? readWorktreeThreads)(records.map(record => record.path))
   const primary = records[0]?.path
   const worktrees = await Promise.all(
-    records.map(async record => await classify(record, { live, primary, run, thisRoot, threads })),
+    records.map(async record =>
+      await classify(record, {
+        live,
+        now: dependencies.now ?? Date.now,
+        primary,
+        readActivityMs: dependencies.readActivityMs ?? readAdminActivityMs,
+        run,
+        thisRoot,
+        threads,
+      })
+    ),
   )
   return { providers: threads.providers, version: 2, worktrees }
 }
 
 type ClassifyContext = {
   live: LiveRoots
+  now: () => number
   primary?: string
+  readActivityMs: (worktreePath: string) => Promise<number | undefined>
   run: typeof CLI.run
   thisRoot: string
   threads: WorktreeThreadInventory
@@ -161,6 +182,11 @@ async function classify(
       evidence: ['the directory no longer exists; `git worktree prune` owns this'],
       verdict: 'unclassified',
     }
+  }
+
+  const activityMs = await context.readActivityMs(record.path)
+  if (activityMs !== undefined && context.now() - activityMs < RECENT_ACTIVITY_MS) {
+    return { ...row, evidence: ['created or switched within the last 24 hours'], verdict: 'live' }
   }
 
   const clean = await readClean(record.path, context.run)
@@ -305,6 +331,27 @@ async function listWorktrees(run: typeof CLI.run): Promise<ReturnType<typeof par
     Errors.throwHostEnvironment("Could not list this repository's worktrees.", { details: { stderr: result.stderr } })
   }
   return parseWorktreePorcelain(result.stdout)
+}
+
+/**
+ * readAdminActivityMs reads when the worktree's own Git admin directory last recorded a HEAD move:
+ * the mtime of `logs/HEAD`, which `worktree add`, `checkout`, and `switch` append to. The index is
+ * deliberately not consulted — any observer's `git status` refreshes it. Without a HEAD log the
+ * admin directory's own mtime stands in; an unreadable or unlinked checkout is unknown, not old.
+ */
+async function readAdminActivityMs(worktreePath: string): Promise<number | undefined> {
+  try {
+    const link = await FS.readText(FS.resolvePath('.git', worktreePath))
+    const target = /^gitdir:\s*(.+?)\s*$/mu.exec(link)?.[1]
+    if (target === undefined) {
+      return undefined
+    }
+    const adminDirectory = FS.resolvePath(target, worktreePath)
+    return await FS.modifiedTimeMs(FS.resolvePath('logs/HEAD', adminDirectory))
+      .catch(async () => await FS.modifiedTimeMs(adminDirectory))
+  } catch {
+    return undefined
+  }
 }
 
 async function readClean(path: string, run: typeof CLI.run): Promise<boolean | undefined> {
