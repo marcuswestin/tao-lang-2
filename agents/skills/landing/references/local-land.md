@@ -1,134 +1,93 @@
-# Landing Mechanics
+# Local `land`
 
-`git-workflow` owns the underlying Git commands; this covers what `./agent unsandboxed land` does, its flags, its
-message format, and how a red lane is classified. The default landing route is hosted `Verify`
-with auto-merge plus the local complement (`hosted-verification.md`); `land` remains for
-`dev/<name>` branches and for when GitHub is unavailable, its push to `main` passing the ruleset
-through the repository admin bypass.
+What `./agent unsandboxed land` does, for a personal `dev/<name>` branch and for a feature branch
+while GitHub is unavailable. The parent skill owns authorization, the merge message, and `landed`;
+`git-workflow` owns the underlying Git commands. Its push to `main` passes the ruleset through the
+repository admin bypass.
 
-Remote inspection and push run directly on the host through `./agent unsandboxed land`. The host
-process runs repository code and has the normal GitHub credential helper available. The final push
-updates main, the archive, and feature-branch deletion atomically with ref leases.
+Remote inspection and push run directly on the host through `./agent unsandboxed land`, which runs
+repository code with the normal GitHub credential helper. The final push updates `main`, the
+archive, and feature-branch deletion atomically with ref leases. A plain `./agent land` stays
+sandboxed, and the `just` and `./dev` landing aliases are human and recovery entry points, not agent
+host-access exceptions. A session holds the permission rules it started with: Codex loads
+project-local rules at task startup, so a new wrapper prefix needs a new task after it lands; after
+changing their source, `./agent setup` refreshes the generated rules where writable, or
+`./agent unsandboxed fix-agent-config` in a task that has that prefix loaded.
 
-The one host prefix list in `.rulesync/permissions.jsonc` generates only `./agent unsandboxed …`
-rules for Codex and Claude Code. The wrapper checks the same list before dispatch; a plain
-`./agent land` stays sandboxed.
-Use landing only after the Developer authorizes this named slice; that authorization persists for retries in
-the same thread unless the Developer revokes it. Direct `just` and `./dev` landing aliases are human/recovery
-entry points, not agent host-access exceptions.
-A session can hold the permission rules it started with: Codex loads project-local rules at task
-startup, so a new wrapper prefix needs a new task after it lands. Generated rules are tracked for
-fresh worktrees; after changing their source, `./agent setup` refreshes them where writable, or
-`./agent unsandboxed fix-agent-config` can refresh them in a task that has that prefix loaded.
+## One process
 
-## `./agent unsandboxed land`
-
-The command runs the whole landing as one process with a bounded agent report. Do not assemble it out of
-`land-lock`, `finalize`, `verify-full` and `merge-with-main` any more: the lock used to be held for
+The command runs the whole landing as one process with a bounded agent report. Do not assemble it
+out of `land-lock`, `finalize`, `verify-full` and `merge-with-main`: the lock used to be held for
 36-44 minutes against 5-15 minutes of lane time, and the gap was model turns between commands, not
-compute. One process closes the gap without making any step faster.
+compute.
 
-**Before the queue**, it rejects missing host capabilities for full verification. It uses the required
-host probes rather than an inherited sandbox environment marker, because an approved command may
-retain that marker after the harness has given the process host access.
-Pause and ask the Developer for the exact needed intervention; do not retry with alternate commands or skip
-the host gates. Unlocked, it then settles what might need an author: this is a clean `feat/*` or
-`dev/*` branch checked out only here, no worktree has `main`, the archive ref is free, and
+**Before the queue**, it rejects missing host capabilities for full verification, using the
+required host probes rather than an inherited sandbox environment marker, because an approved
+command may retain that marker after the harness has given the process host access. Pause and ask
+the Developer for the exact needed intervention; do not retry with alternate commands or skip the
+host gates. Unlocked, it then settles what might need an author: this is a clean `feat/*` or `dev/*`
+branch checked out only here, no worktree has `main`, the archive ref is free, and
 `.artifacts/merge/<branch>.msg` exists and validates. A message saved after the branch's newest
 commit of its own is reviewed for this HEAD, so write it once the last commit is made and the first
 call proceeds. Otherwise the first call drafts a missing message and refuses, having taken no lock;
-read and edit the draft, then rerun `./agent unsandboxed land`. A small review record ties that edit
-to this HEAD. Merges of `main` never make a confirmed message stale — including the merge commit that
-resolves a landing's conflicted integration — but a new commit of the branch's own does: refresh the
-message after it, and the save after that commit confirms it. Do not run `finalize`
-merely to prepare this authorized landing: it could integrate and
-verify outside the lock, then lose that proof to another landing.
+read and edit the draft, then rerun. A small review record ties that edit to this HEAD. Merges of
+`main` never make a confirmed message stale, including the merge commit that resolves a landing's
+conflicted integration, but a new commit of the branch's own does. Do not run `finalize` merely to
+prepare an authorized landing: it could integrate and verify outside the lock, then lose that proof
+to another landing.
 
 **While queued**, the process keeps its FIFO position, refreshes from new `main` tips, and does not
-run full verification. New broad lanes yield to ready landings, but running lanes finish normally.
-A queued merge conflict removes this request from the queue without taking the lock: resolve and
-commit it here, then rerun `./agent unsandboxed land`. A dead waiter is pruned; the lock itself is never stolen.
-`./agent board` shows the live queue and holder.
+run full verification. New broad lanes yield to ready landings; running lanes finish normally. A
+queued merge conflict removes this request from the queue without taking the lock: resolve and
+commit it here, then rerun. A dead waiter is pruned; the lock itself is never stolen. `./agent board`
+shows the live queue and holder.
 
-**Inside the lock**, in one `try`/`finally`, it rechecks the preflight, successfully fetches `origin/main`
-again and merges that fetched tip into the branch, runs the cheap-gate barrier and `verify-full`, then
-fast-forwards local `main` once the verified remote tip is stable, squashes,
+**Inside the lock**, in one `try`/`finally`, it rechecks the preflight, successfully fetches
+`origin/main` again and merges that fetched tip into the branch, runs the cheap-gate barrier and
+`verify-full`, then fast-forwards local `main` once the verified remote tip is stable, squashes,
 pushes, archives, and releases. Local `main` being behind, or the branch not yet containing `main`,
-is no longer a precondition — that requirement is what made a landing lose a race it had already
-paid a full verification for.
+is not a precondition; do not fetch and merge `main` beforehand to satisfy one. An earlier fetch
+does not replace the one inside the lock, and preparation that fell back to local `main` because
+fetching failed is offline preparation, not current remote integration.
 
-The barrier is `just land-barrier` (`check` plus `dead-exports`), and it is deliberately the
-**check-mode** gates, not the `_fix-*` fixers: a fixer writes to the tree the landing is about to
-commit, and the landing then refuses itself with `Verification changed the tree this landing was
-about to commit.` A red barrier costs ~30s and releases the lock immediately.
+The barrier is `just land-barrier` (`check` plus `dead-exports`), deliberately the **check-mode**
+gates, not the `_fix-*` fixers: a fixer writes to the tree the landing is about to commit, and the
+landing then refuses itself with `Verification changed the tree this landing was about to commit.`
+A red barrier costs ~30s and releases the lock immediately.
 
 **A conflict while integrating `main` ends the lock and hands the worktree back**, durable claim
 included. Resolve it here, unlocked, with the machine free for everyone else; commit the merge with
-`git commit --no-edit`; run `./agent unsandboxed land` again, without touching the merge message —
-that merge brought only `main`, so the message stays confirmed. It re-integrates whatever `main` has
-become by then.
+`git commit --no-edit`; run `./agent unsandboxed land` again without touching the merge message. It
+re-integrates whatever `main` has become by then.
 
 It touches no checkout but the invoking one: it builds the squash commit with `git commit-tree` from
 the verified feature tree and moves `refs/heads/main` with `git update-ref` and an expected old
 value, so nothing is staged anywhere and a losing concurrent landing is refused and told to merge and
 retry. A mirror worktree showing `main` is detached at its tip and every landing moves it forward
-itself — treat it as read-only, and give it a branch before working in it.
+itself; treat it as read-only, and give it a branch before working in it.
 
 Flags only remove work (`land --help` lists them); `--skip-all` (on `merge-with-main`) still defaults
 to No and needs a terminal, so there is no way to land unverified non-interactively, and the tree
-assertion still runs under every combination, because the landed commit must carry the tree that was
+assertion runs under every combination, because the landed commit must carry the tree that was
 verified. A remote feature branch behind the worktree is pushed forward during execution, and only
 one holding commits the worktree lacks stops the landing. Success leaves the feature worktree clean
-and detached at the archived tip, and deletes the local feature branch.
+and detached at the archived tip, and deletes the local feature branch. A personal branch archives
+each landing at `merged/<name>/<utc>` (`2026-09-28T15-12-03-789Z`; colons cannot appear in a ref).
 
 `./dev merge-with-main` remains the lower half, for `--dry-run` and `--abort` recovery.
-
-## The lock, and what `board` now shows
-
-`land` takes the lock itself. **`land-lock` and `land-unlock` are recovery and debugging tools**, not
-part of the normal path: claiming the lock by hand before a landing now only adds a durable claim the
-landing does not need.
-
-While a landing holds the lock, `verify-changed` and `test-changed` are not admitted — already
-running ones drain, and `test-file`, a named test, `check`, `fix` and `fmt` stay free, so iteration
-never waits on somebody else's landing.
-
-`./agent board` names the phase the lock is being spent on and how long it has been in it:
-`integrating`, `cheap gates`, `repository tests`, `host proof`, `push`, `cleanup`. That is what
-separates a lock doing useful work from one waiting on an agent — `held for 36m by a landing, cheap
-gates: 34m so far` is a stuck command, `host proof: 9m so far` is a landing earning its turn. Nothing
-reclaims a lock on a timer; forcing one is still the Developer's call, and `board` is what to bring to the Developer.
-
-Ask `./agent unsandboxed landed [branch]` whether a branch landed; never infer it. The landing runs for minutes
-behind a wrapper, and every other signal is ambiguous: a stopped wrapper, a task reported failed
-because the shell it was piped into exited non-zero, a `summary.json` read while the lane was still
-writing it. `merge-with-main` pushes the archive on success and at no other time, so that ref is
-the fact. A feature branch archives once, at `merged/<name>`. A personal branch archives each
-landing at `merged/<name>/<utc>` (`2026-09-28T15-12-03-789Z`; colons cannot appear in a ref), which
-is what lets `dev/<name>` be recreated from main and landed again. Any dated ref means that
-personal branch has landed. The command queries the remote directly. A failed remote query reports an error,
-never "not landed." Guessing costs more than asking: one branch was re-landed twice in a session
-because a successful landing read as a failure.
-
 `--abort <snapshot>` restores only command-owned local state while the snapshot still matches. Once a
-snapshot says `push-started`, the remote result may be ambiguous and automatic rewriting is forbidden
-— inspect remote `main` and `merged/*` and follow the printed recovery guidance.
+snapshot says `push-started`, the remote result may be ambiguous and automatic rewriting is
+forbidden: inspect remote `main` and `merged/*` and follow the printed recovery guidance.
 
-## The merge message
+## The lock during a landing
 
-Write or refresh `.artifacts/merge/<branch>.msg` every time a branch becomes merge-ready, including
-after later commits change what it does — landing fails with `Merge message file does not exist`
-otherwise. Format: a summary of at most 72 characters, a blank line, then one or more contiguous
-`- ...` bullets free to wrap onto indented continuation lines. Do not add Git's squash appendix or
-author attribution; the command appends the generated appendix itself.
+`land` takes the machine-wide lock itself; `verification-lanes` owns the lock's rules, and
+`land-lock` and `land-unlock` are recovery and debugging tools. `./agent board` names the phase the
+lock is being spent on and how long it has been in it: `integrating`, `cheap gates`,
+`repository tests`, `host proof`, `push`, `cleanup`. `held for 36m by a landing, cheap gates: 34m so
+far` is a stuck command; `host proof: 9m so far` is a landing earning its turn. Nothing reclaims a
+lock on a timer; forcing one is the Developer's call, and `board` is what to bring them.
 
-## Reading a red lane
-
-Read `.artifacts/logs/<lane>/latest/summary.json` first — it names each node's failure cause. A
-separately recorded retry, not concatenated output, owns the final classification: a node failing
-again on its isolated retry is `repository`, not `machine-contention`.
-
-For an authorized local landing, let `./agent unsandboxed land` run the broad lanes under its lock; do not run
-them immediately beforehand unless diagnosing a failure. `verify-full-sandbox` is a useful managed
-shell diagnostic but never proves host-only browser and native UI gates passed. Human landing
-workflows may still run `verify-full` separately from an unsandboxed terminal.
+Let `land` run the broad lanes under its lock; do not run them immediately beforehand unless
+diagnosing a failure. `verify-full-sandbox` is a useful managed-shell diagnostic but never proves the
+host-only browser and native UI gates passed.
