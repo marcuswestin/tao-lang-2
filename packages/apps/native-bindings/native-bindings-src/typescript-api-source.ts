@@ -24,7 +24,8 @@ import type {
 import { type NativeResourceContract, nativeTypeReader, type NativeTypeSubstitutions } from './typescript-api-types'
 import type { NativeDeferredContract, NativeOperationContract } from './typescript-native-contracts'
 
-const engineRequire = Platform.createModuleRequire(import.meta.url)
+// Packaged language servers are CommonJS; source and native host tools are ESM.
+const engineRequire = Platform.createModuleRequire(typeof __filename === 'string' ? __filename : import.meta.url)
 
 export type NativeCallbackContract = {
   packageName: string
