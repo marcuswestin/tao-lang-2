@@ -851,7 +851,7 @@ async function runProcess(state: WorkState, context: WorkRunContext): Promise<Wo
           : undefined
         const inspectionDiagnostic = inspectionError === undefined
           ? undefined
-          : `\nProcess cleanup inspection was incomplete: ${Errors.messageOf(inspectionError)}.\n`
+          : `\nProcess cleanup inspection was incomplete: ${Errors.formatForLog(inspectionError).slice(0, 4_000)}\n`
         const output = [diagnostic, inspectionDiagnostic].filter((part): part is string => part !== undefined).join('')
         return {
           exitCode: child.exitCode === 0 && (diagnostic !== undefined || inspectionError !== undefined)

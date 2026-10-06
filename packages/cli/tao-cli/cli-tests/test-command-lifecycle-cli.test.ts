@@ -1,12 +1,13 @@
-import { FS, Platform } from '@shared'
+import { CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { runTaoCliForTest, withTaoFixture } from './test-cli-files'
+import { withTaoFixture } from './test-cli-files'
 import { outputText } from './test-command-fixtures'
 
 Describe('tao test leaked resources', () => {
   for (const outcome of ['passing leak', 'failed leak', 'clean'] as const) {
     const fails = outcome === 'failed leak'
     const closes = outcome === 'clean'
+    // budget-ok: Cold compilation can contend; the child has 180 seconds, then 20 seconds for verified teardown.
     Test(`finishes a Tao journey with ${outcome}`, async () => {
       await withTaoFixture({
         '.tao/.gitkeep': '',
@@ -36,8 +37,18 @@ Describe('tao test leaked resources', () => {
           }
         `,
       }, async root => {
-        const result = await runTaoCliForTest(['test', root, '--output', closes ? 'lines' : 'quiet'])
+        const result = await CLI.run('./tao', {
+          args: ['test', root, '--output', closes ? 'lines' : 'quiet'],
+          cwd: Repo.getRoot(),
+          detached: true,
+          processPolicy: 'test',
+          stdio: 'pipe',
+          timeoutMs: 180_000,
+          timeoutPolicy: 'bounded',
+        })
         const output = outputText(result)
+        Expect(result.error).toBeUndefined()
+        Expect(result.signal).toBeNull()
         Expect(result.exitCode).toBe(closes ? 0 : 1)
         Expect(output).toContain(`Tao test runner completed (exit ${fails ? 1 : 0})`)
         if (closes) {
@@ -58,6 +69,6 @@ Describe('tao test leaked resources', () => {
         Expect(pid).toBeGreaterThan(1)
         Expect(Platform.processIsAlive(pid)).toBe(false)
       })
-    }, 60_000)
+    }, 200_000)
   }
 })

@@ -912,7 +912,9 @@ Describe('work graph scheduling', () => {
     const restoreGroupMembers = groupMembersOverride.install(group => {
       if (denyGroupOperations) {
         groupMembersDenied += 1
-        Errors.throwHostEnvironment('fixture denied groupMembers')
+        Errors.throwHostEnvironment('fixture denied groupMembers', {
+          details: { fixtureInspection: 'proc_listpids', detail: 'x'.repeat(8_000) },
+        })
       }
       return originalGroupMembers(group)
     })
@@ -968,6 +970,8 @@ Describe('work graph scheduling', () => {
           Expect(state.failure?.kind).toBe('nonzero-exit')
           Expect(state.fullOutput).toContain('Process cleanup inspection was incomplete:')
           Expect(state.fullOutput).toContain('fixture denied groupMembers')
+          Expect(state.fullOutput).toContain('"fixtureInspection":"proc_listpids"')
+          Expect(state.fullOutput.length).toBeLessThan(4_500)
           Expect(state.fullOutput).toContain(`(${child.pid})`)
           Expect(ProcessTree.sameProcess(ProcessTree.identities([child.pid]).get(child.pid), child)).toBe(false)
           Expect(WorkGraph.exitCodeFor(result)).toBe(1)

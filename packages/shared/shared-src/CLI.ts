@@ -1,4 +1,4 @@
-import { asError, CommandExecutionError, messageOf, throwUnexpected } from './core/Errors'
+import { asError, CommandExecutionError, formatForLog, throwUnexpected } from './core/Errors'
 import type { FileHandle } from './FS'
 import * as HCI from './HCI'
 import * as Platform from './Platform'
@@ -562,7 +562,7 @@ function startCommand(
         }
         const diagnostic = Buffer.from(
           `Test process cleanup could not be verified after child exit ${exitCode ?? signal}: ${
-            messageOf(inspectionError)
+            formatForLog(inspectionError).slice(0, 4_000)
           }\n`,
         )
         if (outputHasWrapperSink) {

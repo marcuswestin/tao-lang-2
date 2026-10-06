@@ -180,13 +180,19 @@ Describe('CLI process policy', () => {
         const pid = await until(() => Number(/^(\d+)/.exec(output)?.[1]) || undefined, { timeoutPolicy: 'bounded' })
         abandoned.push(pid)
         const identity = ProcessTree.identities([pid]).get(pid)!
-        restore = groupMembersSlot.install(() => Errors.throwHostEnvironment('fixture group inspection denied'))
-        restoreSignal = signalGroupSlot.install(() => Errors.throwHostEnvironment('fixture group inspection denied'))
+        const denyInspection = () =>
+          Errors.throwHostEnvironment('fixture group inspection denied', {
+            details: { fixtureInspection: 'proc_listpids', detail: 'x'.repeat(8_000) },
+          })
+        restore = groupMembersSlot.install(denyInspection)
+        restoreSignal = signalGroupSlot.install(denyInspection)
         command.writeStdin('exit\n')
         const result = await command.waitForClose()
         Expect(result.exitCode).toBe(verdict || 1)
         Expect(output).toContain('Test process cleanup could not be verified')
         Expect(output).toContain('fixture group inspection denied')
+        Expect(output).toContain('"fixtureInspection":"proc_listpids"')
+        Expect(output.length).toBeLessThan(4_500)
         Expect(isAlive(identity)).toBe(false)
       } finally {
         restore()
