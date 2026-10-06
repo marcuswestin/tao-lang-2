@@ -19,7 +19,7 @@ const FULL_LANE = [
   '_test',
   'dead-exports',
   'ship-bundle-proof',
-  'studio-smoke',
+  'studio-proof-real-app',
   'studio-canary',
 ]
 
@@ -39,32 +39,39 @@ Describe('verify-complement', () => {
 
   Test('runs every host gate the workflow does not admit, with the prepare nodes they read', () => {
     const plan = VerifyComplement.plan(FULL_LANE, '')
-    Expect(plan.host).toEqual(['studio-smoke', 'studio-canary'])
+    Expect(plan.host).toEqual(['studio-proof-real-app', 'studio-canary'])
     Expect(plan.workflowAdmits).toBe(false)
     // The portable gates stay on the hosted runners; the fixers and generators the smokes read run first.
     Expect(plan.gates).not.toContain('_typecheck')
     Expect(plan.gates).not.toContain('_test')
     Expect(plan.gates).not.toContain('ship-bundle-proof')
-    for (const need of GateCatalog.dependenciesOf('studio-smoke')) {
+    for (const need of GateCatalog.dependenciesOf('studio-proof-real-app')) {
       Expect(plan.gates).toContain(need)
     }
     // In the full lane's order, so the two lanes read the same way.
-    Expect(plan.gates.indexOf('_parser-gen')).toBeLessThan(plan.gates.indexOf('studio-smoke'))
+    Expect(plan.gates.indexOf('_parser-gen')).toBeLessThan(plan.gates.indexOf('studio-proof-real-app'))
   })
 
   Test('leaves out what CI macOS admits', () => {
-    const plan = VerifyComplement.plan(FULL_LANE, "env:\n  CI_HOST_GATES: 'studio-smoke'\n")
-    Expect(plan.admitted).toEqual(['studio-smoke'])
+    const plan = VerifyComplement.plan(FULL_LANE, "env:\n  CI_HOST_GATES: 'studio-proof-real-app'\n")
+    Expect(plan.admitted).toEqual(['studio-proof-real-app'])
     Expect(plan.host).toEqual(['studio-canary'])
-    Expect(plan.gates).not.toContain('studio-smoke')
-    Expect(VerifyComplement.plan(FULL_LANE, "  CI_HOST_GATES: 'studio-smoke,studio-canary'\n").host).toEqual([])
+    Expect(plan.gates).not.toContain('studio-proof-real-app')
+    Expect(VerifyComplement.plan(FULL_LANE, "  CI_HOST_GATES: 'studio-proof-real-app,studio-canary'\n").host).toEqual(
+      [],
+    )
   })
 
   Test('leaves a gate hosted Verify runs on Linux to Verify', () => {
-    Expect(VerifyComplement.isHostGate('studio-dialog-browser')).toBe(false)
-    const plan = VerifyComplement.plan([...FULL_LANE, 'studio-dialog-browser'], '')
-    Expect(plan.host).toEqual(['studio-smoke', 'studio-canary'])
-    Expect(plan.gates).not.toContain('studio-dialog-browser')
+    const hostedLinux = ['studio-dialog-browser', 'studio-smoke']
+    for (const name of hostedLinux) {
+      Expect(VerifyComplement.isHostGate(name)).toBe(false)
+    }
+    const plan = VerifyComplement.plan([...FULL_LANE, ...hostedLinux], '')
+    Expect(plan.host).toEqual(['studio-proof-real-app', 'studio-canary'])
+    for (const name of hostedLinux) {
+      Expect(plan.gates).not.toContain(name)
+    }
   })
 
   Test('the real full lane and workflow leave a non-empty complement of host gates only', async () => {
