@@ -2705,8 +2705,8 @@ class TypeResolutionContext {
     const owner = parameter.$container?.$container
     if (
       !AST.isViewDeclaration(owner) || AST.findOwningView(context) !== owner
-      || parameter.copy || parameter.mutable || parameterRequiresWritable(parameter)
       || declared.kind !== 'union' || declared.members.length !== 2
+      || parameter.copy || parameter.mutable
     ) {
       return undefined
     }
@@ -2724,7 +2724,7 @@ class TypeResolutionContext {
     }
     const entity = declared.members.find(member => member.kind === 'entity')
     const none = declared.members.find(member => member.kind === 'primitive' && member.primitive === 'none')
-    if (entity?.kind !== 'entity' || !none) {
+    if (entity?.kind !== 'entity' || !none || parameterRequiresWritable(parameter)) {
       return undefined
     }
     let anchor = context
