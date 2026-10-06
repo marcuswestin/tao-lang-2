@@ -880,3 +880,21 @@ The landing authorization supersedes earlier conditional landing holds in this d
 does not prove the remaining physical-device Companion controls, Firebase offline restart/replay,
 two-device account isolation/switching, or direct hostile-server requests. Appwrite and the other
 provider acceptance gates remain deferred. Local evidence and Developer-owned test apps are retained.
+
+### Host complement retry — 2026-10-06 07:25 UTC
+
+The portable repair passed stable-tree `verify-changed` before commit9e2a8097. Its hosted
+Verify run37428884511 was automatically cancelled and auto-merge disabled when the local
+complement failed two `studio-proof-real-app` checks: Snap publication and preview iframe
+activation each timed out after30seconds. The other seven host gates passed; no portable test
+failure was reported before cancellation. The failed complement receipt and browser snapshot
+remain under `.artifacts/logs/verify-complement/2026-10-06T07-19-00-697Z-12661-cf9dcc9a/`
+and `.artifacts/tests/studio-smoke/studio-proof-real-app/shard-8/`.
+
+A separately invoked `studio-proof-real-app` retry passed all four real browser journeys with
+no source change. Before that retry, the board reported no registered Tao lane and a free landing
+lock; retained unrelated leases were left alone. This distinguishes the repeatable Firebase CI
+fixture defect from an intermittently failing host proof, without establishing the timeout's cause.
+No selector, assertion or timeout was weakened. The complete complement and hosted Verify must
+both succeed on the next head before landing is claimed. The source and device acceptance limits
+listed above remain unchanged.
