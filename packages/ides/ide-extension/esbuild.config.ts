@@ -1,6 +1,18 @@
-import { generateMaintainedNativeBindings, stageNativeBindingResources } from '@native-bindings'
+import {
+  generateMaintainedNativeBindings,
+  inspectMaintainedNativeBindings,
+  stageNativeBindingResources,
+} from '@native-bindings'
 import { Errors, FS, HCI, Platform, ReleaseCapabilities, type ReleasePhase } from '@shared'
 import { context } from 'esbuild'
+import {
+  BUILD_RECORD_NAME,
+  buildInputIdentity,
+  checkBuildFreshness,
+  hashFile,
+  hashOutputs,
+  makeBuildRecord,
+} from './ide-extension-src/build-record/build-identity'
 import { stageProjectToolingResources } from './ide-extension-src/resources/project-tooling-resources'
 import { writeMergedTaoTextMateGrammar } from './ide-extension-src/syntax/textmate-grammar'
 
@@ -83,6 +95,34 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
   const stagingBundledStdlibRoot = FS.resolvePath('_gen_ide-extension/stdlib/@tao', stagingPackageRoot)
   const runtimeRoot = FS.resolvePath('../../apps/runtime', packageRoot)
   const typescriptPackageRoot = FS.dirname(Bun.resolveSync('typescript/package.json', packageRoot))
+  const outputRoots = ['_gen_ide-extension', 'ide-extension-syntaxes/_gen_syntaxes']
+  const recordPath = FS.resolvePath(`_gen_ide-extension/${BUILD_RECORD_NAME}`, packageRoot)
+  const inputs = await buildInputIdentity(repositoryRoot, {
+    minify,
+    releaseVersion: releaseVersion ?? 'development',
+    phase: profile.phase,
+  })
+  if (!watch) {
+    const freshness = await checkBuildFreshness({
+      packageRoot,
+      recordPath,
+      outputRoots,
+      grammarPath: generatedTaoTextMateGrammar,
+      inputs,
+    })
+    if (freshness.status === 'fresh') {
+      HCI.logProcessInfo('editor', 'The built extension matches its inputs; nothing to rebuild.')
+      await FS.remove(stagingPackageRoot)
+      return
+    }
+    if (freshness.status === 'grammar-unmerged') {
+      HCI.logProcessInfo('editor', 'The built extension matches its inputs; merging the regenerated grammar.')
+      await writeMergedTaoTextMateGrammar(generatedTaoTextMateGrammar, taoTextMateGrammarOverlay)
+      await FS.remove(stagingPackageRoot)
+      return
+    }
+    HCI.logProcessInfo('editor', `Building the extension: ${freshness.reason}.`)
+  }
 
   const ctx = await context({
     absWorkingDir: packageRoot,
@@ -112,7 +152,9 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
       setup(build) {
         build.onStart(async () => {
           HCI.logProcessInfo('editor', 'Generating maintained native bindings...')
-          await generateMaintainedNativeBindings({ mode: 'write' })
+          if ((await inspectMaintainedNativeBindings({})).status !== 'fresh') {
+            await generateMaintainedNativeBindings({ mode: 'write' })
+          }
           await FS.remove(stagingGeneratedRoot)
         })
         build.onEnd(async result => {
@@ -160,6 +202,11 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
           await FS.copyFile(
             FS.resolvePath('../.tao/store/project.json', stdlibSourceRoot),
             FS.resolvePath('stdlib/.tao/store/project.json', stagingGeneratedRoot),
+          )
+          const baseGrammar = await hashFile(generatedTaoTextMateGrammar)
+          await FS.writeJson(
+            FS.resolvePath(BUILD_RECORD_NAME, stagingGeneratedRoot),
+            makeBuildRecord(inputs, await hashOutputs(stagingPackageRoot, outputRoots), baseGrammar),
           )
           await publishIdeExtensionOutputs(stagingPackageRoot, packageRoot, { boundaryPath: repositoryRoot })
         })
