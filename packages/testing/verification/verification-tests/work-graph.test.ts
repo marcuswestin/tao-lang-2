@@ -140,7 +140,7 @@ function schedule(
   const holds = new Map(specs.map(spec => [spec.name, Deferred()]))
   const environments = new Map<string, Record<string, string>>()
   const commands = new Map<string, WorkCommand>()
-  const cancellationGraces = new Map<string, number>()
+  const cancellationGraces = new Map<string, number | undefined>()
   const started: string[] = []
   const states = specs.map(spec => WorkGraph.createState(workNode(spec)))
   let interrupt = () => {}

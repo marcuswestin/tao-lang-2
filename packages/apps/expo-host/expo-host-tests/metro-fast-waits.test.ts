@@ -1,15 +1,13 @@
 import { RuntimeToolchainPaths } from '@expo-host'
-import { FS } from '@shared'
+import { Assert, FS, Platform } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, Test, testOverrideSlot } from '@shared/test'
-import { realpathSync } from 'node:fs'
-import { createRequire } from 'node:module'
 
-const expoLauncher = realpathSync(FS.resolvePath('.bin/expo', RuntimeToolchainPaths.dependencyRoot()))
-const expoRequire = createRequire(expoLauncher)
+const expoLauncher = FS.realPathSync(FS.resolvePath('.bin/expo', RuntimeToolchainPaths.dependencyRoot()))
+const expoRequire = Platform.createModuleRequire(expoLauncher)
 const cliEntry = expoRequire.resolve('@expo/cli')
-const cliRequire = createRequire(cliEntry)
+const cliRequire = Platform.createModuleRequire(cliEntry)
 const metroWrapper = cliRequire.resolve('@expo/metro/metro/HmrServer')
-const metroRequire = createRequire(metroWrapper)
+const metroRequire = Platform.createModuleRequire(metroWrapper)
 const metroEntry = metroRequire.resolve('metro/private/HmrServer')
 const hmrServerModule = metroRequire(metroEntry) as {
   default: new(bundler: unknown, createModuleId: unknown, config: unknown) => any
@@ -17,7 +15,7 @@ const hmrServerModule = metroRequire(metroEntry) as {
 const metroPackageJson = metroRequire.resolve('metro/package.json')
 const fileMapEntry = cliRequire.resolve('@expo/metro-file-map')
 const fileMapPackageJson = cliRequire.resolve('@expo/metro-file-map/package.json')
-const fileMapRequire = createRequire(fileMapEntry)
+const fileMapRequire = Platform.createModuleRequire(fileMapEntry)
 const fileMapModule = fileMapRequire(fileMapEntry) as {
   default: { create(options: unknown): any; H: Record<string, number> }
 }
@@ -44,11 +42,11 @@ const clearIntervalSlot = testOverrideSlot<typeof clearInterval>({
   write: value => globalThis.clearInterval = value,
 })
 const fastHmrEnv = testOverrideSlot<string | undefined>({
-  read: () => process.env.TAO_STUDIO_FAST_HMR,
+  read: () => Platform.runtimeProcess.env['TAO_STUDIO_FAST_HMR'],
   write: value => setEnv('TAO_STUDIO_FAST_HMR', value),
 })
 const fastFileMapEnv = testOverrideSlot<string | undefined>({
-  read: () => process.env.TAO_STUDIO_FAST_FILE_MAP,
+  read: () => Platform.runtimeProcess.env['TAO_STUDIO_FAST_FILE_MAP'],
   write: value => setEnv('TAO_STUDIO_FAST_FILE_MAP', value),
 })
 const watcherClassSlot = testOverrideSlot<new(...args: any[]) => any>({
@@ -62,9 +60,9 @@ const processorClassSlot = testOverrideSlot<new(...args: any[]) => any>({
 
 function setEnv(key: string, value: string | undefined): void {
   if (value === undefined) {
-    delete process.env[key]
+    delete Platform.runtimeProcess.env[key]
   } else {
-    process.env[key] = value
+    Platform.runtimeProcess.env[key] = value
   }
 }
 
@@ -124,9 +122,7 @@ function withTimers<T>(
     delays,
     async fire(index) {
       const callback = [...pending.values()][index]
-      if (!callback) {
-        throw new Error(`No captured timeout at index ${index}`)
-      }
+      Assert.that(callback, `No captured timeout at index ${index}`)
       pending.delete([...pending.keys()][index]!)
       await callback()
     },
@@ -356,7 +352,7 @@ function makeHmrServer(): { instance: any; register: () => Promise<void>; listen
 }
 
 async function installControlledFileMap(
-  gate: ReturnType<typeof Deferred>,
+  gate: Deferred<void>,
 ): Promise<{ root: string; watcher: any; restore: () => void }> {
   let watcher: any
   const FakeWatcher = class {
@@ -385,7 +381,7 @@ async function installControlledFileMap(
     }
     async processRegularFile(_path: string, fileMetadata: number[]) {
       await gate.promise
-      fileMetadata[fileMapModule.default.H.VISITED!] = 1
+      fileMetadata[fileMapModule.default.H['VISITED']!] = 1
     }
     async end(): Promise<void> {}
   }
@@ -423,10 +419,10 @@ function fileMapOptions(rootDir: string): unknown {
 
 function metadata(mtime: number): number[] {
   const value: number[] = []
-  value[fileMapModule.default.H.MTIME!] = mtime
-  value[fileMapModule.default.H.SIZE!] = 1
-  value[fileMapModule.default.H.SYMLINK!] = 0
-  value[fileMapModule.default.H.VISITED!] = 1
+  value[fileMapModule.default.H['MTIME']!] = mtime
+  value[fileMapModule.default.H['SIZE']!] = 1
+  value[fileMapModule.default.H['SYMLINK']!] = 0
+  value[fileMapModule.default.H['VISITED']!] = 1
   return value
 }
 
