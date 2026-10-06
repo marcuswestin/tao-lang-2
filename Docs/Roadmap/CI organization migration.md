@@ -15,6 +15,17 @@ It currently has PR, main-push and dispatch triggers, but no `merge_group` trigg
 the queue prerequisites before requiring native merge queue. The live landing contract is in
 [`landing/SKILL.md`](../../agents/skills/landing/SKILL.md).
 
+Measured on 2026-10-06 over fourteen landings through that route: push to merged took 6 min 30 s
+to 9 min 57 s for a lone landing, 11–16 min for two or three overlapping (admission sizes each at
+11 partitions), and 27 min when a complement flake forced a rerun. The admission queue, not CI,
+set most of the rest: one landing waited 22 min to push behind runs that shared no file with it.
+A native merge queue would replace that queue with GitHub's, serialize the merges, and verify each
+group against `main` plus the groups ahead of it, so stale-base re-pushes and the admission wait
+disappear; it would add the group's own `Verify` run, about 7 min, to every landing on top of the
+pull request's. At today's one to three concurrent landers it trades a wait that is sometimes zero
+for a cost that is always paid. Worth enabling when more than two agents land at once routinely,
+and only after the queue-aware tooling below exists.
+
 ## Decide and prepare
 
 - [x] Move the repository identity to `tao-dev-org/tao-lang` and update the setup recipe.
