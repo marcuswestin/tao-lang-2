@@ -109,6 +109,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-MANAGED-WORKTREE-TOOL-CACHE-WRITES — Managed worktree tool cache writes](<Developer environment upgrades/Archive/DEVENV-MANAGED-WORKTREE-TOOL-CACHE-WRITES.md>) — Resolved
 - [DEVENV-MERGE-RECOVERY-TEST-TIMES-OUT-UNDER-COMPLETE-VERIFY — Merge recovery test times out under complete verification](<Developer environment upgrades/Archive/DEVENV-MERGE-RECOVERY-TEST-TIMES-OUT-UNDER-COMPLETE-VERIFY.md>) — Resolved
 - [DEVENV-MUTATION-FAILURES-CAN-BE-TOLERATED-AS-FLAKES — Mutation failures can be tolerated as flakes](<Developer environment upgrades/Archive/DEVENV-MUTATION-FAILURES-CAN-BE-TOLERATED-AS-FLAKES.md>) — Resolved
+- [DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS — Nested Tao journeys run in overlapping shards](<Developer environment upgrades/Archive/DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS.md>) — Resolved
 - [DEVENV-NODE-WORKER-TEARDOWN-LOADS-BUN-FFI — Node worker teardown loads Bun-only process inspection](<Developer environment upgrades/Archive/DEVENV-NODE-WORKER-TEARDOWN-LOADS-BUN-FFI.md>) — Resolved
 - [DEVENV-NONAUTH-FIXTURES-AUTOLINK-CLERK-SWIFT-PACKAGES — Non-auth fixtures autolink Clerk Swift packages](<Developer environment upgrades/Archive/DEVENV-NONAUTH-FIXTURES-AUTOLINK-CLERK-SWIFT-PACKAGES.md>) — Resolved
 - [DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY — open-pr reports no checks while runners are busy](<Developer environment upgrades/Archive/DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY.md>) — Resolved
