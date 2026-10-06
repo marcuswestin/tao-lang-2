@@ -48,9 +48,20 @@ export type AppiumSession = Readonly<{
   ) => Promise<Readonly<{ appId: string; label: string }>>
   captureManagedHandshakeDiagnostics?: (
     options: Readonly<{
+      platform?: 'ios' | 'android'
       expectedAppId: string
       signal: AbortSignal
       assertCurrent: () => Promise<void>
+      onStage?: (stage: 'foreground-bundle' | 'xml' | 'screenshot') => void
+      onForegroundCategory?: (
+        category: 'expected' | 'springboard' | 'expo-go' | 'other' | 'missing' | 'unobserved',
+      ) => void
+      onSpringBoardAlert?: (
+        observation: Readonly<{
+          status: 'captured' | 'empty' | 'over-limit' | 'query-failed'
+          text?: string
+        }>,
+      ) => void
     }>,
   ) => Promise<Readonly<{ source: string; screenshot: Uint8Array }>>
 }>
@@ -334,6 +345,9 @@ class AppiumWebDriverSession implements AppiumSession {
       }
       marker = markers[0]
     } else {
+      if (appId !== expectedAppId) {
+        protocolError('The foreground iOS bundle differs from the managed runtime.')
+      }
       marker = await request('POST', 'element', {
         using: 'xpath',
         value: `//*[starts-with(@name, '${devLoopMobileIdentityId}.')]`,
@@ -375,9 +389,20 @@ class AppiumWebDriverSession implements AppiumSession {
 
   async captureManagedHandshakeDiagnostics(
     options: Readonly<{
+      platform?: 'ios' | 'android'
       expectedAppId: string
       signal: AbortSignal
       assertCurrent: () => Promise<void>
+      onStage?: (stage: 'foreground-bundle' | 'xml' | 'screenshot') => void
+      onForegroundCategory?: (
+        category: 'expected' | 'springboard' | 'expo-go' | 'other' | 'missing' | 'unobserved',
+      ) => void
+      onSpringBoardAlert?: (
+        observation: Readonly<{
+          status: 'captured' | 'empty' | 'over-limit' | 'query-failed'
+          text?: string
+        }>,
+      ) => void
     }>,
   ): Promise<Readonly<{ source: string; screenshot: Uint8Array }>> {
     const assertCurrent = async () => {
@@ -385,11 +410,16 @@ class AppiumWebDriverSession implements AppiumSession {
       await options.assertCurrent()
       options.signal.throwIfAborted()
     }
-    const read = async (suffix: 'appium/device/current_package' | 'source' | 'screenshot', limit: number) => {
+    const read = async (
+      suffix: 'alert/text' | 'appium/device/current_package' | 'execute/sync' | 'source' | 'screenshot',
+      limit: number,
+      body?: unknown,
+    ) => {
       await assertCurrent()
       const value = await requestValue<unknown>(this.#transport, {
-        method: 'GET',
+        method: suffix === 'execute/sync' ? 'POST' : 'GET',
         path: this.#path(suffix),
+        ...(body === undefined ? {} : { body }),
         purpose: 'managed-diagnostic',
         diagnosticSignal: options.signal,
         responseByteLimit: limit,
@@ -398,26 +428,60 @@ class AppiumWebDriverSession implements AppiumSession {
       return value
     }
     const assertApp = async () => {
-      if (await read('appium/device/current_package', 16_384) !== options.expectedAppId) {
+      options.onStage?.('foreground-bundle')
+      await assertCurrent()
+      options.onForegroundCategory?.('unobserved')
+      const active = options.platform === 'ios'
+        ? record(await read('execute/sync', 16_384, { script: 'mobile: activeAppInfo', args: [] }))?.['bundleId']
+        : await read('appium/device/current_package', 16_384)
+      await assertCurrent()
+      options.onForegroundCategory?.(
+        active === options.expectedAppId
+          ? 'expected'
+          : active === 'com.apple.springboard'
+          ? 'springboard'
+          : active === 'host.exp.Exponent'
+          ? 'expo-go'
+          : typeof active === 'string' && active.length > 0
+          ? 'other'
+          : 'missing',
+      )
+      await assertCurrent()
+      if (active !== options.expectedAppId) {
+        if (
+          options.platform === 'ios' && active === 'com.apple.springboard' && options.onSpringBoardAlert !== undefined
+        ) {
+          try {
+            const value = await read('alert/text', 8 * 1024)
+            const text = string(value)
+            await assertCurrent()
+            options.onSpringBoardAlert(
+              text === undefined || text.length === 0
+                ? { status: 'empty' }
+                : Buffer.byteLength(text, 'utf8') > 4 * 1024
+                ? { status: 'over-limit' }
+                : { status: 'captured', text },
+            )
+          } catch {
+            await assertCurrent()
+            options.onSpringBoardAlert({ status: 'query-failed' })
+          }
+        }
         protocolError('Managed handshake diagnostics refused an unrelated foreground application.')
       }
     }
     await assertApp()
+    options.onStage?.('xml')
     const source = string(await read('source', 4 * 1024 * 1024))
       ?? protocolError('Appium did not report diagnostic XML.')
     if (Buffer.byteLength(source, 'utf8') > 2 * 1024 * 1024) {
       protocolError('Managed handshake diagnostic XML exceeded its private capture limit.')
     }
     await assertApp()
+    options.onStage?.('screenshot')
     const encoded = string(await read('screenshot', 14 * 1024 * 1024))
       ?? protocolError('Appium did not report a diagnostic screenshot.')
-    if (encoded.length > Math.ceil(10 * 1024 * 1024 / 3) * 4) {
-      protocolError('Managed handshake diagnostic screenshot exceeded its private capture limit.')
-    }
-    const screenshot = Uint8Array.from(Buffer.from(encoded, 'base64'))
-    if (screenshot.byteLength > 10 * 1024 * 1024) {
-      protocolError('Managed handshake diagnostic screenshot exceeded its private capture limit.')
-    }
+    const screenshot = decodePrivatePng(encoded, 'managed handshake diagnostic screenshot')
     await assertApp()
     return { source, screenshot }
   }
@@ -441,6 +505,26 @@ class AppiumWebDriverSession implements AppiumSession {
   #path(suffix = ''): string {
     return `/session/${encodeURIComponent(this.id)}${suffix.length === 0 ? '' : `/${suffix}`}`
   }
+}
+
+/** Canonical base64 and the PNG signature are required before a bounded private image is retained. */
+function decodePrivatePng(encoded: string, label: string): Uint8Array {
+  if (encoded.length > Math.ceil(10 * 1024 * 1024 / 3) * 4) {
+    protocolError(`Appium ${label} exceeded its private capture limit.`)
+  }
+  if (encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(encoded)) {
+    protocolError(`Appium returned invalid ${label} encoding.`)
+  }
+  const png = Buffer.from(encoded, 'base64')
+  if (png.byteLength > 10 * 1024 * 1024) {
+    protocolError(`Appium ${label} exceeded its private capture limit.`)
+  }
+  if (
+    png.toString('base64') !== encoded || !png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  ) {
+    protocolError(`Appium returned a non-PNG ${label}.`)
+  }
+  return Uint8Array.from(png)
 }
 
 class AppiumWebDriverElement implements AppiumElement {
@@ -492,22 +576,7 @@ class AppiumWebDriverElement implements AppiumElement {
       responseByteLimit: 14 * 1024 * 1024,
     })
     const encoded = string(value) ?? protocolError('Appium did not report an element screenshot.')
-    if (encoded.length > Math.ceil(10 * 1024 * 1024 / 3) * 4) {
-      protocolError('Appium element screenshot exceeded its private capture limit.')
-    }
-    if (encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(encoded)) {
-      protocolError('Appium returned invalid element screenshot encoding.')
-    }
-    const png = Buffer.from(encoded, 'base64')
-    if (png.byteLength > 10 * 1024 * 1024) {
-      protocolError('Appium element screenshot exceeded its private capture limit.')
-    }
-    if (
-      png.toString('base64') !== encoded || !png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-    ) {
-      protocolError('Appium returned a non-PNG element screenshot.')
-    }
-    return Uint8Array.from(png)
+    return decodePrivatePng(encoded, 'element screenshot')
   }
 
   async observe(): Promise<AppiumElementObservation> {

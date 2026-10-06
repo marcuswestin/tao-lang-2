@@ -201,6 +201,9 @@ export async function setProjectSecret(
   const { root, path } = await storeLocation(target)
   const original = await readStore(path)
   await unlockStoreKey(original, environment.cipher)
+  HCI.writeStderr(
+    `Obtain or create ${name} from the service or app that uses it. Tao encrypts the value you supply; it does not issue credentials. Enter the exact value in the hidden local prompt.\n`,
+  )
   const value = await environment.promptSecret(name)
   if (value === '') {
     Errors.throwUserInput('No value was entered, so nothing was stored.')

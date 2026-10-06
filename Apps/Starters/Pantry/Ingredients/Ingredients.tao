@@ -95,31 +95,32 @@ scene IngredientDetail(Ingredient) {
    }
    Toolbar { SaveIngredientCommand }
    render ScrollView() [screen] {
-      Col() [column, panel] {
-         Text("INGREDIENT") [eyebrow]
-         guard Ingredient {
-            loading -> { Spinner() }
-            none -> { TextMultiline("This ingredient no longer exists.") [body] }
-            error -> Context { TextMultiline("The ingredient could not be loaded: { Context.Message }") [body] }
-         }
+      Col() [column] {
+         Col() [panel] {
+            Text("INGREDIENT") [eyebrow]
+            guard Ingredient {
+               loading -> { Spinner() }
+               none -> { TextMultiline("This ingredient no longer exists.") [body] }
+               error -> Context { TextMultiline("The ingredient could not be loaded: { Context.Message }") [body] }
+            }
 
-         #ingredientNameDraft
-         TextInput(Value: NameDraft, Label: "Name", Placeholder: "Name") {
-            on submit SaveIngredient
-         }
-         Text("Quantity: { Ingredient.Quantity }") [body]
+            #ingredientNameDraft
+            TextInput(Value: NameDraft, Label: "Name", Placeholder: "Name") {
+               on submit SaveIngredient
+            }
+            Text("Quantity: { Ingredient.Quantity }") [body]
 
-         #ingredientInStock
-         Checkbox(Value: Ingredient.InStock is InStock, Label: "In stock") {
-            on change SetInStock
-         }
+            #ingredientInStock
+            Checkbox(Value: Ingredient.InStock is InStock, Label: "In stock") {
+               on change SetInStock
+            }
 
-         #saveIngredient
-         FormButton("Save ingredient", Disabled: NameDraft is empty) {
-            on press SaveIngredient
-         }
+            #saveIngredient
+            FormButton("Save ingredient", Disabled: NameDraft is empty) {
+               on press SaveIngredient
+            }
 
-         #deleteIngredient
-         FormButton("Delete ingredient") [buttonDanger] {
-            on press DeleteIngredient
-}  }  }  }
+            #deleteIngredient
+            FormButton("Delete ingredient") [buttonDanger] {
+               on press DeleteIngredient
+}  }  }  }  }

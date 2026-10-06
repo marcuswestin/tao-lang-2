@@ -10,7 +10,7 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 - Commands over two seconds must print concise steps. Announce major phases; keep activity visible without exhaustive or buffered logging.
 - Ask before direct dependency, package-version, or lockfile edits. Merging any branch needs no approval, including dependency, lockfile, and other file changes. Use `./agent setup --refresh-lockfile` for an approved direct change and `./agent setup` for frozen installs; approval covers only that direct change.
 - Run Tao CLI commands as `./agent tao [args…]`. Run development loops through `./agent unsandboxed app-dev [path] [options]`, `studio [project]`, or `local-instantdb start|stop`. Shell inspection and Git stay direct when permitted. `Justfile` is the human menu. Search with tools that honour `.gitignore`; the output-discipline hook rejects scans of generated trees.
-- Run commands from the worktree root with relative paths. The output-discipline hook explains refused shell shapes. Use `# hook-ok: <reason>` for a false positive; it records the reason in `.artifacts/logs/hook-overrides.jsonl` for tuning.
+- Run commands from the worktree root with relative paths. The output-discipline hook owns shell-shape rules and names the acceptable flag, pipe, redirect, or tool. For a false positive, `# hook-ok: <reason>` records the override in `.artifacts/logs/hook-overrides.jsonl` so the rule can be tuned.
 - On repository-command failure, read its report and named log; `./agent doctor` diagnoses the checkout. `environment-recovery` owns further recovery.
 - Ask the Developer when language design, roadmap priority, destructive work, or ambiguous product behavior cannot be derived safely; the `decision-rounds` skill owns how those questions are found and put to them. Resolve routine implementation choices from repository evidence.
 - Goal questions or "stop notification": `developer-attention`.
@@ -26,11 +26,12 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 
 ## Response format
 
-- Lead with the outcome. Keep expected results to a sentence; surface decisions to confirm, surprises, and anything needing the Developer's judgment. Let other detail wait until asked.
+- Keep every request and question pending across new messages and compaction until answered, completed, or explicitly cancelled. Track unresolved items in the task checkpoint; new messages steer ongoing work. Briefly acknowledge displaced items as "no longer relevant" or "superseded since ...", with the reason; never silently drop them.
+- Lead with the outcome; keep expected results to a sentence and surface surprises, open decisions, and needed judgment.
 - Check live help for Developer-run commands and flags. Give copyable commands and working directory in a shell block. Use `just`, `./dev` or `./tao`, never `./agent`; add missing human commands to `./dev`.
 - Use numbered lists and lettered sub-items, up to three levels ("elaborate 2.b"). Requested summaries use executive-summary bullets, 1–2 sentences each. One point per item; quote errors and output verbatim in code blocks.
-- Depart from this when a root-cause walkthrough or a design argument serves the Developer better. This section governs what they read and nothing else: subagent and agent-to-agent text is exempt from the shape, and the `delegation` skill owns what a subagent's report must contain instead.
-- After a meaningful chunk, recommend the next slice. Harness settings compact context automatically; at a natural break before an unrelated slice, refresh `.artifacts/checkpoint/<branch>.md` and offer `/compact` or a fresh session.
+- Use a root-cause walkthrough or design argument when clearer. This format governs Developer-facing text; `delegation` owns subagent reports.
+- After a meaningful chunk, recommend the next slice. Before an unrelated slice, refresh `.artifacts/checkpoint/<branch>.md` and offer `/compact` or a fresh session.
 
 ## Safety
 

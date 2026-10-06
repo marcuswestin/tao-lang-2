@@ -229,6 +229,19 @@ constraints, and leaves out what only the client reads, such as defaults, titles
 sentences. Device-only stores have none. Tools that provision a backend read it instead of lowering
 the source again; `tao instantdb push` does.
 
+### Private-account provider integration
+
+An authenticated datasource provider may implement a private-account policy when its backend
+authorizes the verified principal's namespace. Firebase uses this policy for its UID-scoped store:
+rows without authored grants are private to the bound account, and the Account row must have that
+account's ID. Account relations must remain within that namespace. The runtime applies the same
+policy to reads and writes, including transaction commit validation. An aborted session or a
+different fixture actor cannot inherit it.
+
+The policy belongs to the datasource provider, not the shared authentication result. Other
+datasources keep grant-based default denial, and authored access declarations retain their
+existing checks. This provider contract adds no access syntax or general provider capability.
+
 ### Local reference integration
 
 `LocalAuth` in `@tao/auth/local` and `Reference` in `@tao/data/providers/reference` connect to the

@@ -5,7 +5,10 @@ import { generateFirebaseBackend, type TaoDataPolicy } from '../firebase-src/gen
 const schema: TR.DataSchemaDefinition = {
   name: 'Notes',
   entities: {
-    Account: { collection: 'Accounts', fields: { DisplayName: { kind: 'text' } } },
+    Account: {
+      collection: 'Accounts',
+      fields: { DisplayName: { kind: 'text', defaultValue: '' }, Bio: { kind: 'text', optional: true } },
+    },
     Note: {
       collection: 'Notes',
       fields: {
@@ -40,7 +43,9 @@ Describe('Firebase rules generation', () => {
     Expect(rules).toContain('match /Account/{id}')
     Expect(rules).toContain('signedInAsOwner() && id == userId && validRow()')
     Expect(rules).toContain('data.keys().hasAll(["_deleted","serverTimestamp","DisplayName"])')
-    Expect(rules).toContain('data["DisplayName"] == null || (data["DisplayName"] is string)')
+    Expect(rules).toContain('&& data["DisplayName"] is string')
+    Expect(rules).not.toContain('data["DisplayName"] == null')
+    Expect(rules).toContain('!data.keys().hasAny(["Bio"]) || data["Bio"] == null || (data["Bio"] is string)')
     Expect(rules).toContain('match /Note/{id}')
     Expect(rules).toContain(
       'data.keys().hasAll(["_deleted","serverTimestamp","Body","Done","UpdatedAt","Status","Owner"])',

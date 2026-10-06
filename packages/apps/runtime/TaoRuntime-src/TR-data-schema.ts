@@ -1674,6 +1674,39 @@ export class RuntimeDataSchema {
     return typeof this.providerBinding === 'object' && this.providerBinding.auth !== undefined
   }
 
+  /** A provider's verified private account namespace authorizes grant-free rows; authored grants keep their policy. */
+  private accessAllowed(
+    data: StoredData,
+    auth: TaoDataAuthBinding,
+    entity: string,
+    row: StoredRow,
+    operation: 'read' | 'create' | 'update' | 'delete',
+    fields: readonly string[],
+    previous?: StoredRow,
+  ): boolean {
+    if (auth.signal.aborted) {
+      return false
+    }
+    const binding = typeof this.providerBinding === 'object' ? this.providerBinding : undefined
+    const declared = this.definition.entities[entity]
+    if (
+      binding?.declaration.provider.authenticatedAccess === 'private-account'
+      && declared !== undefined
+      && (declared.grants?.length ?? 0) === 0
+      && (this.fixtureActor === undefined || this.fixtureActor === auth.accountId)
+    ) {
+      if (entity === 'Account' && row.Id !== auth.accountId) {
+        return false
+      }
+      return Object.entries(declared.fields).every(([name, field]) =>
+        field.kind !== 'relation' || field.relation !== 'Account'
+        || (row[name] === auth.accountId || field.optional === true && row[name] === null)
+          && (operation !== 'update' || previous?.[name] === row[name])
+      )
+    }
+    return dataAccessAllowed(this.definition, data, this.fixtureActor ?? auth.accountId, entity, row, operation, fields)
+  }
+
   private canAccess(
     entity: string,
     row: StoredRow,
@@ -1682,16 +1715,15 @@ export class RuntimeDataSchema {
   ): boolean {
     const auth = typeof this.providerBinding === 'object' ? this.providerBinding.auth : undefined
     return !auth
-      || (!auth.signal.aborted
-        && dataAccessAllowed(
-          this.definition,
-          this.data,
-          this.fixtureActor ?? auth.accountId,
-          entity,
-          row,
-          operation,
-          fields,
-        ))
+      || this.accessAllowed(
+        this.data,
+        auth,
+        entity,
+        row,
+        operation,
+        fields,
+        operation === 'update' ? this.storedRow(entity, row.Id) : undefined,
+      )
   }
 
   private requireAccess(
@@ -1722,16 +1754,15 @@ export class RuntimeDataSchema {
       fields: readonly string[] = [],
     ): void => {
       RuntimeAssert.input(
-        !auth.signal.aborted
-          && dataAccessAllowed(
-            this.definition,
-            after,
-            this.fixtureActor ?? auth.accountId,
-            entity,
-            row,
-            operation,
-            fields,
-          ),
+        this.accessAllowed(
+          after,
+          auth,
+          entity,
+          row,
+          operation,
+          fields,
+          operation === 'update' ? before.rows[entity]?.find(previous => previous.Id === row.Id) : undefined,
+        ),
         `You do not have permission to ${operation} this ${entity}.`,
       )
     }

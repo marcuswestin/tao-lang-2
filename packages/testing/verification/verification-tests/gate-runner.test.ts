@@ -520,6 +520,109 @@ Describe('repository gate runner', () => {
     ).toBe(true)
   })
 
+  Test('partitions test nodes by current membership estimates despite stale shard-name timings', async () => {
+    const root = await mkTestDir('tao-gate-partition-estimates-')
+    const files = ['heavy.test.ts', 'light.test.ts', 'other.test.ts'].map(name =>
+      `packages/example/example-tests/${name}`
+    )
+    const started: string[] = []
+    const originalPlan = TestRunner.testNodesFor
+    const restorePlan = testPlanSlot.install(async options => {
+      if (options.repositoryRoot !== root) {
+        return await originalPlan(options)
+      }
+      const plan = TestNodes.build({
+        ledger: { version: 1, tests: {} },
+        timings: {
+          nodes: {
+            'fixture-weighted': {
+              emaMs: 20_600,
+              lastMs: 20_600,
+              lastRunAt: '2026-01-01T00:00:00.000Z',
+              samples: 1,
+              source: 'wall',
+            },
+            'fixture-weighted#1': {
+              emaMs: 100,
+              lastMs: 100,
+              lastRunAt: '2026-01-01T00:00:00.000Z',
+              samples: 10,
+              source: 'wall',
+            },
+            'fixture-weighted#2': {
+              emaMs: 19_000,
+              lastMs: 19_000,
+              lastRunAt: '2026-01-01T00:00:00.000Z',
+              samples: 10,
+              source: 'wall',
+            },
+          },
+          version: 1,
+        },
+        selected: [{
+          buildProcess: (name, selected) => ({
+            args: [],
+            command: 'fixture-runner',
+            files: selected,
+            testReport: { format: 'bun-junit', path: FS.resolvePath(`${name}.xml`, root), suite: 'fixture-weighted' },
+          }),
+          estimationUnits: files,
+          files: files.slice(0, 2),
+          name: 'fixture-weighted',
+          unitCostMs: new Map([[files[0]!, 8_000], [files[1]!, 1_000], [files[2]!, 1_000]]),
+        }],
+      })
+      return { ...plan, states: [...plan.states] }
+    })
+    try {
+      for (const file of files.slice(0, 2)) {
+        await FS.writeText(FS.resolvePath(file, root), '// test inventory fixture\n')
+      }
+      await FS.writeJson(FS.resolvePath('.artifacts/timings/durations.json', root), {
+        nodes: {
+          'fixture-weighted#1': {
+            emaMs: 100,
+            lastMs: 100,
+            lastRunAt: '2026-01-01T00:00:00.000Z',
+            samples: 10,
+            source: 'wall',
+          },
+          'fixture-weighted#2': {
+            emaMs: 19_000,
+            lastMs: 19_000,
+            lastRunAt: '2026-01-01T00:00:00.000Z',
+            samples: 10,
+            source: 'wall',
+          },
+        },
+        version: 1,
+      })
+      const summary = await runGates({
+        gates: ['_test'],
+        jobs: 1,
+        logRoot: FS.resolvePath('logs', root),
+        machineLoadAverage: IDLE_MACHINE,
+        partition: { count: 2, index: 0 },
+        registryRoot: FS.resolvePath('registry', root),
+        repositoryRoot: root,
+        runGate: async (name, logPath) => {
+          started.push(name)
+          const report = FS.resolvePath(`${name}.xml`, root)
+          await FS.writeText(report, `<testsuite tests="1"><testcase file="${files[0]}" name="weighted" /></testsuite>`)
+          await FS.writeText(logPath, '')
+          return { exitCode: 0, output: '' }
+        },
+      })
+
+      Expect(started).toEqual(['fixture-weighted#1'])
+      Expect(summary.gates.find(gate => gate.name === 'fixture-weighted#2')?.reason)
+        .toBe('runs on partition 2/2')
+    } finally {
+      restorePlan()
+      await FS.remove(root)
+    }
+  })
+
   Test('skips the macOS-only gates off macOS and runs them on it', async () => {
     const macOnly = ['studio-canary']
     const linux = await run(['_repo-lint', ...macOnly], {}, { hostPlatform: 'linux' })

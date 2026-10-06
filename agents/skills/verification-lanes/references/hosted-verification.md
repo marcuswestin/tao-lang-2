@@ -29,7 +29,11 @@ variations:
    `.artifacts/logs/land-fix/`, without a full verification. Report the push to the Developer
    with the fix.
 5. Follow `Verify` with `./agent pr-checks --wait`, diagnose failures from their annotations, fix,
-   and push through `open-pr --auto-merge` again. Never `gh pr merge` by hand, and never run
+   and push through `open-pr --auto-merge` again. `pr-checks` polls every 30 s while partitions
+   queue, every 15 s while they run, and every 10 s once one finishes, with conditional requests;
+   it never waits on the post-merge `Archive` check. GitHub merges about 45 s after `Verify`
+   concludes, and `open-pr` returns once it has, printing `merged_at`, or after the complement,
+   whichever is later; the archive workflow records `merged/<name>` about 10 s after the merge. Never `gh pr merge` by hand, and never run
    `./agent unsandboxed land` for a `feat/<name>` branch while GitHub is reachable.
 
 Use local checks for focused iteration, diagnosis, and the host-only complement above. When CI is
@@ -51,10 +55,13 @@ diagnostic, never merge evidence; reassess machine contention before starting on
   check-detail links. Compare queued/waiting jobs and their age with jobs actually starting and
   finishing; workflow creation, job start times, and recent runs reveal scheduling delay. Little
   or no contention means jobs start promptly and there is no growing runner backlog. Count runner
-  demand across relevant runs, including every partition of each verification run (the count is
-  the `PARTITIONS` default in `.github/workflows/verify.yml`, or the repository variable
-  `VERIFY_PARTITIONS` when set), rather than assuming one pull request consumes one runner. Pending `Verify` alone can mean running tests;
-  waiting for approval or a prerequisite is not runner contention.
+  demand across relevant runs, including every partition of each verification run, rather than
+  assuming one pull request consumes one runner: a `Verify` run takes 20 partitions when it starts
+  alone and 11 when another `Verify` run is already in flight (its `Plan the partitions` summary
+  names the count and the runs it saw), and `open-pr` waits before pushing when two runs are
+  already in flight or when the one other lander changed the same files (`--jump-queue` skips the
+  wait). Pending `Verify` alone can mean running tests; waiting for approval or a prerequisite is
+  not runner contention.
 - `./agent pr-checks --pr <number>` gives the current PR's check state, not the repository-wide
   runner queue. If queue observations are unavailable, report CI contention as unknown; do not
   infer free capacity from missing data or invent a repository command. State the local evidence,
@@ -68,10 +75,11 @@ still needs diagnosis; switching machines is not permission to ignore a failure.
 
 `.github/workflows/verify.yml` runs `verify-full-sandbox` across N Linux runners
 (`--partition k/N`) on pull request pushes, pushes to `main`, and `workflow_dispatch`; `Verify` is
-the aggregate verdict and the only required check on `main`. N is one workflow default
-(`PARTITIONS`, with its sizing reasoning beside it), overridden by the repository variable
-`VERIFY_PARTITIONS` and, for one run, by the dispatch input; the `plan` job resolves it and every
-partition and the aggregate read that resolved count. A cancelled or failed partition records no
+the aggregate verdict and the only required check on `main`. The `plan` job resolves N: 20
+(`PARTITIONS`) when no other `Verify` run is in flight, 11 (`PARTITIONS_SHARED`) when one or more
+are, with the sizing reasoning beside those defaults; the repository variables `VERIFY_PARTITIONS`
+and `VERIFY_PARTITIONS_SHARED` override them, and a dispatch input overrides both for that one run.
+Every partition and the aggregate read that resolved count. A cancelled or failed partition records no
 green tree. It proves the portable gates only; the local complement in the route above proves the
 rest. Read the current workflow and lane membership when deciding what
 the complement is; a gate the workflow admits leaves the local list.

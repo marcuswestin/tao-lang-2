@@ -16,6 +16,7 @@ description: Design or revise interactive CLI prompts, option menus, terminal sc
 - When an option is the default, put it first and append `(default)` on that line. Enter selects that option. Without a default, Enter is an incorrect response; never silently pick one.
 - On an incorrect response, reprint the options and the exact notice `ctrl+c to quit`, then accept another response. Keep the same labels and default while retrying. Ctrl+C exits the prompt.
 - Keep option labels short and explicit about what selecting them does. Choose a default from the Developer's decisions and existing behavior; do not silently spend a limited resource or choose product behavior.
+- Before requesting input, explain how to obtain it, any prerequisite steps, and the accepted format. For external services, include the relevant URL and navigation path; guide reuse of existing resources before creation. Put this guidance before the prompt, not behind a later choice.
 - Present the next action where it is needed, and report failures with what completed and how to resume. Keep passwords and tokens in hidden local prompts.
 - Make terminal screens readable with light and dark themes. Give machine-readable visuals explicit contrast and sufficient quiet space; prevent line wrapping from corrupting their geometry. Keep the underlying address available as text.
 - Reuse shared prompt and output helpers. Put repeatable interaction behavior in those helpers rather than reimplementing it independently in each command.

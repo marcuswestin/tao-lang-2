@@ -11,6 +11,7 @@ export type TaoDataPolicy = Readonly<{
 
 export type FirebaseBackend = Readonly<{
   files: Readonly<{ 'firestore.rules': string; 'firestore.indexes.json': string }>
+  documentMatch: string
 }>
 
 const identifier = /^[A-Za-z][A-Za-z0-9_]*$/
@@ -61,7 +62,7 @@ export function generateFirebaseBackend(schema: TR.DataSchemaDefinition, access?
     for (const [name, field] of Object.entries(definition.fields)) {
       Assert.input(identifier.test(name) && !reserved.has(name), `Firebase cannot use '${entity}.${name}' as a field.`)
       allowed.push(name)
-      if (entity === 'Account' || field.optional !== true) {
+      if (field.optional !== true) {
         required.push(name)
       }
       const value = `data[${JSON.stringify(name)}]`
@@ -92,7 +93,7 @@ export function generateFirebaseBackend(schema: TR.DataSchemaDefinition, access?
         time: () => `${value} is number`,
       })
       checks.push(
-        field.optional === true || entity === 'Account' ? `(!${present} || ${value} == null || (${valid}))` : valid,
+        field.optional === true ? `(!${present} || ${value} == null || (${valid}))` : valid,
       )
     }
 
@@ -115,12 +116,15 @@ export function generateFirebaseBackend(schema: TR.DataSchemaDefinition, access?
       }`)
   }
 
+  const documentMatch =
+    `    match /users/{userId}/stores/{storageKey} {\n      function signedInAsOwner() {\n        return request.auth != null && request.auth.uid == userId;\n      }\n\n${
+      matches.join('\n\n')
+    }\n    }`
   return {
+    documentMatch,
     files: {
       'firestore.rules':
-        `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /users/{userId}/stores/{storageKey} {\n      function signedInAsOwner() {\n        return request.auth != null && request.auth.uid == userId;\n      }\n\n${
-          matches.join('\n\n')
-        }\n    }\n  }\n}\n`,
+        `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n${documentMatch}\n  }\n}\n`,
       'firestore.indexes.json': '{\n  "indexes": [],\n  "fieldOverrides": []\n}\n',
     },
   }

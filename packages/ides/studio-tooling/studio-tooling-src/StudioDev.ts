@@ -662,6 +662,7 @@ export async function openStudioProjectResource(
     })
     watcher = await startStudioFileWatcher(preview.session)
     const session = preview.session
+    await previewRuntime.configure({ displayName: `${session.appName} — ${FS.basename(project.projectRoot)}` })
     if (options.devDataAuthority !== undefined) {
       // The app key needs the session's effective app ID, and Metro has not started yet, so the
       // manifest still takes the fact before any bundle is served.

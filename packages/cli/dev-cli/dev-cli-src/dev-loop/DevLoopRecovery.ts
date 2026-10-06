@@ -520,14 +520,13 @@ async function recoverDevLoopDevices(receipt: DevLoopReceipt, operations: Recove
               return true
             }
             const run = operations.run ?? CLI.run
-            const shutdown = await run('xcrun', {
+            await run('xcrun', {
               args: ['simctl', 'shutdown', device.id],
               processPolicy: 'test',
               timeoutMs: 30_000,
             })
-            if (shutdown.exitCode !== 0 || shutdown.error !== undefined) {
-              return false
-            }
+            // Shutdown can report nonzero when already shut down. The exact authoritative
+            // device state proves closure; the resource owner/generation fences still govern release.
             const inventory = await run('xcrun', {
               args: ['simctl', 'list', 'devices', '--json', 'available'],
               processPolicy: 'test',

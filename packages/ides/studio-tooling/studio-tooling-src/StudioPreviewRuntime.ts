@@ -19,6 +19,8 @@ export type CreatedStudioPreviewRuntime = {
 
 /** The non-secret bootstrap facts a loaded preview bundle reads from its Expo manifest. */
 type StudioPreviewBootstrapOptions = {
+  /** A human-readable app and project label for Companion's recent projects. */
+  displayName?: string
   /** The tao-dev-data-v1 server and app key a `Dev` datasource in the preview dials. */
   devData?: DevDataManifest
   /** The tao-studio-device-v1 gateway port a companion build should dial after loading this bundle. */
@@ -132,6 +134,7 @@ function previewAppConfig(
     ...appConfig,
     expo: {
       ...expo,
+      ...(options.displayName === undefined ? {} : { name: options.displayName }),
       scheme: CompanionIdentity.scheme,
       ...(Object.keys(bootstrap).length === 0 ? {} : { extra: { ...extra, ...bootstrap } }),
     },

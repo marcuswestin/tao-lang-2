@@ -499,6 +499,7 @@ function scriptedFetch(script: FetchScript) {
 }
 
 const EXPO_LINK = 'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.50.107%3A8081'
+const COMPANION_LINK = `${EXPO_LINK}&disableOnboarding=1&disableAutoLaunch=1&disableFab=1`
 
 function linkRedirect(location: string): FetchScript {
   return url =>
@@ -552,7 +553,7 @@ Describe('Studio device launcher', () => {
 
     const info = await launcher.describe({ metroOrigin: 'http://127.0.0.1:8081' })
 
-    Expect(info.url).toBe(EXPO_LINK)
+    Expect(info.url).toBe(COMPANION_LINK)
     Expect(info.candidates).toEqual(['192.168.50.107', '169.254.37.4'])
     Expect(info.hosts).toEqual([{ id: PHONE_UDID, installed: true, kind: 'device', name: 'example-phone' }])
     Expect(info.installCommand).toBe('just studio-companion-install device="example-phone"')
@@ -581,7 +582,9 @@ Describe('Studio device launcher', () => {
       const first = await launcher.describe({ metroOrigin: 'http://127.0.0.1:49152' })
       const second = await launcher.describe({ metroOrigin: 'http://127.0.0.1:49152' })
 
-      Expect(first.url).toBe('taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.50.107%3A49152')
+      Expect(first.url).toBe(
+        'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.50.107%3A49152&disableOnboarding=1&disableAutoLaunch=1&disableFab=1',
+      )
       Expect(first.metroPort).toBe(49_152)
       Expect(first.diagnostics.map(entry => entry.layer)).toEqual(['expo', 'devicectl'])
       Expect(first.diagnostics[1]?.message).toContain('No iPhone or iPad is connected')
@@ -625,7 +628,7 @@ Describe('Studio device launcher', () => {
 
     const info = await launcher.describe({ metroOrigin: 'http://127.0.0.1:8081' })
 
-    Expect(info.url).toBe(EXPO_LINK)
+    Expect(info.url).toBe(COMPANION_LINK)
     Expect(fetched.urls.some(url => url.includes('/_expo/link'))).toBe(true)
     Expect(
       info.diagnostics.some(entry => entry.message.includes('answered /_expo/open with status 200 and no usable url')),
@@ -712,8 +715,8 @@ Describe('Studio device launcher', () => {
 
     const result = await launcher.open({ hostId: PHONE_UDID, metroOrigin: 'http://127.0.0.1:8081' })
 
-    Expect(result).toEqual({ hostName: 'example-phone', launched: true, url: EXPO_LINK })
-    Expect(device.opened).toEqual([{ hostId: PHONE_UDID, terminateExisting: true, url: EXPO_LINK }])
+    Expect(result).toEqual({ hostName: 'example-phone', launched: true, url: COMPANION_LINK })
+    Expect(device.opened).toEqual([{ hostId: PHONE_UDID, terminateExisting: true, url: COMPANION_LINK }])
   })
 
   /**
@@ -838,7 +841,7 @@ Describe('Studio device launcher', () => {
 
   Test('builds and reads the development-client deep link', () => {
     const url = companionDevClientUrl({ host: '192.168.50.107', port: 8081, scheme: 'taostudiocompanion' })
-    Expect(url).toBe('taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.50.107%3A8081')
+    Expect(url).toBe(COMPANION_LINK)
     Expect(metroHostFromDevClientUrl(url)).toBe('192.168.50.107')
     Expect(metroHostFromDevClientUrl('taostudiocompanion://expo-development-client/')).toBeUndefined()
     Expect(metroHostFromDevClientUrl('not a url')).toBeUndefined()

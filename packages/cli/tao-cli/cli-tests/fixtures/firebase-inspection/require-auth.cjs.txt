@@ -1,0 +1,1 @@
+exports.requireAuth = async options => options.user.email;

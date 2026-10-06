@@ -269,6 +269,11 @@ export type TaoDataAuthentication = Readonly<{
 
 /** TaoDataProvider is the clean package boundary implemented by Local, Memory, and remote providers. */
 export type TaoDataProvider = {
+  /**
+   * Opt in only after verifying the principal, binding storage to its account ID, and enforcing
+   * that private namespace remotely. Grant-free rows then belong to the bound account.
+   */
+  authenticatedAccess?: 'private-account'
   /** Resolves a signed-in principal to an account; a datasource without it cannot hold an Auth app's data. */
   authenticate?(context: TaoDataAuthenticationContext): Promise<TaoDataAuthentication>
   connect(context: TaoDataProviderContext): TaoDataConnection

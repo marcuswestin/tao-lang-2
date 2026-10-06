@@ -19,6 +19,10 @@ const PR_BRANCH_PREFIXES = [
 ] as const
 
 const REPOSITORY = 'repos/{owner}/{repo}'
+/** The run statuses that hold, or are about to hold, runners. */
+const IN_FLIGHT_STATUSES = ['in_progress', 'queued'] as const
+/** GitHub's largest page for a pull request's files; a shorter page is the last. */
+const FILES_PAGE_SIZE = 100
 
 /** GhRunner is the injectable process seam every `git` and `gh` call goes through. */
 export type GhRunner = (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
@@ -178,6 +182,38 @@ export function gitHubPulls(run: GhRunner, root: string, writeLine: (line: strin
       ])
       return body.workflow_runs.filter(run => run.head_sha === sha)
     },
+    /**
+     * Verify runs still queued or running, on every branch and for every event: a pull request, a
+     * push to `main`, and a manual dispatch all hold runners. The endpoint filters by one status at a
+     * time, so this asks for each and drops a run that moved from queued to running between the two.
+     */
+    async inFlightVerifyRuns(): Promise<WorkflowRun[]> {
+      const byId = new Map<number, WorkflowRun>()
+      for (const status of IN_FLIGHT_STATUSES) {
+        const body = await api<{ workflow_runs: WorkflowRun[] }>([
+          `${REPOSITORY}/actions/workflows/verify.yml/runs?status=${status}&per_page=50`,
+        ])
+        for (const run of body.workflow_runs) {
+          byId.set(run.id, run)
+        }
+      }
+      return [...byId.values()]
+    },
+    /** Every path a pull request changes, a renamed file's old path included, read a page at a time. */
+    async changedFiles(number: number): Promise<string[]> {
+      const paths: string[] = []
+      for (let page = 1;; page += 1) {
+        const files = await api<{ filename: string; previous_filename?: string }[]>([
+          `${pulls}/${number}/files?per_page=${FILES_PAGE_SIZE}&page=${page}`,
+        ])
+        for (const file of files) {
+          paths.push(file.filename, ...(file.previous_filename === undefined ? [] : [file.previous_filename]))
+        }
+        if (files.length < FILES_PAGE_SIZE) {
+          return paths
+        }
+      }
+    },
     /** Asks Actions to cancel one run; GitHub answers 202 and cancels asynchronously. */
     async cancelRun(id: number): Promise<void> {
       await api(['--method', 'POST', `${REPOSITORY}/actions/runs/${id}/cancel`, '--silent'])
@@ -196,9 +232,16 @@ export type CommitStatusFields = {
 /** WorkflowRun is the slice of an Actions run these commands read. */
 export type WorkflowRun = {
   conclusion: string | null
+  /** When GitHub created the run, queued or not; ISO 8601. */
+  created_at?: string
+  /** `pull_request`, `push`, `workflow_dispatch`, and so on. */
+  event?: string
+  head_branch?: string | null
   head_sha: string
   html_url: string
   id: number
+  /** The run's pull requests in this repository; GitHub leaves it empty for one opened from a fork. */
+  pull_requests?: { number: number }[]
   status: string
 }
 

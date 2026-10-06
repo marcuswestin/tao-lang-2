@@ -1,7 +1,14 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
 import { enableAutoMerge } from './AutoMerge'
 import { cancelVerifyRuns } from './CancelVerify'
-import { type GhRunner, gitHubPulls, isMerged, type PullRequest, requirePrBranch } from './GitHubPulls'
+import {
+  type GhRunner,
+  gitHubPulls,
+  isMerged,
+  type PullRequest,
+  requirePrBranch,
+  type WorkflowRun,
+} from './GitHubPulls'
 import { PrChecksCommand, type PrChecksOptions } from './PrChecksCommand'
 import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMergeMessage'
 
@@ -25,7 +32,8 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
  * refused before any push, because pushing it again would
  * open a second, empty pull request that auto-merge also lands.
  * By default, it refuses an already enabled pull request before pushing, checks that auto-merge is
- * still off before following CI, and leaves landing to a later decision.
+ * still off before following CI, and leaves landing to a later decision. Before the push it also
+ * waits for admission to the hosted runner pool (`admitVerifyRun`), which `--jump-queue` skips.
  *
  * Every read and write goes through REST (`GitHubPulls`), and the checks are followed by `pr-checks`,
  * so it works where a cloud agent host's proxy refuses `gh pr`'s GraphQL. Auto-merge has no GitHub
@@ -45,7 +53,26 @@ const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
 const CHECKS_APPEAR_POLL_MS = 5_000
 const CHECKS_APPEAR_WITHIN_MS = 90_000
+/**
+ * GitHub merges an armed pull request some seconds after its last required check concludes
+ * (45 s on 2026-10-06's landings). The merge is the landing, so with auto-merge on the command
+ * waits for it this long after a green verdict, at this interval, and otherwise names `merge-pr`.
+ * It never waits for the archive workflow, which starts after the merge and `landed` reads later.
+ */
+const MERGE_POLL_MS = 5_000
+const MERGE_APPEARS_WITHIN_MS = 180_000
 const GH_AUTH_REMEDY = 'Run `gh auth login`.'
+/**
+ * The hosted runner pool (about 25) holds one Verify run at its full 20 partitions, or two at the
+ * smaller count the plan job picks when another run is in flight. A third run beside them starves
+ * all three, so admission waits until fewer than this many other runs are in flight.
+ */
+const VERIFY_RUNS_IN_FLIGHT_LIMIT = 2
+const ADMISSION_POLL_MS = 30_000
+/** A wait this long while the set is unchanged prints a still-waiting line rather than staying silent. */
+const ADMISSION_HEARTBEAT_MS = 5 * 60_000
+const ADMISSION_WAIT_LIMIT_MS = 90 * 60_000
+const OVERLAP_PATHS_SHOWN = 10
 
 /** OpenPrRunner is the injectable process seam every `git` and `gh` call goes through. */
 export type OpenPrRunner = GhRunner
@@ -54,6 +81,8 @@ export type OpenPrRunner = GhRunner
 export type OpenPrDependencies = {
   exists: (path: string) => Promise<boolean>
   followChecks: (options: PrChecksOptions) => Promise<{ exitCode: number }>
+  /** The current time in epoch milliseconds; admission ages runs and bounds its wait by it. */
+  now: () => number
   readText: (path: string) => Promise<string>
   run: OpenPrRunner
   /** Runs the local complement lane to its verdict; the lane posts its own status on the head. */
@@ -65,6 +94,7 @@ export type OpenPrDependencies = {
 const defaultDependencies: OpenPrDependencies = {
   exists: FS.exists,
   followChecks: options => PrChecksCommand.run(options),
+  now: () => Date.now(),
   readText: FS.readText,
   run: CLI.run,
   runComplement: async root => {
@@ -81,6 +111,8 @@ export type OpenPrOptions = {
   autoMerge?: boolean
   /** With auto-merge, run the local complement lane beside hosted Verify; false leaves it to a separate run. */
   complement?: boolean
+  /** Push without waiting for the Verify pool or for another lander that changed the same files. */
+  jumpQueue?: boolean
   /** How often to poll the checks while they run; `pr-checks` sizes the default to GitHub's rate limit. */
   pollIntervalMs?: number
   /** Override the current repository root, principally for tests. */
@@ -126,6 +158,9 @@ export const OpenPrCommand = {
     }
 
     const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
+    if (!await admitVerifyRun(dependencies, root, github, branch, options.jumpQueue === true, report)) {
+      return { exitCode: 1, lines }
+    }
     report(`Pushing ${branch} to ${REMOTE}...`)
     await pushBranch(dependencies, root, branch, report)
     report('Opening or updating the pull request...')
@@ -166,6 +201,10 @@ export const OpenPrCommand = {
       if (options.autoMerge !== true) {
         report(`PASS  CI succeeded on ${headSha.slice(0, 8)} for #${pr.number}; auto-merge is off.`)
         report(`NEXT  After authorization, run merge-pr to confirm Verify and merge #${pr.number}.`)
+      } else if (await awaitMerge(dependencies, github, pr.number, report)) {
+        report(
+          `NEXT  The archive workflow records merged/<name>; \`landed\` reads it. Put further work on a new branch.`,
+        )
       } else {
         report(
           `NEXT  Run merge-pr: it confirms Verify on this head, merges #${pr.number} unless auto-merge did, and archives it.`,
@@ -304,6 +343,192 @@ async function requireAutoMergeOff(github: GitHub, prNumber: number): Promise<vo
   }
 }
 
+/** AdmissionVerdict is admission's reading of the other runs in flight: push now, or wait for `blocking`. */
+type AdmissionVerdict =
+  | { admit: true; line: string }
+  | { admit: false; blocking: WorkflowRun[]; line: string }
+
+/**
+ * Admission comes immediately before the push, because the push is what starts Verify. On
+ * 2026-10-06 four agents landing together cancelled 22 of 25 Verify runs: the runner pool holds two
+ * runs, so a third starves them all. Admission therefore waits while two other Verify runs are in
+ * flight, whatever their event, and while the one other run is a pull request that changed any of
+ * this branch's files, since two such landings would each pass against a `main` without the other
+ * and then merge untested together. A run on this branch is not counted: the push replaces it
+ * through the workflow's concurrency group. The wait polls, prints a line whenever the blocking set
+ * changes and a still-waiting line every few minutes otherwise, and gives up after
+ * `ADMISSION_WAIT_LIMIT_MS`, naming `--jump-queue` as the way past it.
+ */
+async function admitVerifyRun(
+  dependencies: OpenPrDependencies,
+  root: string,
+  github: GitHub,
+  branch: string,
+  jumpQueue: boolean,
+  report: (line: string) => void,
+): Promise<boolean> {
+  report('Checking the Verify runs in flight before pushing...')
+  const started = dependencies.now()
+  let branchFiles: Promise<Set<string>> | undefined
+  const overlaps = new Map<number, Promise<string[] | undefined>>()
+  const overlapWith = (run: WorkflowRun): Promise<string[] | undefined> => {
+    let overlap = overlaps.get(run.id)
+    if (overlap === undefined) {
+      branchFiles ??= changedOnBranch(dependencies, root, run, report)
+      overlap = sharedPaths(github, run, branchFiles)
+      overlaps.set(run.id, overlap)
+    }
+    return overlap
+  }
+  let shownKey: string | undefined
+  let shownAt = started
+  for (;;) {
+    const runs = (await github.inFlightVerifyRuns()).filter(run => run.head_branch !== branch)
+    const now = dependencies.now()
+    if (jumpQueue) {
+      report(
+        runs.length === 0
+          ? 'NOTE  --jump-queue: no other Verify run is in flight, so admission had nothing to skip.'
+          : `NOTE  --jump-queue: pushing without admission beside ${describeRuns(runs, now)}.`,
+      )
+      return true
+    }
+    const verdict = await admissionVerdict(runs, now, overlapWith)
+    if (verdict.admit) {
+      report(verdict.line)
+      return true
+    }
+    const waited = now - started
+    if (waited >= ADMISSION_WAIT_LIMIT_MS) {
+      report(
+        `FAIL  Waited ${minutes(waited)} for admission and ${describeRuns(verdict.blocking, now)} still in flight;`
+          + ' nothing was pushed. Run open-pr again later, or with --jump-queue to push beside them.',
+      )
+      return false
+    }
+    const key = verdict.blocking.map(run => run.id).sort((left, right) => left - right).join(',')
+    if (key !== shownKey) {
+      report(verdict.line)
+      shownKey = key
+      shownAt = now
+    } else if (now - shownAt >= ADMISSION_HEARTBEAT_MS) {
+      report(
+        `WAIT  Still waiting for admission (${minutes(waited)} of ${minutes(ADMISSION_WAIT_LIMIT_MS)}): ${
+          describeRuns(verdict.blocking, now)
+        }.`,
+      )
+      shownAt = now
+    }
+    await dependencies.sleep(ADMISSION_POLL_MS)
+  }
+}
+
+async function admissionVerdict(
+  runs: readonly WorkflowRun[],
+  now: number,
+  overlapWith: (run: WorkflowRun) => Promise<string[] | undefined>,
+): Promise<AdmissionVerdict> {
+  const poll = `checking every ${ADMISSION_POLL_MS / 1000}s`
+  if (runs.length >= VERIFY_RUNS_IN_FLIGHT_LIMIT) {
+    return {
+      admit: false,
+      blocking: [...runs],
+      line:
+        `WAIT  ${runs.length} other Verify runs are in flight and the runner pool holds ${VERIFY_RUNS_IN_FLIGHT_LIMIT}: ${
+          describeRuns(runs, now)
+        }; ${poll} until fewer remain.`,
+    }
+  }
+  const other = runs[0]
+  if (other === undefined) {
+    return { admit: true, line: 'PASS  No other Verify run is in flight; this run gets the whole runner pool.' }
+  }
+  const isPullRequest = other.event === 'pull_request'
+  if (isPullRequest) {
+    const overlap = await overlapWith(other)
+    if (overlap === undefined) {
+      return {
+        admit: false,
+        blocking: [other],
+        line: `WAIT  Found no pull request for ${describeRun(other, now)}, so its changed files are unknown;`
+          + ` waiting for it to finish, ${poll}.`,
+      }
+    }
+    if (overlap.length > 0) {
+      return {
+        admit: false,
+        blocking: [other],
+        line: `WAIT  ${describeRun(other, now)} changed the same files as this branch, and the two would merge`
+          + ` untested against each other: ${listPaths(overlap)}. Waiting for it to finish, ${poll}.`,
+      }
+    }
+  }
+  return {
+    admit: true,
+    line: `PASS  One other Verify run is in flight (${describeRun(other, now)})${
+      isPullRequest ? ' and it changed none of these files' : ''
+    }; this run will share the pool with run ${other.id} at the smaller partition count.`,
+  }
+}
+
+/** The paths this branch changes since it left `main`, a rename counted as both of its paths. */
+async function changedOnBranch(
+  dependencies: OpenPrDependencies,
+  root: string,
+  other: WorkflowRun,
+  report: (line: string) => void,
+): Promise<Set<string>> {
+  report(`Fetching ${REMOTE}/${MAIN_BRANCH} to compare this branch's files with run ${other.id}'s...`)
+  await git(dependencies, root, ['fetch', REMOTE, MAIN_BRANCH])
+  const diff = await git(dependencies, root, ['diff', '--name-only', '--no-renames', `${REMOTE}/${MAIN_BRANCH}...HEAD`])
+  return new Set(diff.stdout.split('\n').map(line => line.trim()).filter(line => line !== ''))
+}
+
+/**
+ * The paths both this branch and the run's pull request change, or undefined when the run names no
+ * pull request: GitHub leaves `pull_requests` empty for one opened from a fork, so the run's branch
+ * is looked up before giving up.
+ */
+async function sharedPaths(
+  github: GitHub,
+  run: WorkflowRun,
+  branchFiles: Promise<Set<string>>,
+): Promise<string[] | undefined> {
+  const number = run.pull_requests?.[0]?.number
+    ?? (typeof run.head_branch === 'string' && run.head_branch !== ''
+      ? (await github.forBranch(run.head_branch, 'open'))[0]?.number
+      : undefined)
+  if (number === undefined) {
+    return undefined
+  }
+  const theirs = new Set(await github.changedFiles(number))
+  const ours = await branchFiles
+  return [...theirs].filter(path => ours.has(path)).sort()
+}
+
+function describeRuns(runs: readonly WorkflowRun[], now: number): string {
+  return runs.map(run => describeRun(run, now)).join(', ')
+}
+
+function describeRun(run: WorkflowRun, now: number): string {
+  const pr = run.pull_requests?.[0]?.number
+  const created = run.created_at === undefined ? Number.NaN : Date.parse(run.created_at)
+  const age = Number.isNaN(created) ? 'age unknown' : `${minutes(now - created)} old`
+  return `run ${run.id} on ${run.head_branch ?? 'an unnamed branch'} (${run.event ?? 'unknown event'}${
+    pr === undefined ? '' : ` #${pr}`
+  }, ${age})`
+}
+
+function listPaths(paths: readonly string[]): string {
+  const shown = paths.slice(0, OVERLAP_PATHS_SHOWN).join(', ')
+  const more = paths.length - OVERLAP_PATHS_SHOWN
+  return more > 0 ? `${shown}, and ${more} more` : shown
+}
+
+function minutes(ms: number): string {
+  return `${Math.max(0, Math.round(ms / 60_000))}m`
+}
+
 /** A branch lands once; pushing a merged one again would open an empty duplicate. */
 async function refuseMergedBranch(github: GitHub, branch: string): Promise<void> {
   const merged = (await github.forBranch(branch, 'closed')).find(isMerged)
@@ -355,6 +580,38 @@ async function awaitChecksOnHead(
       report(`PASS  Waiting for GitHub to start checks on ${headSha.slice(0, 8)}.`)
     }
     await dependencies.sleep(CHECKS_APPEAR_POLL_MS)
+  }
+}
+
+/** awaitMerge reports GitHub's merge of the pull request once it happens, or that it has not within the window. */
+async function awaitMerge(
+  dependencies: OpenPrDependencies,
+  github: GitHub,
+  prNumber: number,
+  report: (line: string) => void,
+): Promise<boolean> {
+  const attempts = Math.ceil(MERGE_APPEARS_WITHIN_MS / MERGE_POLL_MS)
+  for (let attempt = 1;; attempt += 1) {
+    const pr = await github.view(prNumber)
+    if (pr.merged_at !== null) {
+      report(
+        `PASS  GitHub merged #${prNumber} at ${pr.merged_at}${
+          typeof pr.merge_commit_sha === 'string' ? ` as ${pr.merge_commit_sha.slice(0, 8)}` : ''
+        }.`,
+      )
+      return true
+    }
+    if (attempt >= attempts) {
+      report(
+        `NOTE  GitHub has not merged #${prNumber} within ${MERGE_APPEARS_WITHIN_MS / 1000}s of Verify passing;`
+          + ' a required check may be missing or auto-merge may be off.',
+      )
+      return false
+    }
+    if (attempt === 1) {
+      report(`Waiting for GitHub to merge #${prNumber}...`)
+    }
+    await dependencies.sleep(MERGE_POLL_MS)
   }
 }
 
