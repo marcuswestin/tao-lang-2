@@ -286,8 +286,11 @@ Describe('gate catalog metadata', () => {
     // Shared preparation pays compiler startup once; a shard pays only its warm CLI overhead.
     Expect(GateCatalog.suiteTuning('tao-apps').fixedMs).toBe(800)
     Expect(GateCatalog.suiteTuning('tao-apps').shardCost).toBe(2)
-    // Jest's own pool already parallelizes its whole run, so splitting it only adds startups.
-    Expect(GateCatalog.suiteTuning('runtime-jest').shardable).toBe(false)
+    // Jest's own pool already fills one machine, so its shards are machines' worth: three, each
+    // keeping the whole suite's three-worker reservation, cold or measured.
+    Expect(GateCatalog.suiteTuning('runtime-jest').maxShards).toBe(3)
+    Expect(GateCatalog.suiteTuning('runtime-jest').coldShardCount).toBe(3)
+    Expect(GateCatalog.suiteTuning('runtime-jest').shardCost).toBe(3)
     Expect(GateCatalog.suiteTuning('tao-apps').shardable).toBeUndefined()
     Expect(GateCatalog.suiteTuning('cli/dev-cli').fixedMs).toBeUndefined()
     Expect(GateCatalog.BUN_SUITE_FIXED_MS).toBe(600)
