@@ -36,7 +36,6 @@ function selectsStudio(command: string, args: readonly string[]): boolean {
   return command === 'verify-repo'
     || ['studio-manual-checks', 'studio-host-control-smoke', 'studio-mac2-acceptance'].includes(command)
     || (command === 'studio-smoke' && smokeNeedsStudio(args, args.includes('--native')))
-    || (command === 'studio-smoke-native' && smokeNeedsStudio(args, true))
 }
 
 function smokeNeedsStudio(files: readonly string[], native = false): boolean {

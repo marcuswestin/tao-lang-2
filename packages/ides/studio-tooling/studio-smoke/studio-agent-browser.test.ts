@@ -156,15 +156,36 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
       .toBe('true')
     await browser.click('.studio-agent-collapse')
     await browser.waitFor(`document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'false'`)
+    // The panel animates its width and height as it expands, so the switch keeps moving after it
+    // first becomes hit-testable; a click resolved during that motion lands beside it and the toggle
+    // never fires. Wait for the switch to report the same box twice before clicking.
     await browser.waitFor(`(() => {
       const cloud = document.querySelector('.chat-cloud')
       if (!(cloud instanceof HTMLInputElement) || cloud.disabled) return false
       const rect = cloud.getBoundingClientRect()
-      return rect.width > 0 && rect.height > 0
+      const box = [rect.left, rect.top, rect.width, rect.height].join(',')
+      const settled = window.__taoSmokeCloudBox === box
+      window.__taoSmokeCloudBox = box
+      return settled && rect.width > 0 && rect.height > 0
         && document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) === cloud
     })()`)
     await browser.click('.chat-cloud')
-    await browser.waitFor(`document.querySelector('.chat-status')?.getAttribute('data-state') === 'on'`)
+    try {
+      await browser.waitFor(`document.querySelector('.chat-status')?.getAttribute('data-state') === 'on'`)
+    } catch (cause) {
+      const panel = await browser.evaluate<string>(`JSON.stringify({
+        checked: document.querySelector('.chat-cloud')?.checked,
+        disabled: document.querySelector('.chat-cloud')?.disabled,
+        status: document.querySelector('.chat-status')?.textContent,
+        state: document.querySelector('.chat-status')?.getAttribute('data-state'),
+      })`)
+      Errors.throwHostEnvironment(
+        `Studio chat did not turn on after the cloud toggle: ${
+          JSON.stringify({ panel, console: browser.consoleErrors(), browser: browser.browserFailures() })
+        }`,
+        { cause },
+      )
+    }
 
     await sendPrompt(browser, 'Answer slowly.')
     await browser.waitFor(`(() => {

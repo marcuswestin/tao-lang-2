@@ -26,6 +26,7 @@ function fakeDependencies(script: {
   checkRuns: Run[][]
   env?: Readonly<Record<string, string | undefined>>
   mergeableState?: string
+  pullRequest?: Record<string, unknown>
   statuses?: { context: string; state: string }[]
   workflowRuns?: WorkflowRun[][]
 }) {
@@ -48,7 +49,7 @@ function fakeDependencies(script: {
         return respond([PR])
       }
       if (path === `/repos/${SLUG}/pulls/3`) {
-        return respond({ ...PR, mergeable_state: script.mergeableState ?? 'clean' })
+        return respond({ ...PR, mergeable_state: script.mergeableState ?? 'clean', ...script.pullRequest })
       }
       if (path.startsWith(`/repos/${SLUG}/commits/${SHA}/check-runs`)) {
         const runs = script.checkRuns[Math.min(polls, script.checkRuns.length - 1)]!
@@ -137,6 +138,24 @@ Describe('pr-checks', () => {
     Expect(fake.dependencies.env).toBe(env)
     Expect(env).toEqual({})
     Expect(result.lines.some(line => line.includes('fixture-login-token'))).toBe(false)
+  })
+
+  Test('reports where the pull request stands on the landing route when GitHub says', async () => {
+    const line = async (pullRequest: Record<string, unknown>): Promise<string | undefined> => {
+      const fake = fakeDependencies({ checkRuns: [[run('Verify', 'completed', 'success')]], pullRequest })
+      await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT }, fake.dependencies)
+      return fake.lines[1]
+    }
+    Expect(await line({ auto_merge: null, merged_at: null })).toBe(
+      'NOTE  Auto-merge is off for #3; open-pr --auto-merge or merge-pr turns it on.',
+    )
+    Expect(await line({ auto_merge: { merge_method: 'squash' }, merged_at: null })).toBe(
+      'Auto-merge is on for #3: GitHub squash-merges the moment Verify is green on this head.',
+    )
+    Expect(await line({ auto_merge: null, merged_at: '2026-10-05T10:00:00Z' })).toBe(
+      'NOTE  GitHub merged #3 at 2026-10-05T10:00:00Z; the checks below are its record.',
+    )
+    Expect((await line({}))?.startsWith('NOTE  ') ?? false).toBe(false)
   })
 
   Test('prefers nonempty environment tokens without reading the CLI login', async () => {

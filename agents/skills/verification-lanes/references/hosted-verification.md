@@ -10,20 +10,24 @@ variations:
    "open first, arm later" step. It pushes, opens or reuses the pull request, and starts hosted
    `Verify`, which runs every gate CI can run. GitHub squash-merges the pull request the moment
    `Verify` is green on that head; nothing reruns and nothing waits.
-2. At the same time, in the same worktree, run the local complement: only the gates CI cannot run,
-   which are the catalog's `requiresUnsandboxed` and `requiresMacOS` gates, each through its listed
-   `./agent unsandboxed <gate>` shape (today: `studio-smoke`, `studio-proof-real-app`,
-   `studio-smoke-simulated-user`, `keyboard-navigation-smoke`, `studio-dialog-browser`,
-   `studio-agent-browser`, `studio-network-simulation`, `studio-smoke-native`, `studio-canary`,
-   about five minutes together). Never run the sandbox-capable gates locally as merge evidence:
-   hosted `Verify` owns them.
-3. If a local gate fails while `Verify` is still running, cancel the run (`gh run cancel <id>`),
-   fix the failure, commit, and run `open-pr --auto-merge` again; the push restarts `Verify` with
-   auto-merge still on.
-4. If `Verify` merged the pull request first and a local gate then fails, fix it on the branch,
-   merge the branch into `main` locally (`git merge --ff-only` or a merge commit from the branch's
-   worktree, after fetching `origin/main`), and push `main`, without a full verification. Report
-   the push to the Developer with the fix.
+2. The same command starts the local complement beside `Verify`: `verify-complement`, one locked
+   lane of exactly the gates CI cannot run, derived from the catalog's `requiresUnsandboxed` and
+   `requiresMacOS` gates minus whatever `CI_HOST_GATES` in `.github/workflows/verify.yml` admits
+   (about five minutes today). It posts the `Verify (host)` status on the head, which
+   `pr-checks` follows beside `Verify`, and leaves a receipt (`complement.json`) beside the lane's
+   `summary.json`. Never run the sandbox-capable gates locally as merge evidence: hosted `Verify`
+   owns them. `open-pr --auto-merge --no-complement` and a separate
+   `./agent unsandboxed verify-complement` are the two-command shape for a machine that must run
+   the lane at another time.
+3. If the complement fails while `Verify` is still running, `open-pr` cancels the run and turns
+   auto-merge off itself (`./agent unsandboxed cancel-verify` does the same for a failure found
+   by hand). Fix the failure, commit, and run `open-pr --auto-merge` again; the push restarts
+   `Verify` and the complement.
+4. If `Verify` merged the pull request first and the complement then fails, fix it on the branch,
+   commit, and run `./agent unsandboxed land-fix`: it fetches `origin/main`, merges the branch into
+   it with a merge commit, pushes `main`, moves the archive, and writes a receipt under
+   `.artifacts/logs/land-fix/`, without a full verification. Report the push to the Developer
+   with the fix.
 5. Follow `Verify` with `./agent pr-checks --wait`, diagnose failures from their annotations, fix,
    and push through `open-pr --auto-merge` again. Never `gh pr merge` by hand, and never run
    `./agent unsandboxed land` for a `feat/<name>` branch while GitHub is reachable.

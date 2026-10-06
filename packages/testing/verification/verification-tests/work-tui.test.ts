@@ -45,7 +45,7 @@ Describe('work dashboard', () => {
   Test('explains non-dependency blockage instead of showing anonymous waiting cards', () => {
     const gui = state('studio-canary', [], 'running')
     gui.node.resources = ['gui']
-    const native = state('studio-smoke-native')
+    const native = state('studio-host-control-smoke')
     native.node.resources = ['gui']
     Expect(WorkTUI.testing.dashboardSummaryText([gui, native])).toBe('1 node blocked on resource gui')
 

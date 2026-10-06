@@ -93,7 +93,7 @@ async function run(options: StudioSmokeOptions): Promise<number> {
   await requireGeneratedParser()
   const guiLease = options.native === true && Platform.runtimeProcess.env[GateCatalog.GUI_LEASE_HELD_ENV_KEY] !== 'true'
     ? await MachineLanes.acquireResource({
-      command: 'studio-smoke-native',
+      command: 'studio-smoke --native',
       name: GateCatalog.GUI_RESOURCE,
       registryRoot: options.registryRoot,
       repositoryRoot: Repo.getRoot(),
@@ -115,7 +115,6 @@ async function run(options: StudioSmokeOptions): Promise<number> {
           TAO_HOME: FS.resolvePath('home', allocation.artifactRoot),
           [UiVisibility.STUDIO_ENV_KEY]: options.showStudio === true ? 'true' : 'false',
           TAO_STUDIO_SMOKE_ARTIFACT_ROOT: allocation.artifactRoot,
-          TAO_STUDIO_SMOKE_NATIVE: options.native === true ? 'true' : 'false',
           TAO_STUDIO_SMOKE_PREVIEW_PORT: String(allocation.previewPort),
           TAO_STUDIO_SMOKE_SERVER_PORT: String(allocation.serverPort),
           TAO_STUDIO_TEST_SHARD_INDEX: String(allocation.shardIndex),
