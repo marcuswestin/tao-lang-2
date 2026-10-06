@@ -11,13 +11,11 @@ renumber on every round. Landing the finished half early is what keeps that bill
 
 The finished part lands on `main` now; the remainder continues on a new branch from that `main`.
 Nothing half-done ships: the cut is chosen so every commit that lands is complete on its own terms.
-The rest of `git-workflow` owns squashing, merging, and syncing `main`, and `verification-lanes` owns
-the evidence and message format; this reference owns only the mid-task cut.
+The parent skill owns the route and the message format; this reference owns only the mid-task cut.
 
 ## When a slice is worth proposing
 
-`verification-lanes` owns the landing route and its offline fallback. Propose a landing only when
-all four hold, and it is then the Developer's to accept or defer:
+Propose a landing only when all four hold, and it is then the Developer's to accept or defer:
 
 - The finished side is independently complete by the cut rule below.
 - It is at least two commits, or one that touches a surface other branches also edit: root
@@ -26,8 +24,8 @@ all four hold, and it is then the Developer's to accept or defer:
   it. Both are reasons the merge gets dearer by waiting.
 - You have not proposed a landing in the last half hour. One proposal per boundary, not per commit.
 
-Say in the proposal which of these made it worth asking. Never land on the strength of this section alone — root `AGENTS.md` requires the Developer's explicit
-yes, which may have been given in advance for a named slice.
+Say in the proposal which of these made it worth asking. Never land on the strength of this section
+alone: the parent skill's authorization still applies.
 
 ## Choosing the cut
 
@@ -56,7 +54,7 @@ deliberately not in this commit and where it continues, naming the follow-up bra
 
 ## Merging and continuing
 
-Land through `verification-lanes`' route; once GitHub has merged, without waiting to be asked: create the follow-up branch from the `main` that now holds the
+Land through the parent skill's route; once GitHub has merged, without waiting to be asked: create the follow-up branch from the `main` that now holds the
 merge, in a fresh worktree; carry the in-progress work onto it, preferring to re-apply it from the
 landed base over cherry-picking a commit whose context has moved; and continue — the follow-up branch
 is an ordinary feature branch from here. A later cut is proposed the same way, against the same four

@@ -187,7 +187,7 @@ async function accept(release: string): Promise<void> {
       },
       {
         name: 'create a deterministic starter outside a checkout',
-        run: () => shell(home, 'tao create "A tally counter" --ai none --yes --skip-tests'),
+        run: () => shell(home, 'tao create "A tally counter" --provider local --ai none --yes --skip-tests'),
       },
       {
         name: 'newly created app selects native appearance defaults',
@@ -261,7 +261,7 @@ async function accept(release: string): Promise<void> {
       {
         name: 'create with journeys and reuse the host in a second project',
         run: async () => {
-          await shell(home, 'tao create "A reading list" --ai none --yes')
+          await shell(home, 'tao create "A reading list" --provider local --ai none --yes')
           const second = await shell(FS.resolvePath('a-reading-list', home), 'tao build --web')
           if (second.includes(HOST_INSTALL_NOTICE)) {
             Errors.throwUnexpected('A second project installed the host again instead of sharing the first install.')

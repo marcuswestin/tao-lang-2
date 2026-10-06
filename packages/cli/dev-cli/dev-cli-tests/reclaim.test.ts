@@ -367,6 +367,49 @@ Describe('reclaim', () => {
     Expect(row?.evidence).toEqual(['clean', 'idle', 'contained in origin/merged/some-task'])
   })
 
+  Test('a worktree whose HEAD log moved within 24 hours is live; an old one stays reclaimable', async () => {
+    const { candidate, registryRoot, run } = await scenario({})
+    const admin = FS.resolvePath('admin', FS.dirname(candidate))
+    await FS.mkdir(FS.resolvePath('logs', admin))
+    await FS.writeText(FS.resolvePath('.git', candidate), `gitdir: ${admin}\n`)
+    const headLog = FS.resolvePath('logs/HEAD', admin)
+    await FS.writeText(headLog, 'worktree add\n')
+    const verdict = async () => {
+      const report = await reclaim({ readThreads: noThreads, registryRoot, run })
+      return report.worktrees.find(worktree => worktree.path === candidate)
+    }
+
+    const fresh = await verdict()
+    Expect(fresh?.verdict).toBe('live')
+    Expect(fresh?.evidence).toEqual(['created or switched within the last 24 hours'])
+
+    await FS.setModifiedTimeMs(headLog, Date.now() - 48 * 60 * 60 * 1000)
+    const old = await verdict()
+    Expect(old?.verdict).toBe('reclaimable')
+    Expect(old?.evidence).toEqual(['clean', 'idle', 'contained in origin/merged/some-task'])
+
+    // An observer's `git status` refreshes the index, which must not count as activity.
+    await FS.writeText(FS.resolvePath('index', admin), 'refreshed')
+    Expect((await verdict())?.verdict).toBe('reclaimable')
+  })
+
+  Test('the activity window follows the injected clock and reader', async () => {
+    const { candidate, registryRoot, run } = await scenario({})
+    const created = Date.parse('2026-10-06T12:00:00Z')
+    const verdictAt = async (now: number) => {
+      const report = await reclaim({
+        now: () => now,
+        readActivityMs: async () => created,
+        readThreads: noThreads,
+        registryRoot,
+        run,
+      })
+      return report.worktrees.find(worktree => worktree.path === candidate)?.verdict
+    }
+    Expect(await verdictAt(created + 23 * 60 * 60 * 1000)).toBe('live')
+    Expect(await verdictAt(created + 25 * 60 * 60 * 1000)).toBe('reclaimable')
+  })
+
   Test('never reclaims the worktree it is running in, or the primary checkout', async () => {
     const { registryRoot, run } = await scenario({})
 

@@ -296,6 +296,8 @@ async function captureReviewCell(
       })
       frame.dataset.taoReviewCapture = ${JSON.stringify(marker)}
       frame.scrollIntoView({ block: 'center', inline: 'center' })
+      const activation = frame.querySelector('.studio-preview-activation-toggle[aria-pressed="false"]')
+      if (activation instanceof HTMLButtonElement) activation.click()
       return true
     })()`)
     if (!marked) {

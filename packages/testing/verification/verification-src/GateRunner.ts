@@ -133,6 +133,11 @@ export type RunGatesOptions = {
   repositoryRoot?: string
   /** Omit gates whose catalog metadata declares a host capability the managed sandbox denies. */
   skipUnsandboxed?: boolean
+  /**
+   * The lane is a hosted `Verify` Linux partition: `skipUnsandboxed` keeps the gates the catalog
+   * marks `runsOnHostedLinux`, since that runner has no agent sandbox to deny them.
+   */
+  hostedLinux?: boolean
   /** Gates deliberately not run in this lane, as `name=reason`. */
   skipped?: readonly string[]
   /** Injected so tests observe orchestration without running the real recipes. */
@@ -174,9 +179,9 @@ const GUI_WAIT_MS = 10 * 60 * 1_000
 
 /** runGates executes every node of a lane through the one work graph and returns the rollup. */
 export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
-  const selectedGates = options.skipUnsandboxed === true
-    ? options.gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
-    : options.gates
+  const skipsUnsandboxed = (name: string) =>
+    options.skipUnsandboxed === true && GateCatalog.skippedUnsandboxed(name, { hostedLinux: options.hostedLinux })
+  const selectedGates = options.gates.filter(name => !skipsUnsandboxed(name))
   const visibilityWarnings = UiVisibility.preflightGates(selectedGates, options.showStudio)
   UiVisibility.warn(visibilityWarnings)
   const location = RunArtifacts.locate({
@@ -223,8 +228,6 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   // A gate that is both run and declared skipped is run: the declaration is stale, and counting
   // it twice would make the totals disagree with the list above them.
   const { hostPlatform } = options
-  const skipsUnsandboxed = (name: string) =>
-    options.skipUnsandboxed === true && GateCatalog.metadata(name).requiresUnsandboxed === true
   const skipsMacOS = (name: string) =>
     hostPlatform !== undefined && hostPlatform !== 'darwin' && GateCatalog.metadata(name).requiresMacOS === true
   const runnableGates = options.gates.filter(name => !skipsUnsandboxed(name) && !skipsMacOS(name))
@@ -592,8 +595,15 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   // A partition never stands for its lane: the rest of the lane ran on other machines.
   const recordsLane = wholeLaneRecordable && unstable.size === 0 && partition === undefined
   if (options.greenTree !== undefined && summary.status === 'passed' && !result.interrupted) {
+    // A suite with a shard on another partition never saw that shard here, so "every shard I ran
+    // passed" would record the whole suite green while its other shards were unproved; a sibling
+    // partition restoring the store would then skip them. Only an unpartitioned run, or a suite
+    // wholly inside this partition, can vouch for a suite.
+    const splitSuites = new Set(
+      (testPlan?.states ?? []).filter(state => elsewhere(state.name)).map(state => state.suite),
+    )
     await recordGreen({
-      canStandOnRecord,
+      canStandOnRecord: name => canStandOnRecord(name) && !splitSuites.has(name),
       lane: recordsLane,
       key: startingKey,
       lanes: options.greenTree.lanes,

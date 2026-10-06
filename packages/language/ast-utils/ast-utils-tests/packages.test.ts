@@ -39,6 +39,25 @@ Describe('Tao package discovery', () => {
     }
   })
 
+  Test('does not index a root-level file or an excluded directory named by source paths as a package', async () => {
+    const root = await mkTestDir('tao-packages-source-paths-')
+    try {
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+      const mainPath = FS.resolvePath('Main.tao', root)
+      const rootFilePath = FS.resolvePath('@x.tao', root)
+      const generatedPath = FS.resolvePath('@generated/_gen_tao-app/View.tao', root)
+      const modulePath = FS.resolvePath('@real/View.tao', root)
+
+      const index = await Packages.createIndex(root, [mainPath, rootFilePath, generatedPath, modulePath])
+
+      Expect(index.packages.has('@x.tao')).toBe(false)
+      Expect(index.packages.has('@generated')).toBe(false)
+      Expect([...index.packages.keys()]).toEqual(['@real'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('reserves the project-root generated package before it contains Tao source', async () => {
     const root = await mkTestDir('tao-packages-generated-root-')
     try {

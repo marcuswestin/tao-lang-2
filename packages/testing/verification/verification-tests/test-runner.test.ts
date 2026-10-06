@@ -28,7 +28,6 @@ const SPLIT_PROJECT_PARTITIONS = [
   'native-service',
   'native-bodies',
   'native-receipt',
-  'native-receipt-signatures',
   'native-typescript',
   'native-typescript-consumers',
   'receipt-repairs',

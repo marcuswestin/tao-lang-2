@@ -204,4 +204,4 @@ else
     fi
   fi
 fi
-printf 'Start with: tao create "A tally counter"\n'
+printf 'Start with: tao create "A tally counter" --provider local\n'

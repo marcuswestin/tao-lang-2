@@ -7,7 +7,8 @@ name: Verify
 # compute the same plan, because a disagreement there means some node ran nowhere.
 #
 # What this does not prove: the host-only lanes (Studio smokes, browser, native shell, canary),
-# which need a window server and an unsandboxed host. The landing route runs those locally while
+# which need a window server and an unsandboxed host, except the host gates the catalog marks
+# `runsOnHostedLinux`, which these runners do run. The landing route runs the rest locally while
 # this workflow runs (`agents/skills/verification-lanes/references/hosted-verification.md`).
 # The `CI macOS` workflow (`ci-macos.yml`) is where they move, one gate at a time; it is a workflow
 # of its own so a run here ends when the Linux partitions do.
@@ -273,7 +274,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.NODE_MODULES_PATHS }}
-          key: tao-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'devenv.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'packages/apps/providers/*/package.json', 'Apps/Hosted CRUD/package.json') }}
+          key: tao-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'devenv.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'packages/apps/providers/*/package.json', 'Apps/Hosted CRUD/package.json', 'patches/*.patch') }}
 
       # Bun's download cache matters only when it has to install, so it is restored only then.
       - name: Restore Bun's download cache
@@ -388,8 +389,11 @@ jobs:
           cp .github/verify/durations.json .artifacts/timings/durations.json
           cp .github/verify/ledger.json .artifacts/testing/ledger.json
 
+      # `--hosted-linux` keeps the host gates the catalog marks `runsOnHostedLinux`: this runner has
+      # no agent sandbox, and Chrome and Watchman are on it. The rest of the host gates stay in the local
+      # complement.
       - name: Verify partition ${{ env.PARTITION }}
-        run: ./agent verify-full-sandbox --partition "$PARTITION"
+        run: ./agent verify-full-sandbox --partition "$PARTITION" --hosted-linux
 
       # Locally the prepare phase fixes formatting and regenerates indexes in place; here a rewrite
       # means the pull request carries unformatted or stale files, which is a failure.

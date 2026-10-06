@@ -72,7 +72,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.NODE_MODULES_PATHS }}
-          key: tao-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'devenv.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'packages/apps/providers/*/package.json', 'Apps/Hosted CRUD/package.json') }}
+          key: tao-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'devenv.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'packages/apps/providers/*/package.json', 'Apps/Hosted CRUD/package.json', 'patches/*.patch') }}
 
       - name: Set up Tao
         run: devenv shell -- ./agent setup
