@@ -53,7 +53,7 @@ For repository development, clone this repository on macOS with [Nix](https://ni
 
 ```sh
 ./enter-tao-dev-env
-./agent tao create "A reading list" --ai none
+./agent tao create "A reading list" --provider local --ai none
 ```
 
 The entry script enters the pinned environment once, runs `./agent setup`, and opens your interactive
@@ -94,16 +94,16 @@ The checkout runs Tao CLI commands through `./agent tao`; an installed standalon
 `tao` directly. `create` generates a multi-file starter. [Your First Tao App](<Docs/Tutorials/Your First Tao App.md>)
 instead builds a separate, single-file reading list by hand.
 
-| Command or surface                                            | Availability and purpose                                                                                                                                                       |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `./agent tao create "A reading list" --ai none`               | Checkout analogue of release-1 creation; `--ai none` forces the plain starter in the development checkout. The public release-1 command will be `tao create "A reading list"`. |
-| `./agent tao run Apps/Starters/Notebook --app Notebook --web` | Development checkout: run the checked-in starter in a browser. Release-1 creation projects its later design features into supported styles.                                    |
-| `./agent tao check Apps/Starters/Notebook`                    | Development checkout: check the named starter. Public `check` starts in release 1 for source supported by that release.                                                        |
-| `./agent tao fix Apps/Starters/Notebook`                      | Development checkout: apply source fixes to the named starter. Public `fix` starts in release 1.                                                                               |
-| `./agent tao test Apps/Starters/Notebook`                     | Development checkout: run the starter's behavior tests. Public `test` starts in release 1.                                                                                     |
-| `./agent tao run Apps/Starters/Notebook --app Notebook --ios` | Development checkout: run the checked-in starter in iOS Simulator. Public Simulator support starts in release 2 for supported source.                                          |
-| Native Studio                                                 | Release 3: native workbench and interactive scenario review, after distribution.                                                                                               |
-| `tao ship --beta`                                             | Release 5: TestFlight, after distribution and acceptance.                                                                                                                      |
+| Command or surface                                               | Availability and purpose                                                                                                                                                                                                                        |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `./agent tao create "A reading list" --provider local --ai none` | Checkout analogue of release-1 creation; `--provider local` keeps data on the device and `--ai none` forces the plain starter in the development checkout. The public release-1 command will be `tao create "A reading list" --provider local`. |
+| `./agent tao run Apps/Starters/Notebook --app Notebook --web`    | Development checkout: run the checked-in starter in a browser. Release-1 creation projects its later design features into supported styles.                                                                                                     |
+| `./agent tao check Apps/Starters/Notebook`                       | Development checkout: check the named starter. Public `check` starts in release 1 for source supported by that release.                                                                                                                         |
+| `./agent tao fix Apps/Starters/Notebook`                         | Development checkout: apply source fixes to the named starter. Public `fix` starts in release 1.                                                                                                                                                |
+| `./agent tao test Apps/Starters/Notebook`                        | Development checkout: run the starter's behavior tests. Public `test` starts in release 1.                                                                                                                                                      |
+| `./agent tao run Apps/Starters/Notebook --app Notebook --ios`    | Development checkout: run the checked-in starter in iOS Simulator. Public Simulator support starts in release 2 for supported source.                                                                                                           |
+| Native Studio                                                    | Release 3: native workbench and interactive scenario review, after distribution.                                                                                                                                                                |
+| `tao ship --beta`                                                | Release 5: TestFlight, after distribution and acceptance.                                                                                                                                                                                       |
 
 Android, desktop app builds, over-the-air updates, and `tao review` in the standalone CLI are
 deferred. The development checkout may expose commands that a release-1 build hides.

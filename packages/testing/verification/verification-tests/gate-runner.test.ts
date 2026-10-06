@@ -641,7 +641,10 @@ Describe('repository gate runner', () => {
         })),
       })
       // Equal unknown costs place by name: split#1 on partition 1, split#2 on partition 2, whole on 1.
-      const shapes = [['split-suite', 'split-suite#1'], ['split-suite', 'split-suite#2'], ['whole-suite', 'whole-suite']]
+      const shapes = [['split-suite', 'split-suite#1'], ['split-suite', 'split-suite#2'], [
+        'whole-suite',
+        'whole-suite',
+      ]]
       for (const [index, state] of plan.states.entries()) {
         state.suite = shapes[index]![0]!
         state.name = shapes[index]![1]!
