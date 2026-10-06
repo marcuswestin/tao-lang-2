@@ -263,11 +263,12 @@ function startCommand(
     }
   }
   const rememberDescendants = () => {
-    if (policy !== 'test' || child.pid === undefined) {
+    const pid = child.pid
+    if (policy !== 'test' || pid === undefined) {
       return true
     }
     return inspectOwnership(() => {
-      const current = child.exitCode === null && child.signalCode === null ? ProcessTree.descendants(child.pid) : []
+      const current = child.exitCode === null && child.signalCode === null ? ProcessTree.descendants(pid) : []
       const remembered = new Map((trackedDescendants ?? []).map(entry => [`${entry.pid}:${entry.startedAt}`, entry]))
       const identities = ProcessTree.identities((trackedDescendants ?? []).map(entry => entry.pid))
       for (const owner of trackedDescendants ?? []) {
@@ -277,7 +278,7 @@ function startCommand(
       }
       // Live children can change groups while starting. Inspect groups only after their owner exits.
       if (spec.detached && (child.exitCode !== null || child.signalCode !== null)) {
-        lastGroupMembers = ProcessTree.groupMembers(child.pid)
+        lastGroupMembers = ProcessTree.groupMembers(pid)
         current.push(...lastGroupMembers)
       }
       for (const entry of current) {

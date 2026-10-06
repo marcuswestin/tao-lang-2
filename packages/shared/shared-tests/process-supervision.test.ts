@@ -23,16 +23,20 @@ const clearTimeoutSlot = testOverrideSlot<ClearTimeoutCall>({
     globalThis.clearTimeout = value as typeof globalThis.clearTimeout
   },
 })
+const mutableProcessTree = ProcessTree as unknown as {
+  groupMembers: typeof ProcessTree.groupMembers
+  signalGroup: typeof ProcessTree.signalGroup
+}
 const groupMembersSlot = testOverrideSlot<typeof ProcessTree.groupMembers>({
   read: () => ProcessTree.groupMembers,
   write: value => {
-    ProcessTree.groupMembers = value
+    mutableProcessTree.groupMembers = value
   },
 })
 const signalGroupSlot = testOverrideSlot<typeof ProcessTree.signalGroup>({
   read: () => ProcessTree.signalGroup,
   write: value => {
-    ProcessTree.signalGroup = value
+    mutableProcessTree.signalGroup = value
   },
 })
 
