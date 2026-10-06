@@ -453,6 +453,15 @@ const TYPECHECK_COST = 3
  * this lane's own graph, and machine-wide once `GateRunner` takes the lease of the same name.
  */
 const STUDIO_LANE_COST = 1
+/**
+ * A browser smoke ported to hosted Linux reserves the whole ubuntu-24.04 runner (4 vCPUs, the
+ * `runs-on` of every Verify job), so its partition runs it with nothing beside it. Packed beside
+ * other gates every ported smoke ran two to four times its solo time (studio-smoke 15 s to 64 s,
+ * studio-metro-refresh 80 s to 142 s), and studio-agent-browser starved outright: Verify run
+ * 37529644139 failed it twice on partition 7/11 at load ~10 on 4 CPUs, first an approval-box settle
+ * timeout, then a DevToolsActivePort timeout.
+ */
+const HOSTED_BROWSER_LANE_COST = 4
 /** The release proof runs CPU-heavy Expo exports rather than waiting on an interactive host. */
 const SHIP_BUNDLE_PROOF_COST = 3
 /** Generous against a healthy canary run; a bound against a post-report hang regressing. */
@@ -663,10 +672,14 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ],
     [
       'studio-network-simulation',
-      studioSmoke(
-        'studio-network-simulation',
-        'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts',
-      ),
+      {
+        ...studioSmoke(
+          'studio-network-simulation',
+          'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts',
+        ),
+        cost: HOSTED_BROWSER_LANE_COST,
+        runsOnHostedLinux: true,
+      },
     ],
     // The canary is the one `gui` node `verify-full` runs, and a serial floor of its own, so it starts
     // at t=0, ahead of work that can be packed later. `gui` is also the resource name `GateRunner` takes a machine-wide lease under for
@@ -872,6 +885,7 @@ export const GateCatalog = {
   GUI_PRIORITY,
   GUI_LEASE_HELD_ENV_KEY,
   GUI_RESOURCE,
+  HOSTED_BROWSER_LANE_COST,
   PREPARE_PRIORITY,
   STUDIO_LANE_COST,
   STUDIO_SMOKE_POOL,

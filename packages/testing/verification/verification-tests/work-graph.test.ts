@@ -455,6 +455,31 @@ Describe('work graph scheduling', () => {
     Expect(run.started).toEqual(['blocker', 'wide', 'cheap'])
   })
 
+  Test('runs a node as wide as the whole run with nothing beside it', async () => {
+    // A hosted browser smoke reserves all four slots of a 4-vCPU runner (HOSTED_BROWSER_LANE_COST):
+    // it waits for running work to drain, and nothing starts beside it until it finishes.
+    const run = schedule([
+      { held: true, name: 'before', priority: 2 },
+      { cost: 4, held: true, name: 'browser', priority: 1 },
+      { name: 'after-a' },
+      { name: 'after-b' },
+    ], { jobs: 4 })
+    await settle(2)
+
+    Expect(run.started).toEqual(['before'])
+    run.release('before')
+    await until(() => run.started.includes('browser'), { description: 'the full-width node to be admitted' })
+    await settle(2)
+
+    Expect(run.started).toEqual(['before', 'browser'])
+    Expect(run.stateOf('browser').slots).toBe(4)
+    run.release('browser')
+    const result = await run.finished
+
+    Expect(result.capacity).toBe(4)
+    Expect(run.started.slice(2).toSorted()).toEqual(['after-a', 'after-b'])
+  })
+
   Test('starts a higher-priority node first, whatever the measured durations say', async () => {
     const run = schedule([
       { name: 'cheap' },
