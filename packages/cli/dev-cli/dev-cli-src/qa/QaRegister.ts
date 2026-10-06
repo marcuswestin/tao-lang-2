@@ -73,7 +73,7 @@ type Options = { phase?: string; scope?: string; resume?: string; file?: string 
 
 /** QaRegister stores immutable runs and observations, and derives current coverage from evidence. */
 export class QaRegister {
-  constructor(private readonly root: string) {}
+  constructor(private readonly root: string, private readonly runSourceCheck: typeof CLI.run = CLI.run) {}
 
   async command(action: string, options: Options): Promise<void> {
     const handlers: Record<string, () => Promise<unknown>> = {
@@ -188,17 +188,19 @@ export class QaRegister {
         await this.atomic(`${dir}/links.json`, links, true)
       }
       if (run.selected.includes('story:DOC1') && !await FS.exists(this.path(`${dir}/tutorial.json`))) {
-        const result = await CLI.run('./agent', {
-          args: ['test-file', 'packages/cli/tao-cli/cli-tests/tutorials.test.ts'],
+        const result = await this.runSourceCheck('./agent', {
+          // Stream preparation and retry progress. Test workers capture their own output until
+          // completion, so silence is not a hang signal; bound the whole replay instead.
+          args: ['test-file', '--verbose', 'packages/cli/tao-cli/cli-tests/tutorials.test.ts'],
           cwd: this.root,
           processPolicy: 'test',
           timeoutMs: 600_000,
-          idleOutputMs: 120_000,
+          timeoutPolicy: 'bounded',
         })
         const log = `${dir}/tutorial.log`
         await FS.writeText(this.path(log), `${result.stdout}\n${result.stderr}`)
         await this.atomic(`${dir}/tutorial.json`, {
-          command: './agent test-file packages/cli/tao-cli/cli-tests/tutorials.test.ts',
+          command: './agent test-file --verbose packages/cli/tao-cli/cli-tests/tutorials.test.ts',
           outcome: result.exitCode === 0 ? 'pass' : CLI.isSandboxDenial(result) ? 'blocked' : 'fail',
           evidence: log,
           scope: 'source tests only; no text, visual, installed artifact, or human acceptance',

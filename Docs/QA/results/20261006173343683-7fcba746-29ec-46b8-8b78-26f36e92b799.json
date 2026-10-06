@@ -1,0 +1,45 @@
+{
+  "id": "20261006173343683-7fcba746-29ec-46b8-8b78-26f36e92b799",
+  "runId": "20261006173228989-5fb7f13c-8705-44df-b55e-749ddea89064",
+  "createdAt": "2026-10-06T17:33:43.682Z",
+  "recordedAt": "2026-10-06T17:33:43.682Z",
+  "commit": "8d6e3ac40ac11e6fb32acb3b9652afccfa10fbda",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/tutorial-first-hour/capture-complete/source-snapshot.json",
+      "Docs/QA/evidence/tutorial-first-hour/capture-complete/screenshots/qa-views-dark-d53ce3e07882.png"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/61f63a185b453faa2badedbf1c35701445938ae086e3aba607ff7306066a9818.json"
+  },
+  "surfaceId": "visual:reading-list",
+  "dimension": "visual",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "phone-dark",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/capture-complete/source-snapshot.json",
+      "sha256": "14039423fb4c6caa67c71711e6e2d113ee734b49666ddc951d4bf1b365bd8ca7"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/capture-complete/screenshots/qa-views-dark-d53ce3e07882.png",
+      "sha256": "680b9ac1bdf45019c98bb2600899fdae917dce41a82f2acf76565bb848029318"
+    }
+  ],
+  "notes": "Inspected exact dark-scheme phone scenario: readable intentional light paper palette, distinct tabs, compact lists. The tutorial now explicitly documents its fixed colors in either scheme; no dark theme is promised.",
+  "sourceHash": "fad7480be7c1e76be5c333eec9c4cb2cd898c7d8af5db71605c77fc99478d1f1",
+  "rendererHash": "312f63ebfd700080dc711ff7194f560c61f52db1f8b2a3d2f38d083f828be34d",
+  "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
+}

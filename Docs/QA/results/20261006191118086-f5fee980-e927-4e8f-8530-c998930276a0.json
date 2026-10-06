@@ -1,0 +1,45 @@
+{
+  "id": "20261006191118086-f5fee980-e927-4e8f-8530-c998930276a0",
+  "runId": "20261006190454914-8e492d50-b4b4-47c3-98c3-b5aeb2c790d4",
+  "createdAt": "2026-10-06T19:11:18.085Z",
+  "recordedAt": "2026-10-06T19:11:18.085Z",
+  "commit": "1b8a44f0d840a8ab2ccbe2aad454939f8baa511f",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/tutorial-first-hour/land-candidate/capture/source-snapshot.json",
+      "Docs/QA/evidence/tutorial-first-hour/land-candidate/capture/screenshots/qa-views-phone-6c6dc4d8d0a9.png"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/e5e4a61c696f6e87e58902bdd79f2241ebe7012f38af7e664d5d25e377fb717a.json"
+  },
+  "surfaceId": "visual:reading-list",
+  "dimension": "visual",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "phone-light",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/capture/source-snapshot.json",
+      "sha256": "afda4a594d950f2f46adb345cc53a81d9f92df788cb279b2c9b7f02ee1d24f77"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/capture/screenshots/qa-views-phone-6c6dc4d8d0a9.png",
+      "sha256": "9e75bebdc87f7b8967a6cd492b94b3b0fbec11b1256b962377f68b6d5d9dc39a"
+    }
+  ],
+  "notes": "Inspected fresh phone capture: separate tab targets, selected underline and compact adjacent Reading/Finished sections. Fresh browser replay also operates both destinations and scrolls eight rows. Complete staged capture validates the exact tutorial project, source and all three cells. Human and native acceptance separate.",
+  "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+  "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
+  "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
+}

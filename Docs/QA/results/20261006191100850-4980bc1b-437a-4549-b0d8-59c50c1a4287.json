@@ -1,0 +1,60 @@
+{
+  "id": "20261006191100850-4980bc1b-437a-4549-b0d8-59c50c1a4287",
+  "runId": "20261006190454914-8e492d50-b4b4-47c3-98c3-b5aeb2c790d4",
+  "createdAt": "2026-10-06T19:11:00.848Z",
+  "recordedAt": "2026-10-06T19:11:00.848Z",
+  "commit": "1b8a44f0d840a8ab2ccbe2aad454939f8baa511f",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/browser.json",
+      "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/browser.log",
+      "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/build.json",
+      "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/web-export.json",
+      "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/run.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/e5e4a61c696f6e87e58902bdd79f2241ebe7012f38af7e664d5d25e377fb717a.json"
+  },
+  "surfaceId": "source:tutorial-replay",
+  "dimension": "functional",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "browser-preview",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/browser.json",
+      "sha256": "da33fcbf9da74061ed0a340041783bb7059b1c08bd99b5ebf7ae12e6dbb0e447"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/browser.log",
+      "sha256": "c731c9d7f24584b926f2f43c8b77685326caa631c87432a127d3dd2b4cec3c4d"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/build.json",
+      "sha256": "7384e53c4ed35c7d3443386568f84c2302770163c3a2aff7c9f31c53c39e403a"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/web-export.json",
+      "sha256": "91510a2117a1d05b9b553e9ec6d3e4a1ea6d54b65cb71635ec44888b47c4b4ec"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/run.json",
+      "sha256": "7c7159a8a035178528b50d048d76215fce14ef3466a015a2a19453b08ff19d64"
+    }
+  ],
+  "notes": "Fresh production export from the current tutorial Markdown passes three journeys: title/author editing, actual storage writes and reloads, finish/remove, Library/About, unavailable storage and Retry with saved book preserved. All seven fresh images inspected, including long phone list and paper palette under dark system scheme. Source digest matches current Markdown; no native or public release claim.",
+  "sourceHash": "e2d7f548e9a0f242f849c4b764bbe1c804ca35645f0cd2a5aff3c2d0678b0e20",
+  "rendererHash": "1ff6839d2ea12b834afa171c143e942981ae94cccf4eca15f6c7c276ed96fb26",
+  "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
+}

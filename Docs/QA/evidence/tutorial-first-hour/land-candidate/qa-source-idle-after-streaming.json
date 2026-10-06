@@ -1,0 +1,6 @@
+{
+  "command": "./agent test-file --verbose packages/cli/tao-cli/cli-tests/tutorials.test.ts",
+  "outcome": "fail",
+  "evidence": ".artifacts/qa/runs/20261006190051371-e9f78ac9-8bd8-41cf-87ec-55d3c6980258/tutorial.log",
+  "scope": "source tests only; no text, visual, installed artifact, or human acceptance"
+}

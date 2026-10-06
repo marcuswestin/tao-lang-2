@@ -1,0 +1,11 @@
+bun test v1.4.2 (744846f84)
+
+packages/cli/tao-cli/cli-tests/tutorials.test.ts:
+(pass) Docs tutorials > Your First Tao App assembles, step by step, into the finished file it ends with [1.11ms]
+(pass) Docs tutorials > every step of Your First Tao App is canonically formatted and validates [2094.25ms]
+(pass) Docs tutorials > Your First Tao App runs its final journey, edits a title, and recovers from CLI failures [18589.90ms]
+
+ 3 pass
+ 0 fail
+ 23 expect() calls
+Ran 3 tests across 1 file. [20.89s]

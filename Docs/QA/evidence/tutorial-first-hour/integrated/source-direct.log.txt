@@ -1,0 +1,18 @@
+parser generate: up to date
+compile app: up to date
+
+Test selection:
+- selected cli/tao-cli: exact requested file
+dev-test: running 1 node — logs: .artifacts/logs/dev-test/2026-10-06T18-46-28-502Z-3599-c16fa459
+cli/tao-cli: started at 14:46:28
+cli/tao-cli: failed in 144.1s — log: .artifacts/logs/dev-test/2026-10-06T18-46-28-502Z-3599-c16fa459/cli_tao-cli.log
+
+Test suite summary:
+- cli/tao-cli: passed; tests 3; pass 3; fail 0; expect n/a; duration 170.1s
+Total: 1 suites in 1 processes tests 3 pass 3 fail 0 expect 0+n/a(1) wall 323.8s suite sum 170.1s
+
+Machine contention: 5 Tao lanes ran at once; load peaked at 64.4 on 18 CPUs.
+- cli/tao-cli: timed out under machine contention; passed on an isolated retry
+test suites ok
+Summary: .artifacts/logs/dev-test/2026-10-06T18-46-28-502Z-3599-c16fa459/summary.json
+dev-test: PASSED in 323.8s

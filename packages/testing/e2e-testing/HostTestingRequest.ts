@@ -40,7 +40,7 @@ export type DriverHostTestingRequest = Readonly<{
 export type SimulatorNativeHostTestingRequest = Readonly<{
   kind: 'native'
   mode: 'android' | 'ios'
-  subject: HostSubject
+  subject: Exclude<HostSubject, 'reading-list'>
   seed: number
   browserChannel: string
   device: string
@@ -54,7 +54,7 @@ export type SimulatorNativeHostTestingRequest = Readonly<{
 type PhysicalIosInstallRequest = Readonly<{
   kind: 'native'
   mode: 'device'
-  subject: HostSubject
+  subject: Exclude<HostSubject, 'reading-list'>
   seed: number
   browserChannel: string
   device: string
@@ -112,9 +112,23 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
   }
   if (
     options.app !== 'hnreader' && options.app !== 'clockwork' && options.app !== 'native-navigation'
-    && options.app !== 'native-bridge' && options.app !== 'syntax2'
+    && options.app !== 'native-bridge' && options.app !== 'syntax2' && options.app !== 'reading-list'
   ) {
-    Errors.throwUserInput('--app must be hnreader, clockwork, native-navigation, native-bridge, or syntax2.')
+    Errors.throwUserInput(
+      '--app must be hnreader, clockwork, native-navigation, native-bridge, syntax2, or reading-list.',
+    )
+  }
+  if (options.app === 'reading-list') {
+    if ((mode !== 'prepare' && mode !== 'export' && mode !== 'browser') || options.fault === true) {
+      Errors.throwUserInput('reading-list supports prepare, export, or browser without --fault.')
+    }
+    return {
+      kind: 'browser',
+      mode,
+      subject: options.app,
+      seed,
+      browserChannel: options.browserChannel ?? 'chrome',
+    }
   }
   if (options.app === 'syntax2' && !['ios', 'android', 'prepare'].includes(mode)) {
     Errors.throwUserInput(
