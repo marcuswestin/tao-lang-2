@@ -4,6 +4,13 @@ import * as FS from './FS'
 import { runtimeProcess } from './Platform'
 
 const rootByCwd = new Map<string, string>()
+/**
+ * Directories Git has answered "no repository here or above" for, with the error it gave. The
+ * answer holds for every descendant whose own marker walk finds no `.git`, because Git discovers a
+ * repository only through those markers (or `GIT_DIR`, which disables this cache). A `git init`
+ * later creates a marker the walk sees first, so a cached answer never hides a new repository.
+ */
+const noRootAbove = new Map<string, unknown>()
 
 /** FilesUnderOptions configures repo-aware file discovery. */
 type FilesUnderOptions = {
@@ -30,10 +37,33 @@ export function getRoot(cwd = runtimeProcess.cwd()): string {
     return markerRoot
   }
 
-  const result = CLI.mustRunSync('git', {
-    args: ['rev-parse', '--show-toplevel'],
-    cwd: resolvedCwd,
-  })
+  const cacheable = runtimeProcess.env['GIT_DIR'] === undefined
+  const known = cacheable ? knownNoRootAbove(resolvedCwd) : undefined
+  if (known !== undefined) {
+    throw known
+  }
+  let result: CLI.CommandResult
+  try {
+    result = CLI.mustRunSync('git', {
+      args: ['rev-parse', '--show-toplevel'],
+      cwd: resolvedCwd,
+    })
+  } catch (error) {
+    if (cacheable) {
+      // The marker walk above reached the filesystem root without finding a repository, so the
+      // answer is the same for every ancestor and for every sibling tree that walks the same way.
+      let current = resolvedCwd
+      while (true) {
+        noRootAbove.set(current, error)
+        const parent = FS.dirname(current)
+        if (parent === current) {
+          break
+        }
+        current = parent
+      }
+    }
+    throw error
+  }
 
   const root = result.stdout.trim()
   if (root.length === 0) {
@@ -261,6 +291,25 @@ function restoreInputPath(path: string, realRoot: string, inputRoot: string): st
     return path
   }
   return FS.resolvePath(path.slice(realRoot.length + 1), inputRoot)
+}
+
+/** knownNoRootAbove returns the cached failure covering `cwd` or one of its ancestors, if any. */
+function knownNoRootAbove(cwd: string): unknown {
+  if (noRootAbove.size === 0) {
+    return undefined
+  }
+  let current = cwd
+  while (true) {
+    const cached = noRootAbove.get(current)
+    if (cached !== undefined) {
+      return cached
+    }
+    const parent = FS.dirname(current)
+    if (parent === current) {
+      return undefined
+    }
+    current = parent
+  }
 }
 
 function findGitMarkerRoot(cwd: string): string | undefined {

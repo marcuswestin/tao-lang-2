@@ -110,7 +110,9 @@ Describe('verification execution timeouts', () => {
         })
         try {
           if (policy === 'bounded') {
-            await Expect(waiting).rejects.toThrow('Timed out waiting for the file mutation lock')
+            await Expect(waiting).rejects.toThrow(
+              `Timed out waiting for the file mutation lock ${lock} after 300s; held by process ${Platform.runtimeProcess.pid}`,
+            )
             Expect(entered).toBe(false)
             Expect((await FS.readJson<{ token: string }>(lock)).token).toBe('live-owner')
           } else {
