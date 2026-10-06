@@ -195,6 +195,8 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
   ].map(path => FS.resolvePath(path, guestHome))
   const forbiddenTemp = ['metro-cache', 'tao-test-runs', 'tao-ship-coordination']
     .map(path => FS.resolvePath(path, guestTemp))
+  // These OS allowances are inferred from exact service/product-named VM snapshot paths;
+  // the audit evidence does not independently identify the writer process for each artifact.
   const guestCache = [
     'CloudKit',
     'GeoServices',
@@ -226,6 +228,8 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     'com.apple.Spotlight',
     'com.apple.helpd',
     'com.apple.tipsd',
+    'com.apple.geoanalyticsd',
+    'com.google.GoogleUpdater',
   ].map(name => FS.resolvePath(`Library/Caches/${name}`, guestHome))
   const guestSystem = [
     // The base image's login shell runs outside the isolated acceptance HOME.
@@ -252,6 +256,8 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     'Library/HTTPStorages/com.apple.itunescloudd',
     'Library/HTTPStorages/com.apple.AMPLibraryAgent',
     'Library/HTTPStorages/com.apple.tipsd',
+    'Library/HTTPStorages/com.apple.weatherd',
+    'Library/HTTPStorages/com.google.GoogleUpdater',
     'Library/AppleMediaServices',
     'Library/Application Scripts',
     'Library/Application Support',
@@ -272,6 +278,9 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     'Library/Keychains',
     'Library/Logs/com.apple.CloudTelemetry',
     'Library/Logs/DiagnosticReports',
+    'Library/Logs/CrashReporter/DiagnosticLogs/Search',
+    'Library/Google/GoogleSoftwareUpdate/Actives',
+    'Library/Google/GoogleSoftwareUpdate/GoogleSoftwareUpdate.bundle',
     'Library/Messages',
     'Library/Metadata',
     'Library/Passes',
@@ -309,6 +318,11 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
   ].map(onVolume)
   const guestSystemExact = [
     'Library/Safari/PasswordBreachStore.plist',
+    'Library/Caches/com.apple.Safari.SafeBrowsing/Cache.db-wal',
+    'Library/LaunchAgents/com.google.GoogleUpdater.wake.plist',
+    'Library/LaunchAgents/com.google.keystone.agent.plist',
+    'Library/LaunchAgents/com.google.keystone.xpcservice.plist',
+    'Library/Logs/PhotosSearch.aapbz',
   ].map(path => FS.resolvePath(path, guestHome))
   const guestSystemTrees = [
     // Apple documents Movies/TV as the default location for TV media libraries:
@@ -412,6 +426,11 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     FS.resolvePath('Library/homeenergyd', guestHome),
     FS.resolvePath('Library/HTTPStorages', guestHome),
     FS.resolvePath('Library/Logs', guestHome),
+    FS.resolvePath('Library/Google', guestHome),
+    FS.resolvePath('Library/Google/GoogleSoftwareUpdate', guestHome),
+    FS.resolvePath('Library/LaunchAgents', guestHome),
+    FS.resolvePath('Library/PPM', guestHome),
+    FS.resolvePath('Library/PPM/PAT', guestHome),
     FS.resolvePath('Library/Safari', guestHome),
     FS.resolvePath('Library/Photos', guestHome),
     FS.resolvePath('Library/Photos/Libraries', guestHome),
@@ -430,6 +449,16 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     FS.resolvePath('CFNetworkDownload_TZj7l3.tmp', guestTemp),
   ]
   const runtimeRoot = onVolume('/private/var/run')
+  const ppmPatRoot = FS.resolvePath('Library/PPM/PAT', guestHome)
+  const ppmPatArtifact = (path: string) =>
+    path === ppmPatRoot
+    || /^Tokens_\d{2}_\d{2}_\d{4}_\d{2}_\d{2}_\d{2}\.pat$/u.test(FS.relativePath(ppmPatRoot, path))
+  const googleUpdaterTempPath = (path: string) => {
+    const [root, child, ...rest] = FS.relativePath(guestTemp, path).split('/')
+    return /^com\.google\.GoogleUpdater\.GoogleUpdater_chrome_url_fetcher_\.[A-Za-z0-9]{6}$/u.test(root ?? '')
+      && rest.length === 0
+      && (child === undefined || child === 'decoded_xz' || /^[a-f0-9]{64}$/u.test(child))
+  }
   const launchdDirectory = (path: string) =>
     /^com\.apple\.launchd\.[A-Za-z0-9]+$/.test(
       FS.relativePath(runtimeRoot, path),
@@ -460,6 +489,17 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     FS.resolvePath('.rbenv/shims', guestHome),
     ...['assistantd', 'assistantd/TemporaryItems', 'siriknowledged'].map(name => FS.resolvePath(name, guestTemp)),
   ]
+  const xcodeTemporaryDirectories = scope.vmProfile === 'xcode'
+    ? ['assistantd', 'assistantd/TemporaryItems', 'siriknowledged'].map(name => FS.resolvePath(name, guestTemp))
+    : []
+  const xcodeTemporaryDirectoryChanges = new Set(
+    diff.changed.filter(change =>
+      xcodeTemporaryDirectories.includes(change.path)
+      && change.before.kind === 'directory' && change.after.kind === 'directory'
+      && JSON.stringify({ ...change.before, device: 0, inode: 0, modifiedMs: 0 })
+        === JSON.stringify({ ...change.after, device: 0, inode: 0, modifiedMs: 0 })
+    ).map(change => change.path),
+  )
   const timestampChanged = new Set(
     diff.changed.filter(change =>
       change.before.kind === 'directory' && change.after.kind === 'directory'
@@ -553,7 +593,9 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     }
     if (
       xcodeExact.includes(path) || systemExact.includes(path) || guestSystemExact.includes(path)
+      || ppmPatArtifact(path) || googleUpdaterTempPath(path)
       || xcodeCryptex(path) || xcodeRemoved(path)
+      || xcodeTemporaryDirectoryChanges.has(path)
       || (scope.vmProfile === 'xcode' && xcodeTimestampDirectories.includes(path) && timestampChanged.has(path))
       || (path === newsDirectory && timestampChanged.has(path))
       || observedMetadataChanges.has(path)
