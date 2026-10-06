@@ -141,6 +141,10 @@ export async function runAgentCommand(options: RunAgentCommandOptions): Promise<
     })
   )
   const child = start(options.spawnCommand, {
+    // Retain descendant identities while suites run, so a failed wrapper cannot orphan them.
+    processPolicy: 'test',
+    // Captured commands own an isolated group; prompting commands retain terminal job control.
+    detached: runStdio.stdio !== 'inherit',
     args: [...options.spawnArgs, ...flags.rest],
     cwd: repositoryRoot,
     // Every command gets a real stdin: a prompting command otherwise reads from a stream that was

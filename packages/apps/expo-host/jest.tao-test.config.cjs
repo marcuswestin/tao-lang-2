@@ -17,6 +17,7 @@ const base = createRuntimeJestConfig({
 
 module.exports = {
   ...base,
+  reporters: ['default', '<rootDir>/jest-completion-reporter.cjs'],
   // `jest.shared.config.cjs` owns why `roots` is named rather than left to default. This run also
   // reads the entrypoints it just generated, which live outside the package, so it adds that one
   // directory. The compiled apps those entrypoints import need no root of their own: they are

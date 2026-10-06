@@ -144,6 +144,88 @@ async function waitForGone(tracked: TrackedProcess, description: string): Promis
 }
 
 Describe('CLI process policy', () => {
+  Test('stops an isolated child forked from the direct child termination handler', async () => {
+    let output = ''
+    const command = CLI.start('/bin/sh', {
+      args: ['-c', 'trap \'trap "" TERM; sleep 300 & echo late:$!; exit 7\' TERM; echo ready; while :; do :; done'],
+      detached: true,
+      processPolicy: 'test',
+      onOutput: (_stream, chunk) => {
+        output += chunk.toString()
+      },
+      stdio: 'pipe',
+      timeoutMs: 30_000,
+      timeoutPolicy: 'bounded',
+    })
+    try {
+      await until(() => output.includes('ready'), { timeoutPolicy: 'bounded' })
+      command.kill('SIGTERM')
+      const pid = await until(() => Number(/late:(\d+)/.exec(output)?.[1]) || undefined, { timeoutPolicy: 'bounded' })
+      abandoned.push(pid)
+      const result = await command.waitForClose()
+      Expect(result.exitCode).toBe(7)
+      Expect(Platform.processIsAlive(pid)).toBe(false)
+    } finally {
+      command.kill('SIGKILL')
+      await command.waitForClose()
+    }
+  })
+
+  Test('waits for a descendant that closes its pipes and ignores termination after its parent closes', async () => {
+    let output = ''
+    const command = CLI.start('/bin/sh', {
+      args: ['-c', 'sh -c \'trap "" TERM; echo $$; exec >/dev/null 2>&1; while :; do :; done\' & wait'],
+      processPolicy: 'test',
+      onOutput: (_stream, chunk) => {
+        output += chunk.toString()
+      },
+      stdio: 'pipe',
+      timeoutMs: 30_000,
+      timeoutPolicy: 'bounded',
+    })
+    try {
+      const pid = await until(() => Number(/^(\d+)/.exec(output)?.[1]) || undefined)
+      abandoned.push(pid)
+      const identity = ProcessTree.identities([pid]).get(pid)!
+      Expect(identity).toBeDefined()
+      command.kill('SIGTERM')
+      await command.waitForClose()
+      // Assert at the join, with no later wait that could hide premature cleanup completion.
+      Expect(isAlive(identity)).toBe(false)
+    } finally {
+      command.kill('SIGKILL')
+      await command.waitForClose()
+    }
+  })
+
+  Test('preserves a failed parent exit while stopping a child holding its output pipes', async () => {
+    let output = ''
+    const command = CLI.start('/bin/sh', {
+      args: ['-c', 'sleep 300 & echo $!; read reply; echo "original suite failure" >&2; exit 7'],
+      processPolicy: 'test',
+      onOutput: (_stream, chunk) => {
+        output += chunk.toString()
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeoutMs: 30_000,
+      timeoutPolicy: 'bounded',
+    })
+    try {
+      const pid = await until(() => Number(/^(\d+)/.exec(output)?.[1]) || undefined)
+      abandoned.push(pid)
+      const identity = ProcessTree.identities([pid]).get(pid)!
+      Expect(identity).toBeDefined()
+      command.writeStdin('exit\n')
+      const result = await command.waitForClose()
+      Expect(result.exitCode).toBe(7)
+      Expect(result.signal).toBe(null)
+      Expect(output).toContain('original suite failure')
+      Expect(isAlive(identity)).toBe(false)
+    } finally {
+      command.kill('SIGKILL')
+      await command.waitForClose()
+    }
+  })
   Test('no policy detaches a child; only the caller decides its process group', async () => {
     const ownGroup = ProcessTree.processGroupOf(Platform.runtimeProcess.pid)
     const toolChild = await startTree()

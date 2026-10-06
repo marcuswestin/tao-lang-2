@@ -480,6 +480,8 @@ export const runtimeProcess = {
   cwd: process.cwd.bind(process),
   env: process.env,
   execPath: process.execPath,
+  /** Resource kind snapshots are diagnostic evidence, rather than a claim of which handle leaked. */
+  getActiveResourcesInfo: () => process.getActiveResourcesInfo(),
   /** The current process id, for recording which process owns a resource. */
   get pid(): number {
     return process.pid

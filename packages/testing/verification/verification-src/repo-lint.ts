@@ -581,6 +581,8 @@ const NODE_IMPORT_ALLOWLIST = [
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
   'packages/testing/verification/verification-tests/repo-lint.test.ts',
   'packages/testing/verification/verification-tests/work-graph.test.ts',
+  'packages/cli/tao-cli/cli-tests/test-command-lifecycle-cli.test.ts',
+  'packages/cli/tao-cli/cli-tests/test-runner-lifecycle.test.ts',
   // Stream classes a test constructs to stand in for a terminal.
   'packages/cli/tao-cli/cli-tests/compile-command.test.ts',
   'packages/cli/tao-cli/cli-tests/create-command.test.ts',
@@ -597,6 +599,9 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/apps/expo-host/jest-runner-adapter.cjs:1',
   'packages/apps/expo-host/jest-runner-adapter.cjs:2',
   'packages/apps/expo-host/jest-runner-adapter.cjs:3',
+  // Jest loads the completion reporter before TypeScript shared wrappers are available.
+  'packages/apps/expo-host/jest-completion-reporter.cjs:1',
+  'packages/apps/expo-host/jest-completion-reporter.cjs:2',
   // Jest loads its direct-cache coordinator before TypeScript shared wrappers are available.
   'packages/apps/expo-host/jest-direct-cache.cjs:2',
   'packages/apps/expo-host/jest-direct-cache.cjs:3',

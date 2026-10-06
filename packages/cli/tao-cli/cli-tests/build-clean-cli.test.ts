@@ -1,6 +1,7 @@
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, settle, Test } from '@shared/test'
 import { type BuildRecord, executeBuildTargets } from '../cli-src/build-command'
+import { waitForStandaloneReadiness } from '../cli-src/standalone-readiness'
 
 const fixtureRoot = Repo.resolvePath('packages/testing/e2e-testing/fixtures/Clockwork')
 
@@ -109,21 +110,37 @@ async function servesOnlyContainedFiles(buildRoot: string): Promise<void> {
     args: ['serve.ts'],
     cwd: FS.resolvePath('web', buildRoot),
     env: { PORT: '0' },
+    processPolicy: 'test',
+    timeoutMs: 120_000,
     onOutput: (_stream, chunk) => output += chunk.toString(),
     stdio: 'pipe',
   })
   try {
-    const port = await until(() => {
-      const value = Number(output.match(/Serving http:\/\/localhost:(\d+)/)?.[1])
-      return value > 0 ? value : undefined
-    }, { description: 'the standalone web server to announce its bound port', timeoutMs: 90_000 })
-    await until(async () => {
-      try {
-        return (await fetch(`http://127.0.0.1:${port}/`)).status === 200 ? true : undefined
-      } catch {
-        return undefined
-      }
-    }, { description: `the standalone web server to start: ${output}`, timeoutMs: 90_000 })
+    let port: number | undefined
+    await waitForStandaloneReadiness(
+      server,
+      () => {
+        const value = Number(output.match(/Serving http:\/\/localhost:(\d+)/)?.[1])
+        port = value > 0 ? value : undefined
+        return port !== undefined
+      },
+      () => output,
+      'the standalone web server port',
+      90_000,
+    )
+    await waitForStandaloneReadiness(
+      server,
+      async () => {
+        try {
+          return (await fetch(`http://127.0.0.1:${port}/`)).status === 200
+        } catch {
+          return false
+        }
+      },
+      () => output,
+      'the standalone web server response',
+      90_000,
+    )
     Expect((await fetch(`http://127.0.0.1:${port}/%252e%252e/secret.txt`)).status).toBe(400)
     Expect((await fetch(`http://127.0.0.1:${port}/escape`)).status).toBe(400)
     Expect((await fetch(`http://127.0.0.1:${port}/missing`)).status).toBe(404)

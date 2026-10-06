@@ -25,7 +25,6 @@ change that addressed it.
 - [DEVENV-NO-FRONT-DOOR-REPEATS-A-TEST-UNDER-CPU-LOAD — No front door repeats a test under CPU load](<Developer environment upgrades/DEVENV-NO-FRONT-DOOR-REPEATS-A-TEST-UNDER-CPU-LOAD.md>) — Candidate
 - [DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY — open-pr reports no checks while runners are busy](<Developer environment upgrades/DEVENV-OPEN-PR-REPORTS-NO-CHECKS-WHILE-RUNNERS-ARE-BUSY.md>) — Candidate
 - [DEVENV-PERSISTENT-UI-CONTROLLER-POST-MVP — Persistent UI controller after MVP](<Developer environment upgrades/DEVENV-PERSISTENT-UI-CONTROLLER-POST-MVP.md>) — Planned
-- [DEVENV-STANDALONE-SERVER-STARTUP-HIDES-CHILD-FAILURE — Standalone server startup hides child failure](<Developer environment upgrades/DEVENV-STANDALONE-SERVER-STARTUP-HIDES-CHILD-FAILURE.md>) — Candidate
 - [DEVENV-STUDIO-STARTUP-STAGES-NEED-MEASUREMENT — Studio startup stages need measurement](<Developer environment upgrades/DEVENV-STUDIO-STARTUP-STAGES-NEED-MEASUREMENT.md>) — Planned
 
 ## External and observational findings
@@ -145,10 +144,8 @@ change that addressed it.
 - [DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO — Tao fix never reuses the check memo, so every verify lane refixes the whole repository](<Developer environment upgrades/DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO.md>) — Candidate
 - [DEVENV-TAO-INSTALL-DEFAULT-NPM-CACHE-IS-OUTSIDE-WRITABLE-PROJECT — Tao install defaults to an npm cache outside the writable project](<Developer environment upgrades/DEVENV-TAO-INSTALL-DEFAULT-NPM-CACHE-IS-OUTSIDE-WRITABLE-PROJECT.md>) — Candidate
 - [DEVENV-TAO-PIPELINE-DEFECTS-SET-EVERY-LANES-FLOOR — Tao pipeline defects set every lane's floor](<Developer environment upgrades/DEVENV-TAO-PIPELINE-DEFECTS-SET-EVERY-LANES-FLOOR.md>) — Candidate
-- [DEVENV-TAO-TEST-WAITS-FOREVER-ON-A-JEST-WORKER-LEFT-OPEN — `tao test` waits forever on a Jest worker left open](<Developer environment upgrades/DEVENV-TAO-TEST-WAITS-FOREVER-ON-A-JEST-WORKER-LEFT-OPEN.md>) — Candidate
 - [DEVENV-TEST-FILE-REFUSES-STANDALONE-APP-TESTS — Focused test-file refuses standalone app tests](<Developer environment upgrades/DEVENV-TEST-FILE-REFUSES-STANDALONE-APP-TESTS.md>) — Candidate
 - [DEVENV-TEST-FILE-TAKES-NO-TAO-FILE-OR-TEST-NAME — `test-file` takes no Tao test file or test name](<Developer environment upgrades/DEVENV-TEST-FILE-TAKES-NO-TAO-FILE-OR-TEST-NAME.md>) — Candidate
-- [DEVENV-TEST-FILE-WRAPPER-REMAINS-AFTER-FAILED-SUITE — Test-file wrapper remains after a failed suite reports](<Developer environment upgrades/DEVENV-TEST-FILE-WRAPPER-REMAINS-AFTER-FAILED-SUITE.md>) — Candidate
 - [DEVENV-TEST-RUNS-CANNOT-BE-CPU-PROFILED — Test runs cannot be CPU-profiled](<Developer environment upgrades/DEVENV-TEST-RUNS-CANNOT-BE-CPU-PROFILED.md>) — Candidate
 - [DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS — Visual review scenario readiness timeouts](<Developer environment upgrades/DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS.md>) — Candidate
 - [DEVENV-WATCHOS-SWIFT-PROBE-FAILS-UNDER-BROAD-LANES — watchOS Swift probe fails under broad lanes](<Developer environment upgrades/DEVENV-WATCHOS-SWIFT-PROBE-FAILS-UNDER-BROAD-LANES.md>) — Candidate

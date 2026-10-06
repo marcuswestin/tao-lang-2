@@ -1,4 +1,4 @@
-import { FS, Platform, Time } from '@shared'
+import { FS, Platform, ProcessTree, Time, type TrackedProcess } from '@shared'
 import { Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
 import { resolveRunStdio, runAgentCommand } from '../agent-cli-src/runner/AgentRunner'
 
@@ -220,6 +220,63 @@ Describe('agent runner', () => {
       const latestPath = FS.resolvePath('.artifacts/logs/agent/probe/latest.log', scratch)
       Expect(await FS.readText(latestPath)).toContain('was not found on PATH')
     } finally {
+      await FS.remove(scratch)
+    }
+  })
+
+  Test('reports a failed suite after stopping a stubborn child that holds its output', async () => {
+    const scratch = await mkTestDir('tao-agent-runner-failed-tree-')
+    const pidPath = FS.resolvePath('child.pid', scratch)
+    const releasePath = FS.resolvePath('release', scratch)
+    let child: TrackedProcess | undefined
+    let runPromise: Promise<{ result: number; stdout: string; stderr: string }> | undefined
+    let finished = false
+    try {
+      const script = await writeProbeScript(scratch, [
+        `const child = Bun['spawn'](['/bin/sh', '-c', 'trap "" TERM; echo child-ready >&2; while :; do sleep 300; done'], { stdout: 'inherit', stderr: 'inherit' })`,
+        `await Bun.write(${JSON.stringify(pidPath)}, String(child.pid))`,
+        `${LOG}('original suite failure')`,
+        `while (!await Bun.file(${JSON.stringify(releasePath)}).exists()) { await Bun['sleep'](25) }`,
+        `${EXIT}(7)`,
+      ])
+      runPromise = withCapturedOutput(() =>
+        runAgentCommand({
+          env: {},
+          args: [],
+          command: 'probe',
+          cwd: scratch,
+          spawnArgs: [script],
+          spawnCommand: 'bun',
+        })
+      ).finally(() => {
+        finished = true
+      })
+      const latestPath = FS.resolvePath('.artifacts/logs/agent/probe/latest.log', scratch)
+      await until(async () => await FS.isFile(latestPath) && (await FS.readText(latestPath)).includes('child-ready'))
+      const childPid = Number(await FS.readText(pidPath))
+      child = ProcessTree.identities([childPid]).get(childPid)
+      Expect(child).toBeDefined()
+      await FS.writeText(releasePath, '')
+      await until(() => finished, {
+        description: 'failed wrapper teardown',
+        timeoutMs: 30_000,
+        timeoutPolicy: 'bounded',
+      })
+      const result = await runPromise
+      Expect(result.result).toBe(7)
+      Expect(result.stdout).toContain('original suite failure')
+      Expect(result.stdout).toContain('owned processes still running')
+      Expect(Platform.processIsAlive(childPid)).toBe(false)
+    } finally {
+      await FS.writeText(releasePath, '')
+      if (child === undefined && await FS.isFile(pidPath)) {
+        child = ProcessTree.identities([Number(await FS.readText(pidPath))]).values().next().value
+      }
+      if (child !== undefined) {
+        ProcessTree.signalTracked(ProcessTree.descendants(child.pid), 'SIGKILL')
+        ProcessTree.signalTracked([child], 'SIGKILL')
+      }
+      await runPromise
       await FS.remove(scratch)
     }
   })

@@ -694,32 +694,117 @@ async function runProcess(state: WorkState, context: WorkRunContext): Promise<Wo
     return { error: Errors.asError(error), exitCode: null }
   }
   let forceKill: ReturnType<typeof setTimeout> | undefined
+  let ownershipPoll: ReturnType<typeof setInterval> | undefined
   let trackedDescendants: TrackedProcess[] = []
+  const trackedByIdentity = new Map<string, TrackedProcess>()
+  const rememberDescendants = () => {
+    if (child.exitCode !== null) {
+      return
+    }
+    for (const process of ProcessTree.descendants(child.pid)) {
+      trackedByIdentity.set(`${process.pid}:${process.startedAt}`, process)
+    }
+  }
+  const rememberOwnedDescendants = () => {
+    const owners = [...trackedByIdentity.values()]
+    const current = ProcessTree.identities(owners.map(process => process.pid))
+    for (const owner of owners) {
+      if (ProcessTree.sameProcess(current.get(owner.pid), owner)) {
+        for (const process of ProcessTree.descendants(owner.pid)) {
+          trackedByIdentity.set(`${process.pid}:${process.startedAt}`, process)
+        }
+      }
+    }
+  }
   let cancelled = false
   try {
+    ownershipPoll = setInterval(rememberDescendants, 100)
     context.onCancel(graceMs => {
       if (cancelled) {
         return
       }
       cancelled = true
-      trackedDescendants = ProcessTree.descendants(child.pid)
+      rememberDescendants()
+      for (const process of ProcessTree.groupMembers(child.pid)) {
+        trackedByIdentity.set(`${process.pid}:${process.startedAt}`, process)
+      }
+      rememberOwnedDescendants()
+      trackedDescendants = [...trackedByIdentity.values()]
       ProcessTree.signalTracked(trackedDescendants, 'SIGTERM')
-      ProcessTree.signalGroup(child.pid, 'SIGTERM')
       forceKill = setTimeout(() => {
+        rememberOwnedDescendants()
+        trackedDescendants = [...trackedByIdentity.values()]
         ProcessTree.signalTracked(trackedDescendants, 'SIGKILL')
         ProcessTree.signalGroup(child.pid, 'SIGKILL')
+        forceKill = undefined
       }, graceMs ?? ProcessTree.FORCE_KILL_GRACE_MS)
     })
-    const outcome = await waitForProcess(child, context.onOutput)
+    const outcome = await waitForProcess(
+      child,
+      output => {
+        rememberDescendants()
+        context.onOutput(output)
+      },
+      async () => {
+        if (ownershipPoll !== undefined) {
+          clearInterval(ownershipPoll)
+          ownershipPoll = undefined
+        }
+        const groupMembers = ProcessTree.groupMembers(child.pid)
+        for (const process of groupMembers) {
+          trackedByIdentity.set(`${process.pid}:${process.startedAt}`, process)
+        }
+        rememberOwnedDescendants()
+        const owned = [...trackedByIdentity.values()]
+        trackedDescendants = owned
+        const current = ProcessTree.identities(owned.map(process => process.pid))
+        const survivors = owned.filter(process => ProcessTree.sameProcess(current.get(process.pid), process))
+        if (survivors.length > 0 && !cancelled) {
+          ProcessTree.signalTracked(survivors, 'SIGTERM')
+          forceKill = setTimeout(() => {
+            rememberOwnedDescendants()
+            ProcessTree.signalTracked([...trackedByIdentity.values()], 'SIGKILL')
+            ProcessTree.signalGroup(child.pid, 'SIGKILL')
+            forceKill = undefined
+          }, ProcessTree.FORCE_KILL_GRACE_MS)
+        }
+        if (cancelled && survivors.length > 0) {
+          // Cancellation may have raced with a descendant escaping its original process group.
+          ProcessTree.signalTracked(survivors, 'SIGTERM')
+          if (forceKill === undefined) {
+            forceKill = setTimeout(() => {
+              rememberOwnedDescendants()
+              ProcessTree.signalTracked([...trackedByIdentity.values()], 'SIGKILL')
+              ProcessTree.signalGroup(child.pid, 'SIGKILL')
+              forceKill = undefined
+            }, ProcessTree.FORCE_KILL_GRACE_MS)
+          }
+        }
+        await Promise.all([
+          groupMembers.length > 0 ? ProcessTree.waitForGroupExit(child.pid) : Promise.resolve(),
+          ProcessTree.waitForTrackedExit(owned),
+        ])
+        if (forceKill !== undefined) {
+          clearTimeout(forceKill)
+          forceKill = undefined
+        }
+        const diagnostic = survivors.length > 0
+          ? `\nOwned child processes outlived the command (${
+            survivors.map(process => process.pid).join(', ')
+          }); terminated ${survivors.length}.\n`
+          : undefined
+        return {
+          exitCode: child.exitCode === 0 && diagnostic !== undefined ? 1 : child.exitCode,
+          ...(diagnostic === undefined ? {} : { output: diagnostic }),
+        }
+      },
+    )
     state.cpuMs = directCpuMs(child)
-    if (cancelled) {
-      await Promise.all([
-        ProcessTree.waitForGroupExit(child.pid),
-        ProcessTree.waitForTrackedExit(trackedDescendants),
-      ])
-    }
     return outcome
   } finally {
+    if (ownershipPoll !== undefined) {
+      clearInterval(ownershipPoll)
+    }
     if (forceKill !== undefined) {
       clearTimeout(forceKill)
     }
@@ -727,18 +812,21 @@ async function runProcess(state: WorkState, context: WorkRunContext): Promise<Wo
 }
 
 /**
- * waitForProcess resolves only once the child has exited and both its output streams have reached
- * end-of-stream. A stream that stays open — a detached background job the command forgot to redirect,
- * inheriting the same pipe — must keep the node "running" exactly as it did under `child_process`'s
- * `close` event, so a node with an escaped, output-holding descendant is still caught by its timeout
- * rather than reported done while something is still attached to its pipes.
+ * waitForProcess waits for the direct child to exit, tears down any owned descendants, then waits for
+ * both output streams to reach end-of-stream. While the command itself is still running, an escaped
+ * background job that keeps producing no output still holds the node open and remains subject to its
+ * timeout; once the command exits, inherited pipes cannot keep the graph waiting on an orphan.
  */
 async function waitForProcess(
   child: Bun.Subprocess<'ignore', 'pipe', 'pipe'>,
   onOutput: (output: string) => void,
+  afterExit: () => Promise<WorkOutcome>,
 ): Promise<WorkOutcome> {
-  await Promise.all([pumpOutput(child.stdout, onOutput), pumpOutput(child.stderr, onOutput), child.exited])
-  return { exitCode: child.exitCode }
+  const output = Promise.all([pumpOutput(child.stdout, onOutput), pumpOutput(child.stderr, onOutput)])
+  await child.exited
+  const outcome = await afterExit()
+  await output
+  return outcome
 }
 
 /** pumpOutput reports each chunk to the graph as it arrives, rather than buffering to the end. */
