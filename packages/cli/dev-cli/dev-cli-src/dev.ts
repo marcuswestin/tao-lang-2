@@ -29,10 +29,13 @@ import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { MergeRecovery } from './git/MergeRecovery'
+import { CancelVerifyCommand } from './pr/CancelVerify'
 import { CiTimingsCommand } from './pr/CiTimingsCommand'
+import { LandFixCommand } from './pr/LandFixCommand'
 import { MergePrCommand } from './pr/MergePrCommand'
 import { OpenPrCommand } from './pr/OpenPrCommand'
 import { PrChecksCommand } from './pr/PrChecksCommand'
+import { VerifyComplementCommand } from './pr/VerifyComplementCommand'
 
 /*
  * Studio and Expo command modules load lazily inside their actions. Studio reaches the generated
@@ -477,7 +480,10 @@ await runWithCommands(commands => {
         UiVisibility.preflightGates(runnable, options.showStudio)
         // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
         // Gate children inherit it; the invoking shell and landing process keep their priority.
-        if (VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)) {
+        if (
+          VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)
+          || options.lane === VerificationLanes.VERIFY_COMPLEMENT
+        ) {
           const { WatchmanCommand } = await import('./doctor/WatchmanCommand')
           const watchmanStart = await WatchmanCommand.startBeforeLoweringPriority(
             runnable.some(name => GateCatalog.metadata(name).usesWatchman === true),
@@ -522,6 +528,33 @@ await runWithCommands(commands => {
         })
       })
     })
+
+  commands
+    .command('verify-complement')
+    .description(
+      'Run the host-only gates hosted Verify does not admit, as one locked lane, and report them as the Verify (host) status on HEAD.',
+    )
+    .argument('<gates...>', "The full lane's gate list; the host-only complement is derived from it and the workflow.")
+    .option('--show-studio', 'Permit selected native Studio tests to open windows.')
+    .option('--jobs <count>', 'Maximum number of gates to run at once.')
+    .option('--output <mode>', OUTPUT_OPTION_HELP)
+    .option('--no-status', 'Do not post the Verify (host) commit status; for a head that is not on GitHub.')
+    .action(
+      async (
+        gates: string[],
+        options: { jobs?: string; output?: string; showStudio?: boolean; status?: boolean } = {},
+      ) => {
+        await runExitCommand(async () =>
+          (await VerifyComplementCommand.run({
+            gates,
+            jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
+            output: options.output,
+            showStudio: options.showStudio,
+            status: options.status,
+          })).exitCode
+        )
+      },
+    )
 
   commands
     .command('merge-with-main')
@@ -858,27 +891,46 @@ await runWithCommands(commands => {
       'Enable GitHub auto-merge after checks start for authorized ready landing; omitted keeps it off and refuses an already enabled pull request.',
     )
     .option('--poll-interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
-    .action(async (options: { autoMerge?: boolean; pollIntervalMs?: string } = {}) => {
+    .option(
+      '--no-complement',
+      'With --auto-merge, do not start the local complement lane; run verify-complement separately.',
+    )
+    .action(async (options: { autoMerge?: boolean; complement?: boolean; pollIntervalMs?: string } = {}) => {
       await runExitCommand(async () =>
         (await OpenPrCommand.run({
           autoMerge: options.autoMerge,
+          complement: options.complement,
           pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
         })).exitCode
       )
     })
 
   commands
+    .command('cancel-verify')
+    .description(
+      "Cancel the Verify runs still in flight for this worktree's HEAD, after a local gate decided the landing.",
+    )
+    .option('--sha <commit>', 'The commit whose runs to cancel; by default HEAD.')
+    .action(async (options: { sha?: string } = {}) => {
+      await runExitCommand(async () => (await CancelVerifyCommand.run({ sha: options.sha })).exitCode)
+    })
+
+  commands
+    .command('land-fix')
+    .description(
+      'Land a fix committed after GitHub merged this branch: merge the branch into fetched origin/main, push, and write a receipt; no verification runs.',
+    )
+    .action(async () => {
+      await runExitCommand(async () => (await LandFixCommand.run()).exitCode)
+    })
+
+  commands
     .command('merge-pr')
     .description(
-      "Wait for every check on this branch's pushed head, Verify among them; enqueue it pinned to that head where main requires a merge queue and wait for the merge (squash-merge directly otherwise) unless auto-merge already did, then archive it at merged/<name>.",
+      "Finish this branch's landing without waiting: archive a pull request GitHub already merged at this head; squash-merge one whose Verify is green with auto-merge off, pinned to this head, and archive it; otherwise turn auto-merge on for this head.",
     )
-    .option('--interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
-    .action(async (options: { intervalMs?: string } = {}) => {
-      await runExitCommand(async () =>
-        (await MergePrCommand.run({
-          intervalMs: parseOptionalPositiveInteger(options.intervalMs, '--interval-ms'),
-        })).exitCode
-      )
+    .action(async () => {
+      await runExitCommand(async () => (await MergePrCommand.run()).exitCode)
     })
 
   commands

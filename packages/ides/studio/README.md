@@ -506,14 +506,13 @@ overrides the choice. Every lane writes `.artifacts/logs/<lane>/<timestamp>/<nod
 `just verify-full` bootstraps dependencies and then runs the same graph grown to everything: the
 verify membership plus the doctor (whose node log is the versioned `--json` report)
 and the smoke gates (`studio-smoke`, `studio-proof-real-app`,
-`keyboard-navigation-smoke`, `studio-smoke-native`), which the catalog runs through
+`keyboard-navigation-smoke`), which the catalog runs through
 `./dev studio-smoke` on worker indices the graph assigns from the `studio-smoke` pool
-(`StudioSmoke.resources()` gives each index its own ports and artifact root); the native shell and
-canary are serialized on a `gui` resource so they never overlap each other while the browser lanes
-run beside them. The simulated-user browser lane is an ordinary member of the graph again, and closed
+(`StudioSmoke.resources()` gives each index its own ports and artifact root), plus the native
+`studio-canary`, which holds a machine-wide `gui` resource while the browser lanes run beside it. The simulated-user browser lane is an ordinary member of the graph again, and closed
 DEVENV-042 on 2026-09-20 with ten consecutive green normal-terminal runs;
 `just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts` runs it alone. A failing lane no longer hides the lanes after it — every lane
-appears in the one rollup with its own log. `just studio-smoke`, `just studio-smoke-native`,
+appears in the one rollup with its own log. `just studio-smoke`,
 `just studio-proof-real-app`, and `just studio-canary` remain the standalone entry points, and the
 smoke lanes need an unsandboxed shell (Chrome cannot create its socket and Crashpad directories
 under the agent sandbox). Checks that need a person live in `just studio-manual-checks` and are

@@ -168,7 +168,7 @@ const PREPARE_WAIT_MS = 10 * 60 * 1_000
  * A `gui` node may wait this long for another worktree's `gui` node, or a standalone recipe using
  * the same machine-wide lease, before it gives up and reports the exact holder. Generous for the
  * same reason as `PREPARE_WAIT_MS`: a `verify-full` run beside another one is ordinary, not a
- * failure, and the two `gui` nodes together are only a ~21s serial floor once admitted.
+ * failure, and the canary, the only `gui` node `verify-full` runs, takes about 10s once admitted.
  */
 const GUI_WAIT_MS = 10 * 60 * 1_000
 
@@ -818,28 +818,27 @@ async function acquirePrepare(
 /**
  * acquireGuiLease takes the machine-wide `gui` lease before this run's own `gui`-declaring nodes are
  * admitted, and holds it until every one of them has finished. A second worktree's `gui` node, or a
- * standalone recipe running `studio-smoke-native` or `studio-canary`'s own work outside `./dev
- * gates` entirely, waits on it or is told the exact holder instead of clicking into this run's
- * windows.
+ * standalone `studio-canary` or `studio-smoke --native` run outside `./dev gates` entirely, waits on
+ * it or is told the exact holder instead of clicking into this run's windows.
  *
  * This replaces `--needs-machine`, which refused a lane outright whenever any other lane was
  * registered at all, because it could not see whether that lane's gates touched the window server.
  * That wideness is no longer needed: `verify-full` and `verify-full-sandbox` cannot overlap each
  * other regardless (both sit in `VerificationLanes.LOCKED`, behind the machine-wide landing lock),
- * the six browser gates run headless Chrome on disjoint ports and are declared parallel-safe, and
- * the two gates that do drive a real window server — `studio-smoke-native` and `studio-canary` — are
+ * the browser gates run headless Chrome on disjoint ports and are declared parallel-safe, and the
+ * gates that do drive a real window server — `studio-canary` and the opt-in native smokes — are
  * exactly the ones `GateCatalog` declares `resources: [GUI_RESOURCE]` on. Naming the lease after that
  * resource, rather than after the lane, is what lets every other gate share the machine freely while
- * these two still cannot overlap a peer's.
+ * those still cannot overlap a peer's.
  *
  * It waits rather than refuses, unlike the flag it replaces: a refusal costs whoever hits it a model
  * turn to retry by hand, and a bounded wait costs nothing when the holder finishes well within it —
- * which two `gui` nodes together, at a measured ~21s, usually do. `MachineResourceBusyError`'s
+ * which the canary, at a measured ~10s, usually does. `MachineResourceBusyError`'s
  * message already names the holder the way `LandingLock.describeWaiting` does, once the wait finally
  * runs out; nothing here has to spell that out a second time.
  *
  * Acquired before this run's own nodes are admitted rather than at the point one is ready to start:
- * `GateCatalog.GUI_PRIORITY` already pins both `gui` nodes to begin at t=0, so by the time either
+ * `GateCatalog.GUI_PRIORITY` already pins the `gui` node to begin at t=0, so by the time it
  * would actually run the lease is already held, and taking it up front means a lane that will end up
  * waiting or failing on it never first reserves CPU broker slots for work it has not been allowed to
  * run.

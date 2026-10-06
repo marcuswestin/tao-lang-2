@@ -288,8 +288,8 @@ Describe('two lanes in one checkout', () => {
 
 /**
  * The `gui` lease. Every other kind of contention here is about dividing the machine fairly; this is
- * about the two nodes that cannot be divided at all, because they drive one window server between
- * them — `studio-smoke-native` and `studio-canary`, the only gates `GateCatalog` declares
+ * about the nodes that cannot be divided at all, because they drive one window server between them —
+ * `studio-canary` and the opt-in native smokes, the only gates `GateCatalog` declares
  * `resources: [GateCatalog.GUI_RESOURCE]` on.
  */
 Describe('the machine-wide gui lease', () => {

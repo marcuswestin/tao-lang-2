@@ -69,10 +69,30 @@ type Check = {
 }
 
 type PullRequest = {
+  /** GitHub's auto-merge record, `null` while auto-merge is off; absent from a stubbed answer. */
+  auto_merge?: { merge_method?: string } | null
   head: { ref: string; sha: string }
   html_url: string
   mergeable_state?: string
+  merged_at?: string | null
   number: number
+}
+
+/**
+ * landingState says where the pull request stands on the landing route in one line: merged, armed to
+ * merge on green `Verify`, or waiting for someone to arm it. It stays silent for an answer that
+ * carries neither field, so a stubbed listing reports nothing it does not know.
+ */
+function landingState(pr: PullRequest): string | undefined {
+  if (typeof pr.merged_at === 'string') {
+    return `NOTE  GitHub merged #${pr.number} at ${pr.merged_at}; the checks below are its record.`
+  }
+  if (pr.auto_merge === undefined) {
+    return undefined
+  }
+  return pr.auto_merge === null
+    ? `NOTE  Auto-merge is off for #${pr.number}; open-pr --auto-merge or merge-pr turns it on.`
+    : `Auto-merge is on for #${pr.number}: GitHub squash-merges the moment Verify is green on this head.`
 }
 
 type CheckRun = { conclusion: string | null; html_url: string; id: number; name: string; status: string }
@@ -108,6 +128,10 @@ export const PrChecksCommand = {
       return { exitCode: 1, lines } satisfies PrChecksResult
     }
     report(`Pull request #${pr.number} (${pr.head.ref}) at ${sha.slice(0, 8)}: ${pr.html_url}`)
+    const landing = landingState(pr)
+    if (landing !== undefined) {
+      report(landing)
+    }
     const local = (await dependencies.run('git', { args: ['rev-parse', 'HEAD'], cwd: root, stdio: 'pipe' })).stdout
       .trim()
     if (local !== '' && local !== sha && options.pr === undefined) {
