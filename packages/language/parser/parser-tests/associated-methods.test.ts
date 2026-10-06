@@ -254,12 +254,12 @@ Describe('parser: associated methods', () => {
     const member = result.entry.ast.statements.find(AST.isAliasDeclaration)?.value
     Expect.Is(member, AST.isMethodCallExpression)
     Expect.Is(member.callee, AST.isMemberAccessExpression)
-    Expect(member.callee.target.ref).toBeUndefined()
+    Expect(member.callee.target.ref).toBe(token)
+    Expect(AST.associatedReceiverOwner(member.callee.target)).toBeUndefined()
     Expect(
       result.diagnostics.filter(diagnostic => diagnostic.source === 'linker').map(diagnostic => diagnostic.message),
     )
       .toEqual([
-        "No value named 'Token' is in scope.",
         "No value named 'Token' is in scope.",
         "No value named 'Token' is in scope.",
       ])
