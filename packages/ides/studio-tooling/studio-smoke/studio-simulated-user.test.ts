@@ -862,11 +862,12 @@ Test('simulated user exercises the browser editor', async () => {
   } catch (error) {
     primaryFailure = error
     if (browser !== undefined) {
-      const consoleErrors = browser.consoleErrors()
       // Diagnostics are best effort: preserve the original failure if capture or writing fails.
-      await lensDiagnostic(browser).then(editor =>
-        FS.writeJson(FS.resolvePath('logs/lens-failure.json', artifactRoot), { consoleErrors, editor })
-      ).catch(() => {})
+      await Promise.resolve().then(async () => {
+        const consoleErrors = browser!.consoleErrors()
+        const editor = await lensDiagnostic(browser!)
+        await FS.writeJson(FS.resolvePath('logs/lens-failure.json', artifactRoot), { consoleErrors, editor })
+      }).catch(() => {})
     }
     throw error
   } finally {
