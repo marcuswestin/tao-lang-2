@@ -88,6 +88,24 @@ Describe('Studio test process output', () => {
     }
   })
 
+  Test('leaves no resource record behind a subprocess that exits by itself', async () => {
+    const root = await mkTestDir('studio-test-natural-exit-')
+    const indexRoot = FS.resolvePath('resource-index', root)
+    const runner = new StudioTestProcessRunner({
+      args: ['-c', 'exit 0', 'natural-exit'],
+      command: '/bin/sh',
+      cwd: root,
+      resourceIndexRoot: indexRoot,
+    })
+    try {
+      await runner.run()
+      Expect(await FS.listDir(indexRoot)).toEqual([])
+    } finally {
+      await runner.close()
+      await FS.remove(root)
+    }
+  })
+
   Test('requests and retains the versioned live-render artifact from tao test', async () => {
     const artifact = {
       checks: [{
