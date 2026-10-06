@@ -16,9 +16,7 @@ the evidence and message format; this reference owns only the mid-task cut.
 
 ## When a slice is worth proposing
 
-GitHub CI is the default for final portable proof and hosted landing; local landing uses a
-machine-wide lock and remains the `dev/<name>` path. `verification-lanes` owns the route and
-offline fallback. Propose a landing only when
+`verification-lanes` owns the landing route and its offline fallback. Propose a landing only when
 all four hold, and it is then the Developer's to accept or defer:
 
 - The finished side is independently complete by the cut rule below.
@@ -28,9 +26,7 @@ all four hold, and it is then the Developer's to accept or defer:
   it. Both are reasons the merge gets dearer by waiting.
 - You have not proposed a landing in the last half hour. One proposal per boundary, not per commit.
 
-Say in the proposal which of these made it worth asking and which verification route applies. For
-local landing, check `./agent board` and report any lock wait; an already verified hosted PR does
-not need that local lock. Never land on the strength of this section alone — root `AGENTS.md` requires the Developer's explicit
+Say in the proposal which of these made it worth asking. Never land on the strength of this section alone — root `AGENTS.md` requires the Developer's explicit
 yes, which may have been given in advance for a named slice.
 
 ## Choosing the cut
@@ -47,10 +43,9 @@ Before touching `main`: land every finished change as commits so `git status` is
 in-progress change may be committed too, only if inert — not reachable from anything the Developer would run);
 reverse anything in progress that is not inert, restoring the previous state; leave loud markers (a
 quarantine entry) exactly where they were, note updated to say where work now stands; refresh the
-documents the landed work changed; follow `verification-lanes` for local or hosted proof and the
-required host acceptance, saying explicitly if a lane was already red rather than implying it
-passed. Write or refresh `.artifacts/merge/<branch>.msg`; do not require broad local verification
-before preparing a hosted landing or merging its already verified PR.
+documents the landed work changed; run the targeted checks the change reaches, saying explicitly
+if one was already red rather than implying it passed. Write or refresh
+`.artifacts/merge/<branch>.msg`; the landing route proves the rest, so run no broad local lane first.
 
 ## The merge message for a partial landing
 
@@ -61,8 +56,7 @@ deliberately not in this commit and where it continues, naming the follow-up bra
 
 ## Merging and continuing
 
-Sync `main` as any landing does (`git-workflow`'s fetch/fast-forward/merge-if-both-moved sequence),
-then, without waiting to be asked: create the follow-up branch from the `main` that now holds the
+Land through `verification-lanes`' route; once GitHub has merged, without waiting to be asked: create the follow-up branch from the `main` that now holds the
 merge, in a fresh worktree; carry the in-progress work onto it, preferring to re-apply it from the
 landed base over cherry-picking a commit whose context has moved; and continue — the follow-up branch
 is an ordinary feature branch from here. A later cut is proposed the same way, against the same four

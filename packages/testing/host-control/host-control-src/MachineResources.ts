@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Platform, Time, type TrackedProcess } from '@shared'
+import { CLI, Errors, FS, Platform, Time, type TrackedProcess, VerificationTimeouts } from '@shared'
 
 /** MachineResourceLease prevents another process from mutating one named host target. */
 export type MachineResourceLease = {
@@ -187,7 +187,10 @@ function registryRoot(): string {
 /** acquire waits briefly for a named target, then reports the exact owning worktree and command. */
 async function acquire(options: AcquireResourceOptions): Promise<MachineResourceLease> {
   assertNoAdmissionReentry(options.registryRoot ?? registryRoot())
-  const waitTimeoutMs = Math.max(0, options.waitTimeoutMs ?? RESOURCE_WAIT_TIMEOUT_MS)
+  const waitTimeoutMs = Math.max(
+    0,
+    options.waitTimeoutMs ?? VerificationTimeouts.resolve(RESOURCE_WAIT_TIMEOUT_MS) ?? Infinity,
+  )
   const deadline = Time.nowMs() + waitTimeoutMs
   while (true) {
     throwIfAcquisitionAborted(options.signal)
@@ -584,7 +587,7 @@ async function retentionRecords(root: string): Promise<{ path: string; record: R
 async function withRegistryLock<T>(
   root: string,
   work: () => Promise<T>,
-  timeoutMs = MUTEX_ACQUIRE_TIMEOUT_MS,
+  timeoutMs = VerificationTimeouts.resolve(MUTEX_ACQUIRE_TIMEOUT_MS) ?? Infinity,
   signal?: AbortSignal,
 ): Promise<T> {
   assertNoAdmissionReentry(root)

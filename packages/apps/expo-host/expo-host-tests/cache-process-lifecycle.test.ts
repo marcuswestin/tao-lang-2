@@ -70,7 +70,7 @@ async function runCache(kind: CacheKind, root: string): Promise<void> {
   }
 }
 
-function heldReader(kind: CacheKind, root: string, ready: string): string {
+function heldReader(kind: CacheKind, root: string, ready: string, waiting?: string): string {
   const work = `async directory => {
     await FS.writeText(FS.resolvePath('transform', directory), 'live reader');
     await FS.writeText(${JSON.stringify(ready)}, 'ready');
@@ -79,7 +79,11 @@ function heldReader(kind: CacheKind, root: string, ready: string): string {
   return kind === 'managed'
     ? `await JestTransformCache.run(${JSON.stringify(root)}, ${work}, { root: ${
       JSON.stringify(root)
-    }, maxIdentities: 1 });`
+    }, maxIdentities: 1${
+      waiting === undefined ? '' : `, onLockWait: async () => {
+      await FS.writeText(${JSON.stringify(waiting)}, 'waiting');
+    }`
+    } });`
     : `const root = ${JSON.stringify(root)};
        const lease = await direct.start(root, { maxIdentities: 1 });
        try { await (${work})(FS.resolvePath('data', root)); }
@@ -140,6 +144,7 @@ Describe('cache process lifecycle', () => {
       const parent = await mkTestDir(`cache-process-lock-${kind}-`)
       const root = FS.resolvePath('aaaaaaaaaaaaaaaa', parent)
       const ready = FS.resolvePath('ready', parent)
+      const waiting = FS.resolvePath('waiting', parent)
       const lockName = kind === 'managed' ? 'coordination.tao-file-mutation.lock' : '.coordination.lock'
       const lock = FS.resolvePath(lockName, parent)
       const release = Deferred()
@@ -155,13 +160,16 @@ Describe('cache process lifecycle', () => {
           await FS.remove(lock)
         })
       await acquired.promise
-      const worker = startWorker(parent, heldReader(kind, root, ready))
+      const worker = startWorker(parent, heldReader(kind, root, ready, waiting))
       try {
-        // Seeing an actual claim while the parent's lock is held proves overlap without a sleep.
+        // Observe actual lock contention while the parent holds ownership. Managed waiters avoid
+        // writing repeated claims; the direct loader still publishes one persistent claim.
         await until(async () =>
           await FS.isFile(ready)
-          || (await FS.listDir(parent)).some(name => name.startsWith(`${lockName}.owner-`)), {
-          description: 'a competing cache lock claim',
+          || (kind === 'managed'
+            ? await FS.isFile(waiting)
+            : (await FS.listDir(parent)).some(name => name.startsWith(`${lockName}.owner-`))), {
+          description: 'a competing cache lock wait',
         })
         Expect(await FS.isFile(ready)).toBe(false)
         Expect(await FS.readJson(lock)).toMatchObject({ pid: Platform.runtimeProcess.pid })

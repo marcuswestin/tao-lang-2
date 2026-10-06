@@ -99,8 +99,13 @@ Describe('compiler: watchOS SwiftUI', () => {
 let values: [Double] = [1e20, 1e-6, 1e21, 1e-7, -0.0, .nan, .infinity]
 print(values.map { TaoValues.text($0) }.joined(separator: "|"))
 `
-    const run = await CLI.run('swift', { args: ['-e', script], processPolicy: 'test', timeoutMs: 30_000 })
-    Expect(run.exitCode).toBe(0)
+    // The probe measures 0.2s warm and 1.0s with a cold module cache on an idle machine, and 1.2s at
+    // worst with 72 copies sharing 18 CPUs. The two minutes leave room for a machine saturated by
+    // broad lanes while staying under the runner's four-minute per-test budget, so a hang still
+    // fails with this command's own timeout rather than an anonymous one.
+    const run = await CLI.run('swift', { args: ['-e', script], processPolicy: 'test', timeoutMs: 120_000 })
+    // Matching the whole result prints swift's stderr and the stopping signal when the probe fails.
+    Expect(run).toMatchObject({ exitCode: 0, signal: null })
     Expect(run.stdout.trim()).toBe('100000000000000000000|0.000001|1e+21|1e-7|0|NaN|Infinity')
   })
 

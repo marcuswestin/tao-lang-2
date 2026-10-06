@@ -21,8 +21,8 @@ const STUDIO_BROWSER_SMOKES = [
   'studio-agent-browser',
   'studio-network-simulation',
 ]
-/** Every Studio smoke gate: the pool members the graph numbers. */
-const STUDIO_SMOKES = [...STUDIO_BROWSER_SMOKES, 'studio-smoke-native']
+/** Studio smoke pool members the graph numbers: the browser smokes plus an opt-in native one. */
+const STUDIO_SMOKES = [...STUDIO_BROWSER_SMOKES, 'studio-host-control-smoke']
 /** Every gate that needs a host the managed sandbox denies: the smokes plus the native canary. */
 const HOST_ONLY_GATES = [...STUDIO_SMOKES, 'studio-canary']
 /** The prepare phase: every node that rewrites something, in the order its classes imply. */
@@ -292,6 +292,18 @@ Describe('gate catalog metadata', () => {
     Expect(GateCatalog.BUN_SUITE_FIXED_MS).toBe(600)
   })
 
+  Test('keeps compiler test durations attributable to individual work', () => {
+    // Compiler sessions serialize their work, so Bun's --concurrent would overlap timeout windows
+    // without making compilation faster and would turn per-test timings into cumulative durations.
+    Expect(GateCatalog.suiteTuning('compiler').args).toBeUndefined()
+    Expect(GateCatalog.reportsAttributableDurations('compiler')).toBe(true)
+  })
+
+  Test('keeps validator batches from overlapping their shared publication lock', () => {
+    Expect(GateCatalog.suiteTuning('language/validator').args).toBeUndefined()
+    Expect(GateCatalog.reportsAttributableDurations('language/validator')).toBe(true)
+  })
+
   Test('derives each audited suite dependency from only the source classes it consumes', () => {
     for (
       const suite of [
@@ -387,7 +399,7 @@ Describe('gate catalog metadata', () => {
       Expect(typeof node.run).toBe('function')
       const command = typeof node.run === 'function' ? node.run({ slots: 1, workerIndex: 0 }) : node.run
       Expect(command.env).toEqual(
-        name === 'studio-smoke-native'
+        name === 'studio-host-control-smoke'
           ? { [GateCatalog.GUI_LEASE_HELD_ENV_KEY]: 'true' }
           : undefined,
       )
@@ -403,9 +415,8 @@ Describe('gate catalog metadata', () => {
     for (const name of STUDIO_BROWSER_SMOKES) {
       Expect(nodeOf(name).priority).toBeUndefined()
     }
-    // The two window-server lanes cannot overlap each other, so together they are a serial floor
-    // that must begin at t=0 or it extends the run by its own whole length.
-    Expect(nodeOf('studio-smoke-native').priority).toBe(GateCatalog.GUI_PRIORITY)
+    // The canary holds the window server nothing can overlap, so it is a serial floor that must
+    // begin at t=0 or it extends the run by its own whole length.
     Expect(nodeOf('studio-canary').priority).toBe(GateCatalog.GUI_PRIORITY)
     // The prepare chain must not be overtaken by readers that are merely cheap.
     for (const name of PREPARE_GATES) {
@@ -419,7 +430,7 @@ Describe('gate catalog metadata', () => {
   })
 
   Test('serializes the native window server while disposable projects need no shared project lease', () => {
-    Expect(nodeOf('studio-smoke-native').resources).toEqual(['gui'])
+    Expect(nodeOf('studio-host-control-smoke').resources).toEqual(['gui'])
     Expect(nodeOf('studio-canary').resources).toEqual(['gui'])
     Expect(nodeOf('studio-smoke').resources).toBeUndefined()
     Expect(nodeOf('studio-proof-real-app').resources).toBeUndefined()
@@ -453,7 +464,7 @@ Describe('gate catalog scheduling', () => {
   })
 
   Test('numbers the Studio smokes from the pool and runs each under its own run id', async () => {
-    const smokes = ['studio-smoke', 'studio-proof-real-app', 'studio-smoke-native']
+    const smokes = ['studio-smoke', 'studio-proof-real-app', 'studio-host-control-smoke']
     const { commands } = await runLane(smokes, 24, smokes.length)
 
     const workers = smokes.map(name => {
@@ -467,7 +478,7 @@ Describe('gate catalog scheduling', () => {
     // Three smokes admitted together hold three distinct indices, so `StudioSmoke.resources()`
     // hands each its own ports and artifact root without any recipe carrying a literal.
     Expect(workers.toSorted()).toEqual([0, 1, 2])
-    Expect(commands.get('studio-smoke-native')?.args).toContain('--native')
+    Expect(commands.get('studio-host-control-smoke')?.args).toContain('--native')
     Expect(commands.get('studio-smoke')?.args).not.toContain('--native')
     Expect(commands.get('studio-smoke')?.args.at(-1)).toBe(
       'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts',
@@ -524,34 +535,36 @@ Describe('gate catalog scheduling', () => {
         'studio-smoke',
         'studio-proof-real-app',
         'studio-smoke-simulated-user',
-        'studio-smoke-native',
+        'studio-canary',
         '_typecheck',
         '_tao-check',
       ],
-      // One slot for the native smoke, three for typecheck, two for tao-check, and the two browser
-      // smokes that fit beside them; the fourth smoke waits for a slot rather than for a phase.
+      // One slot for the canary, three for typecheck, two for tao-check, and the two browser smokes
+      // that fit beside them; the third browser smoke waits for a slot rather than for a phase.
       8,
       5,
     )
 
-    Expect(started[0]).toBe('studio-smoke-native')
+    Expect(started[0]).toBe('studio-canary')
     Expect(overlaps.some(names =>
       names.includes('_typecheck')
       && names.includes('_tao-check')
-      && names.filter(name => STUDIO_SMOKES.includes(name)).length === 3
+      && names.filter(name => HOST_ONLY_GATES.includes(name)).length === 3
     )).toBe(true)
   })
 
   Test('keeps gui lanes exclusive while independent browser and launch lanes overlap', async () => {
     // Each pair fits inside 24 slots. The barrier makes allowed overlap deterministic, while the
     // two gui nodes must still run sequentially because they hold the same resource.
-    const guiPair = await runLane(['studio-smoke-native', 'studio-canary'], 24)
-    const nativeAndBrowser = await runLane(['studio-smoke-native', 'studio-smoke-simulated-user'], 24, 2)
+    const guiPair = await runLane(['studio-host-control-smoke', 'studio-canary'], 24)
+    const nativeAndBrowser = await runLane(['studio-host-control-smoke', 'studio-smoke-simulated-user'], 24, 2)
     const canaryAndBrowser = await runLane(['studio-canary', 'studio-smoke-simulated-user'], 24, 2)
     const canaryAndLaunch = await runLane(['studio-canary', 'studio-smoke'], 24, 2)
 
-    Expect(overlapped(guiPair.overlaps, 'studio-smoke-native', 'studio-canary')).toBe(false)
-    Expect(overlapped(nativeAndBrowser.overlaps, 'studio-smoke-native', 'studio-smoke-simulated-user')).toBe(true)
+    Expect(overlapped(guiPair.overlaps, 'studio-host-control-smoke', 'studio-canary')).toBe(false)
+    Expect(overlapped(nativeAndBrowser.overlaps, 'studio-host-control-smoke', 'studio-smoke-simulated-user')).toBe(
+      true,
+    )
     Expect(overlapped(canaryAndBrowser.overlaps, 'studio-canary', 'studio-smoke-simulated-user')).toBe(true)
     Expect(overlapped(canaryAndLaunch.overlaps, 'studio-canary', 'studio-smoke')).toBe(true)
   })

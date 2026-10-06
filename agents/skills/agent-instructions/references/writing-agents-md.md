@@ -69,7 +69,7 @@ so that a later reader disagrees with the argument rather than re-running the re
 
 ## After editing
 
-- Follow the checkout's `AGENTS.md` validation policy. On a feature branch, `./agent verify` runs
+- Follow the checkout's `AGENTS.md` validation policy. On a feature branch, `./agent verify-changed` runs
   `repo-lint` for budgets and `dead-exports` for code behind rules moved into enforcement. In a
   Developer-directed primary `dev/<name>` checkout, use focused checks and defer full verification
   until authorized landing.

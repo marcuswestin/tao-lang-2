@@ -569,6 +569,253 @@ Describe('Tao runtime app generation', () => {
     )
   })
 
+  Test('rebuilds publication state when revision checks are toggled around identical source inputs', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    await withTaoFiles(
+      'tao-runtime-publication-check-mode-',
+      {
+        'Main.tao':
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>Same</RN.Text> ``` }',
+      },
+      async paths => {
+        const first = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(1),
+          runtimePackageRoot,
+        })
+        const marker = generatedPreviewPath(runtimePackageRoot, 'TaoStudioPublication.ts')
+        const firstMarker = await FS.readText(marker)
+        const unchecked = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(2, {
+            publicationChecks: false,
+            sourceVersions: first.preview!.sourceVersions,
+          }),
+          runtimePackageRoot,
+        })
+        Expect(unchecked.previewPublicationSkipped).toBe(false)
+        Expect(unchecked.previewRevision).toBe(2)
+        Expect(unchecked.code).toContain('const TaoStudioPublicationChecks = false')
+        Expect(await FS.readText(marker)).toBe(firstMarker)
+
+        const checkedAgain = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(3, { sourceVersions: first.preview!.sourceVersions }),
+          runtimePackageRoot,
+        })
+        Expect(checkedAgain.previewPublicationSkipped).toBe(false)
+        Expect(checkedAgain.previewRevision).toBe(3)
+        Expect(checkedAgain.code).toContain('const TaoStudioPublicationChecks = true')
+        Expect(await FS.readText(marker)).toContain('"compileRevision":3')
+      },
+    )
+  })
+
+  Test('reuses an identical successful Studio publication while completing each attempt', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    await withTaoFiles(
+      'tao-runtime-identical-preview-',
+      {
+        'Main.tao':
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>Same</RN.Text> ``` }',
+      },
+      async paths => {
+        const first = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(1),
+          runtimePackageRoot,
+        })
+        const publicationPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioPublication.ts')
+        const publication = await FS.readText(publicationPath)
+        const publicationTime = await FS.modifiedTimeMs(publicationPath)
+        const second = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(2, { sourceVersions: first.preview!.sourceVersions }),
+          runtimePackageRoot,
+        })
+
+        Expect(first.previewRevision).toBe(1)
+        Expect(second.previewPublicationSkipped).toBe(true)
+        Expect(second.previewRevision).toBe(1)
+        Expect(await FS.readText(publicationPath)).toBe(publication)
+        Expect(await FS.modifiedTimeMs(publicationPath)).toBe(publicationTime)
+
+        await FS.writeText(
+          paths['Main.tao'],
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>Changed</RN.Text> ``` }',
+        )
+        const changedCode = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(3, { sourceVersions: first.preview!.sourceVersions }),
+          runtimePackageRoot,
+        })
+        Expect(changedCode.previewPublicationSkipped).toBe(false)
+        Expect(changedCode.previewRevision).toBe(3)
+        Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'App.injection-1.tsx'))).toContain('Changed')
+        Expect(await FS.readText(publicationPath)).toContain('"compileRevision":3')
+      },
+    )
+  })
+
+  Test('publishes changed source versions and repairs generated files on an identical retry', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    await withTaoFiles(
+      'tao-runtime-identical-repair-',
+      {
+        'Main.tao':
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>Same</RN.Text> ``` }',
+      },
+      async paths => {
+        const first = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(1),
+          runtimePackageRoot,
+        })
+        const second = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(2),
+          runtimePackageRoot,
+        })
+        const publicationPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioPublication.ts')
+        const taoAppPath = generatedPreviewPath(runtimePackageRoot, 'TaoApp.tsx')
+        const publication = await FS.readText(publicationPath)
+        Expect(second.previewPublicationSkipped).toBe(false)
+        Expect(second.previewRevision).toBe(2)
+        Expect(publication).toContain('"compileRevision":2')
+        Expect(publication).toContain('text-v2')
+
+        await FS.writeText(taoAppPath, 'tampered generated output')
+        const repaired = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(3, { sourceVersions: second.preview!.sourceVersions }),
+          runtimePackageRoot,
+        })
+        Expect(repaired.previewPublicationSkipped).toBe(true)
+        Expect(repaired.previewRevision).toBe(2)
+        Expect(await FS.readText(publicationPath)).toContain('"compileRevision":2')
+        Expect(await FS.readText(taoAppPath)).not.toBe('tampered generated output')
+        Expect(first.previewRevision).toBe(1)
+      },
+    )
+  })
+
+  Test('publishes generated module paths when a source module is added and removed', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    await withTaoFiles(
+      'tao-runtime-preview-module-paths-',
+      {
+        'Main.tao': `
+          use Text from @tao/ui
+          app Preview { id "preview" version "1.0.0" name "Preview" view Main }
+          view Main() { render Text("Base") }
+        `,
+      },
+      async (paths, project) => {
+        const addedSourcePath = FS.resolvePath('@/studio/View1.tao', project)
+        const first = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(1, { project, sourceVersions: { 'Main.tao': 'main-v1' } }),
+          runtimePackageRoot,
+        })
+        const firstGraph = await generatedGraph(runtimePackageRoot)
+        const addedSource = `use Text from @tao/ui\npublic view View1() { render Text("Added") }\n`
+        await FS.writeText(addedSourcePath, addedSource)
+        await FS.writeText(
+          paths['Main.tao'],
+          `
+          use Text from @tao/ui
+          use View1 from @/studio
+          app Preview { id "preview" version "1.0.0" name "Preview" view Main }
+          view Main() { render View1() }
+        `,
+        )
+        const added = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(2, {
+            project,
+            sourceVersions: { 'Main.tao': 'main-v2', '@/studio/View1.tao': 'view-v1' },
+          }),
+          runtimePackageRoot,
+        })
+        const addedGraph = await generatedGraph(runtimePackageRoot)
+        const emittedSourceModule = Object.keys(addedGraph).find(path => path.includes('modules/@/studio/View1.tao'))
+
+        Expect(first.previewRevision).toBe(1)
+        Expect(Object.keys(firstGraph).some(path => path.includes('modules/@/studio/View1.tao'))).toBe(false)
+        Expect(added.previewPublicationSkipped).toBe(false)
+        Expect(emittedSourceModule).toBeDefined()
+
+        await FS.remove(addedSourcePath)
+        await FS.writeText(
+          paths['Main.tao'],
+          `
+          use Text from @tao/ui
+          app Preview { id "preview" version "1.0.0" name "Preview" view Main }
+          view Main() { render Text("Base again") }
+        `,
+        )
+        const removed = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(3, { project, sourceVersions: { 'Main.tao': 'main-v3' } }),
+          runtimePackageRoot,
+        })
+        const removedGraph = await generatedGraph(runtimePackageRoot)
+
+        Expect(removed.previewPublicationSkipped).toBe(false)
+        Expect(Object.keys(removedGraph).some(path => path.includes('modules/@/studio/View1.tao'))).toBe(false)
+        Expect(addedGraph).not.toEqual(removedGraph)
+      },
+    )
+  })
+
+  Test('does not advance the successful input snapshot on a failed compile', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    await withTaoFiles(
+      'tao-runtime-identical-retry-',
+      {
+        'Main.tao':
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>Same</RN.Text> ``` }',
+      },
+      async paths => {
+        const first = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(1),
+          runtimePackageRoot,
+        })
+        const source = await FS.readText(paths['Main.tao'])
+        await FS.writeText(paths['Main.tao'], 'view Broken( {')
+        await Expect(Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(2),
+          runtimePackageRoot,
+        })).rejects.toThrow()
+        await FS.writeText(paths['Main.tao'], source)
+        const retried = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(2, { sourceVersions: first.preview!.sourceVersions }),
+          runtimePackageRoot,
+        })
+
+        Expect(retried.previewPublicationSkipped).toBe(true)
+        Expect(retried.previewRevision).toBe(1)
+        Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'TaoStudioPublication.ts')))
+          .toContain('"compileRevision":1')
+      },
+    )
+  })
+
+  Test('reset clears identical-publication state and the next pass repairs missing output', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    await withTaoFiles(
+      'tao-runtime-identical-reset-',
+      {
+        'Main.tao':
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>Same</RN.Text> ``` }',
+      },
+      async paths => {
+        await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(1),
+          runtimePackageRoot,
+        })
+        await FS.remove(generatedPreviewPath(runtimePackageRoot, 'TaoApp.tsx'))
+        await Runtime.resetStudioPreviewSession({ runtimePackageRoot })
+        const reopened = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(1),
+          runtimePackageRoot,
+        })
+
+        Expect(reopened.previewPublicationSkipped).toBe(false)
+        Expect(reopened.previewRevision).toBe(1)
+        Expect(await FS.exists(generatedPreviewPath(runtimePackageRoot, 'TaoApp.tsx'))).toBe(true)
+      },
+    )
+  })
+
   Test('preserves multi-app selection for stable previews', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
 

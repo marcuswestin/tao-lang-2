@@ -20,6 +20,8 @@ const MAX_LEASE_AGE_MS = 24 * DEAD_OWNER_GRACE_MS
 const LEASE_NAME = /^\d+-[0-9a-f-]+\.json$/
 
 type Options = {
+  /** Observe contention before a cache reader registers, without forcing a competing disk claim. */
+  onLockWait?: () => Promise<void>
   /** An isolated root and small budgets let lifecycle tests exercise eviction without real Jest. */
   root?: string
   maxFiles?: number
@@ -59,7 +61,9 @@ async function run<Value>(
   // A parent lock covers registration and retirement across every checkout identity. A reader
   // cannot enter an identity while another process is deciding whether to remove it.
   const locked = async (action: () => Promise<void>) =>
-    await FS.withFileMutationLock(FS.resolvePath('coordination', identitiesRoot), identitiesRoot, action)
+    await FS.withFileMutationLock(FS.resolvePath('coordination', identitiesRoot), identitiesRoot, action, {
+      onWait: options.onLockWait,
+    })
 
   await locked(async () => {
     await FS.mkdir(cacheDirectory)

@@ -1,7 +1,7 @@
 import { HostDependencies, ManagedNode, RuntimeToolchainPaths } from '@expo-host'
 import { RuntimeTesting } from '@expo-host/testing/runtime-testing'
 import { AST, Langium, Parser } from '@parser'
-import { CLI, Errors, FS, HCI, Json, Platform, ProjectIdentity, Repo, TaoTestProtocol } from '@shared'
+import { CLI, Errors, FS, HCI, Json, Platform, ProjectIdentity, Repo, TaoTestProtocol, Time } from '@shared'
 import { TaoAppModules } from './app-modules'
 import { inPlace } from './in-place-files'
 import { findTaoFiles } from './tao-files'
@@ -466,7 +466,8 @@ async function validateAndCompileTaoTests(
     const errorsByPath = await mapTestFilesOnWorkers(
       groups,
       workers,
-      async (worker, testPath) => await worker.validateTestFile(testPath),
+      async (worker, testPath) =>
+        await preparationProgress('validation', testPath, async () => await worker.validateTestFile(testPath)),
     )
     const validationErrors = testPaths.flatMap(testPath => errorsByPath.get(testPath) ?? [])
     if (validationErrors.length > 0) {
@@ -479,7 +480,12 @@ async function validateAndCompileTaoTests(
     const filesByPath = await mapTestFilesOnWorkers(
       groups,
       workers,
-      async (worker, testPath) => await worker.compileTestPlan(testPath, { runRoot, skipValidation: true }),
+      async (worker, testPath) =>
+        await preparationProgress(
+          'compilation',
+          testPath,
+          async () => await worker.compileTestPlan(testPath, { runRoot, skipValidation: true }),
+        ),
     )
     const manifestPath = FS.resolvePath(RuntimeTesting.TestRunRoot.MANIFEST_FILE_NAME, runRoot)
     await FS.writeJson(manifestPath, {
@@ -497,7 +503,13 @@ async function validateAndCompileTaoTestsInProcess(
 ): Promise<CompiledTaoTests | ValidationFailed> {
   HCI.logProcessInfo('test', 'Validating Tao test files (packaged runner)')
   const validationErrors = (await Promise.all(
-    testPaths.map(testPath => RuntimeTesting.TestCompiler.validateTestFile(testPath)),
+    testPaths.map(testPath =>
+      preparationProgress(
+        'validation',
+        testPath,
+        async () => await RuntimeTesting.TestCompiler.validateTestFile(testPath),
+      )
+    ),
   )).flat()
   if (validationErrors.length > 0) {
     writeTaoTestValidationErrors(validationErrors)
@@ -509,15 +521,46 @@ async function validateAndCompileTaoTestsInProcess(
   const files = []
   for (const testPath of testPaths) {
     files.push(
-      await RuntimeTesting.TestCompiler.compileTestFile(testPath, {
-        context,
-        skipValidation: true,
-      }),
+      await preparationProgress(
+        'compilation',
+        testPath,
+        async () =>
+          await RuntimeTesting.TestCompiler.compileTestFile(testPath, {
+            context,
+            skipValidation: true,
+          }),
+      ),
     )
   }
   const manifestPath = FS.resolvePath(RuntimeTesting.TestRunRoot.MANIFEST_FILE_NAME, runRoot)
   await FS.writeJson(manifestPath, { files })
   return { manifestPath, runRoot, runtimeRoot, testPaths }
+}
+
+/** Includes queue time; submission is not a claim that the worker has begun executing. */
+async function preparationProgress<ResultT>(
+  phase: 'validation' | 'compilation',
+  testPath: string,
+  run: () => Promise<ResultT>,
+): Promise<ResultT> {
+  const env = Platform.runtimeProcess.env
+  if (env['TAO_VERIFY_NO_TIMEOUTS'] !== 'true' && env['TAO_VERIFY_LIVE_PROGRESS'] !== 'true') {
+    return await run()
+  }
+  const startedAt = Time.nowMs()
+  const path = FS.displayPath(testPath)
+  HCI.logProcessInfo('test', `${phase} submitted: ${path}`)
+  try {
+    const result = await run()
+    HCI.logProcessInfo(
+      'test',
+      `${phase} completed: ${path} (${Math.round(Time.nowMs() - startedAt)}ms including queue)`,
+    )
+    return result
+  } catch (error) {
+    HCI.logProcessInfo('test', `${phase} failed: ${path} (${Math.round(Time.nowMs() - startedAt)}ms including queue)`)
+    throw error
+  }
 }
 
 async function mapTestFilesOnWorkers<ResultT>(

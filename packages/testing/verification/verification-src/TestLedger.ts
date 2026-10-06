@@ -1,4 +1,4 @@
-import { Errors, FS, Json, Repo, Time } from '@shared'
+import { Errors, FS, Json, Repo, Time, VerificationTimeouts } from '@shared'
 import { createHash, randomUUID } from 'node:crypto'
 import { GateCatalog } from './GateCatalog'
 import { MachineLanes, type MachineResourceLease } from './MachineLanes'
@@ -206,7 +206,7 @@ async function acquireLedgerLease(repositoryRoot: string): Promise<MachineResour
   const registryRoot = FS.resolvePath('.artifacts/testing/transaction-lock', repositoryRoot)
   const lease = await Time.pollUntil(
     () => MachineLanes.tryAcquireResource({ name: 'test-ledger', registryRoot }),
-    { intervalMs: 25, timeoutMs: LEDGER_LOCK_TIMEOUT_MS },
+    { intervalMs: 25, timeoutMs: VerificationTimeouts.resolve(LEDGER_LOCK_TIMEOUT_MS) ?? Infinity },
   )
   if (lease !== undefined) {
     return lease

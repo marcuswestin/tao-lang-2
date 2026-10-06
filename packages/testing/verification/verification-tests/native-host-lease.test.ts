@@ -109,7 +109,7 @@ Describe('native host lease', () => {
     try {
       await writeOwner(registryRoot, { pid: 2 ** 30, processStartedAt: 'old-process' })
       const lease = await MachineLanes.acquireResource({
-        command: 'studio-smoke-native',
+        command: 'studio-host-control-smoke',
         name: resourceName,
         processIdentity: async pid =>
           pid === 2 ** 30
@@ -120,7 +120,7 @@ Describe('native host lease', () => {
         waitTimeoutMs: 0,
       })
 
-      Expect(lease.owner.command).toBe('studio-smoke-native')
+      Expect(lease.owner.command).toBe('studio-host-control-smoke')
       Expect((await FS.readJson<MachineResourceOwner>(resourcePath(registryRoot))).id).toBe(lease.owner.id)
       await lease.release()
     } finally {
@@ -154,7 +154,7 @@ Describe('native host lease', () => {
       await writeOwner(registryRoot, { processStartedAt: 'recorded-process' })
 
       await Expect(MachineLanes.acquireResource({
-        command: 'studio-smoke-native',
+        command: 'studio-host-control-smoke',
         name: resourceName,
         processIdentity: async () => ({ evidence: 'unknown' }),
         registryRoot,

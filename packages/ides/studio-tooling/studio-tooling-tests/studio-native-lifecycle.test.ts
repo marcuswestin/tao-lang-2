@@ -95,7 +95,7 @@ Describe('Studio native bounded lifecycle', () => {
     const error = await rejectedError(StudioNative.testing.prepareElectrobun(
       '/tools/hutch',
       '/workspace/native',
-      { installTimeoutMs: 5, log: () => {}, startCommand: () => fake.command },
+      { timeoutPolicy: 'bounded', installTimeoutMs: 5, log: () => {}, startCommand: () => fake.command },
     ))
 
     Expect(error).toBeInstanceOf(Errors.HostEnvironmentError)
@@ -114,6 +114,7 @@ Describe('Studio native bounded lifecycle', () => {
       '/tools/hutch',
       '/workspace/native',
       {
+        timeoutPolicy: 'bounded',
         installTimeoutMs: 5,
         log: () => {},
         startCommand: (_command, spec) => {
@@ -171,6 +172,7 @@ Describe('Studio native bounded lifecycle', () => {
       '/workspace/native',
       {
         log: () => {},
+        timeoutPolicy: 'bounded',
         prepareTimeoutMs: 5,
         startCommand: () => commands.shift()!,
       },

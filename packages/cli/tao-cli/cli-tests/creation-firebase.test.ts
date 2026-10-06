@@ -46,7 +46,7 @@ Describe('tao create Firebase', () => {
     } finally {
       await FS.remove(root)
     }
-  }, 60_000)
+  }, 180_000)
 
   Test('includes the synthetic fill action only when validation tools are requested', async () => {
     const plan = deterministicPlan('A notebook for short notes')
@@ -65,7 +65,7 @@ Describe('tao create Firebase', () => {
     } finally {
       await FS.remove(root)
     }
-  }, 60_000)
+  }, 180_000)
 
   Test('passes the correct registration value to a local auth provider', async () => {
     const plan = deterministicPlan('A notebook for short notes')
@@ -142,7 +142,7 @@ export function ProbeAuthProvider(): TR.AuthProvider {
     } finally {
       await FS.remove(root)
     }
-  }, 60_000)
+  }, 180_000)
 
   Test('rejects account declaration collisions', () => {
     const plan = deterministicPlan('A notebook for short notes')

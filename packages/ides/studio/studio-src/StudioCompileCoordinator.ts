@@ -27,6 +27,7 @@ export type StudioCompileRequest = StudioProjectIdentity & {
 
 export type StudioCompileOutput = {
   message?: string
+  publishedRevision?: number
 }
 
 export type StudioCompileCompletion = {
@@ -35,6 +36,7 @@ export type StudioCompileCompletion = {
   compileRevision: number
   diagnostics: readonly StudioCompileDiagnostic[]
   message: string
+  publishedRevision?: number
   status: 'compiled' | 'error'
 }
 
@@ -43,6 +45,7 @@ export type StudioCompileSnapshot = StudioProjectIdentity & {
   compileRevision: number
   diagnostics: readonly StudioCompileDiagnostic[]
   message: string
+  publishedRevision?: number
   previewInstanceId?: string
   status: 'idle' | 'compiling' | 'compiled' | 'error'
 }
@@ -96,6 +99,7 @@ export class StudioCompileCoordinator {
   #compileRevision = 0
   #diagnostics: readonly StudioCompileDiagnostic[] = []
   #message = 'Studio compile coordinator is idle.'
+  #publishedRevision: number | undefined
   #pending: PendingBatch | undefined
   #previewInstanceId: string | undefined
   #scheduled = false
@@ -115,6 +119,9 @@ export class StudioCompileCoordinator {
       compileRevision: this.#compileRevision,
       diagnostics: this.#diagnostics,
       message: this.#message,
+      ...(this.#publishedRevision === undefined || this.#publishedRevision === this.#compileRevision
+        ? {}
+        : { publishedRevision: this.#publishedRevision }),
       previewInstanceId: this.#previewInstanceId,
       status: this.#status,
     }
@@ -171,7 +178,7 @@ export class StudioCompileCoordinator {
         path: write.path,
         sourceVersion: write.sourceVersion,
         writeId: write.writeId,
-        compileRevision: completions[index]!.compileRevision,
+        compileRevision: completions[index]!.publishedRevision ?? completions[index]!.compileRevision,
       })),
       compile,
     }
@@ -292,7 +299,8 @@ export class StudioCompileCoordinator {
     this.#emitState()
     try {
       const output = await this.#compile(request)
-      this.#compiledRevisions.add(request.compileRevision)
+      this.#publishedRevision = output?.publishedRevision ?? request.compileRevision
+      this.#compiledRevisions.add(this.#publishedRevision)
       this.#status = 'compiled'
       this.#diagnostics = []
       this.#message = output?.message ?? `Compiled ${this.#project.appName} revision ${this.#compileRevision}.`
@@ -307,6 +315,9 @@ export class StudioCompileCoordinator {
       compileRevision: request.compileRevision,
       diagnostics: this.#diagnostics,
       message: this.#message,
+      ...(this.#publishedRevision === undefined || this.#publishedRevision === request.compileRevision
+        ? {}
+        : { publishedRevision: this.#publishedRevision }),
       status: this.#status,
     }
     this.#emitState()

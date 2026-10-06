@@ -201,6 +201,7 @@ Describe('native module compiler check', () => {
       phase: 'test timeout',
       quiet: true,
       timeoutMs: 10, // budget-ok: the timeout value under test.
+      timeoutPolicy: 'bounded',
     })
 
     Expect(result.timedOut).toBe(true)

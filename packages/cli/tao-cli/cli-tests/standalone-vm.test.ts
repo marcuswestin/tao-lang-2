@@ -351,20 +351,24 @@ exit 17
     }
   })
 
-  Test('fails a stalled transport within its declared parent timeout', async () => {
+  Test('fails a stalled transport through its explicit test-only deadline', async () => {
     const root = await mkTestDir('standalone-vm-timeout-')
     try {
       const tart = FS.resolvePath('tart', root)
       await FS.writeText(tart, '#!/bin/sh\nexec /bin/sleep 30\n')
       await FS.chmod(tart, 0o755)
       const result = await CLI.run(Platform.runtimeProcess.execPath, {
-        // A deliberately short child deadline exercises timeout handling, not performance.
+        // This fixture deliberately enables its 100 ms transport deadline even when
+        // verification watchdogs are disabled. The outer deadline is only a cleanup
+        // safeguard; the transport itself must report the timeout.
         args: ['run', HELPER, 'exec', 'tao-acceptance-1-2', '100', '/usr/bin/true'],
-        env: { ...Platform.runtimeProcess.env, PATH: root },
+        env: { ...Platform.runtimeProcess.env, PATH: root, TAO_VERIFY_NO_TIMEOUTS: 'false' },
         processPolicy: 'test',
         timeoutMs: 30_000,
+        timeoutPolicy: 'bounded',
       })
       Expect(result.exitCode).not.toBe(0)
+      Expect(result.error).toBeUndefined()
       Expect(result.stderr).toContain('timed out')
     } finally {
       await FS.remove(root)
