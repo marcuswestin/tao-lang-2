@@ -74,3 +74,8 @@ gate/shard changes do not replace or contradict the driver fixes; the same revie
 seams. Post-integration CDP checks and typecheck passed. Cold-build timeouts remain a separate
 open verification issue with retained receipts; the initial full control pass and later passing
 driver assertions must not be described as a green later control lane.
+
+The first hosted attempt caught stale raw-error allowlist locations after the CDP source moved.
+The eleven existing browser-injected error exceptions were relocated to their current lines;
+their rationale, count and enforcement remain unchanged. This correction touches the lint source
+in addition to the eight driver/caller files measured above.
