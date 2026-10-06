@@ -884,7 +884,7 @@ await runWithCommands(commands => {
   commands
     .command('open-pr')
     .description(
-      'Push this feat/, claude/, or codex/ branch, open or reuse its pull request titled by the reviewed merge message, then stream its checks; auto-merge stays off unless --auto-merge is specified.',
+      'Wait for admission to the Verify runner pool, push this feat/, claude/, or codex/ branch, open or reuse its pull request titled by the reviewed merge message, then stream its checks; auto-merge stays off unless --auto-merge is specified.',
     )
     .option(
       '--auto-merge',
@@ -898,15 +898,24 @@ await runWithCommands(commands => {
       '--no-complement',
       'With --auto-merge, do not start the local complement lane; run verify-complement separately.',
     )
-    .action(async (options: { autoMerge?: boolean; complement?: boolean; pollIntervalMs?: string } = {}) => {
-      await runExitCommand(async () =>
-        (await OpenPrCommand.run({
-          autoMerge: options.autoMerge,
-          complement: options.complement,
-          pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
-        })).exitCode
-      )
-    })
+    .option(
+      '--jump-queue',
+      'Push without admission: by default open-pr waits while two other Verify runs are in flight, or while the one in flight changed the same files.',
+    )
+    .action(
+      async (
+        options: { autoMerge?: boolean; complement?: boolean; jumpQueue?: boolean; pollIntervalMs?: string } = {},
+      ) => {
+        await runExitCommand(async () =>
+          (await OpenPrCommand.run({
+            autoMerge: options.autoMerge,
+            complement: options.complement,
+            jumpQueue: options.jumpQueue,
+            pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
+          })).exitCode
+        )
+      },
+    )
 
   commands
     .command('cancel-verify')

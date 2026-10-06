@@ -83,8 +83,58 @@ function cleanFeatureBranchRoutes(branch = BRANCH): Record<string, RouteResult> 
     [routeKey('gh', ['api', 'user', '--jq', '.login'], ROOT)]: { stdout: 'someone\n' },
     [listKey('closed', branch)]: { stdout: '[]' },
     [routeKey('git', ['rev-parse', 'HEAD'], ROOT)]: { stdout: `${HEAD_SHA}\n` },
+    [inFlightKey('in_progress')]: { stdout: '{"workflow_runs":[]}' },
+    [inFlightKey('queued')]: { stdout: '{"workflow_runs":[]}' },
     [routeKey('git', ['push', '--set-upstream', 'origin', branch], ROOT)]: {},
   }
+}
+
+/** NOW is the fake clock's start; `fakeDependencies`' default sleep advances it. */
+const NOW = Date.parse('2026-10-06T12:00:00Z')
+const PUSH_KEY = routeKey('git', ['push', '--set-upstream', 'origin', BRANCH], ROOT)
+const FETCH_MAIN_KEY = routeKey('git', ['fetch', 'origin', 'main'], ROOT)
+const BRANCH_DIFF_KEY = routeKey('git', ['diff', '--name-only', '--no-renames', 'origin/main...HEAD'], ROOT)
+
+function inFlightKey(status: 'in_progress' | 'queued'): string {
+  return routeKey(
+    'gh',
+    ['api', `repos/{owner}/{repo}/actions/workflows/verify.yml/runs?status=${status}&per_page=50`],
+    ROOT,
+  )
+}
+
+function prFilesKey(prNumber: number, page: number): string {
+  return routeKey('gh', ['api', `${PULLS}/${prNumber}/files?per_page=100&page=${page}`], ROOT)
+}
+
+/** verifyRun is an in-flight Actions run of Verify, reduced to what admission reads. */
+function verifyRun(
+  id: number,
+  fields: { branch: string; event: string; minutesAgo?: number; pr?: number; status?: string },
+) {
+  return {
+    conclusion: null,
+    created_at: new Date(NOW - (fields.minutesAgo ?? 0) * 60_000).toISOString(),
+    event: fields.event,
+    head_branch: fields.branch,
+    head_sha: `sha${id}`,
+    html_url: `https://github.com/tao/tao/actions/runs/${id}`,
+    id,
+    pull_requests: fields.pr === undefined ? [] : [{ number: fields.pr }],
+    status: fields.status ?? 'in_progress',
+  }
+}
+
+/** answerInFlightInTurn answers successive admission polls with `polls` (the last repeating), all as running. */
+function answerInFlightInTurn(dependencies: OpenPrDependencies, polls: unknown[][]): void {
+  const run = dependencies.run
+  dependencies.run = (async (command, spec = {}) => {
+    const result = await run(command, spec)
+    if (routeKey(command, spec.args ?? [], spec.cwd) !== inFlightKey('in_progress')) {
+      return result
+    }
+    return { ...result, stdout: JSON.stringify({ workflow_runs: polls.length > 1 ? polls.shift() : polls[0] }) }
+  }) as OpenPrRunner
 }
 
 const SUBJECT = 'Add the example workflow'
@@ -184,9 +234,11 @@ function fakeDependencies(
   routes: Record<string, RouteResult>,
   overrides: Partial<OpenPrDependencies> = {},
   branch = BRANCH,
-): { calls: string[]; dependencies: OpenPrDependencies; followed: number[] } {
+): { calls: string[]; dependencies: OpenPrDependencies; followed: number[]; sleeps: number[] } {
   const calls: string[] = []
   const followed: number[] = []
+  const sleeps: number[] = []
+  let clock = NOW
   const dependencies: OpenPrDependencies = {
     exists: async path => path === messageFile(branch),
     followChecks: async options => {
@@ -194,6 +246,7 @@ function fakeDependencies(
       followed.push(options.pr ?? 0)
       return { exitCode: 0 }
     },
+    now: () => clock,
     readText: async path =>
       path === messageFile(branch) ? `${SUBJECT}\n\n${BODY}\n` : Errors.throwUnexpected(`unexpected read: ${path}`),
     run: fakeRun(routes, calls),
@@ -201,11 +254,14 @@ function fakeDependencies(
       calls.push('runComplement')
       return { exitCode: 0 }
     },
-    sleep: async () => {},
+    sleep: async ms => {
+      sleeps.push(ms)
+      clock += ms
+    },
     writeLine: () => {},
     ...overrides,
   }
-  return { calls, dependencies, followed }
+  return { calls, dependencies, followed, sleeps }
 }
 
 function verifyRunsKey(sha = HEAD_SHA): string {
@@ -765,5 +821,141 @@ Describe('open-pr', () => {
       await Expect(OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)).rejects.toThrow(reason)
       Expect(calls.some(call => call.startsWith('git push'))).toBe(false)
     }
+  })
+
+  Describe('admission to the Verify runner pool', () => {
+    // On 2026-10-06 four agents landing together cancelled 22 of 25 Verify runs: the pool holds two.
+    const OTHER_PR = verifyRun(11, { branch: 'feat/other', event: 'pull_request', minutesAgo: 12, pr: 45 })
+    const MAIN_PUSH = verifyRun(12, { branch: 'main', event: 'push', minutesAgo: 3 })
+    // This branch's own earlier run, which the push replaces through Verify's concurrency group.
+    const OWN = verifyRun(10, { branch: BRANCH, event: 'pull_request', minutesAgo: 20, pr: 2 })
+
+    Test('pushes at once when no other Verify run is in flight', async () => {
+      const { calls, dependencies, sleeps } = fakeDependencies(openedPullRequestRoutes(2))
+      answerInFlightInTurn(dependencies, [[OWN]])
+
+      const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+      Expect(result.exitCode).toBe(0)
+      Expect(sleeps).toEqual([])
+      Expect(result.lines).toContain('PASS  No other Verify run is in flight; this run gets the whole runner pool.')
+      Expect(calls.indexOf(inFlightKey('queued'))).toBeLessThan(calls.indexOf(PUSH_KEY))
+      Expect(calls).not.toContain(FETCH_MAIN_KEY)
+    })
+
+    Test('waits while two other runs are in flight, then pushes when one finishes', async () => {
+      const { calls, dependencies, sleeps } = fakeDependencies(openedPullRequestRoutes(2))
+      answerInFlightInTurn(dependencies, [[OWN, OTHER_PR, MAIN_PUSH], [OWN, OTHER_PR, MAIN_PUSH], [MAIN_PUSH]])
+
+      const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+      Expect(result.exitCode).toBe(0)
+      Expect(sleeps).toEqual([30_000, 30_000])
+      // One line for the wait, not one per poll, since the set did not change.
+      Expect(result.lines.filter(line => line.startsWith('WAIT'))).toEqual([
+        'WAIT  2 other Verify runs are in flight and the runner pool holds 2: run 11 on feat/other'
+        + ' (pull_request #45, 12m old), run 12 on main (push, 3m old); checking every 30s until fewer remain.',
+      ])
+      Expect(result.lines).toContain(
+        'PASS  One other Verify run is in flight (run 12 on main (push, 4m old));'
+          + ' this run will share the pool with run 12 at the smaller partition count.',
+      )
+      Expect(calls.lastIndexOf(inFlightKey('in_progress'))).toBeLessThan(calls.indexOf(PUSH_KEY))
+      // A push to main changes no pull request's files, so nothing is compared.
+      Expect(calls).not.toContain(FETCH_MAIN_KEY)
+    })
+
+    Test('waits for one other lander that changed the same files, naming them', async () => {
+      const ours = Array.from({ length: 12 }, (_, index) => `src/a${index}.ts`)
+      const routes = openedPullRequestRoutes(2)
+      routes[FETCH_MAIN_KEY] = {}
+      routes[BRANCH_DIFF_KEY] = { stdout: `${[...ours, 'docs/only-ours.md'].join('\n')}\n` }
+      // A full first page means there is another; the second page's rename shares its old path.
+      const firstPage = [
+        ...ours.slice(0, 11).map(filename => ({ filename })),
+        ...Array.from({ length: 89 }, (_, index) => ({ filename: `other/f${index}.ts` })),
+      ]
+      routes[prFilesKey(45, 1)] = { stdout: JSON.stringify(firstPage) }
+      routes[prFilesKey(45, 2)] = {
+        stdout: JSON.stringify([{ filename: 'src/renamed.ts', previous_filename: 'src/a11.ts' }]),
+      }
+      const { calls, dependencies, sleeps } = fakeDependencies(routes)
+      answerInFlightInTurn(dependencies, [[OTHER_PR], []])
+
+      const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+      Expect(result.exitCode).toBe(0)
+      Expect(sleeps).toEqual([30_000])
+      Expect(result.lines).toContain(
+        'WAIT  run 11 on feat/other (pull_request #45, 12m old) changed the same files as this branch, and the'
+          + ' two would merge untested against each other: src/a0.ts, src/a1.ts, src/a10.ts, src/a11.ts,'
+          + ' src/a2.ts, src/a3.ts, src/a4.ts, src/a5.ts, src/a6.ts, src/a7.ts, and 2 more.'
+          + ' Waiting for it to finish, checking every 30s.',
+      )
+      Expect(result.lines).toContain('PASS  No other Verify run is in flight; this run gets the whole runner pool.')
+      Expect(calls.indexOf(FETCH_MAIN_KEY)).toBeLessThan(calls.indexOf(BRANCH_DIFF_KEY))
+      Expect(calls.indexOf(prFilesKey(45, 2))).toBeLessThan(calls.indexOf(PUSH_KEY))
+    })
+
+    Test('shares the pool with one other lander that changed none of the same files', async () => {
+      // GitHub names no pull request on a run from a fork, so the run's branch finds it.
+      const fromFork = verifyRun(11, { branch: 'feat/other', event: 'pull_request', minutesAgo: 5 })
+      const routes = openedPullRequestRoutes(2)
+      routes[FETCH_MAIN_KEY] = {}
+      routes[BRANCH_DIFF_KEY] = { stdout: 'src/a.ts\n' }
+      routes[listKey('open', 'feat/other')] = { stdout: JSON.stringify([pull(45)]) }
+      routes[prFilesKey(45, 1)] = { stdout: JSON.stringify([{ filename: 'src/elsewhere.ts' }]) }
+      const { calls, dependencies, sleeps } = fakeDependencies(routes)
+      answerInFlightInTurn(dependencies, [[fromFork]])
+
+      const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+      Expect(result.exitCode).toBe(0)
+      Expect(sleeps).toEqual([])
+      Expect(result.lines).toContain(
+        'PASS  One other Verify run is in flight (run 11 on feat/other (pull_request, 5m old)) and it changed none'
+          + ' of these files; this run will share the pool with run 11 at the smaller partition count.',
+      )
+      Expect(calls.indexOf(prFilesKey(45, 1))).toBeLessThan(calls.indexOf(PUSH_KEY))
+    })
+
+    Test('--jump-queue pushes beside the runs in flight, naming what it skipped', async () => {
+      const { calls, dependencies, sleeps } = fakeDependencies(openedPullRequestRoutes(2))
+      answerInFlightInTurn(dependencies, [[OTHER_PR, MAIN_PUSH]])
+
+      const result = await OpenPrCommand.run({ jumpQueue: true, repositoryRoot: ROOT }, dependencies)
+
+      Expect(result.exitCode).toBe(0)
+      Expect(sleeps).toEqual([])
+      Expect(result.lines).toContain(
+        'NOTE  --jump-queue: pushing without admission beside run 11 on feat/other (pull_request #45, 12m old),'
+          + ' run 12 on main (push, 3m old).',
+      )
+      Expect(calls).toContain(PUSH_KEY)
+      Expect(calls.some(call => call === FETCH_MAIN_KEY || call.includes('/files?'))).toBe(false)
+    })
+
+    Test('gives up after 90 minutes without pushing, naming the runs and --jump-queue', async () => {
+      const routes = openedPullRequestRoutes(2)
+      // A queued run holds its place in the pool as surely as a running one.
+      routes[inFlightKey('queued')] = {
+        stdout: JSON.stringify({ workflow_runs: [{ ...MAIN_PUSH, status: 'queued' }] }),
+      }
+      const { calls, dependencies, sleeps } = fakeDependencies(routes)
+      answerInFlightInTurn(dependencies, [[OTHER_PR]])
+
+      const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+      Expect(result.exitCode).toBe(1)
+      Expect(calls.some(call => call.startsWith('git push'))).toBe(false)
+      Expect(sleeps).toHaveLength(180)
+      // Every five minutes of an unchanged wait prints a still-waiting line rather than staying silent.
+      Expect(result.lines.filter(line => line.startsWith('WAIT  Still waiting for admission'))).toHaveLength(17)
+      Expect(result.lines.at(-1)).toBe(
+        'FAIL  Waited 90m for admission and run 11 on feat/other (pull_request #45, 102m old), run 12 on main'
+          + ' (push, 93m old) still in flight; nothing was pushed. Run open-pr again later, or with --jump-queue'
+          + ' to push beside them.',
+      )
+    })
   })
 })
