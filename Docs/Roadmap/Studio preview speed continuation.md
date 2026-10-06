@@ -1075,3 +1075,7 @@ The standalone performance attempt was inconclusive at quiet admission: another 
 was active and load was34.6 on18 CPUs. Retain that result; no performance ceiling changed and no
 new save-to-paint gain is claimed. Hosted Verify and the local host-only complement own landing
 proof. Earlier sequential-versus-parallel research evidence remains in the verification handoff.
+
+Hosted retry correction, 2026-10-06: the first Verify run (37420417279, PR 32) found strict typing and shared-boundary lint defects in the installed-module timer tests, plus incoming root-instruction budget and formatter drift defects. The run was cancelled after those failures were observed. Repairs preserve assertions and timer behavior; the retry still requires hosted Verify and the host-only complement on its new head.
+
+The cancellation command now accepts `--all-workflows --sha <commit>` to stop other workflows on an already-failed owned PR head. It excludes completed runs and runs on other heads; six cancellation/landing-fix checks pass. This stopped the remaining native-parity run on the first failed head. The repaired six installed-module timer checks, typecheck and lint pass; hosted retry proof is still pending.

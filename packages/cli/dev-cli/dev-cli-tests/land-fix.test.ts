@@ -165,29 +165,32 @@ Describe('land-fix', () => {
 })
 
 Describe('cancel-verify', () => {
-  Test('cancels only the runs still in flight for the commit', async () => {
-    const calls: string[] = []
-    const lines: string[] = []
-    const outcome = await CancelVerifyCommand.run({ repositoryRoot: ROOT, sha: FIX }, {
-      run: async (command, spec = {}) => {
-        const args = (spec.args ?? []).join(' ')
-        calls.push(`${command} ${args}`)
-        const stdout = args.includes('actions/workflows/verify.yml/runs')
-          ? JSON.stringify({
-            workflow_runs: [
-              { conclusion: null, head_sha: FIX, html_url: 'u/12', id: 12, status: 'queued' },
-              { conclusion: 'success', head_sha: FIX, html_url: 'u/11', id: 11, status: 'completed' },
-              { conclusion: null, head_sha: MERGED, html_url: 'u/10', id: 10, status: 'in_progress' },
-            ],
-          })
-          : ''
-        return { args: [...(spec.args ?? [])], command, cwd: spec.cwd, exitCode: 0, signal: null, stderr: '', stdout }
-      },
-      writeLine: line => lines.push(line),
+  for (const allWorkflows of [false, true]) {
+    Test(`cancels only live runs on the requested commit (${allWorkflows ? 'all workflows' : 'Verify'})`, async () => {
+      const calls: string[] = []
+      const lines: string[] = []
+      const outcome = await CancelVerifyCommand.run({ repositoryRoot: ROOT, sha: FIX, allWorkflows }, {
+        run: async (command, spec = {}) => {
+          const args = (spec.args ?? []).join(' ')
+          calls.push(`${command} ${args}`)
+          const stdout =
+            args.includes(allWorkflows ? 'actions/runs?head_sha=' : 'actions/workflows/verify.yml/runs?head_sha=')
+              ? JSON.stringify({
+                workflow_runs: [
+                  { conclusion: null, head_sha: FIX, html_url: 'u/12', id: 12, status: 'queued' },
+                  { conclusion: 'success', head_sha: FIX, html_url: 'u/11', id: 11, status: 'completed' },
+                  { conclusion: null, head_sha: MERGED, html_url: 'u/10', id: 10, status: 'in_progress' },
+                ],
+              })
+              : ''
+          return { args: [...(spec.args ?? [])], command, cwd: spec.cwd, exitCode: 0, signal: null, stderr: '', stdout }
+        },
+        writeLine: line => lines.push(line),
+      })
+      Expect(outcome.cancelled).toBe(1)
+      Expect(calls).toContain('gh api --method POST repos/{owner}/{repo}/actions/runs/12/cancel --silent')
+      Expect(calls.some(call => call.includes('runs/11/cancel') || call.includes('runs/10/cancel'))).toBe(false)
+      Expect(lines[0]).toStartWith(`PASS  Cancelled ${allWorkflows ? 'workflow' : 'Verify'} run 12 (queued)`)
     })
-    Expect(outcome.cancelled).toBe(1)
-    Expect(calls).toContain('gh api --method POST repos/{owner}/{repo}/actions/runs/12/cancel --silent')
-    Expect(calls.some(call => call.includes('runs/11/cancel') || call.includes('runs/10/cancel'))).toBe(false)
-    Expect(lines[0]).toStartWith('PASS  Cancelled Verify run 12 (queued)')
-  })
+  }
 })

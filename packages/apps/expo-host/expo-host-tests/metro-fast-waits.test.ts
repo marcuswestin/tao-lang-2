@@ -122,7 +122,7 @@ function withTimers<T>(
     delays,
     async fire(index) {
       const callback = [...pending.values()][index]
-      Assert.that(callback, `No captured timeout at index ${index}`)
+      Assert(callback, `No captured timeout at index ${index}`)
       pending.delete([...pending.keys()][index]!)
       await callback()
     },
