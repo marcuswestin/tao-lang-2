@@ -856,7 +856,7 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands).toContain('url.https://github.com/.insteadOf')
     Expect(commands).toContain('gh auth login --hostname github.com --git-protocol https --web')
     Expect(commands).toContain('gh auth setup-git --hostname github.com')
-    Expect(commands).toContain('git remote set-url origin https://github.com/marcuswestin/tao-lang-2.git')
+    Expect(commands).toContain('git remote set-url origin https://github.com/tao-dev-org/tao-lang.git')
     Expect(commands).toContain('git ls-remote --exit-code origin refs/heads/main')
   })
 

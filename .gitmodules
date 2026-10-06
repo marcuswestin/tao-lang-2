@@ -1,5 +1,5 @@
 [submodule "storage"]
 	path = storage
-	url = https://github.com/marcuswestin/tao-lang-2-storage.git
+	url = https://github.com/tao-dev-org/tao-lang-storage.git
 	ignore = all
 	branch = main

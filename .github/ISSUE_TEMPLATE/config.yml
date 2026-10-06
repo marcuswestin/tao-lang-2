@@ -6,11 +6,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: I want to build something Tao cannot express yet
-    url: https://github.com/marcuswestin/tao-lang-2/discussions/new?category=ideas
+    url: https://github.com/tao-dev-org/tao-lang/discussions/new?category=ideas
     about: Not stuck on a specific attempt — tell us about the app you have in mind and where Tao runs out.
   - name: How would I say this in Tao?
-    url: https://github.com/marcuswestin/tao-lang-2/discussions/new?category=q-a
+    url: https://github.com/tao-dev-org/tao-lang/discussions/new?category=q-a
     about: Ask before you are stuck. What you searched for and did not find is feedback too.
   - name: Read the language spec
-    url: https://github.com/marcuswestin/tao-lang-2/tree/main/Docs/Spec
+    url: https://github.com/tao-dev-org/tao-lang/tree/main/Docs/Spec
     about: What Tao implements today. If it disagrees with what you saw, that is worth an issue.

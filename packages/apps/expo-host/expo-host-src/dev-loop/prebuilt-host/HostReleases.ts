@@ -25,7 +25,7 @@ import type { HostSearch, PrebuiltHost } from './PrebuiltHosts'
 
 const HOST_RELEASE_TAG_PREFIX = 'companion-host-'
 /** The repository whose releases carry prebuilt hosts; `TAO_HOST_RELEASES` names another. */
-const DEFAULT_HOST_RELEASES_REPOSITORY = 'marcuswestin/tao-lang-2'
+const DEFAULT_HOST_RELEASES_REPOSITORY = 'tao-dev-org/tao-lang'
 /**
  * Host releases share the repository's release list with the CLI's and Studio's, so the newest
  * host can sit pages deep. Pages are read one at a time and only until a host fits, within a bound

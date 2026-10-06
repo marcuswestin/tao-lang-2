@@ -35,7 +35,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
-          OWNER: ${{ github.repository_owner }}
+          # The repository belongs to an organization, so the maintainer is named rather than read
+          # from the owner, which is now the organization's login.
+          MAINTAINER: marcuswestin
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -49,7 +51,7 @@ jobs:
           }
           # The maintainer holds the rights already.
           accepted=false
-          if [ "$author" = "$OWNER" ]; then
+          if [ "$author" = "$MAINTAINER" ]; then
             accepted=true
           # This pull request's description, or a comment on it, by its author.
           elif signed "$(jq -r '.body // ""' <<<"$pr")" || signed "$(comments_by "$NUMBER")"; then
