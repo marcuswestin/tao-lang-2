@@ -277,7 +277,10 @@ records whether such an effect ran. A failure report is retry-eligible only when
 reports that fact but does not automatically retry an action.
 
 An `async { ... }` action block is detached from its caller. When encountered inside a transaction, it starts
-as a new serialized root after the caller finishes rather than joining the caller's overlay.
+as a new isolated root after the caller finishes rather than joining the caller's overlay. Suspended
+detached work does not hold the foreground action queue: UI actions can sample or cancel it.
+Explicit action draining still joins detached completion, including detached children. A replacement
+launch excludes abandoned work from its drain.
 
 The runtime also provides explicit lexical cleanup frames. Admitted joined work and its outcome
 handlers settle before a frame drains cleanup, serially in reverse registration order. Every
@@ -500,9 +503,10 @@ one preview cell; it does not automatically write the capture back as Tao fixtur
 
 Action-failure reports still carry name-only call frames rather than compiler source ranges. Render-failure
 frames carry the source range supplied by their automatic boundary. `retryEligible` is reported, and render
-containment can offer Try again, but the runtime does not automatically reinvoke a failed action. Root
-serialization prevents a second root action from overlapping the active transaction; unrelated host
-callbacks still do not have separate async transaction context.
+containment can offer Try again, but the runtime does not automatically reinvoke a failed action.
+Foreground roots remain serialized; detached roots and explicit response actions can run while another
+root is suspended. Generated continuations restore their own transaction and cleanup frame; unrelated
+host callbacks still do not have separate async transaction context.
 
 `TR.Errors` is the runtime's one error-handling surface. It publishes `capture` and `reset` for the bounded
 action-history diagnostics, `onFailure` for contained root action failures, and `onUnowned` and

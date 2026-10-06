@@ -322,7 +322,14 @@ Earlier(.Left Cool, .Right Imperial as Celsius)
 
 Static methods retain their declared result identity. Associated converters declare an explicit
 source-to-target transformation inside the source type; merely sharing backing data does not
-permit implicit sibling conversion. Method visibility follows the visible owning type.
+permit implicit sibling conversion. Method visibility follows the visible owning type. A nominal
+value exposed through a public field or signature retains its associated converters without a
+separate import of the owner's name. Conversion admission still uses the concrete source ancestry
+and exact target, not shared storage or an arbitrary conversion graph.
+
+The core `ConversionFailure` family contains `InvalidFormat`, `UnsupportedEncoding`, `OutOfRange`,
+`PrecisionLoss`, and `ConstraintViolation`. A converter can declare one leaf or the family as its
+failure bound; a propagated failure reaches the ordinary action outcome or app error guard.
 
 ### Native event controls
 

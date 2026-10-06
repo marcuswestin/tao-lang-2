@@ -825,7 +825,7 @@ class TR {
     })
   }
 
-  /** Async starts detached action work immediately and reports the failure its absent caller cannot observe. */
+  /** Async starts isolated work after its caller finishes and reports failures its absent caller cannot observe. */
   static Async(body: () => PromiseLike<unknown>): void {
     deferDetached(body)
   }

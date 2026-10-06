@@ -808,7 +808,12 @@ class AppiumXcuiTestSession implements HostSession {
 
   async #findTarget(target: HostTarget): Promise<AppiumElement> {
     if (target.kind === 'scoped') {
-      const scope = await this.#findTarget(target.scope)
+      let scope: AppiumElement
+      try {
+        scope = await this.#findTarget(target.scope)
+      } catch (error) {
+        throwScopeLookupFailure(error, target.scope)
+      }
       return await this.#findTargetWithin(scope, target.target)
     }
     const occurrence = target.occurrence ?? 1
@@ -821,7 +826,7 @@ class AppiumXcuiTestSession implements HostSession {
       throw new HostControlError(
         'assertion',
         `Appium/XCUITest did not find occurrence ${occurrence} for the requested native target.`,
-        { occurrence, target },
+        { occurrence, reason: 'element-not-found', target },
       )
     }
     return element
@@ -832,7 +837,12 @@ class AppiumXcuiTestSession implements HostSession {
     target: HostTarget,
   ): Promise<AppiumElement> {
     if (target.kind === 'scoped') {
-      const nestedScope = await this.#findTargetWithin(scope, target.scope)
+      let nestedScope: AppiumElement
+      try {
+        nestedScope = await this.#findTargetWithin(scope, target.scope)
+      } catch (error) {
+        throwScopeLookupFailure(error, target.scope)
+      }
       return await this.#findTargetWithin(nestedScope, target.target)
     }
     const occurrence = target.occurrence ?? 1
@@ -883,8 +893,25 @@ function missingScopedOccurrence(occurrence: number, target: HostTarget): never 
   throw new HostControlError(
     'assertion',
     `Appium/XCUITest did not find occurrence ${occurrence} within the requested native scope.`,
-    { occurrence, target },
+    { occurrence, reason: 'element-not-found', target },
   )
+}
+
+function throwScopeLookupFailure(error: unknown, scope: HostTarget): never {
+  if (isMissingElement(error)) {
+    throw new HostControlError(
+      'assertion',
+      'Appium/XCUITest did not find the requested native scope.',
+      { scope },
+    )
+  }
+  throw error
+}
+
+function isMissingElement(error: unknown): boolean {
+  return error instanceof AppiumNoSuchElementError
+    || (error instanceof HostControlError && error.code === 'assertion'
+      && error.details?.['reason'] === 'element-not-found')
 }
 
 function rectContainsCenter(container: AppiumRect, candidate: AppiumRect): boolean {

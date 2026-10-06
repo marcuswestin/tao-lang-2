@@ -8,6 +8,8 @@
     "**/node_modules",
     "**/*-lock.json",
     "**/_gen_*/**",
+    // Native acceptance builds the runtime module in place; Gradle owns this output.
+    "packages/apps/runtime/android/build/**",
     ".*",
     "Docs/Archive/**",
     // The storage submodule holds generated capture records owned by another repository.

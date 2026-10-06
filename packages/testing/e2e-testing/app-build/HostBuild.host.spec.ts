@@ -25,11 +25,42 @@ test(
   },
 )
 
+test('Syntax2 prepares its actual LibraryApp source for native acceptance', async ({}, testInfo) => {
+  // This preparation compiles both complete apps from cold input; no UI assertion wait is extended.
+  test.setTimeout(180_000)
+  const build = await prepareHostApp({
+    artifactRoot: testInfo.outputPath('syntax2'),
+    runId: 'syntax2-native',
+    seed: 12345,
+    subject: 'syntax2',
+  })
+  expect(build.compiledArtifactDigest).not.toBe('')
+  expect(await FS.readJson(FS.resolvePath('HostTestConfig.json', build.root))).toMatchObject({ subject: 'syntax2' })
+  expect(await FS.readJson(FS.resolvePath('app.json', build.root))).toMatchObject({
+    expo: {
+      newArchEnabled: true,
+      plugins: expect.arrayContaining(['jazz-rn', './plugins/with-jazz-podfile-properties.cjs']),
+    },
+  })
+  for (const plugin of ['with-jazz-podfile-properties.cjs', 'with-ios-fmt-compat.cjs']) {
+    expect(await FS.readText(FS.resolvePath(`plugins/${plugin}`, build.root))).toBe(
+      await FS.readText(Repo.resolvePath(`packages/apps/expo-host/plugins/${plugin}`)),
+    )
+  }
+})
+
 test('the HNReader host wrapper publishes a native control receipt after an accepted advance', () => {
   const execution = executeHostEntrypoint(compileEntrypoint(), 'hnreader')
   execution.HostApp()
   execution.onAdvance({ lastControlAdvanceMs: 1_000 })
   expect(execution.publishedReceipt(0)).toBe('Control received: advance 1000ms')
+})
+
+test('Syntax2 installed acceptance keeps the production scheduler instead of installing a virtual clock', () => {
+  const execution = executeHostEntrypoint(compileEntrypoint(), 'syntax2')
+  execution.HostApp()
+  expect(execution.controlledClockInstallations).toBe(0)
+  expect(execution.onAdvance).toBeUndefined()
 })
 
 test('native acceptance waits for both actual native mounts and keeps any fallback failed', () => {
@@ -70,6 +101,7 @@ function compileEntrypoint(): string {
 }
 
 type HostEntrypointExecution = Readonly<{
+  controlledClockInstallations: number
   HostApp: () => unknown
   onAdvance: (snapshot: Readonly<{ lastControlAdvanceMs?: number }>) => void
   publishedReceipt: (index: number) => string | undefined
@@ -83,6 +115,7 @@ function executeHostEntrypoint(
   fallbackOnLoad = false,
   platform = 'ios',
 ): HostEntrypointExecution {
+  let controlledClockInstallations = 0
   let onAdvance: ((snapshot: Readonly<{ lastControlAdvanceMs?: number }>) => void) | undefined
   const receipts: (string | undefined)[] = []
   let nextState = 0
@@ -144,7 +177,12 @@ function executeHostEntrypoint(
         }
       }
       if (request.endsWith('/RuntimeHostTestControl.ts')) {
-        return { installRuntimeHostTestControl: (): object => ({}) }
+        return {
+          installRuntimeHostTestControl: (): object => {
+            controlledClockInstallations += 1
+            return {}
+          },
+        }
       }
       if (request === './HostTestConfig.json') {
         return { __esModule: true, default: { runId: 'host-test', seed: 17, subject } }
@@ -162,12 +200,13 @@ function executeHostEntrypoint(
     module,
   )
   expect(exports.HostApp).toBeDefined()
-  if (platform === 'web') {
+  if (platform === 'web' || subject === 'syntax2') {
     expect(onAdvance).toBeUndefined()
   } else {
     expect(onAdvance).toBeDefined()
   }
   return {
+    controlledClockInstallations,
     HostApp: exports.HostApp!,
     onAdvance: onAdvance!,
     publishedReceipt: index => receipts[index],

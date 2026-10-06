@@ -1,14 +1,15 @@
 import {
   type AppiumServer,
+  type AppiumSession,
   createAppiumHttpTransport,
   createAppiumWebDriverClient,
   startMobileAppiumServer,
 } from '@appium-driver'
 import { type HostRevision, type MachineResourceLease, MachineResources } from '@host-control'
-import { CLI, Errors, FS, HCI, Platform, Repo, Switch } from '@shared'
+import { Assert, CLI, Errors, FS, HCI, Platform, Repo, Switch, Time } from '@shared'
 import type { HostBuild, PrepareHostAppOptions } from './app-build/HostBuild'
 import type { HostTestingContext, SimulatorNativeHostTestingRequest } from './HostTestingRequest'
-import { compileHostJourney, type HostJourney } from './journey/HostJourney'
+import { compileHostJourney, type HostJourney, type HostJourneyOperation } from './journey/HostJourney'
 import {
   androidTargetLeaseName,
   createAppiumAndroidController,
@@ -16,6 +17,7 @@ import {
 import { runAppiumAndroidHostProof } from './native/appium-android/AppiumAndroidHostProof'
 import { runAppiumIosHostProof } from './native/appium/AppiumIosHostProof'
 import { createAppiumXcuiTestController, iosTargetLeaseName } from './native/appium/AppiumXcuiTestController'
+import { proveAppiumBackgroundResume } from './native/AppiumBackgroundResumeProof'
 import { appiumAndroidClient, appiumXcuiTestClient } from './native/AppiumMobileClients'
 import { exportNativeIosApp } from './native/NativeIosAppExport'
 
@@ -50,6 +52,8 @@ export async function runAppiumNativeHostProofCommand(
   let server: AppiumServer | undefined
   let proof: AppiumProof | undefined
   let proofFailure: unknown
+  let lifecycleProved = false
+  let timerSampleProved = false
   let cleanupFailures: readonly AppiumCleanupFailure[] = []
   try {
     await buildAndInstall(platform, request.device, preparation, context.environment)
@@ -69,11 +73,52 @@ export async function runAppiumNativeHostProofCommand(
       runId: context.runId,
     })
     await FS.writeText(FS.resolvePath('appium/server.url.txt', context.artifactRoot), `${server.url}\n`)
-    const factory = createAppiumWebDriverClient(createAppiumHttpTransport({ serverUrl: server.url }))
+    const client = createAppiumWebDriverClient(createAppiumHttpTransport({ serverUrl: server.url }))
+    let mobileSession: AppiumSession | undefined
+    const factory: typeof client = {
+      async createSession(capabilities) {
+        mobileSession = await client.createSession(capabilities)
+        return mobileSession
+      },
+    }
+    let earliestTimerStartMs: number | undefined
+    let observedBackgroundMs: number | undefined
+    const afterOperation = request.subject !== 'syntax2' ? undefined : async (operation: HostJourneyOperation) => {
+      if (operation.kind === 'expect' && operation.text === 'Native timer ready') {
+        earliestTimerStartMs = Time.nowMs()
+        return
+      }
+      if (operation.kind === 'press' && operation.text === 'Sample native timer') {
+        Assert.defined(earliestTimerStartMs, 'Timing acceptance brackets the timer start before backgrounding.')
+        Assert.defined(observedBackgroundMs, 'Timing acceptance observes the actual background interval.')
+        const foregroundUpperBoundMs = Time.nowMs() - earliestTimerStartMs - observedBackgroundMs
+        await FS.writeJson(FS.resolvePath('appium/timer-sample-window.json', context.artifactRoot), {
+          foregroundUpperBoundMs,
+          observedBackgroundMs,
+        })
+        // This bound prevents a paused clock passing merely because automation spent 10s in the foreground.
+        if (foregroundUpperBoundMs >= 10_000) {
+          return Errors.throwHostEnvironment(
+            'Native timing proof is inconclusive: foreground automation took too long to distinguish background time.',
+          )
+        }
+        timerSampleProved = true
+        return
+      }
+      if (operation.kind !== 'press' || operation.text !== 'Start native timer') {
+        return
+      }
+      Assert.defined(mobileSession, 'The native lifecycle proof requires the opened mobile session.')
+      const evidence = await proveAppiumBackgroundResume({ appId: preparation.appId, session: mobileSession })
+      observedBackgroundMs = evidence.backgroundWaitCompletedAtMs - evidence.backgroundObservedAtMs
+      await FS.writeJson(FS.resolvePath('appium/background-resume.json', context.artifactRoot), evidence)
+      lifecycleProved = true
+    }
     const fault = preparation.fault === undefined ? undefined : appiumFault(preparation.fault.kind, journey)
     const control = nativeClockControl(platform, request.device, preparation, context.runId, context.environment)
     proof = platform === 'ios'
       ? await runAppiumIosHostProof({
+        afterOperation,
         artifactRoot: context.artifactRoot,
         control,
         controller: createAppiumXcuiTestController({
@@ -88,6 +133,7 @@ export async function runAppiumNativeHostProofCommand(
         target: `ios-simulator:${request.device}`,
       })
       : await runAppiumAndroidHostProof({
+        afterOperation,
         artifactRoot: context.artifactRoot,
         control,
         controller: createAppiumAndroidController({
@@ -121,6 +167,9 @@ export async function runAppiumNativeHostProofCommand(
       cause: proofFailure,
       details: cleanupFailureDetails(cleanupFailures),
     })
+  }
+  if (request.subject === 'syntax2' && proof?.status === 'passed' && (!lifecycleProved || !timerSampleProved)) {
+    return Errors.throwHostEnvironment('The Syntax2 journey did not prove the native background/resume lifecycle.')
   }
   if (proof?.retainsTargetLease === true) {
     return Errors.throwHostEnvironment(
@@ -309,7 +358,7 @@ async function reportProof(
   )
 }
 
-async function journeyFor(subject: SimulatorNativeHostTestingRequest['subject']) {
+export async function journeyFor(subject: SimulatorNativeHostTestingRequest['subject']) {
   const journey = await Switch<SimulatorNativeHostTestingRequest['subject'], Promise<HostJourney>>(subject, {
     clockwork: () =>
       compileHostJourney(Repo.resolvePath('packages/testing/e2e-testing/fixtures/Clockwork/Clockwork.test.tao'), {
@@ -331,8 +380,13 @@ async function journeyFor(subject: SimulatorNativeHostTestingRequest['subject'])
         check: 'keeps three independent stack positions and local state when switching tabs',
         suite: 'Native navigation acceptance',
       }),
+    syntax2: () =>
+      compileHostJourney(Repo.resolvePath('Apps/Syntax2/.host-tests/Native.test.tao'), {
+        check: 'renders the installed Library',
+        suite: 'Syntax2 native acceptance',
+      }),
   })
-  return subject === 'clockwork' || subject === 'native-bridge'
+  return subject === 'clockwork' || subject === 'native-bridge' || subject === 'syntax2'
     ? journey
     : requireNativeNavigationHosts(journey, subject)
 }

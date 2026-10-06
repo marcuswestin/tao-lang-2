@@ -218,6 +218,7 @@ function shallowSavepoint<ValueT>(value: ValueT): () => void {
 
 let activeTransaction: ActionTransaction | undefined
 const liveRoots = new Set<ActionTransaction>()
+const detachedRoots = new Set<Promise<void>>()
 let rootQueue: Promise<void> = Promise.resolve()
 let queuedRoots = 0
 let externalEffectRevision = 0
@@ -378,8 +379,8 @@ export async function settleActionRoots(): Promise<void> {
   let pending: Promise<void>
   do {
     pending = rootQueue
-    await pending
-  } while (pending !== rootQueue)
+    await Promise.all([pending, ...detachedRoots])
+  } while (pending !== rootQueue || detachedRoots.size > 0)
 }
 
 /** TaoActionContinuation is the compiler-carried transaction identity for one async action root. */
@@ -463,6 +464,7 @@ export function beginActionLaunch(): void {
   }
   rootQueue = Promise.resolve()
   queuedRoots = 0
+  detachedRoots.clear()
   for (const transaction of liveRoots) {
     if (abandonedByLaunch(transaction)) {
       cancelTransaction(transaction)
@@ -732,7 +734,18 @@ async function enqueueDetached(
   testStubs: TestActionStubContext,
   owner?: TaoActionOwner,
 ): Promise<void> {
-  await runAction('async', [], body, false, false, testStubs, undefined, owner)
+  // Detached work must not occupy the foreground queue: UI actions can sample or cancel it
+  // while its continuation is suspended. It still owns an isolated, launch-fenced transaction.
+  const launch = launchGeneration
+  const pending = Promise.resolve(runAction('async', [], body, false, true, testStubs, undefined, owner))
+  if (launch === launchGeneration) {
+    detachedRoots.add(pending)
+  }
+  try {
+    await pending
+  } finally {
+    detachedRoots.delete(pending)
+  }
 }
 
 /**

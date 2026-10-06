@@ -747,6 +747,36 @@ Describe('recorded kept exports', () => {
 })
 
 Describe('dead export run', () => {
+  Test('reads authored hidden host bindings without admitting hidden build bindings', async () => {
+    const root = await mkTestDir('tao-hidden-host-bindings-')
+    const module = 'Apps/Example/.host-tests/Lifecycle.ts'
+    try {
+      await FS.writeText(FS.resolvePath(module, root), 'export function Acquire() {}\nexport function Unused() {}\n')
+      await FS.writeText(
+        FS.resolvePath('Apps/Example/.host-tests/Lifecycle.tao', root),
+        'action Acquire() from ./Lifecycle.ts\n',
+      )
+      await FS.writeText(
+        FS.resolvePath('Apps/Example/.tao-cache/Stale.tao', root),
+        'action Unused() from ../.host-tests/Lifecycle.ts\n',
+      )
+      const captured = await withCapturedOutput(async () =>
+        await runDeadExports({
+          repositoryRoot: root,
+          readKnipReport: async () => ({
+            issues: [{ file: module, exports: [{ line: 1, name: 'Acquire' }, { line: 2, name: 'Unused' }] }],
+          }),
+        })
+      )
+      Expect(captured.result).toBe(1)
+      Expect(captured.stderr).not.toContain(`${module}:1 Acquire`)
+      Expect(captured.stderr).toContain(`${module}:2 Unused`)
+      Expect(captured.stdout).toContain('1 unused, 1 bound from .tao sources')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   /** repository builds a checkout with one Tao binding, one dead export, and one live namesake. */
   async function repository(): Promise<string> {
     const root = await mkTestDir('tao-dead-exports-')
