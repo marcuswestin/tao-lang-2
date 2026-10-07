@@ -148,6 +148,8 @@ export type WorkState = {
   reason?: string
   /** True once a node that failed under machine contention has been run again on its own. */
   retried?: boolean
+  /** The signal that ended the node's process, when it did not exit on its own. */
+  signal?: string
   /** The width the machine broker granted this node, once it was admitted. */
   slots?: number
   startedAt?: number
@@ -183,6 +185,10 @@ export type WorkOutcome = {
   exitCode: number | null
   /** Output a runner buffered instead of streaming; appended to the state as if streamed. */
   output?: string
+  /** The signal that ended the process, when it did not exit on its own. */
+  signal?: string
+  /** True when that signal came from someone other than this graph's own cancellation. */
+  signalFromOutside?: boolean
 }
 
 /** WorkSlotReservation is machine-wide capacity held for one running node. */
@@ -636,13 +642,25 @@ async function executeNode(
     }
     state.elapsedMs = elapsedMs(state)
     state.exitCode = outcome.error === undefined ? outcome.exitCode : null
+    state.signal = outcome.signal
     state.status = outcome.error === undefined && outcome.exitCode === 0 ? 'passed' : 'failed'
     if (outcome.error !== undefined) {
       const message = Errors.messageOf(outcome.error)
       state.failure = { kind: 'process-error', message }
       appendOutput(state, message)
+    } else if (outcome.signal !== undefined && outcome.signalFromOutside === true) {
+      // A process killed from outside prints nothing, so its log would otherwise end mid-test with
+      // no reason at all. Name the signal and its likeliest sender in the log itself.
+      const message = outsideSignalMessage(outcome.signal)
+      state.failure = { kind: 'nonzero-exit', message }
+      appendOutput(state, `${state.fullOutput.length > 0 ? '\n' : ''}${message}\n`)
     } else if (outcome.exitCode !== 0) {
-      state.failure = { kind: 'nonzero-exit', message: `exited ${outcome.exitCode ?? 'unknown'}` }
+      state.failure = {
+        kind: 'nonzero-exit',
+        message: outcome.signal === undefined
+          ? `exited ${outcome.exitCode ?? 'unknown'}`
+          : `killed by ${outcome.signal}`,
+      }
     }
   } catch (error) {
     state.elapsedMs = elapsedMs(state)
@@ -862,6 +880,9 @@ async function runProcess(state: WorkState, context: WorkRunContext): Promise<Wo
       },
     )
     state.cpuMs = directCpuMs(child)
+    if (outcome.signal !== undefined && !cancelled) {
+      outcome.signalFromOutside = true
+    }
     return outcome
   } finally {
     if (ownershipPoll !== undefined) {
@@ -888,7 +909,20 @@ async function waitForProcess(
   await child.exited
   const outcome = await afterExit()
   await output
-  return outcome
+  return child.signalCode === null
+    ? outcome
+    : { ...outcome, signal: child.signalCode }
+}
+
+/**
+ * outsideSignalMessage explains a node killed by a signal this graph never sent. A SIGKILL from
+ * outside leaves no output, and on Linux it usually comes from the kernel's out-of-memory killer
+ * (the container's `memory.events` counts each `oom_kill`); a crash signal means the runtime died.
+ */
+function outsideSignalMessage(signal: string): string {
+  return signal === 'SIGKILL'
+    ? 'killed by SIGKILL, which this run did not send; on Linux the out-of-memory killer is the usual sender'
+    : `killed by ${signal}, which this run did not send`
 }
 
 /** pumpOutput reports each chunk to the graph as it arrives, rather than buffering to the end. */

@@ -658,6 +658,11 @@ Describe('maintained native binding publication', () => {
   })
 
   Test('surfaces an unreadable manifest as its own error rather than a changing-files retry', async () => {
+    // Root reads a mode-000 file anyway, so a root container (the contributor Linux guest) cannot
+    // make the manifest unreadable this way.
+    if (Platform.runtimeProcess.uid === 0) {
+      return
+    }
     await withTaoFiles('maintained-unreadable-manifest', declarations(), async (_paths, root) => {
       const request = options(root)
       await generateMaintainedNativeBindings({ ...request, mode: 'write' })

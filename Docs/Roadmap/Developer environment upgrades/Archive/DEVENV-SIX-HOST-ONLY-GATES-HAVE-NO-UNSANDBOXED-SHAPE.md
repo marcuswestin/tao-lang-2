@@ -1,6 +1,6 @@
 # DEVENV-SIX-HOST-ONLY-GATES-HAVE-NO-UNSANDBOXED-SHAPE — Six host-only gates have no unsandboxed shape
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Permissions
 - **Impact:** The landing route's local complement names nine host-only gates, each to be run as
@@ -22,4 +22,13 @@
   needs the Developer's approval.
 - **Acceptance:** Every gate the hosted-verification reference lists as the local complement runs
   through `./agent unsandboxed`, or the reference names the one operation that runs them all.
+- **Resolution:** The acceptance's second branch holds. Six of the nine gates (`studio-smoke`,
+  `studio-smoke-simulated-user`, `keyboard-navigation-smoke`, `studio-dialog-browser`,
+  `studio-network-simulation`, and the new `studio-metro-refresh`) now run inside hosted `Verify`'s
+  Linux partitions (PRs 55, 63, 64, 69, 70, 71 and 74, 2026-10-06), so no local shape is needed for
+  them. The three that remain local (`studio-proof-real-app`, `studio-agent-browser`,
+  `studio-canary`) run through the one operation the `landing` skill names,
+  `./agent unsandboxed verify-complement`, which `open-pr --auto-merge` starts itself; the per-gate
+  recipes were never the route. `verify.yml`'s header lists both sets.
 - **Source:** 2026-10-06 verification-speed slice A landing.
+- **Archived:** 2026-10-06

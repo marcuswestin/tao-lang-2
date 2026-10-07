@@ -90,7 +90,14 @@ Describe('verify-complement', () => {
   })
 
   Test('leaves a gate hosted Verify runs on Linux to Verify', () => {
-    const hostedLinux = ['studio-dialog-browser', 'studio-smoke']
+    const hostedLinux = [
+      'studio-dialog-browser',
+      'studio-metro-refresh',
+      'studio-smoke',
+      'studio-network-simulation',
+      'keyboard-navigation-smoke',
+      'studio-smoke-simulated-user',
+    ]
     for (const name of hostedLinux) {
       Expect(VerifyComplement.isHostGate(name)).toBe(false)
     }
@@ -109,6 +116,24 @@ Describe('verify-complement', () => {
     }
     for (const name of plan.gates) {
       Expect(VerifyComplement.isHostGate(name) || GateCatalog.isPrepare(name)).toBe(true)
+    }
+  })
+
+  Test('the real Verify workflow runs the gates the complement leaves to its Linux partitions', async () => {
+    // isHostGate drops a runsOnHostedLinux gate on the catalog flag alone; only the workflow's
+    // --hosted-linux makes the partitions run it. Without the flag they report it skipped and Verify
+    // stays green, so a gate left to Verify would be proved nowhere.
+    const leftToVerify = (await justVariable('VERIFY_FULL_GATES')).filter(name =>
+      GateCatalog.metadata(name).runsOnHostedLinux === true && !VerifyComplement.isHostGate(name)
+    )
+    Expect(leftToVerify.length).toBeGreaterThan(0)
+    const workflow = await FS.readText(FS.resolvePath('.github/workflows/verify.yml', Repo.getRoot()))
+    Expect(VerifyComplement.runsOnPullRequests(workflow)).toBe(true)
+    const partitionRuns = workflow.split('\n').filter(line => /^\s*run:.*\bverify-full-sandbox\b/u.test(line))
+    Expect(partitionRuns.length).toBeGreaterThan(0)
+    for (const line of partitionRuns) {
+      Expect({ line: line.trim(), hostedLinux: /\s--hosted-linux(?:\s|$)/u.test(line) })
+        .toEqual({ line: line.trim(), hostedLinux: true })
     }
   })
 

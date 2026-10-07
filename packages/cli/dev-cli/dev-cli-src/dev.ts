@@ -546,10 +546,9 @@ await runWithCommands(commands => {
         // the host gates still pending are reported, so a summary never looks fuller than it is.
         const admission = hostedCi ? CiGateAdmission.select(gates, options.ciHostGates ?? '') : undefined
         const lane = admission === undefined ? gates : admission.gates
-        if (options.hostedLinux === true && (options.skipUnsandboxed !== true || Platform.hostPlatform !== 'linux')) {
-          Errors.throwUserInput(
-            '--hosted-linux is for a hosted Verify Linux runner and goes with --skip-unsandboxed; a local lane keeps those gates in the complement.',
-          )
+        const hostedLinuxRefusal = GateCatalog.hostedLinuxRefusal(options, Platform.hostPlatform)
+        if (hostedLinuxRefusal !== undefined) {
+          Errors.throwUserInput(hostedLinuxRefusal)
         }
         const runnable = options.skipUnsandboxed === true
           ? lane.filter(name => !GateCatalog.skippedUnsandboxed(name, { hostedLinux: options.hostedLinux }))
@@ -614,7 +613,7 @@ await runWithCommands(commands => {
   commands
     .command('verify-complement')
     .description(
-      'Run the host-only gates hosted Verify does not admit, as one locked lane, and report them as the Verify (host) status on HEAD.',
+      'Run the host-only gates hosted Verify does not run, derived from the catalog and ci-macos.yml, as one locked lane, and report them as the Verify (host) status on HEAD.',
     )
     .argument('<gates...>', "The full lane's gate list; the host-only complement is derived from it and the workflow.")
     .option('--show-studio', 'Permit selected native Studio tests to open windows.')

@@ -50,8 +50,9 @@
 - **Workaround:** None; the gates pass as they are.
 - **Proposed change:** Decide each of A–D separately; E waits for its revisit condition. Before landing A, the Metro-claims branch must
   carry the three Metro-unique claims; before B, confirm the session tests' overlap coverage.
-- **Dependencies:** A depends on the Metro-claims branch (see
-  DEVENV-VERIFY-TRIMS-LEFT-TO-OTHER-BRANCHES-POST-MVP); the others on none.
+- **Dependencies:** A's dependency landed on 2026-10-06 as the hosted `studio-metro-refresh` gate
+  (PR 64, `45dd730e9`), which carries the three Metro-unique claims, so A is decidable now; the
+  others depend on none.
 - **Acceptance:** Each decided item lands with its before and after measurement from a complement
   receipt or a Verify run, or is closed here with the reason.
 - **Source:** Expensive-test audit and trims, `feat/trim-project-tooling-tests`, 2026-10-06.
