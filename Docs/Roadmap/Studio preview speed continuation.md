@@ -1086,6 +1086,16 @@ Hosted queue continuation, 2026-10-06: retry 37423918637 on head 5050a8a7 was ca
 
 ## Production preview speed integration, 2026-10-06 — in progress
 
+Current update, 2026-10-07: the final complete local changed-scope repeat passed on `61725396a`
+with 541 passing selected gates, one explicit slow Studio-smoke skip and no failures. Three
+watch scopes passed isolated retries after contention. This supersedes the pending-repeat
+notes below; the four real editor correctness trials remain the visible-behavior evidence.
+The Developer has authorized landing. Supported integration `79c8c76b4d` brings in main
+`776a84ed8` without conflicts; frozen setup passes. Quiet performance qualification and paired
+measurements still have no timing-stage verdict: retry
+`performance-cf746baf-b6d1-499a-a3ff-4004d3315327` found a peer host lane and load 15.57/18.
+Hosted Verify and the current host-only complement remain the merge proof for the new head.
+
 The approved [execution plan](<Studio preview speed execution plan.md>) integrates checkpoint
 `4efc6ff2a` on a separate feature branch. Browser Studio uses conservative preview-first admission,
 complete source/tooling receipt audits, successful source baselines and independent publication

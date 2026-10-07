@@ -1,7 +1,8 @@
 # Studio preview speed execution plan
 
-Prepared 2026-10-06. Status: implementation and source review completed; final iteration and
-performance qualification are in progress. Landing is not authorized.
+Prepared 2026-10-06; updated 2026-10-07. Status: implementation, integrated source review and
+complete local changed-scope verification passed. Performance qualification remains pending.
+The Developer authorized landing on 2026-10-07; the current merge gates still have to pass.
 The [continuation roadmap](<Studio preview speed continuation.md>) remains
 the project owner. The [tracked POC handover](<Studio preview speed POC handover.md>) records the
 experimental mechanisms and historical evidence. This plan supersedes the supplementary archive's
@@ -46,7 +47,9 @@ main-only preparation plan as the proposed execution sequence, without supersedi
    qualification has no journal timer or writes. Focused checks and intended mutation failures are recorded in the
    task checkpoint. Two local changed-scope attempts exposed repaired export and Feed-membership
    failures. Serial repeats of all timed-out scopes pass without raising limits; canceled checks
-   still require a complete successful changed-scope repeat.
+   were followed by a complete successful changed-scope repeat on `61725396a`: 541 passing
+   selected gates, one explicit slow Studio-smoke skip, and no failures. Three watch scopes
+   passed the runner's isolated retries after contention; no execution budgets were raised.
 3. Four real editor trials pass: two-preview width/recovery/rapid/burst/retained-state; single-cell
    revert and fresh activation during an overlay; whole-app retained-state; actual full-work
    overlap. Each records eight computed padding/paint samples and final source parity. Repeated
@@ -194,13 +197,13 @@ run with all writers and task tests stopped, one measurement lane at a time.
 
 1. Focused tests and changed-scope verification prove iteration; the standalone performance lane
    proves the numerical budgets. Do not repeat portable CI gates locally as merge evidence.
-2. On later explicit landing authorization, reread live help and the current hosted route: reviewed
+2. Landing was authorized on 2026-10-07. Reread live help and the current hosted route: reviewed
    message, `open-pr --auto-merge`, hosted Verify plus the local host-only complement. The Developer's
    stricter rule prevails over the repository's two-run capacity: wait until no Verify run is
    running, checking every ten seconds before starting one. Monitor owned runs frequently and
    promptly cancel failed-head work through the supported cancellation command. Never cancel
    another owner's healthy run, jump the queue or merge through a raw GitHub command.
-3. No landing authorization exists for this slice. No Metro revision fallback/retry, editor
+3. Authorization covers this production slice and retries. No Metro revision fallback/retry, editor
    configuration file, dependency/version/lockfile edit or new host permission is part of it.
    Keep UI automation quiet through the existing headless smoke surface; separate visible native
    acceptance remains subject to its own authorization.
@@ -220,5 +223,19 @@ run with all writers and task tests stopped, one measurement lane at a time.
    parity. Selective subscriptions wait for demonstrated consumed-style fan-out in larger apps or
    many previews; the current whole-app timing does not establish that bottleneck.
 
-The recurring repository pass still records a 2026-09-28 review boundary. Recommend a separate pass
-for subsequent cross-package landings; it is outside this production speed slice.
+Main now includes the 2026-10-06 repository health review, and the separate recurring pass is
+active. Its broader work remains outside this production speed slice.
+
+## Landing integration, 2026-10-07
+
+Supported main integration `79c8c76b4d` includes `776a84ed8` without conflicts. Frozen setup
+passes and reproduces all 1,252 maintained native files. The overlapping changes preserve
+Studio's long-request handling, watch startup cancellation and drain, native engine loading,
+and the existing inspection cache, locking and independent final freshness audit. The current
+landing route generates maintained bindings automatically and assigns portable proof to hosted
+Verify; its host complement covers the remaining catalog gates.
+
+Standalone performance retry `performance-cf746baf-b6d1-499a-a3ff-4004d3315327` remains
+inconclusive: another `verify-complement` lane was active and load was 15.57 on 18 CPUs,
+above the unchanged quiet threshold of 9. No timing stages ran. Quiet qualification and
+paired trials remain required; this integration does not establish a new numerical gain.
