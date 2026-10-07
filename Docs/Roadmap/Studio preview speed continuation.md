@@ -18,14 +18,21 @@ quietly with correct computed paint and cleanup, and both passed language budget
 failed numerical Studio ceilings; the direct-delivery qualification stage did not run.
 Their exact runs and phase results are recorded in the
 [execution plan](<Studio preview speed execution plan.md#current-qualification-state-2026-10-07>).
-No qualified gain or hosted merge proof exists.
+The subsequent matched control/candidate/candidate/control sequence completes quietly on
+`bf64ca6ae` / `0fd6205a7`. All four pass language, all six paints and cleanup; all retain failed
+numerical Studio verdicts. Candidate compiler/HMR padding paint medians are 300–311ms versus
+1509–1594ms in control, but candidate tails remain 1456–1510ms. Full fallback remains about a
+second in both. The execution plan retains all four run IDs, both phase tables and the variable
+one-file tail. This is an observed configuration-specific improvement, not an all-budget pass or
+a qualified direct-delivery comparison; that separate runner stage remains unrun after canonical
+failure. Hosted merge proof remains pending.
 
 The implemented narrow work prepares immutable effect indexes once per snapshot, carries validation's
 native inspection only into the immediate implicit-root compile, and avoids the metadata-phase
 tooling audit while retaining source/epoch checks and the independent final publication audit.
 Focused tests, compiler mutations and the integrated gate pass. Both candidate one-file cases
 fit their source and total ceilings; full HNReader fallback and padding tails still fail in both
-trees. Fresh paired repeats and hosted proof remain pending. Synchronous authoritative processing
+trees. The paired repeats are complete; hosted proof remains pending. Synchronous authoritative processing
 still blocks saves under actual overlap;
 worker/admission, shared-snapshot and dependency-directed changes remain a separate scope.
 Landing authorization remains valid, and all ceilings and scheduling limits are preserved.

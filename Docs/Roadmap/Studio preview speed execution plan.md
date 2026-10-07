@@ -15,6 +15,57 @@ main-only preparation plan as the proposed execution sequence, without supersedi
 
 ### Current qualification state, 2026-10-07
 
+The final alternating-order comparison completed on control `bf64ca6ae` and candidate
+`0fd6205a7`, both integrating main `fe7a4da74`. The control includes the same compiler,
+browser custody and editor revert repairs; this isolates Studio preview-first/scheduling/audit
+behavior, rather than comparing against unchanged main. HNReader source, dependencies, Metro
+flags, viewport, preview activation and all ceilings match. Each member ran serially, retained
+eight rows per case, discarded the cold first row, and had no peer lanes or contention reasons.
+All four pass language budgets, all six computed-paint journeys and cleanup. All four fail
+numerical Studio ceilings; no overall or direct-delivery numerical qualification is claimed.
+The runner's unchanged fail-fast boundary leaves its separate direct stage unrun.
+
+| Order       | Run ID                                             | Duration | Load range / 18 CPUs |
+| ----------- | -------------------------------------------------- | -------- | -------------------- |
+| Control A   | `performance-70562e1a-2179-474c-88bd-fc83d6b7d72a` | 217.0s   | 2.822–4.874          |
+| Candidate A | `performance-3f136580-f011-4221-b794-b15256d36672` | 206.0s   | 3.531–4.492          |
+| Candidate B | `performance-9fc67b4d-407f-4f4a-a4c1-4b07765e9067` | 207.4s   | 2.944–4.252          |
+| Control B   | `performance-c5cb0263-49b4-4f43-ac90-324f2c19f6d2` | 218.8s   | 2.760–4.837          |
+
+Warm save-to-painted computed result p50/p95, milliseconds:
+
+| Case                     | Control A   | Candidate A | Candidate B | Control B   |
+| ------------------------ | ----------- | ----------- | ----------- | ----------- |
+| One-file publication on  | 539 / 575   | 285 / 982   | 290 / 301   | 555 / 1330  |
+| One-file publication off | 539 / 586   | 278 / 330   | 286 / 296   | 550 / 776   |
+| HNReader publication on  | 1116 / 1454 | 1096 / 1135 | 1122 / 1168 | 1110 / 1417 |
+| HNReader publication off | 1151 / 1206 | 1158 / 1224 | 1142 / 1164 | 1128 / 1141 |
+| Padding publication on   | 1530 / 1813 | 309 / 1456  | 309 / 1459  | 1509 / 1989 |
+| Padding publication off  | 1594 / 1651 | 300 / 1501  | 311 / 1510  | 1517 / 1652 |
+
+Warm source-to-generated-publication p50/p95, milliseconds; direct delivery is disabled here:
+
+| Case                     | Control A   | Candidate A | Candidate B | Control B   |
+| ------------------------ | ----------- | ----------- | ----------- | ----------- |
+| One-file publication on  | 449 / 481   | 166 / 881   | 180 / 203   | 454 / 1204  |
+| One-file publication off | 424 / 464   | 161 / 195   | 161 / 165   | 419 / 682   |
+| HNReader publication on  | 1005 / 1355 | 1012 / 1039 | 1029 / 1075 | 1017 / 1333 |
+| HNReader publication off | 1031 / 1048 | 1038 / 1070 | 1033 / 1038 | 1009 / 1028 |
+| Padding publication on   | 1424 / 1714 | 241 / 1385  | 235 / 1381  | 1399 / 1922 |
+| Padding publication off  | 1434 / 1501 | 234 / 1359  | 243 / 1346  | 1378 / 1454 |
+
+The two candidate padding medians improve consistently in this configuration, but synchronous
+full work still produces roughly 1.5-second tails. Full fallback remains about a second, and even
+the one-file publication-on tail is variable. These observations are neither an all-budget pass
+nor an additive/general speed guarantee. The bounded production slice proceeds through the
+authorized hosted route with the failures retained; the separate later plans below address the
+remaining costs. The complete integrated source gate passed on `c716bf157`, and subsequent
+rapid-revert source/test changes have focused and real-editor proof recorded below. The lead's
+integrated review found no remaining correctness findings; hosted and host-only merge proof is
+still pending.
+
+### Pre-repeat qualification
+
 Control `a51537cbc` run `performance-080112d6-6e7d-4243-a200-fc0f90255600` completed in
 219.0s and candidate `c716bf157` run `performance-ef25343b-6854-4629-a41a-784efd3dcf02`
 completed in 206.8s. Both had no peers, stayed below quiet admission limits, passed language
@@ -358,11 +409,21 @@ run with all writers and task tests stopped, one measurement lane at a time.
    costs, then propose a persistent background worker with its own mutable workspace, immutable
    requests, one latest pending input, restart/error/close handling and a short stale-checked
    publication boundary. Moving emission alone does not bypass coordinator drain or generation lock.
+   Keep one authoritative executor per watched project and one current plus one latest pending
+   request. Prove a real editor save paints while full work remains active, then cover worker
+   failure/restart, stale diagnostics, fresh activation, close/flush and owned-child termination.
+   One bounded implementer owns the settled executor protocol; the lead owns admission and
+   publication seams and the integrated review. Worker isolation improves responsiveness but
+   does not itself reduce an ineligible edit's full elapsed compilation cost.
 2. Shared immutable tooling/preview snapshots: measure repeated preparation, define complete
    config/package/sidecar/native identity and lifetime, and prohibit shared mutable linked ASTs.
 3. Dependency-directed compilation/validation: partition global versus local reports, certify
    reverse dependencies, membership/unresolved/ownership changes and cold parity before selecting
-   emission/output-plan reuse.
+   emission/output-plan reuse. Define exact semantic owner closures, native/requirement evidence
+   and entry-sensitive report positions before implementation. Whole-document and whole-inventory
+   replay previously had zero hits; do not restore those experiments. One compiler implementer
+   can own a settled closure-reuse slice after read-only design, deterministic repeated-work
+   counts and cold-result parity are reviewed. No mutable AST crosses overlapping builds.
 4. Broader design/token delivery: extend the compiler-owned protocol only from measured costs and
    parity. Selective subscriptions wait for demonstrated consumed-style fan-out in larger apps or
    many previews; the current whole-app timing does not establish that bottleneck.
