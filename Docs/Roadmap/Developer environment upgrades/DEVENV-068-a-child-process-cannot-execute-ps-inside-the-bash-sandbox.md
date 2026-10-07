@@ -146,4 +146,12 @@
   absent. This does not establish why the first observation was unreadable. Its log remains at
   `.artifacts/logs/verify-complement/2026-10-06T21-36-44-146Z-52210-94cdcad6/studio-smoke.log`.
   Complete host proof must be renewed after integrating main.
+- **Personal-branch landing observation (2026-10-07):** At `9eaf7923393f`, the authorized local
+  landing passed its cheap checks but `verify-full` stopped after the receipt-inputs test passed
+  its assertions. Descendant inspection returned zero bytes from `proc_pidinfo` for PID 35334,
+  while the signal probe reported it live; root PID 33894 was the requested owner. Log:
+  `.artifacts/logs/verify-full/2026-10-07T16-51-51-588Z-19444-1faa93f1/language_project-tooling_receipt-inputs.log`.
+  The unchanged exact test then passed in isolation, including wrapper cleanup, in 9.2 seconds:
+  `.artifacts/logs/dev-test/2026-10-07T16-54-52-379Z-35576-fd26f194/language_project-tooling_receipt-inputs.log`.
+  This does not establish the cause of the native unreadability or replace complete landing proof.
 - **Source:** 2026-09-17 process-teardown implementation.
