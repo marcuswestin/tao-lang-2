@@ -92,6 +92,23 @@ export function discoverCallableEffectFacts(
   context?: SourceDiscoveryContext,
 ): readonly CallableEffectFact[] {
   Assert(!context?.root || context.root.node === owner, 'Expected source root identity to match the effect owner.')
+  return discoverWithInventory(owner, prepareInventory(inputs), context)
+}
+
+/**
+ * Prepare indexes for one immutable inventory in an unmodified linked build. The caller owns
+ * this lifetime; mutable raw inputs must continue through discoverCallableEffectFacts. Each
+ * invocation creates fresh owner traversal and facts, and no index escapes this closure.
+ */
+export function createCallableEffectFactDiscovery(inputs: CallableEffectFactInputs) {
+  const inventory = prepareInventory(inputs)
+  return (owner: AST.Node, context?: SourceDiscoveryContext): readonly CallableEffectFact[] => {
+    Assert(!context?.root || context.root.node === owner, 'Expected source root identity to match the effect owner.')
+    return discoverWithInventory(owner, inventory, context)
+  }
+}
+
+function prepareInventory(inputs: CallableEffectFactInputs) {
   const calls = indexRows(inputs.calls, row => row.site)
   const reads = indexRows(inputs.reads, row => row.reference)
   const constructors = indexRows(inputs.constructors ?? [], row => row.site)
@@ -138,6 +155,15 @@ export function discoverCallableEffectFacts(
     }
   }
 
+  return { calls, reads, constructors, units, natives, targets, exports }
+}
+
+function discoverWithInventory(
+  owner: AST.Node,
+  inventory: ReturnType<typeof prepareInventory>,
+  context?: SourceDiscoveryContext,
+): readonly CallableEffectFact[] {
+  const { calls, reads, constructors, units, natives, targets, exports } = inventory
   const queue = [owner]
   const queued = new Set<AST.Node>(queue)
   const facts: CallableEffectFact[] = []

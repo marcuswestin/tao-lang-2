@@ -124,3 +124,21 @@ the group (`setsid`) and outlives a naturally exited root is no longer visible; 
 only as one more uncertain record among hundreds. The existing uncertain records stay: no command
 retires them, and a prune rule (for example, root and every recorded identity gone, group empty,
 older than a week) is a cleanup-authority decision for the Developer, not adopted here.
+
+## Browser output custody — October 7, 2026
+
+Quiet Studio timing exposed a daemonized Chrome crash-reporting helper that escaped parent polling
+and held inherited stderr open after the browser exited. Two publication-on cases timed out after
+writing their paint reports; graceful browser close reproduced the wait. The harness now explicitly
+captures shared local output socket endpoints while its browser is alive, fencing candidates with
+kernel start identities and fresh descriptor confirmation. Existing supervision retains and stops
+only those proved identities; ordinary polling and independent final joins remain unchanged.
+Missing, malformed, changed or unreadable evidence grants no custody. No historical orphan is
+adopted by name, age, a peer address or parentlessness.
+
+Ten deterministic ownership cases and 22 supervision cases pass. Disabling retained custody fails
+the new escaped-group fixture without leaking its owned processes. The previously failing real
+HNReader journey completes its eight correct paint observations and cleanup in 35.2 seconds.
+Failed browser joins retain profiles, and latency cleanup attempts every disposer while keeping
+the original journey failure. Full common-baseline timing and integrated verification remain
+pending; this does not close the broader crash/mobile/native acceptance above.

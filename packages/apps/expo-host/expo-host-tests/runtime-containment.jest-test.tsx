@@ -280,6 +280,8 @@ function previewHost(posted: Array<{ message: any; targetOrigin: string }>): Stu
     parent: { postMessage: (message, targetOrigin) => posted.push({ message, targetOrigin }) },
     window: {
       addEventListener() {},
+      cancelAnimationFrame() {},
+      requestAnimationFrame: () => 0,
       removeEventListener() {},
     },
   }

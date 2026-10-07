@@ -41,6 +41,32 @@ async function artifacts() {
   return root
 }
 
+async function directPaddingArtifact() {
+  const root = await mkTestDir('direct-padding-performance-artifacts')
+  await FS.writeJson(FS.resolvePath('hnreader-editor-padding-publication-off.json', root), {
+    label: 'HNReader editor padding publication-off',
+    rows: [
+      { total: 99_999, sourceToDelivery: 99_000, deliveryToDom: 500, sourceToPaint: 2_000 },
+      ...[800, 850, 900, 910, 920, 930, 940].map((total, index) => ({
+        total,
+        deliveryRevision: index + 1,
+        sourceToDelivery: [400, 450, 500, 550, 560, 570, 580][index],
+        deliveryToDom: 100,
+        sourceToPaint: [500, 550, 600, 650, 660, 670, 680][index],
+      })),
+    ],
+    evidence: {
+      authoritativeCompletion: { status: 'compiled', compileRevision: 12, publishedRevision: 10 },
+      authoritativeManifest: {
+        compileRevision: 9,
+        sourceVersions: { '/repo/Apps/HNReader/Design.tao': 'source-v12' },
+      },
+      finalSource: { path: '/repo/Apps/HNReader/Design.tao', version: 'source-v12' },
+    },
+  })
+  return root
+}
+
 Describe('Studio preview timing ceilings', () => {
   Test('accepts exact ceilings and reports both percentiles independently', () => {
     const ceilings = { editor: { p50Ms: 10, p95Ms: 20 }, undo: { p50Ms: 5, p95Ms: 10 } }
@@ -231,5 +257,288 @@ Describe('Studio preview timing ceilings', () => {
       'all six canonical cases',
     )
     Expect(await FS.exists(FS.resolvePath('preview-budget.json', root))).toBe(false)
+  })
+
+  Test('qualifies actual direct padding stages and writes a stage-specific budget', async () => {
+    const root = await directPaddingArtifact()
+    Expect(await StudioPreviewPerformance.evaluateDirectArtifacts(root)).toEqual([])
+    const report = await FS.readJson<{
+      label: string
+      ceilings: typeof StudioPreviewPerformance.directPaddingCeilings
+      samples: Record<string, number[]>
+      summaries: Record<string, { p50Ms: number; p95Ms: number }>
+      maxDeliveryRevision: number
+      authoritativeCompletion: { status: string; compileRevision: number }
+      authoritativeManifest: { compileRevision: number; sourceVersions: Record<string, string> }
+      finalSource: { path: string; version: string }
+      breaches: unknown[]
+    }>(FS.resolvePath('direct-padding-budget.json', root))
+    Expect(report.label).toBe('HNReader editor padding publication-off')
+    Expect(report.ceilings).toEqual({
+      total: { p50Ms: 950, p95Ms: 1125 },
+      sourceToDelivery: { p50Ms: 600, p95Ms: 800 },
+    })
+    Expect(report.samples['sourceToDelivery']).toEqual([400, 450, 500, 550, 560, 570, 580])
+    Expect(report.summaries['total']).toEqual({ p50Ms: 910, p95Ms: 940 })
+    Expect(report.summaries['sourceToDelivery']).toEqual({ p50Ms: 550, p95Ms: 580 })
+    Expect(report.authoritativeCompletion).toEqual({
+      status: 'compiled',
+      compileRevision: 12,
+      publishedRevision: 10,
+    })
+    Expect(report.maxDeliveryRevision).toBe(7)
+    Expect(report.authoritativeManifest.compileRevision).toBe(9)
+    Expect(report.finalSource).toEqual({ path: '/repo/Apps/HNReader/Design.tao', version: 'source-v12' })
+    Expect(report.breaches).toEqual([])
+  })
+
+  Test('writes independent total and source-to-delivery breaches', async () => {
+    const totalRoot = await directPaddingArtifact()
+    const totalPath = FS.resolvePath('hnreader-editor-padding-publication-off.json', totalRoot)
+    const totalArtifact = await FS.readJson<{ rows: Array<Record<string, unknown>> }>(totalPath)
+    totalArtifact.rows = totalArtifact.rows.map((row, index) =>
+      index === 0 ? row : {
+        ...row,
+        total: 1_200,
+        sourceToDelivery: 500,
+        deliveryToDom: 100,
+        sourceToPaint: 600,
+      }
+    )
+    await FS.writeJson(totalPath, totalArtifact)
+    const totalBreaches = await StudioPreviewPerformance.evaluateDirectArtifacts(totalRoot)
+    Expect(totalBreaches).toEqual([
+      {
+        caseName: 'HNReader editor padding publication-off',
+        percentile: 'p50Ms',
+        measuredMs: 1200,
+        ceilingMs: 950,
+        stage: 'total',
+      },
+      {
+        caseName: 'HNReader editor padding publication-off',
+        percentile: 'p95Ms',
+        measuredMs: 1200,
+        ceilingMs: 1125,
+        stage: 'total',
+      },
+    ])
+
+    const deliveryRoot = await directPaddingArtifact()
+    const deliveryPath = FS.resolvePath('hnreader-editor-padding-publication-off.json', deliveryRoot)
+    const deliveryArtifact = await FS.readJson<{ rows: Array<Record<string, unknown>> }>(deliveryPath)
+    deliveryArtifact.rows = deliveryArtifact.rows.map((row, index) =>
+      index === 0 ? row : {
+        ...row,
+        total: 900,
+        sourceToDelivery: 850,
+        deliveryToDom: 25,
+        sourceToPaint: 890,
+      }
+    )
+    await FS.writeJson(deliveryPath, deliveryArtifact)
+    const deliveryBreaches = await StudioPreviewPerformance.evaluateDirectArtifacts(deliveryRoot)
+    Expect(deliveryBreaches).toEqual([
+      {
+        caseName: 'HNReader editor padding publication-off',
+        percentile: 'p50Ms',
+        measuredMs: 850,
+        ceilingMs: 600,
+        stage: 'sourceToDelivery',
+      },
+      {
+        caseName: 'HNReader editor padding publication-off',
+        percentile: 'p95Ms',
+        measuredMs: 850,
+        ceilingMs: 800,
+        stage: 'sourceToDelivery',
+      },
+    ])
+    const budget = await FS.readJson<{ breaches: unknown[] }>(
+      FS.resolvePath('direct-padding-budget.json', deliveryRoot),
+    )
+    Expect(budget.breaches).toEqual(deliveryBreaches)
+  })
+
+  Test('accepts cold publication fallback while requiring direct publication-off warm rows', async () => {
+    const root = await directPaddingArtifact()
+    const path = FS.resolvePath('hnreader-editor-padding-publication-off.json', root)
+    const artifact = await FS.readJson<{ rows: Array<Record<string, unknown>> }>(path)
+    artifact.rows[0] = { ...artifact.rows[0], sourceToPublished: 99_999 }
+    await FS.writeJson(path, artifact)
+    Expect(await StudioPreviewPerformance.evaluateDirectArtifacts(root)).toEqual([])
+
+    artifact.rows[1] = { ...artifact.rows[1], sourceToPublished: 800 }
+    await FS.writeJson(path, artifact)
+    await Expect(StudioPreviewPerformance.evaluateDirectArtifacts(root)).rejects.toThrow(
+      'omit source-to-publication timings',
+    )
+  })
+
+  Test('refuses missing, fallback, incomplete, and unauthoritative direct padding evidence', async () => {
+    const missing = await directPaddingArtifact()
+    await FS.remove(FS.resolvePath('hnreader-editor-padding-publication-off.json', missing))
+    await Expect(StudioPreviewPerformance.evaluateDirectArtifacts(missing)).rejects.toThrow()
+
+    const base = await directPaddingArtifact()
+    const path = FS.resolvePath('hnreader-editor-padding-publication-off.json', base)
+    const original = await FS.readJson<Record<string, unknown>>(path)
+    const cases = [
+      { ...original, label: 'HNReader editor padding publication-on' },
+      {
+        ...original,
+        rows: (original['rows'] as Array<Record<string, unknown>>).map(row => ({
+          ...row,
+          sourceToPublished: row['total'],
+        })),
+      },
+      {
+        ...original,
+        rows: (original['rows'] as Array<Record<string, unknown>>).map((row, index) =>
+          index === 2
+            ? { ...row, sourceToDelivery: undefined }
+            : row
+        ),
+      },
+      {
+        ...original,
+        rows: (original['rows'] as Array<Record<string, unknown>>).map((row, index) =>
+          index === 3
+            ? { ...row, sourceToDelivery: -1 }
+            : row
+        ),
+      },
+      {
+        ...original,
+        rows: (original['rows'] as Array<Record<string, unknown>>).map((row, index) =>
+          index === 3
+            ? { ...row, sourceToPaint: undefined }
+            : row
+        ),
+      },
+      {
+        ...original,
+        rows: (original['rows'] as Array<Record<string, unknown>>).map((row, index) =>
+          index === 4
+            ? { ...row, deliveryToDom: row['total'] as number + 1 }
+            : row
+        ),
+      },
+      {
+        ...original,
+        rows: (original['rows'] as Array<Record<string, unknown>>).map((row, index) =>
+          index === 4
+            ? {
+              ...row,
+              sourceToPaint: (row['sourceToDelivery'] as number) + (row['deliveryToDom'] as number) - 2,
+            }
+            : row
+        ),
+      },
+      { ...original, evidence: {} },
+      {
+        ...original,
+        evidence: { authoritativeCompletion: { status: 'pending', compileRevision: 8 } },
+      },
+      {
+        ...original,
+        evidence: { authoritativeCompletion: { status: 'compiled', compileRevision: 0 } },
+      },
+      {
+        ...original,
+        evidence: {
+          authoritativeCompletion: { status: 'compiled', compileRevision: 12, publishedRevision: 'invalid' },
+        },
+      },
+      {
+        ...original,
+        rows: (original['rows'] as Array<Record<string, unknown>>).map((row, index) =>
+          index === 2
+            ? { ...row, deliveryRevision: 0 }
+            : row
+        ),
+      },
+      {
+        ...original,
+        rows: (original['rows'] as Array<Record<string, unknown>>).map((row, index) =>
+          index === 3
+            ? { ...row, deliveryRevision: 'stale' }
+            : row
+        ),
+      },
+      {
+        ...original,
+        rows: (original['rows'] as Array<Record<string, unknown>>).map((row, index) =>
+          index === 3
+            ? { ...row, deliveryRevision: 2 }
+            : row
+        ),
+      },
+      {
+        ...original,
+        rows: (original['rows'] as Array<Record<string, unknown>>).map((row, index) =>
+          index === 3
+            ? { ...row, deliveryRevision: 1 }
+            : row
+        ),
+      },
+      {
+        ...original,
+        evidence: {
+          ...(original['evidence'] as Record<string, unknown>),
+          authoritativeCompletion: { status: 'compiled', compileRevision: 8 },
+        },
+      },
+      {
+        ...original,
+        evidence: {
+          ...(original['evidence'] as Record<string, unknown>),
+          authoritativeManifest: {
+            compileRevision: 7,
+            sourceVersions: { '/repo/Apps/HNReader/Design.tao': 'source-v12' },
+          },
+        },
+      },
+      {
+        ...original,
+        evidence: {
+          ...(original['evidence'] as Record<string, unknown>),
+          authoritativeManifest: {
+            compileRevision: 13,
+            sourceVersions: { '/repo/Apps/HNReader/Design.tao': 'source-v12' },
+          },
+        },
+      },
+      {
+        ...original,
+        evidence: {
+          ...(original['evidence'] as Record<string, unknown>),
+          authoritativeManifest: {
+            compileRevision: 9,
+            sourceVersions: { '/repo/Apps/HNReader/Design.tao': 'newer-source' },
+          },
+        },
+      },
+      {
+        ...original,
+        evidence: {
+          ...(original['evidence'] as Record<string, unknown>),
+          finalSource: { path: 'Apps/HNReader/Design.tao', version: 'source-v12' },
+        },
+      },
+      {
+        ...original,
+        evidence: {
+          ...(original['evidence'] as Record<string, unknown>),
+          authoritativeCompletion: { status: 'compiled', compileRevision: 12, publishedRevision: 8 },
+        },
+      },
+    ]
+    for (const invalid of cases) {
+      const root = await directPaddingArtifact()
+      await FS.writeJson(FS.resolvePath('hnreader-editor-padding-publication-off.json', root), invalid)
+      await Expect(StudioPreviewPerformance.evaluateDirectArtifacts(root)).rejects.toThrow()
+      Expect(await FS.exists(FS.resolvePath('direct-padding-budget.json', root))).toBe(false)
+    }
   })
 })

@@ -13,6 +13,7 @@ import {
 export type StudioOpenDiagnostic = (diagnostic: StudioCompileDiagnostic) => void
 
 export type StudioEventHandlers = {
+  onDesignPadding?: (update: import('../../StudioProtocol').StudioDesignPaddingUpdate) => void
   onCompile: (state: StudioCompileState) => void
   onDeviceState: (status: StudioDeviceStatus) => void
   onFile: (file: StudioFile) => void
@@ -66,6 +67,7 @@ export function connectStudioEvents(
         }
         handlers.onDeviceState(device)
       },
+      onDesignPadding: handlers.onDesignPadding,
       onFile: handlers.onFile,
       onFiles: handlers.onFiles,
       onHandshake(handshake) {

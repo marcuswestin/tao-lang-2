@@ -9,6 +9,88 @@ timings.
 
 ## Current state
 
+### Current qualification, 2026-10-07
+
+The integrated compiler, browser custody and final-audit changes pass the complete local
+changed-scope gate at `c716bf157` (360.2 seconds). Control `a51537cbc` and that candidate
+each completed all six canonical cases
+quietly with correct computed paint and cleanup, and both passed language budgets. Both still
+failed numerical Studio ceilings; the direct-delivery qualification stage did not run.
+Their exact runs and phase results are recorded in the
+[execution plan](<Studio preview speed execution plan.md#current-qualification-state-2026-10-07>).
+The subsequent matched control/candidate/candidate/control sequence completes quietly on
+`bf64ca6ae` / `0fd6205a7`. All four pass language, all six paints and cleanup; all retain failed
+numerical Studio verdicts. Candidate compiler/HMR padding paint medians are 300–311ms versus
+1509–1594ms in control, but candidate tails remain 1456–1510ms. Full fallback remains about a
+second in both. The execution plan retains all four run IDs, both phase tables and the variable
+one-file tail. This is an observed configuration-specific improvement, not an all-budget pass or
+a qualified direct-delivery comparison; that separate runner stage remains unrun after canonical
+failure. Hosted merge proof remains pending.
+
+The implemented narrow work prepares immutable effect indexes once per snapshot, carries validation's
+native inspection only into the immediate implicit-root compile, and avoids the metadata-phase
+tooling audit while retaining source/epoch checks and the independent final publication audit.
+Focused tests, compiler mutations and the integrated gate pass. Earlier qualification fit both
+one-file ceilings, but the final paired publication-on results include breaches and a variable
+tail. Full HNReader fallback and padding tails still fail in both
+trees. The paired repeats are complete; hosted proof remains pending. Synchronous authoritative processing
+still blocks saves under actual overlap;
+worker/admission, shared-snapshot and dependency-directed changes remain a separate scope.
+Landing authorization remains valid, and all ceilings and scheduling limits are preserved.
+The bounded production slice will land with the failed numerical verdicts recorded; the larger
+worker/admission, dependency-directed and immutable-transfer proposals stay separate in the
+execution plan. Two mutable workspace owners still exist: tooling and preview. No unsafe shared
+mutable workspace or snapshot is introduced.
+
+Rapid-save/revert stress found and repaired a save bug: a revert matching old acknowledged text
+was skipped while an earlier write could still change disk. Commit `80ca2b4b4` admits that save
+while writes are pending, with the same repair in the control and 111 passing client tests on
+each tree. Whole-app and fresh-activation/multiple-preview trials pass with actual save-response,
+computed padding, subsequent paint and final authoritative source parity witnesses. Exact reports,
+retained failures and the populated-state limitation are in the execution plan.
+
+### Earlier browser cleanup qualification
+
+Candidate `661bef5a8` passes the complete local changed-scope gate. The approved common compiler
+repair brings control's standalone language stage within all budgets (995ms session checking).
+Its first full control run still fails: two publication-on journeys write all paint rows and then
+time out while a daemonized browser helper holds output open. Neither the failed control nor the
+focused diagnostic timings qualify a paired gain.
+
+The browser harness now captures escaped writers by the exact output socket plus fresh kernel
+identities, then retains them in existing supervision. Ordinary polling, independent final joins,
+escalation and all deadlines stay intact. Failed cleanup retains its profile; the latency test
+attempts every owned cleanup operation and preserves a primary failure. Ownership and supervision
+regressions pass, including a failing disabled-custody mutation, and the formerly failing real
+HNReader journey completes correctly in 35.2 seconds. The integrated repair gate, common-baseline
+qualification, paired trials and hosted landing still remain. Landing authorization persists.
+
+### Earlier language qualification failure and repair, 2026-10-07
+
+The current speed candidate integrates main `5a2ba4b6c`. Source review and local changed-scope
+proof remain complete, but quiet standalone qualification now reaches a whole-app session-check
+failure: 1.4 seconds against the unchanged 1.3-second ceiling, no peers and load 4.0166–4.6284
+on 18 CPUs. Current-main control also fails that stage; a branch regression is not established.
+Studio timing stages and all qualified pairs remain pending. A loaded full control attempt ran
+all six cases but was inconclusive, with two publication-on timeouts.
+
+Diagnostic profiling identifies effect-analysis construction as about 620 milliseconds of one
+thirteen-entry validation batch. Exact ordered input reuse had no hits, and two narrower reuse
+trials showed no demonstrated gain; all investigation source changes were removed. The
+[execution plan](<Studio preview speed execution plan.md#earlier-language-blocker-and-repair-2026-10-07>)
+proposes a separate compiler effect-analysis design and parity proof before implementation.
+The Developer approved this separate scope and continuing until merged. Commit `29004402d`
+now shares only immutable projected inventories within each exact canonical effect snapshot;
+owner roots, fact discovery and analysis remain independent. New snapshots and builds stay cold.
+The owning 359-test suite and mutation checks pass. An isolated ten-iteration diagnostic brings
+session checking to 983 milliseconds within the unchanged 1.3-second ceiling, but standalone
+qualification and paired editor paint results remain pending. The control carries the same
+compiler-only change on main `fe7a4da74`, so future comparisons isolate Studio delivery.
+Ceilings, admission and authoritative checks remain intact. Landing remains authorized, with no
+own hosted run, PR or merge yet.
+
+### Landed predecessor
+
 The successor branch `feat/studio-preview-speed`, created from exactly `8ecf581e7`, landed on
 2026-10-04 and is preserved at `origin/merged/studio-preview-speed`. Its activation and decided folder layout are implemented: every scenario and the whole-app preview now
 default to no iframe, with per-cell lightning toggles and server-persisted app activation in
@@ -1083,3 +1165,104 @@ The cancellation command now accepts `--all-workflows --sha <commit>` to stop ot
 The local iteration run stopped on a stale incoming hook-policy assertion after 10m49s, under peak load 54.8 on 18 CPUs. The corrected hook file passes 15 checks. The external-watch topology file passes all five checks unchanged in a separate 47.5s run, versus 149.2s with a helper-observation timeout during the contended run. No watchdog or assertion was weakened. Main's matching instruction/hook corrections were integrated; hosted Verify and the host-only complement remain the final merge proof.
 
 Hosted queue continuation, 2026-10-06: retry 37423918637 on head 5050a8a7 was cancelled before contributor agreement or partition planning executed; the aggregate failed because those prerequisite jobs were cancelled, with no portable tests run. The owned complement was stopped and exact-head cancellation confirmed no remaining workflows. With the Developer reserving the CI queue for this slice, a fresh hosted attempt will provide the missing complete portable and host proof.
+
+## Production preview speed integration, 2026-10-06 — in progress
+
+Current update, 2026-10-07: the final complete local changed-scope repeat passed on `61725396a`
+with 541 passing selected gates, one explicit slow Studio-smoke skip and no failures. Three
+watch scopes passed isolated retries after contention. This supersedes the pending-repeat
+notes below; the four real editor correctness trials remain the visible-behavior evidence.
+The Developer has authorized landing. Supported integration `79c8c76b4d` brings in main
+`776a84ed8` without conflicts; frozen setup passes. Quiet performance qualification and paired
+measurements still have no timing-stage verdict: retry
+`performance-cf746baf-b6d1-499a-a3ff-4004d3315327` found a peer host lane and load 15.57/18.
+Hosted Verify and the current host-only complement remain the merge proof for the new head.
+
+The approved [execution plan](<Studio preview speed execution plan.md>) integrates checkpoint
+`4efc6ff2a` on a separate feature branch. Browser Studio uses conservative preview-first admission,
+complete source/tooling receipt audits, successful source baselines and independent publication
+checks. Full work follows authenticated paint with a one-second quiet window and a ten-second
+first-pending maximum; running synchronous work remains non-preemptible. Invalidations, failed
+attempts, rejected delivery and loss of all registered previews release authoritative recovery.
+Close drains admitted and queued compilation before flushing pending work and disposing resources.
+
+Compiler-owned direct scalar padding is limited to publication-off browser previews without native
+consumers. Source/member/index/prior-value/provenance checks and immutable span shifts guard the
+update. Fresh browser or native registrations publish pending overlays first. Main's native memo,
+locking and separately invoked final freshness audit remain intact. Its unchanged-installation
+memo hit, visible-change rehash, explicit-root cold path and publisher-barrier regressions pass;
+no additional useful duplication has been demonstrated, so another inspection cache is excluded.
+Unchanged source-read reuse and extra whole-document replay remain preserved at the POC checkpoint
+and are restored out of production plumbing.
+
+Focused source evidence passes: real preview-session lifecycle and publication (nine cases),
+project/session identity (52), server boundaries (29), gateway lifecycle (31), compiler padding
+(seven), runtime padding (six), scheduler (twelve), eligibility (seven), input classification (two),
+receipt audit (one), bridge/protocol/coordinator, runtime publication guards and main native memo.
+Deliberate mutations fail their intended stale-source, first-deadline, timer cleanup, final-consumer,
+close-drain, fresh-realm, failed-registration and whole-app paint-identity witnesses. Typecheck and
+lint pass. These checks establish iteration evidence, not merge or performance qualification.
+
+Real-Metro editor acceptance passes in four diagnostic trials. Each retains eight actual computed
+padding/paint samples, final authoritative source/manifest parity and screenshots. The combined
+width-change, invalid-to-valid, rapid-save, two-file burst and retained-state trial passes with two
+active previews; rapid saves reach the twelfth edit. The single-cell revert/fresh-activation trial
+witnesses an actual overlay publication barrier before the second cell registers. The whole-app
+trial retains equal data, navigation and persisted-state captures. The full-processing trial
+observes saves 2, 4 and 5 between traced authoritative attempt start/end events. Existing realms
+do not reload; the newly activated cell's first load is expected. Successful screenshots were
+reviewed, with the edited layout and no Problems.
+
+The reports under `.artifacts/tests/studio-smoke/preview-latency/` are respectively
+`hnreader-editor-padding-publication-off-1791311422255.json`,
+`hnreader-editor-padding-publication-off-1791311749509.json`,
+`hnreader-editor-padding-publication-off-1791311915175.json` and
+`hnreader-editor-padding-publication-off-1791312664745.json`. They ran at load 23.9–222.6 on 18 CPUs,
+with tracing and diagnostic save gaps, so they establish correctness rather than qualified gains.
+
+Failures remain preserved: one default padding trial painted all eight edits and reached final
+parity but failed its all-direct assertion with five deliveries, as quiet releases and event-loop
+lag let full attempts consume later saves. A rapid-save poll used the wrong JavaScript world and
+was corrected before the passing repeat. The first full-overlap trial timed out before yielding
+useful evidence, and a startup retry was stopped for diagnosis. Trace-only live journals now begin
+before Studio readiness, preserving output, progress and completed samples if the test process
+times out. The launch-observer regression passes; the captured full-overlap retry passes unchanged
+production code with one active cell. No watchdog, latency ceiling or Metro recovery policy changed.
+
+The lead performed the integrated source review with one read-only aid, checked its cited claims,
+and fixed shutdown drain, final epoch rechecking and a vacuous forged-padding test. The final
+qualification review also found that repeated delivery receipts could masquerade as seven warm
+saves. Duplicate/reversed-revision fixtures fail the old evaluator and pass with a distinct,
+increasing warm-revision guard. All twelve qualification and six launch-helper cases pass.
+
+The subsequent review found that canceled scheduler callbacks could erase newer timer handles
+before close. Both deterministic late-callback witnesses fail the old scheduler and pass after
+checking attempt/revision identity before changing timer bookkeeping. The twelve scheduler cases
+pass without changing deadlines. The first changed-scope gate stopped on an unused exported
+compiler range type; it is now internal, with focused dead-export and type checks passing. The
+complete changed-scope gate must be repeated; its canceled checks are not coverage.
+
+The repeat gate exposed a Feed-overlay regression: authoritative disk rediscovery discarded a
+virtual-only scenario and its source hash. The exact test reproduced the missing scenario in an
+isolated run. Snapshot membership and the independent final membership audit now include paths
+from the immutable captured overlay as well as disk. The original eight assertions pass, covering
+the scenario, frozen hashes, generated publication and absence of disk writes. This repair adds
+no disk scan beyond the two existing discovery points. The gate also timed out build dependency
+and external-watch cases under contention, without exclusive confirmation, and stopped with
+118 checks unrun. Serial exact-file repeats pass without changing timeouts: sidecar closure
+(one case), sidecar root (one), build dependencies (two) and watch topology (four). The complete
+changed-scope gate still needs a successful repeat; those focused runs are iteration evidence.
+
+All six canonical performance cases and their ceilings are preserved. A separate production-default
+padding qualification requires seven real warm delivery/paint receipts plus eventual authoritative
+source parity, rather than fabricated generated modification times. Quiet admission, paired
+main/feature trials and the changed-scope gate remain outstanding. Main `2876d9437` was fetched and
+integrated through the supported workflow as `1f1962f39`; frozen setup and current permission/route
+inspection completed. The control is pinned at that main SHA on `feat/studio-preview-speed-control`
+to prevent main-mirror sync from moving its unmeasured baseline. Standalone performance admission
+was inconclusive twice: other verification lanes were active and load was 65.45 and 12.585 on
+18 CPUs. Retain both reports and repeat stable source when the host is quiet; paired control
+measurements remain unrun. Equal persisted-state captures were empty in the whole-app trial, so
+that trial does not establish retention of a populated persisted value.
+That initial handoff had no landing authorization. The Developer authorized this slice and its
+retries on 2026-10-07; current proof remains as recorded above.

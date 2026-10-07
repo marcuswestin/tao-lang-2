@@ -1,6 +1,10 @@
 import { AST } from '@parser'
 import { Assert } from '@shared'
-import type { CallableEffectFactInputs, SourceDiscoveryContext } from './callable-effect-facts'
+import {
+  type CallableEffectFactInputs,
+  createCallableEffectFactDiscovery,
+  type SourceDiscoveryContext,
+} from './callable-effect-facts'
 import {
   assertCanonicalEffectSnapshot,
   type CanonicalCallableDescriptor,
@@ -11,15 +15,46 @@ import {
 export type CallableEffectPublications = Readonly<{
   inputs: CallableEffectFactInputs
   context: SourceDiscoveryContext
+  discoverFacts: ReturnType<typeof createCallableEffectFactDiscovery>
 }>
 
-/** Project factory-published identities into the existing, single source-discovery pass. */
+/**
+ * Project factory-published identities into the existing, single source-discovery pass.
+ *
+ * The inventory cache is valid only for the lifetime of an unmodified linked AST and its semantic
+ * inventory. Each distinct snapshot takes the cold projection path; the weak key releases its
+ * cached inventory with the snapshot. This does not reuse work across snapshot entries or builds.
+ */
 export function projectCallableEffectPublications(
   snapshot: CanonicalEffectIndependentSnapshot,
   owner: AST.Node,
 ): CallableEffectPublications {
   assertCanonicalEffectSnapshot(snapshot)
 
+  let inventory = callableEffectInventoriesBySnapshot.get(snapshot)
+  if (!inventory) {
+    const inputs = projectCallableEffectFactInputs(snapshot)
+    inventory = Object.freeze({ inputs, discoverFacts: createCallableEffectFactDiscovery(inputs) })
+    callableEffectInventoriesBySnapshot.set(snapshot, inventory)
+  }
+
+  const descriptor = snapshot.descriptors.get(owner)
+  const root = descriptor && descriptor.declaration === owner
+    ? projectSourceRoot(owner, descriptor)
+    : undefined
+  const context: SourceDiscoveryContext = Object.freeze({
+    ...(root ? { root } : {}),
+    covered: snapshot.covered,
+  })
+  return Object.freeze({ ...inventory, context })
+}
+
+const callableEffectInventoriesBySnapshot = new WeakMap<
+  CanonicalEffectIndependentSnapshot,
+  Pick<CallableEffectPublications, 'inputs' | 'discoverFacts'>
+>()
+
+function projectCallableEffectFactInputs(snapshot: CanonicalEffectIndependentSnapshot): CallableEffectFactInputs {
   const foreignHeads = new Map(
     snapshot.natives.filter(native =>
       native.phase === 'evaluation' && native.declaration === native.exportSource
@@ -186,16 +221,7 @@ export function projectCallableEffectPublications(
       Assert(snapshot.constructors.has(node), 'Expected every covered named constructor to have a publication.')
     }
   }
-
-  const descriptor = snapshot.descriptors.get(owner)
-  const root = descriptor && descriptor.declaration === owner
-    ? projectSourceRoot(owner, descriptor)
-    : undefined
-  const context: SourceDiscoveryContext = Object.freeze({
-    ...(root ? { root } : {}),
-    covered: snapshot.covered,
-  })
-  return Object.freeze({ inputs, context })
+  return inputs
 }
 
 function projectRead(publication: CanonicalReadPublication): CallableEffectFactInputs['reads'][number] {

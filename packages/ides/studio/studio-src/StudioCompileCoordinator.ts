@@ -23,6 +23,8 @@ export type StudioCompileRequest = StudioProjectIdentity & {
   causes: readonly StudioCompileCause[]
   changes: readonly StudioSourceChange[]
   compileRevision: number
+  /** Wall-clock enqueue time, used only for pipeline diagnostics. */
+  queuedAt?: number
 }
 
 export type StudioCompileOutput = {
@@ -71,6 +73,7 @@ export type StudioCompileCoordinatorOptions = StudioProjectIdentity & {
 }
 
 type PendingBatch = {
+  queuedAt: number
   causes: Set<StudioCompileCause>
   changes: Map<string, StudioSourceChange>
   waiters: Array<{
@@ -95,6 +98,7 @@ export class StudioCompileCoordinator {
   readonly #onState: StudioCompileCoordinatorOptions['onState']
   readonly #project: StudioProjectIdentity
   readonly #studioWrites = new Map<string, TrackedStudioWrite[]>()
+  readonly #idleWaiters = new Set<() => void>()
   #appliedRevision = 0
   #compileRevision = 0
   #diagnostics: readonly StudioCompileDiagnostic[] = []
@@ -129,6 +133,14 @@ export class StudioCompileCoordinator {
 
   requestInitialCompile(): Promise<StudioCompileCompletion> {
     return this.#requestCompile('initial', [])
+  }
+
+  /** Wait for admitted and queued attempts without requesting another compilation. */
+  waitForIdle(): Promise<void> {
+    if (!this.#working && this.#pending === undefined) {
+      return Promise.resolve()
+    }
+    return new Promise(resolve => this.#idleWaiters.add(resolve))
   }
 
   /** noteStudioWrite schedules its compile and records the exact source version the watcher should acknowledge. */
@@ -195,6 +207,16 @@ export class StudioCompileCoordinator {
     this.#emitState()
   }
 
+  /** Only the current realm can release its applied-revision stream. */
+  releasePreviewInstance(previewInstanceId: string): void {
+    if (previewInstanceId !== this.#previewInstanceId) {
+      return
+    }
+    this.#previewInstanceId = undefined
+    this.#appliedRevision = 0
+    this.#emitState()
+  }
+
   /** acknowledgePreview advances appliedRevision only for this coordinator's current, successfully compiled preview. */
   acknowledgePreview(message: StudioPreviewAppliedMessage): boolean {
     if (
@@ -238,6 +260,7 @@ export class StudioCompileCoordinator {
 
   #newPendingBatch(): PendingBatch {
     const pending: PendingBatch = {
+      queuedAt: Date.now(),
       causes: new Set(),
       changes: new Map(),
       waiters: [],
@@ -281,6 +304,11 @@ export class StudioCompileCoordinator {
       this.#working = false
       if (this.#pending !== undefined) {
         this.#scheduleDrain()
+      } else {
+        for (const resolve of this.#idleWaiters) {
+          resolve()
+        }
+        this.#idleWaiters.clear()
       }
     }
   }
@@ -289,6 +317,7 @@ export class StudioCompileCoordinator {
     this.#compileRevision += 1
     const request: StudioCompileRequest = {
       ...this.#project,
+      queuedAt: batch.queuedAt,
       causes: [...batch.causes],
       changes: [...batch.changes.values()],
       compileRevision: this.#compileRevision,

@@ -532,6 +532,35 @@ Describe('Studio protocol v1', () => {
     })).toBe(undefined)
   })
 
+  Test('preserves whole-app compilation identity and rejects malformed revisions', () => {
+    const message = {
+      channel: studioProtocolChannel,
+      identity: {
+        appName: identity.appName,
+        compileRevision: 7,
+        previewInstanceId: identity.previewInstanceId,
+        project: identity.project,
+      },
+      painted: true,
+      paintRevision: 8,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-painted',
+    }
+    Expect(StudioProtocol.parseMessage(message)?.identity).toEqual(message.identity)
+    for (const compileRevision of [-1, '7', 1.5]) {
+      Expect(StudioProtocol.parseMessage({
+        ...message,
+        identity: { ...identity, compileRevision },
+      })).toBe(undefined)
+    }
+    for (const partial of [{ cellRevision: 2 }, { manifestRevision: 'manifest-7' }]) {
+      Expect(StudioProtocol.parseMessage({
+        ...message,
+        identity: { ...message.identity, ...partial },
+      })).toBe(undefined)
+    }
+  })
+
   Test('accepts only complete runtime Scheme resolutions', () => {
     const message = {
       channel: studioProtocolChannel,

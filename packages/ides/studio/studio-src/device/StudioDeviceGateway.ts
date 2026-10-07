@@ -39,20 +39,22 @@ import type {
 import type { StudioDeviceTrustStore } from './StudioDeviceTrustStore'
 
 /** The slice of a project session the gateway drives; a real `StudioProjectSession` satisfies it. */
-export type StudioDeviceGatewaySession = Pick<
-  StudioProjectSession,
-  | 'acknowledgePreview'
-  | 'appName'
-  | 'applySourceAction'
-  | 'reconfigureCell'
-  | 'compileSnapshot'
-  | 'previewCellInstance'
-  | 'previewManifest'
-  | 'projectRoot'
-  | 'registerCellPreview'
-  | 'subscribe'
-  | 'unregisterCellPreview'
->
+export type StudioDeviceGatewaySession =
+  & Pick<
+    StudioProjectSession,
+    | 'acknowledgePreview'
+    | 'appName'
+    | 'applySourceAction'
+    | 'reconfigureCell'
+    | 'compileSnapshot'
+    | 'previewCellInstance'
+    | 'previewManifest'
+    | 'projectRoot'
+    | 'registerCellPreview'
+    | 'subscribe'
+    | 'unregisterCellPreview'
+  >
+  & Partial<Pick<StudioProjectSession, 'retainNativePreviewConsumer' | 'ensurePublishedPreview'>>
 
 export type StudioDeviceGatewaySessionRef = {
   /** The project's Metro origin; a hello naming that port resolves to this session. */
@@ -89,6 +91,8 @@ export type StudioDeviceStatusListener = (status: StudioDeviceStatus) => void
 type ConnectionState = 'authenticating' | 'closed' | 'confirm' | 'connected' | 'hello' | 'pairing'
 
 type Connection = {
+  publicationBarrier?: Promise<void>
+  deferredCellId?: string
   appliedRevision?: number
   /** The cell this device renders, kept whole so an edit from the phone can name its instance. */
   assignment?: {
@@ -678,6 +682,20 @@ export class StudioDeviceGateway {
       Errors.throwUnexpected('A device connection has no session to welcome it into.')
     }
     connection.state = 'connected'
+    const releaseNative = ref.session.retainNativePreviewConsumer?.()
+    connection.publicationBarrier = ref.session.ensurePublishedPreview?.()
+    void connection.publicationBarrier?.then(() => {
+      connection.publicationBarrier = undefined
+      const cellId = connection.deferredCellId
+      connection.deferredCellId = undefined
+      if (connection.state === 'connected' && cellId !== undefined) {
+        this.#assign(connection, cellId)
+      }
+    }).catch(error => {
+      connection.publicationBarrier = undefined
+      connection.lastError = Errors.formatForUser(error)
+      this.#reject(connection, 'unknown-session', connection.lastError)
+    })
     const manifest = ref.session.previewManifest()
     this.#sendSealed(connection, {
       appName: ref.session.appName,
@@ -689,7 +707,11 @@ export class StudioDeviceGateway {
       sessionId: ref.sessionId,
       type: 'studio.welcome',
     })
-    connection.unsubscribe = ref.session.subscribe(event => this.#sessionEvent(connection, event))
+    const unsubscribe = ref.session.subscribe(event => this.#sessionEvent(connection, event))
+    connection.unsubscribe = () => {
+      unsubscribe()
+      releaseNative?.()
+    }
     this.#repeatedOutcome = undefined
     this.#log(`device ${deviceText(connection.device?.name ?? 'unknown')} connected to ${ref.session.appName}`)
     this.#emit(ref.sessionId)
@@ -712,6 +734,8 @@ export class StudioDeviceGateway {
       'compile-state': compiled => {
         this.#sendSealed(connection, { ...compileState(compiled.state), type: 'studio.compileState' })
       },
+      // Direct design delivery is browser-only; devices retain authoritative publication.
+      'design-padding': Switch.nothing,
       'file-changed': Switch.nothing,
       'files-changed': Switch.nothing,
       'preview-manifest-changed': changed => this.#manifestChanged(connection, changed.manifest),
@@ -745,6 +769,11 @@ export class StudioDeviceGateway {
   }
 
   #assign(connection: Connection, cellId: string): void {
+    const barrier = connection.publicationBarrier
+    if (barrier !== undefined) {
+      connection.deferredCellId = cellId
+      return
+    }
     const ref = connection.ref
     if (ref === undefined) {
       Errors.throwUnexpected('A device connection has no session to assign a cell from.')

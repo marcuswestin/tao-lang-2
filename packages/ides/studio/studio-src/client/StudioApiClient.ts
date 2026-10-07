@@ -94,6 +94,7 @@ export type StudioGeneratedFixtureResult =
 /** One handler per message the event socket can send; the ones the workbench has no use for are optional. */
 export type StudioApiEventHandlers = {
   onConnect?: () => void
+  onDesignPadding?: (update: import('../StudioProtocol').StudioDesignPaddingUpdate) => void
   onCellReconfigured?: (cellId: string) => void
   onCheckpoint?: (checkpoint: Pick<StudioCheckpointSummary, 'id' | 'status'>) => void
   onCompile: (state: StudioCompileState) => void
@@ -163,6 +164,7 @@ export const StudioApiEventStream = {
       'cell-reconfigured': event => handlers.onCellReconfigured?.(event.cellId),
       'checkpoint-changed': event => handlers.onCheckpoint?.(event.checkpoint),
       'compile-state': event => handlers.onCompile(event.state),
+      'design-padding': event => handlers.onDesignPadding?.(event),
       'data-invalidated': event => handlers.onDataInvalidated?.({ entities: event.entities, revision: event.revision }),
       'device-state': event => handlers.onDeviceState?.(event.status),
       'file-changed': event => handlers.onFile(event.file),
@@ -255,6 +257,9 @@ export const StudioApiClient = {
   releaseCellInstance: async (previewInstanceId: string): Promise<void> => {
     await request<{ released: true }>(routes.previewCellRelease, { previewInstanceId })
   },
+  releasePreviewInstance: async (previewInstanceId: string): Promise<void> => {
+    await request<{ released: true }>(routes.previewRelease, { previewInstanceId })
+  },
   connectEvents,
   createFile: async (body: StudioCreateFileRequest): Promise<StudioCreateFileResult> =>
     await request(routes.fileCreate, body),
@@ -299,6 +304,8 @@ export const StudioApiClient = {
   lspTransport: async (signal?: AbortSignal): Promise<StudioLspTransport> =>
     await webSocketTransport(webSocketUrl(studioSessionPath(routes.languageLsp.path)), signal),
   previewApplied: async (body: unknown): Promise<unknown> => await request(routes.previewApplied, body),
+  previewPaint: async (message: import('../StudioProtocol').StudioPreviewPaintedMessage): Promise<unknown> =>
+    await request(routes.previewPaint, message),
   previewCell: async (cellId: string): Promise<StudioCellRuntimeResponse> =>
     await get(`${routes.previewCell.path}?cellId=${encodeURIComponent(cellId)}`),
   previewLayoutMeasurements: async (body: unknown): Promise<unknown> =>

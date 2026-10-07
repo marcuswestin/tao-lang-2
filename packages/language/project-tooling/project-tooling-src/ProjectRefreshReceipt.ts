@@ -74,7 +74,12 @@ export class ProjectRefreshReceipt {
     ])
   }
 
-  async audit(options: ProjectToolingOptions, force = false, nativeIdentity?: string): Promise<Audit | undefined> {
+  async audit(
+    options: ProjectToolingOptions,
+    force = false,
+    nativeIdentity?: string,
+    sourceBaseline?: ReadonlyMap<string, string>,
+  ): Promise<Audit | undefined> {
     if (force) {
       this.clear()
     }
@@ -101,7 +106,11 @@ export class ProjectRefreshReceipt {
         } else if (SOURCE_EXTENSIONS.has(FS.extname(path)) || FS.basename(path) === '.gitignore') {
           const text = await FS.readText(path)
           texts.set(path, text)
-          records.push(JSON.stringify([path, await FS.realPath(path), Platform.sha256Hex(text)]))
+          records.push(JSON.stringify([
+            path,
+            await FS.realPath(path),
+            Platform.sha256Hex(sourceBaseline?.get(path) ?? text),
+          ]))
         }
       }
       for (const root of new Set([this.root, ...this.roots.filter(root => root !== this.stdlibRoot), stdlibRoot])) {
@@ -176,6 +185,42 @@ export class ProjectRefreshReceipt {
       return undefined
     }
     return await this.outputFingerprint() === saved.outputs ? saved.data : undefined
+  }
+
+  /** Source bytes may advance only inside an unchanged, independently audited authored graph. */
+  async auditPreview(
+    options: ProjectToolingOptions,
+    sourceVersions: Readonly<Record<string, string>>,
+    nativeIdentity: string,
+    versionOfSource: (text: string) => string,
+  ): Promise<boolean> {
+    const saved = this.saved
+    if (!saved) {
+      return false
+    }
+    const baseline = new Map<string, string>()
+    const paths = saved.data.discovery.sourcePaths
+    for (const path of paths) {
+      const relative = FS.relativePath(this.root, path)
+      if (!Object.hasOwn(sourceVersions, relative) || !saved.audit.texts.has(path)) {
+        return false
+      }
+      baseline.set(path, saved.audit.texts.get(path)!)
+    }
+    if (Object.keys(sourceVersions).length !== paths.length) {
+      return false
+    }
+    const audit = await this.audit(options, false, nativeIdentity, baseline)
+    if (!audit || this.saved !== saved || !sameAudit(audit, saved.audit)) {
+      return false
+    }
+    for (const path of paths) {
+      const text = audit.texts.get(path)
+      if (text === undefined || versionOfSource(text) !== sourceVersions[FS.relativePath(this.root, path)]) {
+        return false
+      }
+    }
+    return await this.outputFingerprint() === saved.outputs && this.saved === saved
   }
 
   async remember(

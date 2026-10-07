@@ -3,6 +3,7 @@ import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import { createElement } from './TR-create-element'
 import { Debug, type TaoDebugStep } from './TR-debug'
+import { DesignControls, type TaoStudioDesignPaddingUpdate } from './TR-design'
 import { captureArguments, onRuntimeFailure } from './TR-error-containment'
 import { HostEnvironmentError, UnexpectedBehaviorError, UserInputError } from './TR-errors'
 import { requireReactNativeRuntime } from './TR-react-native'
@@ -214,7 +215,9 @@ export type StudioPreviewHost = {
   }
   window: {
     addEventListener: StudioPreviewWindowListener
+    cancelAnimationFrame(id: number): void
     getComputedStyle?: (element: StudioPreviewElement) => { getPropertyValue(property: string): string }
+    requestAnimationFrame(callback: (timestamp: number) => void): number
     removeEventListener: StudioPreviewWindowListener
   }
 }
@@ -885,6 +888,26 @@ export function mountStudioPreviewBridge(
   let recording: StudioJourneyRecording | undefined
   let measurementQueued = false
   let stopped = false
+  let lastDesignRevision = -1
+  const pendingPaintFrames = new Set<number>()
+  const schedulePaintAcknowledgement = (paintRevision: number): void => {
+    let firstFrame = 0
+    firstFrame = host.window.requestAnimationFrame(() => {
+      pendingPaintFrames.delete(firstFrame)
+      if (stopped) {
+        return
+      }
+      let secondFrame = 0
+      secondFrame = host.window.requestAnimationFrame(() => {
+        pendingPaintFrames.delete(secondFrame)
+        if (!stopped) {
+          postToStudio(host, config, 'preview-painted', { painted: true, paintRevision })
+        }
+      })
+      pendingPaintFrames.add(secondFrame)
+    })
+    pendingPaintFrames.add(firstFrame)
+  }
 
   const postLayoutMeasurements = () => {
     measurementQueued = false
@@ -1429,6 +1452,27 @@ export function mountStudioPreviewBridge(
     // the table is read for an own key rather than dispatched exhaustively.
     const message = studioMessage(event, config, host.parent)
     const type = message?.['type']
+    if (message !== undefined && type === 'design-padding') {
+      const identity = message['identity']
+      const revision = nonNegativeInteger(message['revision'])
+      if (
+        config.publicationChecks === false
+        && isObject(identity)
+        && identityMatchesPreviewConfig(identity, config)
+        && revision !== undefined
+        && revision > lastDesignRevision
+      ) {
+        lastDesignRevision = revision
+        const update = parseStudioDesignPaddingUpdate(message)
+        const accepted = update !== undefined && DesignControls.patchStudioPadding(update)
+        if (accepted) {
+          schedulePaintAcknowledgement(revision)
+        } else {
+          postToStudio(host, config, 'preview-painted', { painted: false, paintRevision: revision })
+        }
+      }
+      return
+    }
     if (message !== undefined && typeof type === 'string' && Object.hasOwn(inboundMessages, type)) {
       inboundMessages[type]!(message)
     }
@@ -1510,6 +1554,7 @@ export function mountStudioPreviewBridge(
       compileRevision: config.compileRevision,
     })
   }
+  schedulePaintAcknowledgement(config.compileRevision)
   scheduleLayoutMeasurements()
   const stopFailures = onRuntimeFailure(capture => postToStudio(host, config, 'preview-runtime-failure', { capture }))
   const restoreConsole = forwardPreviewConsole(host, config)
@@ -1520,6 +1565,10 @@ export function mountStudioPreviewBridge(
   return () => {
     releaseCanvasPanKey()
     stopped = true
+    for (const frame of pendingPaintFrames) {
+      host.window.cancelAnimationFrame(frame)
+    }
+    pendingPaintFrames.clear()
     // A preview instance owns its debugger pause and clock hold. Releasing the bridge must release
     // both before a replacement instance starts, without letting the old pause publish a resumed
     // event into the replacement's drawer.
@@ -1891,6 +1940,16 @@ function validCellIdentity(config: StudioPreviewConfig): boolean {
     && nonEmptyValue(config.manifestRevision)
 }
 
+function identityMatchesPreviewConfig(identity: Record<string, unknown>, config: StudioPreviewConfig): boolean {
+  return identity['appName'] === config.appName
+    && identity['cellId'] === config.cellId
+    && identity['cellRevision'] === config.cellRevision
+    && identity['compileRevision'] === config.compileRevision
+    && identity['manifestRevision'] === config.manifestRevision
+    && identity['previewInstanceId'] === config.previewInstanceId
+    && identity['project'] === config.project
+}
+
 function exactWebOrigin(value: string): boolean {
   try {
     const url = new URL(value)
@@ -1988,7 +2047,9 @@ function postToStudio(
     channel: studioProtocolChannel,
     identity: {
       ...previewIdentity(config),
-      ...(type === 'preview-applied' || type === 'preview-mounted' ? { compileRevision: config.compileRevision } : {}),
+      ...(type === 'preview-applied' || type === 'preview-mounted' || type === 'preview-painted'
+        ? { compileRevision: config.compileRevision }
+        : {}),
     },
     protocolVersion: studioProtocolVersion,
     ...payload,
@@ -2395,6 +2456,59 @@ function nonEmptyValue(value: unknown): value is string {
 
 function nonNegativeInteger(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
+}
+
+function parseStudioDesignPaddingUpdate(
+  message: Record<string, unknown>,
+): TaoStudioDesignPaddingUpdate | undefined {
+  const designName = message['designName']
+  const bundleName = message['bundleName']
+  const sourcePath = message['sourcePath']
+  const expectedPadding = message['expectedPadding']
+  const padding = message['padding']
+  const entryIndex = nonNegativeInteger(message['entryIndex'])
+  const ownerKind = message['ownerKind']
+  const oldLiteralRange = parseStudioDesignSourceRange(message['oldLiteralRange'])
+  const newLiteralRange = parseStudioDesignSourceRange(message['newLiteralRange'])
+  const oldSpecRange = parseStudioDesignSourceRange(message['oldSpecRange'])
+  const newSpecRange = parseStudioDesignSourceRange(message['newSpecRange'])
+  if (
+    typeof designName !== 'string'
+    || typeof bundleName !== 'string'
+    || typeof sourcePath !== 'string'
+    || typeof expectedPadding !== 'number'
+    || typeof padding !== 'number'
+    || (ownerKind !== 'legacy' && ownerKind !== 'styles' && ownerKind !== 'text')
+    || entryIndex === undefined
+    || oldLiteralRange === undefined
+    || newLiteralRange === undefined
+    || oldSpecRange === undefined
+    || newSpecRange === undefined
+  ) {
+    return undefined
+  }
+  return {
+    bundleName,
+    designName,
+    entryIndex,
+    expectedPadding,
+    newLiteralRange,
+    newSpecRange,
+    oldLiteralRange,
+    oldSpecRange,
+    ownerKind,
+    padding,
+    sourcePath,
+  }
+}
+
+function parseStudioDesignSourceRange(value: unknown): { from: number; to: number } | undefined {
+  if (!isObject(value)) {
+    return undefined
+  }
+  const from = nonNegativeInteger(value['from'])
+  const to = nonNegativeInteger(value['to'])
+  return from === undefined || to === undefined || to < from ? undefined : { from, to }
 }
 
 // Mirrors `isRecord` in packages/shared/shared-src/core/Json.ts; `runtime-mirrors.test.ts` keeps them in step.

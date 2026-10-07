@@ -8,7 +8,7 @@ import {
 } from '@runtime/TR-studio-device-protocol'
 import { StudioDeviceTrust, type TaoStudioDeviceSessionKeys } from '@runtime/TR-studio-device-trust'
 import { CLI, Errors, FS, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import {
   StudioDeviceGateway,
   type StudioDeviceGatewayOptions,
@@ -943,6 +943,98 @@ Describe('Studio device gateway sealed control plane', () => {
   })
 })
 
+Describe('Studio device gateway native publication barrier', () => {
+  Test('retains before publication and assigns the latest queued cell from the current manifest', async () => {
+    const publication = Deferred<void>()
+    let session: StudioProjectSession | undefined
+    let consumerRetainedBeforePublication = false
+    await withGateway({
+      ensurePublishedPreview: () => {
+        consumerRetainedBeforePublication = session?.hasNativePreviewConsumers() === true
+        return publication.promise
+      },
+    }, async env => {
+      session = env.session
+      const device = await pairedDevice(env)
+      Expect(consumerRetainedBeforePublication).toBe(true)
+      Expect(env.session.hasNativePreviewConsumers()).toBe(true)
+
+      env.gateway.selectCell(env.sessionId, 'cell:phone')
+      env.gateway.selectCell(env.sessionId, 'cell:tablet')
+      Expect(env.session.hasPreviewConsumers()).toBe(false)
+
+      const currentManifest = manifestFor(env.session, 2, env.cells)
+      env.session.setMatrixManifest(currentManifest)
+      publication.resolve()
+
+      const assigned = await nextAssignedCell(device)
+      Expect(assigned.identity).toMatchObject({
+        cellId: 'cell:tablet',
+        compileRevision: 2,
+        manifestRevision: 'manifest-2',
+      })
+      Expect(env.session.hasPreviewConsumers()).toBe(true)
+      Expect(env.session.previewCellInstance(assigned.identity.previewInstanceId)).toMatchObject({
+        identity: {
+          appName: 'Garden',
+          cellId: 'cell:tablet',
+          cellRevision: 0,
+          compileRevision: 2,
+          manifestRevision: 'manifest-2',
+        },
+      })
+      device.close()
+    })
+  })
+
+  Test('disconnect releases the native consumer once and a delayed barrier cannot assign', async () => {
+    const publication = Deferred<void>()
+    await withGateway({ ensurePublishedPreview: () => publication.promise }, async env => {
+      let releaseCalls = 0
+      const retain = env.session.retainNativePreviewConsumer.bind(env.session)
+      env.session.retainNativePreviewConsumer = () => {
+        const release = retain()
+        return () => {
+          releaseCalls += 1
+          release()
+        }
+      }
+      const device = await pairedDevice(env)
+      Expect(env.session.hasNativePreviewConsumers()).toBe(true)
+      env.gateway.selectCell(env.sessionId, 'cell:phone')
+      Expect(env.session.hasPreviewConsumers()).toBe(false)
+
+      device.close()
+      device.close()
+      await until(() => releaseCalls > 0, { description: 'the native preview consumer to be released' })
+      Expect(releaseCalls).toBe(1)
+      Expect(env.session.hasNativePreviewConsumers()).toBe(false)
+
+      publication.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+      Expect(env.session.hasPreviewConsumers()).toBe(false)
+      Expect(env.gateway.status(env.sessionId).connection).toBeUndefined()
+    })
+  })
+
+  Test('publication rejection closes the device and releases its retained consumer', async () => {
+    const publication = Deferred<void>()
+    await withGateway({ ensurePublishedPreview: () => publication.promise }, async env => {
+      const device = await pairedDevice(env)
+      Expect(env.session.hasNativePreviewConsumers()).toBe(true)
+
+      publication.reject(new Errors.UnexpectedBehaviorError('Preview publication failed.'))
+      Expect(await device.rejected()).toMatchObject({ code: 'unknown-session' })
+      await until(() => !env.session.hasNativePreviewConsumers(), {
+        description: 'the native preview consumer to be released after publication failed',
+      })
+      Expect(env.session.hasPreviewConsumers()).toBe(false)
+      Expect(env.gateway.status(env.sessionId).connection).toBeUndefined()
+    })
+  })
+})
+
 const fixedNow = new Date('2026-09-02T10:00:00.000Z')
 
 type Env = {
@@ -1171,10 +1263,11 @@ async function withGateway(
     & Partial<
       Pick<StudioDeviceGatewayOptions, 'bonjour' | 'handshakeTimeoutMs' | 'pairingWindowMs' | 'trustRefreshMs'>
     >
-    & { source?: string },
+    & { ensurePublishedPreview?: () => Promise<void>; source?: string },
   use: (env: Env) => Promise<void>,
 ): Promise<void> {
-  const project = await openProject('Garden', 'tao-studio-device-', options.source)
+  const { ensurePublishedPreview, source, ...gatewayOptions } = options
+  const project = await openProject('Garden', 'tao-studio-device-', source, ensurePublishedPreview)
   const trustRoot = await mkTestDir('tao-studio-device-trust-')
   const sessions = new Map<string, StudioDeviceGatewaySessionRef>()
   sessions.set('first_session', {
@@ -1185,8 +1278,8 @@ async function withGateway(
   const store = await StudioDeviceTrustStore.open(trustRoot)
   const clock = { now: fixedNow }
   const gateway = await StudioDeviceGateway.start({
-    ...options,
-    bonjour: options.bonjour ?? false,
+    ...gatewayOptions,
+    bonjour: gatewayOptions.bonjour ?? false,
     hostname: '127.0.0.1',
     hosts: async () => ['192.168.1.20'],
     now: () => clock.now,
@@ -1218,6 +1311,7 @@ async function openProject(
   appName: string,
   prefix: string,
   source?: string,
+  ensurePublishedPreview?: () => Promise<void>,
 ): Promise<{
   cells: string[]
   close: () => Promise<void>
@@ -1247,6 +1341,7 @@ async function openProject(
       return publishedRevision === undefined ? undefined : { publishedRevision }
     },
     entryPath: `${appName}.tao`,
+    ensurePublishedPreview,
     projectRoot: root,
   })
   await session.compileInitial()

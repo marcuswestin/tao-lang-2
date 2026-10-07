@@ -31,6 +31,7 @@ export class StudioDraftSync {
   #pendingContent: string | undefined
   #lastResult: StudioDraftSyncResult | undefined
   #working: Promise<void> = Promise.resolve()
+  #pendingWrites = 0
 
   constructor(file: StudioDraftFile, options: StudioDraftSyncOptions) {
     this.#file = file
@@ -42,6 +43,11 @@ export class StudioDraftSync {
     this.#pendingContent = content
   }
 
+  /** A requested save can still change the saved file even when the editor matches its old text. */
+  get hasPendingWrites(): boolean {
+    return this.#pendingWrites > 0
+  }
+
   async save(): Promise<StudioDraftSyncResult | undefined> {
     const content = this.#pendingContent
     if (content === undefined) {
@@ -49,6 +55,7 @@ export class StudioDraftSync {
       return this.#lastResult
     }
     this.#pendingContent = undefined
+    this.#pendingWrites += 1
     const save = this.#working.then(async () => {
       let result: StudioDraftSyncResult
       try {
@@ -70,6 +77,8 @@ export class StudioDraftSync {
       this.#lastResult = result
       this.#onResult?.(result)
       return result
+    }).finally(() => {
+      this.#pendingWrites -= 1
     })
     this.#working = save.then(() => undefined, () => undefined)
     return await save

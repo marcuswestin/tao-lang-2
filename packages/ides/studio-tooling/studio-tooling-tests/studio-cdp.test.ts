@@ -102,6 +102,51 @@ class FakeCdpTransport implements StudioCdpTransport {
 }
 
 Describe('Studio browser CDP harness', () => {
+  Test('attempts disconnect and ownership join after capture fails without replacing that failure', async () => {
+    const events: string[] = []
+    const captureFailure = new Errors.HostEnvironmentError('output custody is uncertain')
+    let caught: unknown
+    try {
+      await StudioCdp.testing.closeChrome([
+        () => {
+          events.push('capture')
+          throw captureFailure
+        },
+        () => {
+          events.push('disconnect')
+        },
+        async () => {
+          events.push('join')
+          Errors.throwHostEnvironment('ownership join failed')
+        },
+      ])
+    } catch (error) {
+      caught = error
+    }
+    Expect(events).toEqual(['capture', 'disconnect', 'join'])
+    Expect(caught).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect((caught as Errors.HostEnvironmentError).cause).toBe(captureFailure)
+    Expect(Errors.formatForLog(caught)).toContain('ownership join failed')
+  })
+
+  Test('reports a supervised unsuccessful exit after joining owned Chrome cleanup', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-cleanup-')
+    await Expect(StudioCdp.testing.stopChrome(
+      {
+        exitCode: 0,
+        signalCode: null,
+        kill: () => true,
+        waitForClose: async () => ({ exitCode: 1, signal: null }),
+        closeOutput: async () => {},
+        dispose: () => {},
+      },
+      profile,
+      'SIGTERM',
+    )).rejects.toThrow('Chrome cleanup could not be verified')
+    Expect(await FS.isDirectory(profile)).toBe(true)
+    await FS.remove(profile)
+  })
+
   Test('joins owned Chrome cleanup after a natural exit before disposing its observers', async () => {
     const profile = await mkTestDir('tao-studio-cdp-cleanup-')
     const joined = Deferred<{ exitCode: number; signal: null }>()
@@ -135,7 +180,7 @@ Describe('Studio browser CDP harness', () => {
     Expect(await FS.isDirectory(profile)).toBe(false)
   })
 
-  Test('retains cleanup failures while still disposing Chrome output and removing its profile', async () => {
+  Test('retains an unverified Chrome profile while reporting cleanup failures and disposing output', async () => {
     const profile = await mkTestDir('tao-studio-cdp-cleanup-')
     const events: string[] = []
     const original = new Errors.HostEnvironmentError('original ownership join failure')
@@ -165,7 +210,7 @@ Describe('Studio browser CDP harness', () => {
     Expect((caught as Errors.HostEnvironmentError).cause).toBe(original)
     Expect(Errors.formatForLog(caught)).toContain('output drain failure')
     Expect(events).toEqual(['output', 'dispose'])
-    Expect(await FS.isDirectory(profile)).toBe(false)
+    Expect(await FS.isDirectory(profile)).toBe(true)
   })
 
   Test('rejects a stale DevTools port after Chrome failed with its original startup output', async () => {

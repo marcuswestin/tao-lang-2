@@ -2,7 +2,12 @@ import { Errors, FS, HCI } from '@shared'
 import { watch } from 'chokidar'
 import { type ProjectNativeBindingInventory, projectNativeBindingInventory } from './ProjectNativeBindingInventory'
 import { createProjectRefreshLane } from './ProjectRefreshLane'
-import type { ProjectToolingOptions, ProjectToolingResult, ProjectToolingWatch } from './ProjectTooling'
+import type {
+  ProjectToolingInputChange,
+  ProjectToolingOptions,
+  ProjectToolingResult,
+  ProjectToolingWatch,
+} from './ProjectTooling'
 import {
   explicitProjectConfigWatchPaths,
   explicitProjectOwnershipWatchPaths,
@@ -13,6 +18,7 @@ import {
 
 const DEBOUNCE_MS = 250
 const NATIVE_INVENTORY_MS = 1_000
+const SOURCE_EXTENSION = '.tao'
 
 type Refresh = (options?: { force?: boolean }) => Promise<ProjectToolingResult>
 
@@ -91,6 +97,7 @@ export async function startProjectFileWatch(
         const inventory = await readNativeInventory(plan)
         if (!disposed && nativePlan === plan && nativeInventory !== inventory) {
           nativeInventory = inventory
+          onInputChange({ event: 'native-inventory', kind: 'native' })
           schedule()
         }
       })().catch(onError).finally(() => {
@@ -257,6 +264,7 @@ export async function startProjectFileWatch(
       const inventory = await readNativeInventory(nativePlan!)
       if (inventory !== nativeInventory) {
         nativeInventory = inventory
+        onInputChange({ event: 'native-inventory', kind: 'native' })
         schedule()
       }
       scheduleNativeScan()
@@ -325,6 +333,7 @@ export async function startProjectFileWatch(
     nativeBindingWatchers.set(key, nativeWatcher)
     nativeWatcher.on('all', (_event, candidate) => {
       if (nativeBindingPaths.has(FS.resolvePath(candidate)) && !FS.isFileMutationAuxiliaryPath(candidate)) {
+        onInputChange({ path: FS.resolvePath(candidate), event: _event, kind: 'native' })
         schedule()
       }
     })
@@ -339,6 +348,7 @@ export async function startProjectFileWatch(
     nativePlan = plan
     nativeInventory = await readNativeInventory(plan)
     if (baseline !== nativeInventory) {
+      onInputChange({ event: 'native-inventory', kind: 'native' })
       schedule()
     }
     scheduleNativeScan()
@@ -371,8 +381,13 @@ export async function startProjectFileWatch(
     return result
   }, options.onResult)
 
+  const onInputChange = (change: ProjectToolingInputChange): void => {
+    if (!disposed) {
+      options.onInputChange?.(change)
+    }
+  }
   const schedule = (): void => {
-    if (disposed) {
+    if (disposed || options.automaticRefresh === false) {
       return
     }
     if (timer !== undefined) {
@@ -397,6 +412,22 @@ export async function startProjectFileWatch(
         nativeBindingAncestors,
       )
     ) {
+      const absolute = FS.resolvePath(path)
+      onInputChange({
+        path: absolute,
+        event,
+        kind: classifyInputChange(
+          event,
+          absolute,
+          projectRoot,
+          dependencyRoots,
+          configInputPaths,
+          externalSidecarInputPaths,
+          sidecarOwnershipInputPaths,
+          nativeBindingPaths,
+          nativeBindingAncestors,
+        ),
+      })
       schedule()
     }
   }
@@ -459,4 +490,43 @@ export async function startProjectFileWatch(
       await Promise.all([...nativeBindingWatchers.values()].map(nativeWatcher => nativeWatcher.close()))
     },
   }
+}
+
+function classifyInputChange(
+  event: string,
+  path: string,
+  projectRoot: string,
+  dependencyRoots: ReadonlySet<string>,
+  configInputPaths: ReadonlySet<string>,
+  externalSidecarInputPaths: ReadonlySet<string>,
+  sidecarOwnershipInputPaths: ReadonlySet<string>,
+  nativeBindingPaths: ReadonlySet<string>,
+  nativeBindingAncestors: ReadonlySet<string>,
+): ProjectToolingInputChange['kind'] {
+  if (nativeBindingPaths.has(path) || nativeBindingAncestors.has(path)) {
+    return 'native'
+  }
+  if (configInputPaths.has(path)) {
+    return 'config'
+  }
+  if (
+    externalSidecarInputPaths.has(path)
+    || [...sidecarOwnershipInputPaths].some(input => FS.pathIsWithin(path, input))
+  ) {
+    return 'sidecar'
+  }
+  if ([...dependencyRoots].some(root => FS.pathIsWithin(path, root))) {
+    return 'dependency'
+  }
+  if (event === 'add' || event === 'unlink' || event === 'addDir' || event === 'unlinkDir') {
+    return 'topology'
+  }
+  if (
+    event === 'change'
+    && FS.extname(path) === SOURCE_EXTENSION
+    && FS.pathIsWithin(path, projectRoot)
+  ) {
+    return 'source'
+  }
+  return 'unknown'
 }

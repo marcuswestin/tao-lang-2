@@ -4,7 +4,7 @@ import { Assert, FS } from '@shared'
 type PreviewCeiling = { p50Ms: number; p95Ms: number }
 type PreviewSummary = { p50Ms: number; p95Ms: number }
 type PreviewBreach = { caseName: string; percentile: 'p50Ms' | 'p95Ms'; measuredMs: number; ceilingMs: number }
-type ArtifactPreviewBreach = PreviewBreach & { stage: 'total' | 'sourceToPublished' }
+type ArtifactPreviewBreach = PreviewBreach & { stage: 'total' | 'sourceToPublished' | 'sourceToDelivery' }
 
 const cases = [
   'one-file app publication-on',
@@ -36,14 +36,20 @@ const calibratedSourceCeilings: PreviewCeilings = {
   'HNReader editor padding publication-on': { p50Ms: 600, p95Ms: 775 },
   'HNReader editor padding publication-off': { p50Ms: 600, p95Ms: 800 },
 }
+const directPaddingCeilings = {
+  total: { p50Ms: 950, p95Ms: 1125 },
+  sourceToDelivery: { p50Ms: 600, p95Ms: 800 },
+} as const
 
 /** StudioPreviewPerformance evaluates preserved real-preview samples against supplied ceilings. */
 export const StudioPreviewPerformance = {
   cases,
   ceilings: calibratedCeilings,
   sourceCeilings: calibratedSourceCeilings,
+  directPaddingCeilings,
   evaluate,
   evaluateArtifacts,
+  evaluateDirectArtifacts,
 } as const
 
 async function evaluateArtifacts(
@@ -113,6 +119,156 @@ async function evaluateArtifacts(
     breaches,
   })
   return breaches
+}
+
+async function evaluateDirectArtifacts(
+  artifactRoot: string,
+  ceilings = directPaddingCeilings,
+): Promise<ArtifactPreviewBreach[]> {
+  const label = 'HNReader editor padding publication-off'
+  const slug = label.replaceAll(/[^a-z0-9]+/giu, '-').toLowerCase()
+  const path = FS.resolvePath(`${slug}.json`, artifactRoot)
+  const report = await FS.readJson<unknown>(path)
+  Assert.input(isRecord(report) && report['label'] === label, `Studio preview report ${path} must identify ${label}.`)
+  const rows = report['rows']
+  Assert.input(
+    Array.isArray(rows) && rows.length === 8 && rows.every(isRecord),
+    `Studio preview report ${path} must contain exactly eight timing rows.`,
+  )
+  const evidence = report['evidence']
+  Assert.input(isRecord(evidence), `Studio preview report ${path} must contain qualification evidence.`)
+  const completion = evidence['authoritativeCompletion']
+  Assert.input(
+    isRecord(completion) && completion['status'] === 'compiled',
+    `Studio preview report ${path} must contain a compiled authoritative completion receipt.`,
+  )
+  const completionRevision = positiveRevision(
+    completion['compileRevision'],
+    `Studio preview report ${path} must contain a positive authoritative compile revision.`,
+  )
+  const publishedRevision = completion['publishedRevision'] === undefined
+    ? undefined
+    : positiveRevision(
+      completion['publishedRevision'],
+      `Studio preview report ${path} must contain a positive published revision when present.`,
+    )
+  const manifest = evidence['authoritativeManifest']
+  Assert.input(isRecord(manifest), `Studio preview report ${path} must contain an authoritative manifest receipt.`)
+  const manifestRevision = positiveRevision(
+    manifest['compileRevision'],
+    `Studio preview report ${path} must contain a positive authoritative manifest revision.`,
+  )
+  Assert.input(
+    isRecord(manifest['sourceVersions']),
+    `Studio preview report ${path} authoritative manifest must contain source versions.`,
+  )
+  const sourceVersions = manifest['sourceVersions']
+  const finalSource = evidence['finalSource']
+  Assert.input(
+    isRecord(finalSource) && typeof finalSource['path'] === 'string' && FS.isAbsolute(finalSource['path'])
+      && typeof finalSource['version'] === 'string' && finalSource['version'].length > 0,
+    `Studio preview report ${path} must identify an absolute final source path and version.`,
+  )
+  Assert.input(
+    sourceVersions[finalSource['path']] === finalSource['version'],
+    `Studio preview report ${path} authoritative manifest must include the final source version.`,
+  )
+  const warmRows = rows.slice(1)
+  const deliveryRevisions = warmRows.map(row =>
+    positiveRevision(
+      row['deliveryRevision'],
+      `Studio preview report ${path} must contain positive delivery revisions for all warm rows.`,
+    )
+  )
+  Assert.input(
+    deliveryRevisions.every((revision, index) => index === 0 || revision > deliveryRevisions[index - 1]!),
+    `Studio preview report ${path} must contain distinct, increasing warm delivery revisions.`,
+  )
+  const maxDeliveryRevision = Math.max(...deliveryRevisions)
+  Assert.input(
+    completionRevision > maxDeliveryRevision,
+    `Studio preview report ${path} authoritative completion must follow every measured delivery.`,
+  )
+  Assert.input(
+    manifestRevision > maxDeliveryRevision && manifestRevision <= completionRevision,
+    `Studio preview report ${path} authoritative manifest must follow every measured delivery and not exceed completion.`,
+  )
+  Assert.input(
+    publishedRevision === undefined || publishedRevision >= manifestRevision,
+    `Studio preview report ${path} published revision must include the authoritative manifest revision.`,
+  )
+  const samples = collectDirectSamples(warmRows, 'total', path)
+  const deliverySamples = collectDirectSamples(warmRows, 'sourceToDelivery', path)
+  const domSamples = collectDirectSamples(warmRows, 'deliveryToDom', path)
+  const paintSamples = collectDirectSamples(warmRows, 'sourceToPaint', path)
+  Assert.input(
+    warmRows.every(row => row['sourceToPublished'] === undefined),
+    `Studio preview report ${path} must omit source-to-publication timings for publication-off delivery.`,
+  )
+  Assert.input(
+    [deliverySamples, domSamples, paintSamples].every(stageSamples =>
+      stageSamples.every((duration, index) => duration <= samples[index]!)
+    ),
+    `Studio preview report ${path} direct delivery and paint timings must not exceed total durations.`,
+  )
+  Assert.input(
+    paintSamples.every((paint, index) => paint + 1 >= deliverySamples[index]! + domSamples[index]!),
+    `Studio preview report ${path} direct paint timings must follow delivery and DOM timing within rounding tolerance.`,
+  )
+  Assert.input(
+    Number.isFinite(ceilings.total.p50Ms) && ceilings.total.p50Ms > 0
+      && Number.isFinite(ceilings.total.p95Ms) && ceilings.total.p95Ms >= ceilings.total.p50Ms
+      && Number.isFinite(ceilings.sourceToDelivery.p50Ms) && ceilings.sourceToDelivery.p50Ms > 0
+      && Number.isFinite(ceilings.sourceToDelivery.p95Ms)
+      && ceilings.sourceToDelivery.p95Ms >= ceilings.sourceToDelivery.p50Ms,
+    'Studio direct-padding performance ceilings must be positive and ordered.',
+  )
+  const totalResult = evaluate({ [label]: samples }, { [label]: ceilings.total })
+  const deliveryResult = evaluate({ [label]: deliverySamples }, { [label]: ceilings.sourceToDelivery })
+  const totalBreaches = totalResult.breaches.map(breach => ({ ...breach, stage: 'total' as const }))
+  const deliveryBreaches = deliveryResult.breaches.map(breach => ({ ...breach, stage: 'sourceToDelivery' as const }))
+  const breaches = [...totalBreaches, ...deliveryBreaches]
+  await FS.writeJson(FS.resolvePath('direct-padding-budget.json', artifactRoot), {
+    label,
+    artifact: path,
+    ceilings,
+    samples: {
+      total: samples,
+      sourceToDelivery: deliverySamples,
+      deliveryToDom: domSamples,
+      sourceToPaint: paintSamples,
+    },
+    summaries: {
+      total: totalResult.summaries[label],
+      sourceToDelivery: deliveryResult.summaries[label],
+    },
+    maxDeliveryRevision,
+    authoritativeCompletion: completion,
+    authoritativeManifest: manifest,
+    finalSource,
+    breaches,
+  })
+  return breaches
+}
+
+function positiveRevision(value: unknown, message: string): number {
+  Assert.input(typeof value === 'number' && Number.isSafeInteger(value) && value > 0, message)
+  return value
+}
+
+function collectDirectSamples(
+  rows: readonly Record<string, unknown>[],
+  stage: string,
+  path: string,
+): number[] {
+  const samples = rows.map(row => row[stage])
+  Assert.input(
+    samples.every((duration): duration is number =>
+      typeof duration === 'number' && Number.isFinite(duration) && duration >= 0
+    ),
+    `Studio preview report ${path} must contain seven finite, nonnegative warm ${stage} durations.`,
+  )
+  return samples
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

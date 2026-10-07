@@ -2,7 +2,7 @@ import type { CompileResult, EmittedModuleCache } from '@compiler/compiler'
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
 import { findProjectRoot } from '@project-tooling'
-import { Assert, type FirebaseConnection, FS, Platform, readFirebaseConnections } from '@shared'
+import { Assert, type FirebaseConnection, FS, HCI, Platform, readFirebaseConnections } from '@shared'
 import type { DevLoopMobilePublication } from '@shared/DevLoopControl'
 import { withGeneratedModuleLinks } from './generated-module-links'
 import { expoUpdateArtifacts, proveReleaseBundle } from './release-bundle-proof'
@@ -21,8 +21,14 @@ export {
 export { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 
 export type GeneratePreviewOptions = {
-  /** Disable revision marker updates and their exact publication checks for a browser speed experiment. */
+  /** Publication-off browser previews use runtime messages instead of revision marker checks. */
   publicationChecks?: boolean
+  /**
+   * Check consumed source versions after compilation and again immediately before publication.
+   * The publication phase must independently audit the complete input graph; the compiled phase
+   * may use the compiler's completed native inspection while still checking source versions.
+   */
+  acceptSourceSnapshot?: (phase: 'compiled' | 'publication') => Promise<boolean>
   sourceOverrides?: Readonly<Record<string, string>>
   project: string
   revision: number
@@ -134,7 +140,10 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
   const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', runtimePackageRoot)
   const generatedAppRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
   const shipManifestPath = FS.resolvePath('ship.json', generatedAppRoot)
+  const trace = opts.preview !== undefined && Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true'
+  const requestedAt = trace ? performance.now() : 0
   return await serializeGeneration(generatedAppRoot, async () => {
+    const startedAt = trace ? performance.now() : 0
     if (opts.preview === undefined) {
       previewOutputSnapshots.delete(generatedAppRoot)
       previewPublications.delete(generatedAppRoot)
@@ -172,9 +181,15 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     const sourceRevision = opts.managedPublication === undefined
       ? undefined
       : await managedSourceRevision(opts.managedPublication.projectRoot)
+    const preparedAt = trace ? performance.now() : 0
     const compiled = opts.preview === undefined
       ? await Workspace.compile(sourcePath, compileOptions)
       : await compileStudioPreview(sourcePath, opts.preview, compileOptions, opts.previewWorkspace)
+    const compiledAt = trace ? performance.now() : 0
+    Assert.input(
+      await opts.preview?.acceptSourceSnapshot?.('compiled') ?? true,
+      'Preview source inputs changed during compilation; keeping the last working preview.',
+    )
     let preview = opts.preview === undefined
       ? undefined
       : previewPublication(compiled.appNames, opts.appName, opts.preview)
@@ -240,11 +255,16 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       relativePath: 'ManagedLoopIdentity.ts',
       code: `export default ${JSON.stringify(publication ?? null)}\n`,
     }]
+    const metadataAt = trace ? performance.now() : 0
     await withGeneratedModuleLinks(
       generatedAppRoot,
       requesterRoot,
       compiled.dependencyEnvironments,
       async () => {
+        Assert.input(
+          await opts.preview?.acceptSourceSnapshot?.('publication') ?? true,
+          'Preview source inputs changed before publication; keeping the last working preview.',
+        )
         await writeGeneratedFiles(
           generatedAppRoot,
           generatedFiles,
@@ -262,6 +282,21 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
         metadata: metadata!,
         attemptRevision: opts.preview!.revision,
       })
+    }
+
+    if (trace) {
+      HCI.logProcessInfo(
+        'runtime',
+        JSON.stringify({
+          type: 'studio-runtime-profile',
+          revision: opts.preview!.revision,
+          queueMs: startedAt - requestedAt,
+          preparationMs: preparedAt - startedAt,
+          compileMs: compiledAt - preparedAt,
+          metadataMs: metadataAt - compiledAt,
+          publicationMs: performance.now() - metadataAt,
+        }),
+      )
     }
 
     const generatedAppCode = generatedFiles.find(file => file.relativePath === 'App.tsx')?.code

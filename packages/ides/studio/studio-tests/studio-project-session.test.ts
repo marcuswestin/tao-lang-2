@@ -2225,6 +2225,85 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
   })
 })
 
+Test('Studio releases only the current whole-app preview and preserves remaining cell consumers', async () => {
+  await withStudioProject(async session => {
+    await registerScenarioCell(session, 'remaining-cell')
+    let lostConsumers = 0
+    session.previewConsumersChanged = () => {
+      lostConsumers += 1
+    }
+    session.registerPreview({ previewInstanceId: 'old-whole' })
+    session.registerPreview({ previewInstanceId: 'current-whole' })
+    session.unregisterPreview('old-whole')
+    Expect(session.compileSnapshot().previewInstanceId).toBe('current-whole')
+    Expect(lostConsumers).toBe(0)
+    session.unregisterPreview('current-whole')
+    Expect(session.compileSnapshot().previewInstanceId).toBeUndefined()
+    Expect(session.compileSnapshot().appliedRevision).toBe(0)
+    Expect(session.hasPreviewConsumers()).toBe(true)
+    Expect(lostConsumers).toBe(0)
+    session.unregisterCellPreview('remaining-cell')
+    Expect(session.hasPreviewConsumers()).toBe(false)
+    Expect(lostConsumers).toBe(1)
+    session.unregisterPreview('current-whole')
+    Expect(lostConsumers).toBe(1)
+    session.registerPreview({ previewInstanceId: 'only-whole' })
+    session.unregisterPreview('only-whole')
+    Expect(session.hasPreviewConsumers()).toBe(false)
+    Expect(lostConsumers).toBe(2)
+  })
+})
+
+Test('Studio authenticates paint against the current registered cell and whole-app identities', async () => {
+  await withStudioProject(async session => {
+    const { identity } = await registerScenarioCell(session, 'paint-cell')
+    const reports: Array<[number, boolean | undefined]> = []
+    session.previewPaint = (revision, painted) => {
+      reports.push([revision, painted])
+      return true
+    }
+    const message = {
+      channel: studioProtocolChannel,
+      identity: { ...identity, previewInstanceId: 'paint-cell' },
+      painted: true,
+      paintRevision: identity.compileRevision,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-painted',
+    }
+    Expect(() => session.acknowledgePreviewPaint({ revision: 1 })).toThrow('preview-painted')
+    Expect(session.acknowledgePreviewPaint({ ...message, identity: { ...message.identity, appName: 'Other' } })).toBe(
+      false,
+    )
+    Expect(session.acknowledgePreviewPaint({ ...message, identity: { ...message.identity, compileRevision: 999 } }))
+      .toBe(false)
+    Expect(() =>
+      session.acknowledgePreviewPaint({ ...message, identity: { ...message.identity, previewInstanceId: 'old' } })
+    ).toThrow()
+    Expect(session.acknowledgePreviewPaint(message)).toBe(true)
+    session.unregisterCellPreview('paint-cell')
+    Expect(() => session.acknowledgePreviewPaint(message)).toThrow()
+    session.registerPreview({ previewInstanceId: 'whole-paint' })
+    const whole = {
+      ...message,
+      identity: {
+        appName: session.appName,
+        compileRevision: identity.compileRevision,
+        previewInstanceId: 'whole-paint',
+        project: session.projectRoot,
+      },
+    }
+    Expect(session.acknowledgePreviewPaint(whole)).toBe(true)
+    Expect(session.acknowledgePreviewPaint({ ...whole, identity: { ...whole.identity, previewInstanceId: 'old' } }))
+      .toBe(false)
+    Expect(reports).toEqual([[identity.compileRevision, true], [identity.compileRevision, true]])
+    const release = session.retainNativePreviewConsumer()
+    Expect(session.hasNativePreviewConsumers()).toBe(true)
+    release()
+    release()
+    Expect(session.hasNativePreviewConsumers()).toBe(false)
+  })
+})
+
 async function withStudioProject(
   use: (
     session: StudioProjectSession,

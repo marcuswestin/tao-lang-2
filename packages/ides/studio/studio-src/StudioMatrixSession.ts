@@ -136,6 +136,10 @@ export class StudioMatrixSession {
     return this.cell(identity.cellId)
   }
 
+  hasInstances(): boolean {
+    return this.#instances.size > 0
+  }
+
   assertCurrentInstance(identity: StudioCellInstanceIdentity): StudioCellRuntime {
     this.#assertCellIdentity(identity)
     const current = this.#instances.get(identity.previewInstanceId)

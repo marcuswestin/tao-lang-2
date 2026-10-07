@@ -973,6 +973,83 @@ Describe('Tao runtime app generation', () => {
     )
   })
 
+  Test('rejects stale source snapshots without changing the last working preview publication', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+
+    await withTaoFiles(
+      'tao-runtime-stale-preview-snapshot-',
+      {
+        'Main.tao':
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>Before</RN.Text> ``` }',
+      },
+      async paths => {
+        const appPath = paths['Main.tao']!
+        const publicationPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioPublication.ts')
+        await Runtime.generateApp(appPath, {
+          preview: previewOptions(1),
+          runtimePackageRoot,
+        })
+        const lastWorkingGraph = await generatedGraph(runtimePackageRoot)
+        const lastWorkingPublication = await FS.readText(publicationPath)
+
+        await FS.writeText(
+          appPath,
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>After</RN.Text> ``` }',
+        )
+        await Expect(Runtime.generateApp(appPath, {
+          preview: previewOptions(2, { acceptSourceSnapshot: async () => false }),
+          runtimePackageRoot,
+        })).rejects.toThrow('Preview source inputs changed during compilation')
+        Expect(await generatedGraph(runtimePackageRoot)).toEqual(lastWorkingGraph)
+        Expect(await FS.readText(publicationPath)).toBe(lastWorkingPublication)
+
+        let secondAttemptCount = 0
+        const rejectedPhases: string[] = []
+        await Expect(Runtime.generateApp(appPath, {
+          preview: previewOptions(3, {
+            acceptSourceSnapshot: async phase => {
+              rejectedPhases.push(phase)
+              return ++secondAttemptCount === 1
+            },
+          }),
+          runtimePackageRoot,
+        })).rejects.toThrow('Preview source inputs changed before publication')
+        Expect(secondAttemptCount).toBe(2)
+        Expect(rejectedPhases).toEqual(['compiled', 'publication'])
+        Expect(await generatedGraph(runtimePackageRoot)).toEqual(lastWorkingGraph)
+        Expect(await FS.readText(publicationPath)).toBe(lastWorkingPublication)
+
+        let acceptedAttemptCount = 0
+        const acceptedPhases: string[] = []
+        const current = await Runtime.generateApp(appPath, {
+          preview: previewOptions(4, {
+            acceptSourceSnapshot: async phase => {
+              acceptedPhases.push(phase)
+              acceptedAttemptCount++
+              return true
+            },
+          }),
+          runtimePackageRoot,
+        })
+        const currentGraph = await generatedGraph(runtimePackageRoot)
+        const currentPublication = await FS.readText(publicationPath)
+
+        Expect(acceptedAttemptCount).toBe(2)
+        Expect(acceptedPhases).toEqual(['compiled', 'publication'])
+        Expect(current.previewRevision).toBe(4)
+        Expect(current.previewPublicationSkipped).toBe(false)
+        Expect(currentGraph).not.toEqual(lastWorkingGraph)
+        Expect(currentGraph['App.injection-1.tsx']).toContain('After')
+        Expect(currentPublication).toContain(JSON.stringify({
+          appName: 'Preview',
+          compileRevision: 4,
+          project: previewProject,
+          sourceVersions: { [`${previewProject}/Main.tao`]: 'text-v4' },
+        }))
+      },
+    )
+  })
+
   Test('removes stale generated module files while retaining directories used by core contracts', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
 

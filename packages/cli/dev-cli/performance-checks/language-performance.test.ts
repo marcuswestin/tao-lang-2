@@ -76,4 +76,25 @@ Describe('language performance reporting', () => {
     ])
     Expect(renderLanguagePerformance(report(budgetMs + 1))).toContain('over budget: parse session median')
   })
+
+  Test('keeps the breach visible when seconds formatting rounds the median to its ceiling', () => {
+    const report: LanguagePerformanceReport = {
+      fixturePath: '/repo/App.tao',
+      fixtureBytes: 1,
+      fixtureLines: 1,
+      iterations: 1,
+      wallMs: 2_600.5,
+      measuredMs: 2_600.5,
+      results: [{
+        stage: 'check',
+        strategy: 'session',
+        coldMs: 1_300,
+        samplesMs: [1_300.5],
+        summary: { medianMs: 1_300.5, p95Ms: 1_300.5 },
+      }],
+    }
+    Expect(renderLanguagePerformance(report)).toContain(
+      'over budget: check session median 1300.5ms against 1300ms',
+    )
+  })
 })

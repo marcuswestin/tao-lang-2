@@ -12,7 +12,7 @@ import {
   startRestoredPreviews,
   wireActivation,
 } from '../studio-src/client/matrix/StudioPreviewMatrix'
-import { StudioApiClient, type StudioHandshake } from '../studio-src/client/StudioApiClient'
+import { StudioApiClient, StudioApiError, type StudioHandshake } from '../studio-src/client/StudioApiClient'
 import type { StudioPreviewCell, StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 
 const windowSlot = testOverrideSlot<PropertyDescriptor | undefined>({
@@ -48,6 +48,12 @@ const previewInstanceSlot = testOverrideSlot({
   read: () => StudioApiClient.previewInstance,
   write: value => {
     Reflect.set(StudioApiClient, 'previewInstance', value)
+  },
+})
+const releaseWholeAppSlot = testOverrideSlot({
+  read: () => StudioApiClient.releasePreviewInstance,
+  write: value => {
+    Reflect.set(StudioApiClient, 'releasePreviewInstance', value)
   },
 })
 const documentSlot = testOverrideSlot<PropertyDescriptor | undefined>({
@@ -490,6 +496,105 @@ Test('Studio stops activation after repeated manifest changes without mounting a
   }
 })
 
+Test('Studio retries a stale activation registration with the manifest wired during the failed request', async () => {
+  const restoreWindow = windowSlot.install({
+    configurable: true,
+    value: { location: { origin: 'http://localhost:1234', pathname: '/studio' } },
+  })
+  const registrations: {
+    cellId: string
+    cellRevision: number
+    compileRevision: number
+    manifestRevision: string
+    previewInstanceId: string
+  }[] = []
+  const preview = connection(cell('a'))
+  const previews = [preview]
+  const parent = {} as HTMLElement
+  let wireNewContext: (() => void) | undefined
+  const restoreRegistration = cellInstanceSlot.install(async body => {
+    const identity = body as typeof registrations[number]
+    registrations.push(identity)
+    if (registrations.length === 1) {
+      wireNewContext?.()
+      throw new StudioApiError('Preview manifest changed.', 409, { code: 'stale-manifest' })
+    }
+    return {}
+  })
+  const saved: string[][] = []
+  const restoreSession = saveSessionSlot.install(async (_field, value) => {
+    saved.push(value as string[])
+  })
+  try {
+    const original = manifest(preview.cell!)
+    const currentCell = cell('a', 2)
+    const currentManifest = {
+      ...manifest(currentCell),
+      compileRevision: 2,
+      manifestRevision: 'manifest-2',
+    }
+    wireNewContext = () => {
+      preview.cell = currentCell
+      wireActivation(parent, previews, currentManifest, previewUrl, handshake)
+    }
+    wireActivation(parent, previews, original, previewUrl, handshake)
+    await preview.toggleActivation!()
+
+    Expect(registrations.map(({ cellRevision, compileRevision, manifestRevision }) => ({
+      cellRevision,
+      compileRevision,
+      manifestRevision,
+    }))).toEqual([
+      { cellRevision: 1, compileRevision: 1, manifestRevision: 'manifest-1' },
+      { cellRevision: 2, compileRevision: 2, manifestRevision: 'manifest-2' },
+    ])
+    Expect(saved).toEqual([['a']])
+    Expect(preview.activated).toBe(true)
+    Expect(preview.iframe.src).toContain(registrations[1]!.previewInstanceId)
+    Expect(preview.iframe.src).not.toContain(registrations[0]!.previewInstanceId)
+  } finally {
+    restoreSession()
+    restoreRegistration()
+    restoreWindow()
+  }
+})
+
+Test('Studio leaves activation unchanged when a stale registration fails without a context change', async () => {
+  const restoreWindow = windowSlot.install({
+    configurable: true,
+    value: { location: { origin: 'http://localhost:1234', pathname: '/studio' } },
+  })
+  const registrations: string[] = []
+  const restoreRegistration = cellInstanceSlot.install(async body => {
+    registrations.push((body as { previewInstanceId: string }).previewInstanceId)
+    throw new StudioApiError('Preview manifest changed.', 409, { code: 'stale-manifest' })
+  })
+  const saved: string[][] = []
+  const restoreSession = saveSessionSlot.install(async (_field, value) => {
+    saved.push(value as string[])
+  })
+  try {
+    const preview = connection(cell('a'))
+    wireActivation({} as HTMLElement, [preview], manifest(preview.cell!), previewUrl, handshake)
+    let failure: unknown
+    try {
+      await preview.toggleActivation!()
+    } catch (error) {
+      failure = error
+    }
+
+    Expect(failure).toBeInstanceOf(StudioApiError)
+    Expect(registrations).toHaveLength(1)
+    Expect(saved).toEqual([])
+    Expect(preview.activated).toBe(false)
+    Expect(preview.iframe.src).toBe('')
+  } finally {
+    restoreSession()
+    restoreRegistration()
+    restoreWindow()
+  }
+})
+
 Test('Studio does not mount a cell removed while its activation save is pending', async () => {
   const saveStarted = Deferred<void>()
   const savePending = Deferred<void>()
@@ -797,6 +902,10 @@ Test(
         .install(() => {}),
     ]
     const restorePreview = previewInstanceSlot.install(async () => ({}))
+    const releasedWhole: string[] = []
+    const restoreWholeRelease = releaseWholeAppSlot.install(async id => {
+      releasedWhole.push(id)
+    })
     const registrations: string[] = []
     const restoreRegistration = cellInstanceSlot.install(async body => {
       registrations.push((body as { cellId: string }).cellId)
@@ -837,7 +946,20 @@ Test(
       await refreshCellPreviews(parent, previews, previewUrl, manifest(cell('a')), savedHandshake)
       Expect(previews[0]?.activated).toBe(false)
       Expect(registrations).toEqual(['a'])
+      // When scenario previews disappear, activating and disabling the whole-app realm
+      // must release its server registration through the same connection teardown hook.
+      await refreshCellPreviews(parent, previews, previewUrl, manifest(), savedHandshake)
+      const whole = previews[0]!
+      await whole.toggleActivation!()
+      Expect(whole.activated).toBe(true)
+      const instanceId = whole.previewInstanceId
+      await whole.toggleActivation!()
+      Expect(whole.activated).toBe(false)
+      Expect(releasedWhole).toEqual([instanceId])
+      disconnectPreviews(previews)
+      Expect(releasedWhole).toEqual([instanceId])
     } finally {
+      restoreWholeRelease()
       restoreSession()
       restoreRelease()
       restoreRegistration()
