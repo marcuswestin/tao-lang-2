@@ -91,6 +91,53 @@ function heldReader(kind: CacheKind, root: string, ready: string, waiting?: stri
 }
 
 Describe('cache process lifecycle', () => {
+  Test('direct cache startup tolerates a worker publishing a transform during enumeration', async () => {
+    const home = await mkTestDir('cache-process-publication-')
+    const root = FS.resolvePath('cache/jest-standalone-v2/aaaaaaaaaaaaaaaa', home)
+    const temporary = FS.resolvePath('data/transform.tmp', root)
+    const published = FS.resolvePath('data/transform', root)
+    const worker = startWorker(
+      home,
+      `
+      const root = ${JSON.stringify(root)};
+      const firstLease = await direct.start(root);
+      await FS.writeText(${JSON.stringify(temporary)}, 'published');
+      await FS.writeText(FS.resolvePath('data/keeper', root), 'keep');
+      const fs = require('node:fs');
+      const readdir = fs.readdirSync;
+      let published = false;
+      // Inject the publication at the enumeration boundary in this isolated worker only.
+      fs.readdirSync = function(directory, options) {
+        const entries = readdir.call(this, directory, options);
+        if (directory === FS.resolvePath('data', root) && !published) {
+          published = true;
+          fs.renameSync(${JSON.stringify(temporary)}, ${JSON.stringify(published)});
+        }
+        return entries;
+      };
+      try {
+        const secondLease = await direct.start(root);
+        await direct.finish(root, secondLease);
+      } finally {
+        fs.readdirSync = readdir;
+        await direct.finish(root, firstLease);
+      }
+      await FS.writeJson(FS.resolvePath('publication.json', root), { published });
+    `,
+    )
+    try {
+      await worker.finished()
+      Expect(await FS.readJson(FS.resolvePath('publication.json', root))).toEqual({ published: true })
+      Expect(await FS.readText(published)).toBe('published')
+      Expect(await FS.readText(FS.resolvePath('data/keeper', root))).toBe('keep')
+      Expect(await FS.readJson(FS.resolvePath('size.json', root))).toEqual({ files: 2, bytes: 13 })
+      Expect(await FS.listDir(FS.resolvePath('leases', root))).toEqual([])
+    } finally {
+      await worker.stop()
+      await FS.remove(home)
+    }
+  })
+
   for (const kind of ['managed', 'direct'] as const) {
     Test(`${kind} cache plateaus across fresh processes without writing to the login-home cache`, async () => {
       const home = await mkTestDir(`cache-process-plateau-${kind}-`)
