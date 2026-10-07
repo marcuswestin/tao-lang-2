@@ -65,7 +65,7 @@ running dev loop; on Linux, `./.config/bootstrap-tao-dev-env` takes the place of
 
 Three entry points cover everything: `./tao` is the Tao CLI (an installed release will be plain
 `tao`), `just` is the task menu (`just help`), and `./dev` runs repository workflows
-(`./dev help`). `./agent` belongs to coding agents.
+(`./dev help`). Coding agents use an entry point of their own.
 
 **Build and run apps**
 
