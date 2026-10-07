@@ -238,7 +238,7 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     ).toBe(1)
 
     await sendPrompt(browser, 'Change MainView to say Agent.')
-    await waitForApproval(browser, 'The agent wants to change your app')
+    await waitForApproval(browser, 'The agent wants to change your app', () => model.calls)
     const applyDiff = await currentApprovalDiff(browser)
     Expect(applyDiff).toContain('Text("Before")')
     Expect(applyDiff).toContain('Text("Agent")')
@@ -248,7 +248,7 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
       && document.querySelector('.chat-log')?.textContent?.includes('Applied the agent edit.') === true`)
 
     await sendPrompt(browser, 'Undo that agent change.')
-    await waitForApproval(browser, 'The agent wants to change your app')
+    await waitForApproval(browser, 'The agent wants to change your app', () => model.calls)
     const undoDiff = await currentApprovalDiff(browser)
     Expect(undoDiff).toContain('-   render Text("Agent")')
     Expect(undoDiff).toContain('+   render Text("Before")')
@@ -355,16 +355,39 @@ async function sendPrompt(browser: StudioCdp, prompt: string): Promise<void> {
   await browser.click('.chat-send')
 }
 
-async function waitForApproval(browser: StudioCdp, heading: string): Promise<void> {
-  await browser.waitFor(
-    `(() => {
+async function waitForApproval(browser: StudioCdp, heading: string, calls: () => number): Promise<void> {
+  let last: { ready: boolean; error: string; chat: string; url: string; busy: boolean | undefined } | undefined
+  try {
+    await browser.waitFor(
+      `(() => {
     const cards = [...document.querySelectorAll('.studio-agent-card')]
-    return cards.at(-1)?.querySelector('strong')?.textContent === ${JSON.stringify(heading)}
+    return { ready: cards.at(-1)?.querySelector('strong')?.textContent === ${JSON.stringify(heading)}
       && cards.at(-1)?.querySelector('.studio-agent-card-actions button[data-variant="primary"]')
-        instanceof HTMLButtonElement
+        instanceof HTMLButtonElement,
+      error: document.querySelector('.chat-log .studio-agent-line[data-tone="error"]')?.textContent?.slice(-1000) ?? '',
+      chat: document.querySelector('.chat-log')?.textContent?.slice(-4000) ?? '',
+      url: location.href,
+      busy: document.querySelector('.chat-input')?.disabled }
   })()`,
-    { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
-  )
+      {
+        timeoutMs: 30_000,
+        predicate(value) {
+          last = value as typeof last
+          if (last?.error) {
+            Errors.throwHostEnvironment(`Studio approval turn failed: ${last.error}; calls=${calls()}`)
+          }
+          return last?.ready === true
+        },
+      },
+    )
+  } catch (cause) {
+    Errors.throwHostEnvironment(
+      `Studio approval failed: ${
+        JSON.stringify({ last, calls: calls(), browser: browser.browserFailures() }).slice(0, 8_000)
+      }`,
+      { cause },
+    )
+  }
 }
 
 async function currentApprovalDiff(browser: StudioCdp): Promise<string> {

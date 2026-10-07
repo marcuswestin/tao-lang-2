@@ -3,6 +3,7 @@ export type HostCommandTarget = {
     | 'none'
     | 'notify'
     | 'pid'
+    | 'process-stop'
     | 'standalone-vm'
     | 'studio-list'
     | 'studio-stop'
@@ -119,6 +120,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'processes list': { command: 'ps', fixedArgs: ['-axo', 'pid=,ppid=,lstart=,command='], argsPolicy: 'none' },
   'processes started': { command: 'ps', fixedArgs: ['-o', 'lstart=', '-p'], argsPolicy: 'pid' },
   'processes group': { command: 'ps', fixedArgs: ['-axo', 'pid=,ppid=,pgid=,uid=,stat=,comm='], argsPolicy: 'pid' },
+  'processes stop': { command: './dev', fixedArgs: ['process-stop'], argsPolicy: 'process-stop' },
   'start-branch': { command: './dev', fixedArgs: ['start-branch'] },
   'take-branch': { command: './dev', fixedArgs: ['take-branch'] },
   // The `storage` submodule archives development evidence: syncing and pushing reach its GitHub

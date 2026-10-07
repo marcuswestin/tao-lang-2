@@ -56,6 +56,22 @@ declares its checks as the tests nested inside it: written as a leaf journey it 
 suite of no checks and run nothing, so the validator rejects that shape. JSON, artifacts, retries,
 and alternate device adapters remain future work.
 
+After Jest reports the final verdict, it has three seconds to release its resources and exit.
+If it remains alive, `tao test` reports the last observed resource kinds, stops the owned process
+tree, and retains the original test report in the run's log. An existing failure remains a failure;
+a passing run that cannot terminate also fails cleanup. Before a verdict, two minutes without
+runner output stops an unresponsive runner. Cleanup waits for owned descendants to stop before
+the command returns.
+If process inspection or signalling fails, the command retains and reports that cleanup failure;
+an unreadable identity is not evidence that its process stopped.
+Ownership polls avoid rewalking attached subtrees; cancellation and escalation still refresh
+retained owners to discover late forks. On macOS, `ESRCH` can establish immediate absence,
+and two matching observations of full kernel identities distinguish a zombie-only process group
+from live children. An empty native
+group list after a successful signal probe establishes absence only when a second probe reports
+`ESRCH`; a still-signalable or unreadable group fails cleanup with inspection diagnostics. A second
+enumeration discovers children forked before their listed parent exited.
+
 `tao test --watch` composes with paths, `--name`, `--output`, and `--pass-with-no-tests`: it runs the
 selected set once, then reruns the whole selected set on any change under the selected paths or the
 project roots of the selected tests, until Ctrl-C. Changes are debounced the way `tao run`

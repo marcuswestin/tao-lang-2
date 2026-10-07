@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo, Text, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo, Text, waitForProcessReadiness } from '@shared'
 import { StandaloneScenarios } from './standalone-scenarios'
 
 /**
@@ -323,9 +323,21 @@ async function watchRefreshesSavedBridge(environment: Platform.ProcessEnv, proje
     stdio: 'pipe',
   })
   try {
-    await waitForFreshWatchRevision(watch, () => output, 1)
+    await waitForProcessReadiness(
+      watch,
+      () => [...output.matchAll(/Tao project fresh \(revision \d+\)\./gu)].length >= 1,
+      () => output,
+      'tao watch revision 1',
+      DEV_START_TIMEOUT_MS,
+    )
     await FS.writeText(taoPath, 'function Answer() returns number {\n   return Answer() from ./WatchProbe.ts\n}\n')
-    await waitForFreshWatchRevision(watch, () => output, 2)
+    await waitForProcessReadiness(
+      watch,
+      () => [...output.matchAll(/Tao project fresh \(revision \d+\)\./gu)].length >= 2,
+      () => output,
+      'tao watch revision 2',
+      DEV_START_TIMEOUT_MS,
+    )
     if (!await FS.isFile(contractPath)) {
       Errors.throwUnexpected(`tao watch reported a refresh but wrote no ${contractPath}.`)
     }
@@ -334,20 +346,6 @@ async function watchRefreshesSavedBridge(environment: Platform.ProcessEnv, proje
     await watch.waitForClose()
     await FS.remove(taoPath)
     await FS.remove(typescriptPath)
-  }
-}
-
-async function waitForFreshWatchRevision(
-  watch: ReturnType<typeof CLI.start>,
-  output: () => string,
-  expected: number,
-): Promise<void> {
-  const deadline = Date.now() + DEV_START_TIMEOUT_MS
-  while ([...output().matchAll(/Tao project fresh \(revision \d+\)\./gu)].length < expected) {
-    if (watch.exitCode !== null || Date.now() > deadline) {
-      Errors.throwUnexpected(`tao watch did not report fresh revision ${expected}:\n${output()}`)
-    }
-    await Time.sleep(250)
   }
 }
 
@@ -543,15 +541,30 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
     stdio: 'pipe',
   })
   try {
-    const deadline = Date.now() + DEV_START_TIMEOUT_MS
     let port: string | undefined
-    while (port === undefined) {
-      port = /Waiting on http:\/\/localhost:(\d+)/.exec(output)?.[1]
-      if (port === undefined && (dev.exitCode !== null || Date.now() > deadline)) {
-        await collectDevStartupDiagnostics(dev.pid)
-        Errors.throwUnexpected(`tao run did not start Metro:\n${output}`)
+    try {
+      await waitForProcessReadiness(
+        dev,
+        () => {
+          port = /Waiting on http:\/\/localhost:(\d+)/.exec(output)?.[1]
+          return port !== undefined
+        },
+        () => output,
+        'tao run Metro',
+        DEV_START_TIMEOUT_MS,
+      )
+    } catch (cause) {
+      // Report the startup verdict before sampling a still-running child. Exited children already
+      // carry captured diagnostics, and collecting a dead PID cannot improve their startup stack.
+      HCI.writeErrorLine(Errors.formatForUser(cause))
+      if (dev.error === undefined && dev.exitCode === null && dev.signalCode === null) {
+        try {
+          await collectDevStartupDiagnostics(dev.pid)
+        } catch (diagnosticError) {
+          HCI.writeErrorLine(`Startup diagnostic collection failed: ${Errors.messageOf(diagnosticError)}`)
+        }
       }
-      await Time.sleep(250)
+      throw cause
     }
     const response = await fetch(`http://127.0.0.1:${port}/index.bundle?platform=web&dev=true&minify=false`, {
       signal: AbortSignal.timeout(DEV_START_TIMEOUT_MS),

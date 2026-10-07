@@ -46,11 +46,11 @@ async function acquire(projectRoot: string, surface: DevSessionSurface, options:
   let ownerIdentity: TrackedProcess | undefined
   let parentIdentity: TrackedProcess | undefined
   try {
-    const process = ProcessTree.processTable().find(entry => entry.pid === Platform.runtimeProcess.pid)
-    if (process !== undefined) {
-      ownerIdentity = ProcessTree.identities([process.pid]).get(process.pid)
-      parentIdentity = ProcessTree.identities([process.ppid]).get(process.ppid)
-    }
+    const pid = Platform.runtimeProcess.pid
+    const ppid = Platform.runtimeProcess.ppid
+    const identities = ProcessTree.identities([pid, ppid])
+    ownerIdentity = identities.get(pid)
+    parentIdentity = identities.get(ppid)
   } catch {
     // A v1 record remains safe: live owners stay unknown until exact identities can be proven.
   }

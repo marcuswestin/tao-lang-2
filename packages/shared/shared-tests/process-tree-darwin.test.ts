@@ -1,7 +1,7 @@
-import { Errors, FS, Repo } from '@shared'
+import { Errors, FS, ProcessTree, Repo } from '@shared'
 import { Expect, Test } from '@shared/test'
 
-type Kind = 'descendants' | 'identities' | 'group'
+type Kind = 'descendants' | 'identities' | 'group' | 'live-group'
 type Record = { pid: number; group: number; startedAt: string }
 
 // Evaluate the production script itself with a local FFI fixture. Its private literal is the
@@ -11,11 +11,12 @@ const script = source.match(/const inspectScript = String\.raw`([\s\S]*?)`\n/)?.
 if (script === undefined) {
   Errors.throwUnexpected('Expected the fixed Darwin process inspection script.')
 }
-const execute = new Function('require', 'request', 'fail', 'process', script) as (
+const execute = new Function('require', 'request', 'fail', 'process', 'Atomics', script) as (
   require: (name: string) => unknown,
   request: { kind: Kind; pids: number[] },
   fail: typeof Errors.throwHostEnvironment,
   process: { pid: number; kill: (pid: number, signal: number) => boolean },
+  atomics: { wait: (array: Int32Array, index: number, value: number, timeout: number) => string },
 ) => Record[]
 const helperFailure = source.match(/const helperFailScript = String\.raw`([\s\S]*?)`\n/)?.[1]
 if (helperFailure === undefined) {
@@ -26,11 +27,19 @@ function fixture(options: {
   unreadable?: boolean
   zombie?: boolean
   returnedPid?: number
+  returnedParentPid?: number
+  unreadableReads?: number
+  unreadableUntilYield?: boolean
   group?: number
   probe?: 'live' | 'EPERM' | 'EIO' | 'ESRCH' | 'uncoded' | 'undefined'
   probeErrno?: number
   childFailurePid?: number
   groupFailure?: boolean
+  groupEmpty?: boolean
+  laterGroup?: number[]
+  unreadablePid?: number
+  laterZombieIdentity?: boolean
+  groupStillLive?: boolean
 } = {}) {
   const probes: Array<{ pid: number; signal: number }> = []
   const failure = options.probe === 'undefined' ? undefined : Object.assign(
@@ -39,11 +48,22 @@ function fixture(options: {
   )
   let closes = 0
   let expectedArg = 0
+  let identityReads = 0
+  let waitedMs = 0
+  let groupReads = 0
   const symbols = {
     proc_listpids: (_kind: number, group: number, pids: Int32Array) => {
+      groupReads++
       Expect(group).toBe(700)
       if (options.groupFailure) {
         return -1
+      }
+      if (options.groupEmpty) {
+        return 0
+      }
+      if (groupReads > 1 && options.laterGroup !== undefined) {
+        pids.set(options.laterGroup)
+        return options.laterGroup.length * 4
       }
       pids[0] = 701
       return 4
@@ -59,16 +79,24 @@ function fixture(options: {
       return 1
     },
     proc_pidinfo: (pid: number, kind: number, arg: number, bytes: Uint8Array) => {
-      Expect(pid).toBe(701)
+      identityReads++
+      Expect([701, 702].includes(pid)).toBe(true)
       Expect(kind).toBe(3)
-      Expect(arg).toBe(expectedArg)
-      if (options.unreadable === true || options.zombie === true && arg === 0) {
+      Expect(arg).toBe(expectedArg === 0 && identityReads > 1 ? 1 : expectedArg)
+      if (
+        options.unreadable === true || pid === options.unreadablePid
+        || identityReads <= (options.unreadableReads ?? 0)
+        || options.unreadableUntilYield === true && waitedMs === 0
+        || options.zombie === true && arg === 0
+      ) {
         return 0
       }
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+      view.setUint32(4, options.zombie === true ? 5 : 2, true)
       view.setUint32(12, options.returnedPid ?? pid, true)
+      view.setUint32(16, options.returnedParentPid ?? 700, true)
       view.setUint32(100, options.group ?? 700, true)
-      view.setBigUint64(120, 123n, true)
+      view.setBigUint64(120, options.laterZombieIdentity && groupReads > 1 ? 999n : 123n, true)
       view.setBigUint64(128, 456n, true)
       return bytes.byteLength
     },
@@ -91,10 +119,16 @@ function fixture(options: {
           pid: 999,
           kill: (pid, signal) => {
             probes.push({ pid, signal })
-            if (options.probe === 'live') {
+            if (options.probe === 'live' || pid < 0 && options.groupStillLive === true) {
               return true
             }
             throw failure
+          },
+        },
+        {
+          wait: (_array, _index, _value, timeout) => {
+            waitedMs += timeout
+            return 'timed-out'
           },
         },
       )
@@ -102,8 +136,112 @@ function fixture(options: {
     probes,
     failure,
     closes: () => closes,
+    identityReads: () => identityReads,
+    waitedMs: () => waitedMs,
+    groupReads: () => groupReads,
   }
 }
+
+Test('Darwin group joins omit only fully identified zombies even when kill(0) succeeds', () => {
+  for (const zombie of [false, true]) {
+    const host = fixture({ zombie, probe: 'live' })
+    const alive = ProcessTree.isGroupAlive(700, () => true, {
+      platform: 'darwin',
+      darwinGroupIsAlive: () => host.inspect('live-group').length > 0,
+    })
+    Expect(alive).toBe(!zombie)
+    Expect(host.identityReads()).toBe(zombie ? 2 : 1)
+    Expect(host.groupReads()).toBe(zombie ? 2 : 1)
+    Expect(host.closes()).toBe(1)
+  }
+})
+
+Test('Darwin group joins discover a child forked after its listed parent exited', () => {
+  const host = fixture({ unreadablePid: 701, probe: 'ESRCH', laterGroup: [702] })
+  Expect(host.inspect('live-group').map(record => record.pid)).toEqual([702])
+  Expect(host.groupReads()).toBe(2)
+  Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
+  Expect(host.closes()).toBe(1)
+})
+
+Test('Darwin group joins refuse two missing identity snapshots while the group remains signalable', () => {
+  const host = fixture({ unreadable: true, probe: 'ESRCH', groupStillLive: true })
+  Expect(() => host.inspect('live-group')).toThrow('remained signalable')
+  Expect(host.groupReads()).toBe(2)
+  Expect(host.probes).toEqual([{ pid: 701, signal: 0 }, { pid: 701, signal: 0 }, { pid: -700, signal: 0 }])
+  Expect(host.closes()).toBe(1)
+})
+
+Test('Darwin group joins require matching zombie identities in the second group snapshot', () => {
+  const host = fixture({ zombie: true, probe: 'live', laterZombieIdentity: true })
+  Expect(() => host.inspect('live-group')).toThrow('remained signalable')
+  Expect(host.probes).toEqual([{ pid: -700, signal: 0 }])
+  Expect(host.closes()).toBe(1)
+})
+
+Test('Darwin group joins refuse a zombie record belonging to a different group', () => {
+  const host = fixture({ zombie: true, group: 800, probe: 'live' })
+  Expect(() => host.inspect('live-group')).toThrow('changed process group')
+  Expect(host.closes()).toBe(1)
+})
+
+Test('Darwin group joins refuse a second empty list while the group remains signalable', () => {
+  const host = fixture({ zombie: true, probe: 'live', laterGroup: [] })
+  Expect(() => host.inspect('live-group')).toThrow('remained signalable')
+  Expect(host.groupReads()).toBe(2)
+  Expect(host.closes()).toBe(1)
+})
+
+Test('Darwin group joins refuse unreadable members instead of relying on kill(0)', () => {
+  const host = fixture({ unreadable: true, probe: 'live' })
+  Expect(() =>
+    ProcessTree.isGroupAlive(700, () => true, {
+      platform: 'darwin',
+      darwinGroupIsAlive: () => host.inspect('live-group').length > 0,
+    })
+  ).toThrow('kernel identity of live macOS process')
+  Expect(host.closes()).toBe(1)
+})
+
+for (const probe of ['live', 'EPERM', 'EIO', 'ESRCH'] as const) {
+  Test(`Darwin group joins resolve empty native enumeration only when its probe is ESRCH: ${probe}`, () => {
+    const host = fixture({ groupEmpty: true, probe })
+    const join = () =>
+      ProcessTree.isGroupAlive(700, () => true, {
+        platform: 'darwin',
+        darwinGroupIsAlive: () => host.inspect('live-group').length > 0,
+      })
+    if (probe === 'ESRCH') {
+      Expect(join()).toBe(false)
+    } else {
+      let caught: unknown
+      try {
+        join()
+      } catch (cause) {
+        caught = cause
+      }
+      Expect(caught).toBeInstanceOf(Errors.HostEnvironmentError)
+      const error = caught as Errors.HostEnvironmentError
+      Expect(error.details?.['failureKind']).toBe('group-enumeration')
+      Expect(error.details?.['returnedBytes']).toBe(0)
+      Expect(error.details?.['probeStatus']).toBe(probe === 'live' ? 'live' : 'uncertain')
+      if (probe !== 'live') {
+        Expect(error.cause).toBe(host.failure)
+        Expect(error.details?.['probeCode']).toBe(probe)
+      }
+    }
+    Expect(host.probes).toEqual([{ pid: -700, signal: 0 }])
+    Expect(host.identityReads()).toBe(0)
+    Expect(host.closes()).toBe(1)
+  })
+}
+
+Test('Darwin descendant enumeration retains a reparented zombie without accepting a live orphan', () => {
+  const host = fixture({ zombie: true, returnedParentPid: 1 })
+  Expect(host.inspect('descendants')).toEqual([{ pid: 701, group: 700, startedAt: '123:456', command: '' }])
+  Expect(() => fixture({ returnedParentPid: 1 }).inspect('descendants')).toThrow('changed parent')
+  Expect(host.closes()).toBe(1)
+})
 
 for (const kind of ['group', 'descendants'] as const) {
   Test(`Darwin ${kind} retains a zombie's exact kernel identity until reaping`, () => {
@@ -128,6 +266,22 @@ for (const kind of ['group', 'descendants'] as const) {
     Expect(host.inspect(kind)).toEqual([])
     Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
     Expect(host.closes()).toBe(1)
+    Expect(host.identityReads()).toBe(3)
+  })
+
+  Test(`Darwin ${kind} resolves a temporarily unreadable identity within its fixed retry budget`, () => {
+    const host = fixture({ unreadableReads: 2, probe: 'live' })
+    Expect(host.inspect(kind)).toEqual([{ pid: 701, group: 700, startedAt: '123:456', command: '' }])
+    Expect(host.identityReads()).toBe(3)
+    Expect(host.probes).toEqual([])
+    Expect(host.closes()).toBe(1)
+  })
+
+  Test(`Darwin ${kind} yields before rechecking an exit transition`, () => {
+    const host = fixture({ unreadableUntilYield: true, probe: 'live' })
+    Expect(host.inspect(kind)).toEqual([{ pid: 701, group: 700, startedAt: '123:456', command: '' }])
+    Expect(host.probes).toEqual([])
+    Expect(host.waitedMs()).toBe(5)
   })
 
   for (const probe of ['live', 'EPERM', 'EIO', 'uncoded', 'undefined'] as const) {
@@ -146,6 +300,8 @@ for (const kind of ['group', 'descendants'] as const) {
       }
       Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
       Expect(host.closes()).toBe(1)
+      Expect(host.identityReads()).toBe(3)
+      Expect(host.waitedMs()).toBe(10)
     })
   }
 
@@ -164,25 +320,62 @@ Test('Darwin group inspection refuses a member that moved to another group durin
   Expect(host.closes()).toBe(1)
 })
 
-Test('Darwin direct identity queries retain process-exit semantics for zombies', () => {
-  const host = fixture({ zombie: true, probe: 'live' })
-  Expect(host.inspect('identities')).toEqual([])
+Test('Darwin descendant inspection refuses a changed parent after resolving a transient read failure', () => {
+  const host = fixture({ unreadableReads: 1, returnedParentPid: 800 })
+  Expect(() => host.inspect('descendants')).toThrow('changed parent during inspection')
+  Expect(host.identityReads()).toBe(2)
   Expect(host.probes).toEqual([])
   Expect(host.closes()).toBe(1)
 })
 
-for (const options of [{ unreadable: true }, { returnedPid: 702 }]) {
+Test('Darwin direct identity queries retain process-exit semantics for zombies', () => {
+  const host = fixture({ zombie: true, probe: 'live' })
+  Expect(host.inspect('identities')).toEqual([])
+  Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
+  Expect(host.closes()).toBe(1)
+  Expect(host.identityReads()).toBe(2)
+})
+
+Test('Darwin direct identity queries recover a live exact identity after an unreadable primary record', () => {
+  const host = fixture({ unreadableReads: 1, probe: 'live' })
+  Expect(host.inspect('identities')).toEqual([{ pid: 701, group: 700, startedAt: '123:456', command: '' }])
+  Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
+  Expect(host.identityReads()).toBe(2)
+  Expect(host.closes()).toBe(1)
+})
+
+for (const options of [{ unreadable: true }, { returnedPid: 702 }] as const) {
   Test(
-    `Darwin identities keeps unreadable ${
-      options.unreadable === true ? 'records' : 'PID mismatches'
-    } omitted without a probe`,
+    `Darwin direct identity queries omit absent ${
+      'unreadable' in options ? 'records' : 'PID mismatches'
+    } without waiting`,
     () => {
-      const host = fixture(options)
+      const host = fixture({ ...options, probe: 'ESRCH' })
       Expect(host.inspect('identities')).toEqual([])
-      Expect(host.probes).toEqual([])
+      Expect(host.identityReads()).toBe(1)
+      Expect(host.waitedMs()).toBe(0)
+      Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
       Expect(host.closes()).toBe(1)
     },
   )
+}
+
+for (const options of [{ unreadable: true }, { returnedPid: 702 }] as const) {
+  for (const probe of ['live', 'EPERM', 'EIO'] as const) {
+    Test(
+      `Darwin identities refuses unreadable ${
+        'unreadable' in options ? 'records' : 'PID mismatches'
+      } when its probe is ${probe}`,
+      () => {
+        const host = fixture({ ...options, probe })
+        Expect(() => host.inspect('identities')).toThrow(Errors.HostEnvironmentError)
+        Expect(host.identityReads()).toBe(4)
+        Expect(host.waitedMs()).toBe(15)
+        Expect(host.probes).toEqual([{ pid: 701, signal: 0 }, { pid: 701, signal: 0 }])
+        Expect(host.closes()).toBe(1)
+      },
+    )
+  }
 }
 
 for (
@@ -204,6 +397,33 @@ for (
       kind: 'group',
       options: { groupFailure: true },
       expected: { failureKind: 'group-enumeration', routine: 'proc_listpids', pid: 700, returnedBytes: -1 },
+    },
+    {
+      name: 'changed descendant parent',
+      kind: 'descendants',
+      options: { unreadableReads: 1, returnedParentPid: 800 },
+      expected: {
+        failureKind: 'parent-changed',
+        routine: 'proc_pidinfo',
+        pid: 701,
+        returnedBytes: 136,
+        expectedBytes: 136,
+        expectedParentPid: 700,
+        actualParentPid: 800,
+      },
+    },
+    {
+      name: 'live unreadable direct identity',
+      kind: 'identities',
+      options: { unreadable: true, probe: 'live' },
+      expected: {
+        failureKind: 'identity-unreadable',
+        routine: 'proc_pidinfo',
+        pid: 701,
+        returnedBytes: 0,
+        expectedBytes: 136,
+        probeStatus: 'live',
+      },
     },
     {
       name: 'live unreadable descendant',
@@ -264,7 +484,7 @@ for (
     Expect(failure.details).toEqual({
       ...scenario.expected,
       inspection: scenario.kind,
-      requestedPids: [700],
+      requestedPids: [scenario.kind === 'identities' ? 701 : 700],
       requestedPidCount: 1,
     })
     if ('probeErrno' in scenario.options) {

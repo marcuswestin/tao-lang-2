@@ -1,4 +1,15 @@
-import { CLI, Errors, FS, Json, Platform, Repo, Time, VerificationTimeouts } from '@shared'
+import {
+  Assert,
+  CLI,
+  Errors,
+  FS,
+  Json,
+  Platform,
+  Repo,
+  Time,
+  VerificationTimeouts,
+  waitForProcessReadiness,
+} from '@shared'
 import { Buffer } from 'node:buffer'
 import { chromeSandboxArgs, findChromeExecutable } from './ChromeDiscovery'
 
@@ -134,53 +145,70 @@ export class StudioCdp {
   static async launchChrome(options: StudioCdpOptions = {}): Promise<StudioCdp> {
     const chromePath = await findChromePath()
     const userDataRoot = await Repo.mkScratchDirOrHost('tao-studio-chrome-')
-    const startupOutput: string[] = []
-    const command = CLI.start(chromePath, {
-      args: [
-        '--remote-debugging-port=0',
-        `--user-data-dir=${userDataRoot}`,
-        '--headless=new',
-        '--disable-gpu',
-        ...chromeSandboxArgs(),
-        '--no-default-browser-check',
-        '--no-first-run',
-        ...(options.useMockKeychain ? ['--use-mock-keychain'] : []),
-        'about:blank',
-      ],
-      onOutput(stream, chunk) {
-        startupOutput.push(`${stream}: ${chunk.toString('utf8')}`)
-      },
-      stdio: 'pipe',
-    })
+    let startupOutput = ''
+    let command: CLI.StartedCommand | undefined
+    let client: CdpClient | undefined
     try {
-      await options.onProfileCreated?.(userDataRoot)
-      const port = await waitForActivePort(userDataRoot, command, startupOutput, options.startupTimeoutMs)
-      const target = await waitForTarget(`http://127.0.0.1:${port}`)
-      const client = await CdpClient.connect(requireWebSocketUrl(target))
-      const studio = new StudioCdp(client, async () => {
-        client.close()
-        if (command.exitCode === null && command.signalCode === null) {
-          command.kill('SIGTERM')
-          await Promise.race([command.waitForClose(), Time.sleep(3_000)])
-          if (command.exitCode === null && command.signalCode === null) {
-            command.kill('SIGKILL')
-            await command.waitForClose()
+      command = CLI.start(chromePath, {
+        detached: true,
+        processPolicy: 'test',
+        args: [
+          '--remote-debugging-port=0',
+          `--user-data-dir=${userDataRoot}`,
+          '--headless=new',
+          '--disable-gpu',
+          ...chromeSandboxArgs(),
+          '--no-default-browser-check',
+          '--no-first-run',
+          ...(options.useMockKeychain ? ['--use-mock-keychain'] : []),
+          'about:blank',
+        ],
+        onOutput(stream, chunk) {
+          startupOutput += `${stream}: ${chunk.toString('utf8')}`
+          if (startupOutput.length > 12_000) {
+            startupOutput = `${startupOutput.slice(0, 2_000)}\n... startup output omitted ...\n${
+              startupOutput.slice(-10_000)
+            }`
           }
+        },
+        stdio: 'pipe',
+      })
+      const startedCommand = command
+      const diagnostic = () =>
+        `Executable: ${chromePath}\nPID: ${
+          startedCommand.pid ?? 'unavailable'
+        }\nProfile: ${userDataRoot}\n${startupOutput}`
+      await options.onProfileCreated?.(userDataRoot)
+      const port = await waitForActivePort(userDataRoot, command, diagnostic, options.startupTimeoutMs)
+      const target = await waitForTarget(`http://127.0.0.1:${port}`, undefined, command, diagnostic)
+      client = await CdpClient.connect(requireWebSocketUrl(target), command, diagnostic)
+      const connectedClient = client
+      const studio = new StudioCdp(client, async () => {
+        try {
+          connectedClient.close()
+        } finally {
+          await stopChrome(startedCommand, userDataRoot, 'SIGTERM')
         }
-        await command.closeOutput()
-        command.dispose()
-        await FS.remove(userDataRoot)
       }, options)
       await configure(client, { viewport: { width: 1440, height: 900 } })
       return studio
     } catch (error) {
-      if (command.exitCode === null && command.signalCode === null) {
-        command.kill('SIGKILL')
-        await command.waitForClose()
+      try {
+        try {
+          client?.close()
+        } finally {
+          if (command === undefined) {
+            await FS.remove(userDataRoot)
+          } else {
+            await stopChrome(command, userDataRoot, 'SIGKILL')
+          }
+        }
+      } catch (cleanupError) {
+        Errors.throwHostEnvironment(Errors.messageOf(error), {
+          cause: error,
+          details: { cleanupFailure: Errors.formatForLog(cleanupError).slice(0, 4_000) },
+        })
       }
-      await command.closeOutput()
-      command.dispose()
-      await FS.remove(userDataRoot)
       throw error
     }
   }
@@ -206,12 +234,21 @@ export class StudioCdp {
       await configure(client, options)
       return studio
     } catch (error) {
-      await studio.close()
+      try {
+        await studio.close()
+      } catch (cleanupError) {
+        Errors.throwHostEnvironment(Errors.messageOf(error), {
+          cause: error,
+          details: { cleanupFailure: Errors.formatForLog(cleanupError).slice(0, 4_000) },
+        })
+      }
       throw error
     }
   }
 
   static readonly testing = {
+    stopChrome,
+    waitForActivePort,
     attach(
       client: StudioCdpTransport,
       options: StudioCdpAttachmentOptions = {},
@@ -948,12 +985,14 @@ export class StudioCdp {
     return await this.evaluateInContext(expression, contextId)
   }
 
-  async waitFor(expression: string, options: { timeoutMs?: number } = {}): Promise<void> {
+  async waitFor(
+    expression: string,
+    options: { timeoutMs?: number; predicate?: (value: unknown) => boolean } = {},
+  ): Promise<void> {
     let last: unknown
     const satisfied = await Time.pollUntil(async () => {
       try {
         last = await this.evaluate(expression)
-        return !!last
       } catch (error) {
         if (!isTransientExecutionContextFailure(error)) {
           throw error
@@ -961,6 +1000,8 @@ export class StudioCdp {
         last = Errors.messageOf(error)
         return false
       }
+      // Predicates can report product failures; only evaluate's context replacement is retried.
+      return options.predicate === undefined ? !!last : options.predicate(last)
     }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(options.timeoutMs ?? 15_000) ?? Infinity })
     if (satisfied) {
       return
@@ -1165,24 +1206,35 @@ class CdpClient implements StudioCdpTransport {
     socket.addEventListener('error', () => this.rejectAll('Chrome DevTools connection failed.'))
   }
 
-  static async connect(url: string): Promise<CdpClient> {
+  static async connect(
+    url: string,
+    command?: Pick<CLI.StartedCommand, 'error' | 'exitCode' | 'signalCode'>,
+    startupOutput: () => string = () => '',
+  ): Promise<CdpClient> {
     const socket = new WebSocket(url)
-    await new Promise<void>((resolve, reject) => {
-      const cleanup = (): void => {
-        socket.removeEventListener('open', onOpen)
-        socket.removeEventListener('error', onError)
-      }
-      const onOpen = (): void => {
-        cleanup()
-        resolve()
-      }
-      const onError = (): void => {
-        cleanup()
-        reject(new Errors.HostEnvironmentError('Could not connect to Chrome DevTools.'))
-      }
-      socket.addEventListener('open', onOpen)
-      socket.addEventListener('error', onError)
-    })
+    let connectionError: Error | undefined
+    const onError = () => connectionError = new Errors.HostEnvironmentError('Could not connect to Chrome DevTools.')
+    socket.addEventListener('error', onError)
+    try {
+      await waitForProcessReadiness(
+        command,
+        () => {
+          if (connectionError !== undefined) {
+            throw connectionError
+          }
+          return socket.readyState === WebSocket.OPEN
+        },
+        startupOutput,
+        'Chrome DevTools connection',
+        VerificationTimeouts.resolve(20_000) ?? Infinity,
+        { intervalMs: 100 },
+      )
+    } catch (error) {
+      socket.close()
+      throw error
+    } finally {
+      socket.removeEventListener('error', onError)
+    }
     return new CdpClient(socket)
   }
 
@@ -1339,63 +1391,110 @@ async function findChromePath(): Promise<string> {
     ?? Errors.throwUserInput('Studio smoke requires Chrome or Chromium; set TAO_STUDIO_CHROME_PATH.')
 }
 
+/** Join supervised Chrome ownership before releasing observers, even after the direct child exited. */
+async function stopChrome(
+  command: Pick<CLI.StartedCommand, 'exitCode' | 'signalCode' | 'kill' | 'waitForClose' | 'closeOutput' | 'dispose'>,
+  profile: string,
+  signal: Platform.ProcessSignal,
+): Promise<void> {
+  const failures: unknown[] = []
+  try {
+    if (command.exitCode === null && command.signalCode === null) {
+      command.kill(signal)
+    }
+    await command.waitForClose()
+  } catch (error) {
+    failures.push(error)
+  } finally {
+    try {
+      await command.closeOutput()
+    } catch (error) {
+      failures.push(error)
+    }
+    try {
+      command.dispose()
+    } catch (error) {
+      failures.push(error)
+    }
+    try {
+      await FS.remove(profile)
+    } catch (error) {
+      failures.push(error)
+    }
+  }
+  if (failures.length > 0) {
+    Errors.throwHostEnvironment('Chrome cleanup could not be verified.', {
+      cause: failures[0],
+      details: { failures: failures.map(error => Errors.formatForLog(error).slice(0, 4_000)) },
+    })
+  }
+}
+
 async function waitForActivePort(
   userDataRoot: string,
-  command: CLI.StartedCommand,
-  startupOutput: readonly string[] = [],
+  command: Pick<CLI.StartedCommand, 'error' | 'exitCode' | 'signalCode'>,
+  startupOutput: () => string = () => '',
   timeoutMs = 20_000,
 ): Promise<number> {
   const path = FS.resolvePath('DevToolsActivePort', userDataRoot)
-  const port = await Time.pollUntil(async () => {
-    if (await FS.isFile(path)) {
-      const candidate = Number((await FS.readText(path)).split(/\r?\n/)[0])
-      if (Number.isInteger(candidate) && candidate > 0) {
-        return candidate
+  let port: number | undefined
+  await waitForProcessReadiness(
+    command,
+    async () => {
+      if (await FS.isFile(path)) {
+        const candidate = Number((await FS.readText(path)).split(/\r?\n/)[0])
+        if (Number.isInteger(candidate) && candidate > 0 && candidate <= 65_535) {
+          port = candidate
+          return true
+        }
       }
-    }
-    if (command.exitCode !== null || command.signalCode !== null || command.error !== undefined) {
-      const diagnostic = startupOutput.join('').trim().slice(-4_000)
-      Errors.throwHostEnvironment(
-        `Chrome exited before exposing DevTools (exit ${command.exitCode ?? 'none'}, signal ${
-          command.signalCode ?? 'none'
-        })${command.error === undefined ? '' : `: ${command.error.message}`}${
-          diagnostic === '' ? '' : `\n${diagnostic}`
-        }`,
-      )
-    }
-    return undefined
-  }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(timeoutMs) ?? Infinity })
-  if (port !== undefined) {
-    return port
-  }
-  const diagnostic = startupOutput.join('').trim().slice(-4_000)
-  Errors.throwHostEnvironment(
-    `Timed out waiting for Chrome DevToolsActivePort.${diagnostic === '' ? '' : `\n${diagnostic}`}`,
+      return false
+    },
+    startupOutput,
+    'Chrome DevToolsActivePort',
+    VerificationTimeouts.resolve(timeoutMs) ?? Infinity,
+    { intervalMs: 100 },
   )
+  Assert.defined(port, 'Expected: a DevTools port after Chrome reported readiness.')
+  return port
 }
 
-async function waitForTarget(baseUrl: string, urlPrefix?: string): Promise<ChromeTarget> {
-  const target = await Time.pollUntil(async () => {
-    try {
-      const response = await fetch(`${baseUrl}/json/list`)
-      if (!response.ok) {
-        return undefined
+async function waitForTarget(
+  baseUrl: string,
+  urlPrefix?: string,
+  command?: Pick<CLI.StartedCommand, 'error' | 'exitCode' | 'signalCode'>,
+  startupOutput: () => string = () => '',
+): Promise<ChromeTarget> {
+  let target: ChromeTarget | undefined
+  await waitForProcessReadiness(
+    command,
+    async signal => {
+      try {
+        const response = await fetch(`${baseUrl}/json/list`, { signal } as RequestInit)
+        if (!response.ok) {
+          return false
+        }
+        const targets = await response.json() as ChromeTarget[]
+        target = targets.find(candidate =>
+          candidate.webSocketDebuggerUrl !== undefined
+          && (candidate.type === undefined || candidate.type === 'page')
+          && (urlPrefix === undefined || candidate.url?.startsWith(urlPrefix) === true)
+        )
+        return target !== undefined
+      } catch {
+        // Browser is still starting.
+        return false
       }
-      const targets = await response.json() as ChromeTarget[]
-      return targets.find(candidate =>
-        candidate.webSocketDebuggerUrl !== undefined
-        && (candidate.type === undefined || candidate.type === 'page')
-        && (urlPrefix === undefined || candidate.url?.startsWith(urlPrefix) === true)
-      )
-    } catch {
-      // Browser is still starting.
-      return undefined
-    }
-  }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(20_000) ?? Infinity })
-  if (target !== undefined) {
-    return target
-  }
-  Errors.throwHostEnvironment(`Timed out waiting for a browser target at ${baseUrl}.`)
+    },
+    startupOutput,
+    `Chrome browser target at ${baseUrl}`,
+    VerificationTimeouts.resolve(20_000) ?? Infinity,
+    {
+      intervalMs: 100,
+    },
+  )
+  Assert.defined(target, 'Expected: a browser target after Chrome reported readiness.')
+  return target
 }
 
 function requireWebSocketUrl(target: ChromeTarget): string {
