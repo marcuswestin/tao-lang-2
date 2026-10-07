@@ -30,8 +30,9 @@ failure. Hosted merge proof remains pending.
 The implemented narrow work prepares immutable effect indexes once per snapshot, carries validation's
 native inspection only into the immediate implicit-root compile, and avoids the metadata-phase
 tooling audit while retaining source/epoch checks and the independent final publication audit.
-Focused tests, compiler mutations and the integrated gate pass. Both candidate one-file cases
-fit their source and total ceilings; full HNReader fallback and padding tails still fail in both
+Focused tests, compiler mutations and the integrated gate pass. Earlier qualification fit both
+one-file ceilings, but the final paired publication-on results include breaches and a variable
+tail. Full HNReader fallback and padding tails still fail in both
 trees. The paired repeats are complete; hosted proof remains pending. Synchronous authoritative processing
 still blocks saves under actual overlap;
 worker/admission, shared-snapshot and dependency-directed changes remain a separate scope.
