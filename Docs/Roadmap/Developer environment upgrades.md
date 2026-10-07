@@ -119,6 +119,7 @@ change that addressed it.
 - [DEVENV-METRO-FAILS-TO-START-WITHIN-ITS-WAIT-UNDER-CONTENTION — Expo Metro intermittently fails to start within its wait under machine contention](<Developer environment upgrades/DEVENV-METRO-FAILS-TO-START-WITHIN-ITS-WAIT-UNDER-CONTENTION.md>) — Candidate
 - [DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP — iOS dev loop can stall after an Android loop stops](<Developer environment upgrades/DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP.md>) — Candidate
 - [DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG — Model routing trails the installed catalog](<Developer environment upgrades/DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG.md>) — Candidate
+- [DEVENV-NATIVE-INSPECTION-MEMO-REUSE-ASSERTION-INTERMITTENT — Native inspection memo reuse assertion is intermittent](<Developer environment upgrades/DEVENV-NATIVE-INSPECTION-MEMO-REUSE-ASSERTION-INTERMITTENT.md>) — Candidate
 - [DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES — Native kit omits provider transitives](<Developer environment upgrades/DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES.md>) — In progress
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
 - [DEVENV-OPEN-PR-GIVES-UP-ON-TRANSIENT-GITHUB-SERVER-ERRORS — open-pr gives up on transient GitHub server errors](<Developer environment upgrades/DEVENV-OPEN-PR-GIVES-UP-ON-TRANSIENT-GITHUB-SERVER-ERRORS.md>) — Candidate

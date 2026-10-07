@@ -9,6 +9,7 @@
 - **Dependencies:** Installed Chrome/Chromium for host acceptance; macOS diagnostic reports for the crash-report observation.
 - **Acceptance:** Real-process regressions prove no premature SIGTERM, cleanup after a successful root exits with a live descendant, preservation of exit 7 with surviving children, a bounded stalled-root fallback, and invalid grace rejection. Removing the exit-time grace guard fails the lifecycle regression; inserting an early CDP disconnect fails the ordering regression. Two explicit headless `studio-chrome-shutdown` proofs completed 40 launch/navigation/close cycles each in 45.1 and 40.0 seconds: 80 natural code-0 exits, no forced cleanup, no matching stderr assertion and no new Chrome reports. All four HNReader browser journeys also passed in 90.0 seconds, including edits, undo, persisted state and preview refresh. These observations qualify the normal close path, not every possible future Chrome crash.
 - **Source:** Developer-provided October 7 crash report; `StudioCdp`, shared `CLI` supervision, `process-supervision.test.ts`, `studio-cdp.test.ts`, and `studio-chrome-shutdown.test.ts`.
+- **Archived:** 2026-10-07
 
 ## Remaining boundaries
 
