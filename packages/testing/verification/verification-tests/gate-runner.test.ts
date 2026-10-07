@@ -513,6 +513,24 @@ Describe('repository gate runner', () => {
       'studio-canary',
     ])
 
+    // The hosted lane skips the fixers, reported with why, and still runs the generators and the
+    // check gates that fail on what a fixer would have rewritten.
+    const hostedPrepare = await run(['_fix-dprint', '_fix-tao', '_parser-gen', '_dprint-check', '_tao-check'], {}, {
+      hostedLinux: true,
+      skipUnsandboxed: true,
+    })
+    Expect(hostedPrepare.started.toSorted()).toEqual(['_dprint-check', '_parser-gen', '_tao-check'])
+    const skippedFixers = hostedPrepare.summary.gates.filter(gate => gate.status === 'skipped')
+    Expect(skippedFixers.map(gate => gate.name)).toEqual(['_fix-dprint', '_fix-tao'])
+    Expect(
+      skippedFixers.every(gate =>
+        gate.reason === 'rewrites the tree; hosted Verify runs its check gate and fails a rewrite instead'
+      ),
+    ).toBe(true)
+    // Locally the same lane runs them: the flag, not `skipUnsandboxed`, is what skips a fixer.
+    const localPrepare = await run(['_fix-dprint', '_dprint-check'], {}, { skipUnsandboxed: true })
+    Expect(localPrepare.started.toSorted()).toEqual(['_dprint-check', '_fix-dprint'])
+
     // The same lane without the flag is a local sandboxed run, which still cannot start a browser.
     const sandboxed = await run(['_repo-lint', 'studio-dialog-browser'], {}, { skipUnsandboxed: true })
     Expect(sandboxed.started).toEqual(['_repo-lint'])
