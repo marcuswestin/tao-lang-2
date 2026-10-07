@@ -25,14 +25,44 @@ finish() {
 }
 trap finish EXIT
 
-# One timed step per documented action. Output goes to its log; the console gets one line each way.
+# A step whose log stays the same size for 20 minutes is stopped: no documented step is that quiet,
+# and the VM died after 100 silent minutes in the Nix install on 2026-10-07. Before stopping it,
+# the processes and the disk, keychain and privacy daemons' recent log say what it was waiting on.
+watch_step() {
+  size=-1
+  quiet=0
+  while sleep 60 > /dev/null 2>&1; do
+    current=$(wc -c < "$logs/$1.log" | tr -d ' ')
+    if [ "$current" = "$size" ]; then quiet=$((quiet + 1)); else quiet=0; size=$current; fi
+    printf 'Contributor macOS: %s running (%ss): %s\n' "$1" "$(($(date +%s) - started))" \
+      "$(tail -n 1 "$logs/$1.log" | cut -c1-160)"
+    if [ "$quiet" -ge 20 ]; then
+      printf 'Contributor macOS: %s wrote nothing for 20 minutes; stopping it.\n' "$1"
+      ps -axo pid,ppid,stat,etime,command > "$logs/$1.stalled-processes.txt" 2>&1 || true
+      /usr/bin/log show --last 25m --style compact \
+        --predicate 'process IN {"tccd","diskmanagementd","diskarbitrationd","securityd","diskutil","security"}' \
+        2>&1 | tail -n 3000 > "$logs/$1.stalled-system-log.txt" || true
+      kill "$2" 2>/dev/null || true
+      return 0
+    fi
+  done
+}
+
+# One timed step per documented action. Output goes to its log; the console gets a line when the
+# step starts and ends, and each minute its latest log line, so a stall shows where it stopped.
 step() {
   label=$1
   shift
   started=$(date +%s)
   printf 'Contributor macOS: %s started; log: %s/%s.log\n' "$label" "$logs" "$label"
+  env -i HOME="$HOME" USER="$user" TERM=dumb PATH="$PATH" "$@" > "$logs/$label.log" 2>&1 &
+  step_pid=$!
+  watch_step "$label" "$step_pid" &
+  watch_pid=$!
   step_result=0
-  env -i HOME="$HOME" USER="$user" TERM=dumb PATH="$PATH" "$@" > "$logs/$label.log" 2>&1 || step_result=$?
+  wait "$step_pid" || step_result=$?
+  kill "$watch_pid" 2>/dev/null || true
+  wait "$watch_pid" 2>/dev/null || true
   printf '%s\t%s\t%s\n' "$label" "$step_result" "$(($(date +%s) - started))" >> "$logs/steps.tsv"
   printf 'Contributor macOS: %s finished (exit %s, %ss)\n' "$label" "$step_result" "$(($(date +%s) - started))"
   if [ "$step_result" -ne 0 ]; then
