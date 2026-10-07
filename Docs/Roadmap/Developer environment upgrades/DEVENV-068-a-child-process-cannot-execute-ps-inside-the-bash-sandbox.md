@@ -180,4 +180,24 @@
   fail; process-group joins retain their full exact-identity and two-snapshot proof. Deterministic
   fixtures cover those boundaries, and removing the zombie-status guard makes the live-record
   refusal regression fail. Complete landing verification remains the final acceptance gate.
+- **Privileged-helper correction (2026-10-07):** Two later full verification runs passed, but
+  fresh-main integration required another run. That run captured a live descendant with effective
+  UID 0: PID 15652, short BSD status 2, full BSD `EPERM`, requested root 14586. Log:
+  `.artifacts/logs/verify-full/2026-10-07T17-54-50-947Z-13374-2b4b6f37/studio-canary.log`.
+  This establishes that zombie handling alone cannot resolve the blocker. Apple's full BSD
+  record and resource-usage API enforce the same-effective-UID policy; `KERN_PROC_PID` instead
+  emits a complete process-table record across UIDs. An `EPERM` now tries that record before
+  the existing short-zombie check. PID, parent, group, status and start time come from that one
+  record, preserving the existing seconds:microseconds identity and all ownership guards.
+  The installed SDK's arm64 and x64 layouts both report 648 bytes; incomplete or changed layouts
+  fail closed. This SDK-declared system-tool interface is SPI, so its layout is deliberately
+  guarded rather than assumed stable across future macOS changes. Deterministic fixtures cover
+  exact identity parity, PID mismatch, parent/group changes, partial records and two-snapshot
+  zombie proof. A read-only production-inspector probe of root-owned PID 1 returned `launchd`
+  with an exact start identity. This is inspection evidence, not signal or cleanup authority.
+  All 74 inspector fixtures passed. Relaxing the exact-size guard caused the changed-ABI
+  regression to fail; restoring the guard passed again. The previously failing quiet canary
+  also passed with no owned survivors, invocation `c908be29-6975-4dee-b803-c3ca76ec1b11`.
+  Primary references: [full-record security policy](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/proc_info.c)
+  and [process-table handler and start-time fields](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_sysctl.c).
 - **Source:** 2026-09-17 process-teardown implementation.

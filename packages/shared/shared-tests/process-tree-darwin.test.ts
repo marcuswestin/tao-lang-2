@@ -34,6 +34,9 @@ function fixture(options: {
   shortReturnedBytes?: number
   shortPid?: number
   shortStatus?: number
+  tableRecord?: boolean
+  tableReturnedBytes?: number
+  tablePid?: number
   group?: number
   probe?: 'live' | 'EPERM' | 'EIO' | 'ESRCH' | 'uncoded' | 'undefined'
   probeErrno?: number
@@ -57,6 +60,33 @@ function fixture(options: {
   let groupReads = 0
   const symbols = {
     __error: () => 1,
+    sysctl: (
+      mib: Int32Array,
+      length: number,
+      bytes: Uint8Array,
+      size: BigUint64Array,
+      newValue: unknown,
+      newSize: number,
+    ) => {
+      Expect([...mib]).toEqual([1, 14, 1, 701])
+      Expect(length).toBe(4)
+      Expect(bytes.byteLength).toBe(648)
+      Expect(newValue).toBe(null)
+      Expect(newSize).toBe(0)
+      size[0] = BigInt(options.tableReturnedBytes ?? (options.tableRecord ? 648 : 0))
+      if (!options.tableRecord) {
+        return -1
+      }
+      const view = new DataView(bytes.buffer)
+      view.setBigUint64(0, options.laterZombieIdentity && groupReads > 1 ? 999n : 123n, true)
+      view.setUint32(8, 456, true)
+      view.setUint32(12, 0xdeadbeef, true) // timeval padding is not part of microseconds.
+      view.setUint8(36, options.zombie ? 5 : 2)
+      view.setUint32(40, options.tablePid ?? 701, true)
+      view.setUint32(560, options.returnedParentPid ?? 700, true)
+      view.setUint32(564, options.group ?? 700, true)
+      return 0
+    },
     proc_listpids: (_kind: number, group: number, pids: Int32Array) => {
       groupReads++
       Expect(group).toBe(700)
@@ -168,6 +198,44 @@ Test('Darwin group joins omit only fully identified zombies even when kill(0) su
     Expect(host.groupReads()).toBe(zombie ? 2 : 1)
     Expect(host.closes()).toBe(1)
   }
+})
+
+for (const kind of ['identities', 'descendants', 'group', 'live-group'] as const) {
+  Test(`Darwin ${kind} retains the same exact identity when a privileged helper denies full BSD info`, () => {
+    const ordinary = fixture({ probe: 'live' }).inspect(kind)
+    const privileged = fixture({ unreadable: true, nativeErrno: 1, tableRecord: true, probe: 'live' })
+    Expect(privileged.inspect(kind)).toEqual(ordinary)
+    Expect(privileged.closes()).toBe(1)
+  })
+}
+
+Test('Darwin privileged helper inspection rejects a reused PID instead of claiming its identity', () => {
+  const host = fixture({ unreadable: true, nativeErrno: 1, tableRecord: true, tablePid: 702, probe: 'live' })
+  Expect(() => host.inspect('descendants')).toThrow(Errors.HostEnvironmentError)
+  Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
+})
+
+for (const tableReturnedBytes of [0, 644, 652]) {
+  Test(
+    `Darwin privileged helper inspection rejects an incomplete or changed process-table ABI: ${tableReturnedBytes}`,
+    () => {
+      const host = fixture({ unreadable: true, nativeErrno: 1, tableRecord: true, tableReturnedBytes, probe: 'live' })
+      Expect(() => host.inspect('descendants')).toThrow(Errors.HostEnvironmentError)
+    },
+  )
+}
+
+Test('Darwin privileged helper inspection preserves parent and process-group ownership checks', () => {
+  const denied = { unreadable: true, nativeErrno: 1, tableRecord: true, probe: 'live' } as const
+  Expect(() => fixture({ ...denied, returnedParentPid: 1 }).inspect('descendants')).toThrow('changed parent')
+  Expect(() => fixture({ ...denied, group: 800 }).inspect('group')).toThrow('changed process group')
+})
+
+Test('Darwin privileged zombie group joins require matching exact identities across both snapshots', () => {
+  const denied = { unreadable: true, nativeErrno: 1, tableRecord: true, zombie: true, probe: 'live' } as const
+  Expect(fixture(denied).inspect('live-group')).toEqual([])
+  Expect(() => fixture({ ...denied, laterZombieIdentity: true }).inspect('live-group')).toThrow('remained signalable')
+  Expect(fixture(denied).inspect('identities')).toEqual([])
 })
 
 Test('Darwin group joins discover a child forked after its listed parent exited', () => {
@@ -503,6 +571,9 @@ for (
         shortPid: 701,
         shortStatus: 2,
         shortUid: 0,
+        tableResult: -1,
+        tableReturnedBytes: 0,
+        tableErrno: 1,
       },
     },
     {

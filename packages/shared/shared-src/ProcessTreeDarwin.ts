@@ -30,6 +30,10 @@ const library = dlopen('/usr/lib/libproc.dylib', {
     args: [FFIType.i32, FFIType.i32, FFIType.u64, FFIType.ptr, FFIType.i32],
     returns: FFIType.i32,
   },
+  sysctl: {
+    args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.u64],
+    returns: FFIType.i32,
+  },
 });
 try {
   const retryWait = new Int32Array(new SharedArrayBuffer(4));
@@ -52,8 +56,10 @@ try {
     });
   };
   const identity = (pid, parentPid, direct = false) => {
-    const bytes = new Uint8Array(136);
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let bytes = new Uint8Array(136);
+    let view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let fields = { status: 4, pid: 12, parent: 16, group: 100, seconds: 120, micros: 128,
+      command: 64, commandLength: 32, name: 48, nameLength: 16 };
     // A direct query first excludes zombies, then checks their records before claiming absence.
     // Enumeration and identity queries are separate observations. Recheck an incomplete record
     // before declaring a live PID unreadable; persistent uncertainty still fails inspection.
@@ -79,6 +85,28 @@ try {
     }
     const details = { routine: 'proc_pidinfo', pid, returnedBytes, expectedBytes: bytes.byteLength,
       ...(nativeErrno ? { nativeErrno } : {}) };
+    if (returnedBytes < bytes.byteLength && nativeErrno === 1) {
+      // The SDK-declared KERN_PROC_PID process table has no same-effective-UID check.
+      // Apple treats this system-tool interface as SPI; reject unexpected layouts.
+      // Read one complete LP64 kinfo_proc (arm64 and x64 SDK ABI), including
+      // its PID, parent, group, status and the same kernel seconds:microseconds identity.
+      // Never combine metadata from a short record with a separately observed start time.
+      const tableBytes = new Uint8Array(648);
+      const tableSize = new BigUint64Array([BigInt(tableBytes.byteLength)]);
+      const mib = new Int32Array([1, 14, 1, pid]); // CTL_KERN, KERN_PROC, KERN_PROC_PID
+      const tableResult = library.symbols.sysctl(ptr(mib), mib.length, ptr(tableBytes), ptr(tableSize), null, 0);
+      const tableErrno = tableResult === -1 ? read.i32(library.symbols.__error()) : undefined;
+      details.tableResult = tableResult;
+      details.tableReturnedBytes = Number(tableSize[0]);
+      if (tableErrno) details.tableErrno = tableErrno;
+      if (tableResult === 0 && tableSize[0] === BigInt(tableBytes.byteLength)) {
+        bytes = tableBytes;
+        view = new DataView(bytes.buffer);
+        fields = { status: 36, pid: 40, parent: 560, group: 564, seconds: 0, micros: 8,
+          command: 243, commandLength: 17, name: 243, nameLength: 17 };
+        returnedBytes = bytes.byteLength;
+      }
+    }
     if (returnedBytes < bytes.byteLength) {
       if (nativeErrno === 1) {
         const shortBytes = new Uint8Array(64);
@@ -98,36 +126,38 @@ try {
       }
       return unreadableIdentity(pid, { ...details, failureKind: 'identity-unreadable' });
     }
-    if (view.getUint32(12, true) !== pid) {
+    if (view.getUint32(fields.pid, true) !== pid) {
       return unreadableIdentity(pid, { ...details, failureKind: 'identity-pid-mismatch' });
     }
     // proc_bsdinfo.pbi_status uses BSD SZOMB (5): execution ended, even if not yet reaped.
-    const zombie = view.getUint32(4, true) === 5;
+    const zombie = (fields.status === 36 ? view.getUint8(fields.status) : view.getUint32(fields.status, true)) === 5;
+    const startedAt = String(view.getBigUint64(fields.seconds, true)) + ':'
+      + String(fields.micros === 8 ? view.getUint32(fields.micros, true) : view.getBigUint64(fields.micros, true));
     if (direct && zombie) return undefined;
     if (request.kind === 'live-group' && zombie) {
-      if (view.getUint32(100, true) !== request.pids[0]) {
+      if (view.getUint32(fields.group, true) !== request.pids[0]) {
         failInspection('macOS process ' + pid + ' changed process group during inspection.', {
           details: { failureKind: 'group-changed', routine: 'proc_pidinfo', pid },
         });
       }
-      identifiedZombies.set(pid, String(view.getBigUint64(120, true)) + ':' + String(view.getBigUint64(128, true)));
+      identifiedZombies.set(pid, startedAt);
       return undefined;
     }
     // A reparented zombie has finished execution. Retain its exact identity for enumeration,
     // without treating the kernel's reaping transition as a live ownership change.
-    if (!zombie && parentPid !== undefined && view.getUint32(16, true) !== parentPid) {
+    if (!zombie && parentPid !== undefined && view.getUint32(fields.parent, true) !== parentPid) {
       failInspection('macOS process ' + pid + ' changed parent during inspection.', {
         details: { ...details, failureKind: 'parent-changed', expectedParentPid: parentPid,
-          actualParentPid: view.getUint32(16, true) },
+          actualParentPid: view.getUint32(fields.parent, true) },
       });
     }
     const decode = (offset, length) => new TextDecoder()
       .decode(bytes.subarray(offset, offset + length)).replace(/\0.*$/, '');
     return {
-      command: decode(64, 32) || decode(48, 16),
+      command: decode(fields.command, fields.commandLength) || decode(fields.name, fields.nameLength),
       pid,
-      group: view.getUint32(100, true),
-      startedAt: String(view.getBigUint64(120, true)) + ':' + String(view.getBigUint64(128, true)),
+      group: view.getUint32(fields.group, true),
+      startedAt,
     };
   };
   const enumeratedIdentity = (pid, parentPid) => identity(pid, parentPid);
@@ -262,6 +292,9 @@ function inspectionFailureFields(value: unknown): Errors.ErrorDetails {
       'shortPid',
       'shortStatus',
       'shortUid',
+      'tableResult',
+      'tableReturnedBytes',
+      'tableErrno',
       'helperStatus',
       'expectedParentPid',
       'actualParentPid',
