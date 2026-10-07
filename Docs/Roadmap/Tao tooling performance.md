@@ -10,6 +10,28 @@ The bar is interactive-grade: a warm single-file check or fix under 100ms, a who
 1s, one behavior test re-run under 1s, a whole app's tests under 10s, and an edit visible in the
 preview within 1-2s.
 
+## Current effect projection follow-up, 2026-10-07
+
+Whole-app session checking exceeded its unchanged 1.3-second performance ceiling on current
+main and the Studio speed candidate. Within each canonical effect snapshot, every callable
+was independently projecting the same complete call, read, native, constructor and unit
+inventory. That owner-independent projection now runs once per exact snapshot identity.
+Only completed immutable inputs are retained weakly; each callable still receives its own
+source-root context, discovery traversal and effect analysis. Different snapshots, semantic
+evidence and fresh linked builds remain cold. Factory provenance is checked on every call.
+No validation reports, entry graphs or mutable ASTs are shared across builds by this change.
+
+The owning package's 359 tests pass. New tests prove shared input identity, ordered cold-fact
+parity, distinct owner roots, changed native evidence and missing-to-repaired dependencies.
+Disabling retention and incorrectly reusing inputs across snapshots both make those tests fail.
+An isolated ten-iteration diagnostic benchmark on the 732-line, 51,927-byte WordFlower fixture
+passes every existing median budget: session check 983 milliseconds, one-shot check about
+1.2 seconds, session validation 135 milliseconds and session compile 470 milliseconds.
+Its named report is `2026-10-07T19-37-01-244Z-38935.log`. These are diagnostic measurements;
+standalone quiet qualification and paired Studio editor-save paint measurements remain pending.
+Apply this compiler-only change to both comparison roots when isolating Studio preview delivery.
+Worker admission, shared workspaces and dependency-directed compilation remain separate work.
+
 ## 1. Summary
 
 1. **The slowness is ours, not the stack's.** An uncached `tao check` of WordFlower (13 files, 2,442

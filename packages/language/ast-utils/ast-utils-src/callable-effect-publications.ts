@@ -13,13 +13,42 @@ export type CallableEffectPublications = Readonly<{
   context: SourceDiscoveryContext
 }>
 
-/** Project factory-published identities into the existing, single source-discovery pass. */
+/**
+ * Project factory-published identities into the existing, single source-discovery pass.
+ *
+ * The inventory cache is valid only for the lifetime of an unmodified linked AST and its semantic
+ * inventory. Each distinct snapshot takes the cold projection path; the weak key releases its
+ * cached inventory with the snapshot. This does not reuse work across snapshot entries or builds.
+ */
 export function projectCallableEffectPublications(
   snapshot: CanonicalEffectIndependentSnapshot,
   owner: AST.Node,
 ): CallableEffectPublications {
   assertCanonicalEffectSnapshot(snapshot)
 
+  let inputs = callableEffectFactInputsBySnapshot.get(snapshot)
+  if (!inputs) {
+    inputs = projectCallableEffectFactInputs(snapshot)
+    callableEffectFactInputsBySnapshot.set(snapshot, inputs)
+  }
+
+  const descriptor = snapshot.descriptors.get(owner)
+  const root = descriptor && descriptor.declaration === owner
+    ? projectSourceRoot(owner, descriptor)
+    : undefined
+  const context: SourceDiscoveryContext = Object.freeze({
+    ...(root ? { root } : {}),
+    covered: snapshot.covered,
+  })
+  return Object.freeze({ inputs, context })
+}
+
+const callableEffectFactInputsBySnapshot = new WeakMap<
+  CanonicalEffectIndependentSnapshot,
+  CallableEffectFactInputs
+>()
+
+function projectCallableEffectFactInputs(snapshot: CanonicalEffectIndependentSnapshot): CallableEffectFactInputs {
   const foreignHeads = new Map(
     snapshot.natives.filter(native =>
       native.phase === 'evaluation' && native.declaration === native.exportSource
@@ -186,16 +215,7 @@ export function projectCallableEffectPublications(
       Assert(snapshot.constructors.has(node), 'Expected every covered named constructor to have a publication.')
     }
   }
-
-  const descriptor = snapshot.descriptors.get(owner)
-  const root = descriptor && descriptor.declaration === owner
-    ? projectSourceRoot(owner, descriptor)
-    : undefined
-  const context: SourceDiscoveryContext = Object.freeze({
-    ...(root ? { root } : {}),
-    covered: snapshot.covered,
-  })
-  return Object.freeze({ inputs, context })
+  return inputs
 }
 
 function projectRead(publication: CanonicalReadPublication): CallableEffectFactInputs['reads'][number] {
