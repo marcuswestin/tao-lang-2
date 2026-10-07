@@ -174,6 +174,56 @@ async function waitForGone(tracked: TrackedProcess, description: string): Promis
 }
 
 Describe('CLI process policy', () => {
+  for (
+    const { verdict, requested, expected } of [
+      { verdict: 0, requested: true, expected: 0 },
+      { verdict: 7, requested: true, expected: 7 },
+      { verdict: 0, requested: false, expected: 1 },
+    ]
+  ) {
+    Test(
+      `${
+        requested ? 'requested shutdown' : 'unrequested exit'
+      } joins a slower descendant and reports ${expected} for parent exit ${verdict}`,
+      async () => {
+        let output = ''
+        const command = CLI.start('/bin/sh', {
+          args: [
+            '-c',
+            `trap 'exit ${verdict}' TERM; /bin/sh -c 'trap "" TERM; echo descendant:$$; exec sleep 300' & read reply; exit ${verdict}`,
+          ],
+          processPolicy: 'test',
+          detached: true,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          onOutput: (_stream, chunk) => {
+            output += chunk.toString('utf8')
+          },
+        })
+        abandoned.push(command.pid!)
+        try {
+          const descendant = await until(() => {
+            const pid = /descendant:(\d+)/u.exec(output)?.[1]
+            return pid === undefined ? undefined : ProcessTree.identities([Number(pid)]).get(Number(pid))
+          }, { description: 'the owned descendant to install its ignored shutdown signal' })
+          abandoned.push(descendant.pid)
+          if (requested) {
+            command.kill('SIGTERM')
+          } else {
+            command.writeStdin('exit\n')
+          }
+          const result = await command.waitForClose()
+          Expect(result.exitCode).toBe(expected)
+          Expect(output).toContain(`with owned processes ${requested ? 'still stopping' : 'still running'}`)
+          Expect(isAlive(descendant)).toBe(false)
+        } finally {
+          command.kill('SIGKILL')
+          await command.waitForClose()
+          command.dispose()
+        }
+      },
+    )
+  }
+
   Test('explicit output capture retains escaped identities without adding discovery to ordinary polls', async () => {
     const owner = await startTree({ processPolicy: 'test', detached: true })
     const escaped = await startTree({ processPolicy: 'test', detached: true })

@@ -1446,7 +1446,7 @@ async function stopChrome(
     joined = true
     if (result.exitCode !== null && result.exitCode !== 0) {
       Errors.throwHostEnvironment('Chrome reported an unsuccessful exit during cleanup.', {
-        details: { exitCode: result.exitCode, signal: result.signal },
+        details: { exitCode: result.exitCode, directExitCode: command.exitCode, signal: result.signal },
       })
     }
   } catch (error) {
@@ -1462,7 +1462,7 @@ async function stopChrome(
     } catch (error) {
       failures.push(error)
     }
-    if (joined) {
+    if (joined && failures.length === 0) {
       try {
         await FS.remove(profile)
       } catch (error) {

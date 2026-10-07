@@ -143,7 +143,8 @@ Describe('Studio browser CDP harness', () => {
       profile,
       'SIGTERM',
     )).rejects.toThrow('Chrome cleanup could not be verified')
-    Expect(await FS.isDirectory(profile)).toBe(false)
+    Expect(await FS.isDirectory(profile)).toBe(true)
+    await FS.remove(profile)
   })
 
   Test('joins owned Chrome cleanup after a natural exit before disposing its observers', async () => {

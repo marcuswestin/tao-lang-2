@@ -251,6 +251,7 @@ function startCommand(
   let completionTimer: ReturnType<typeof setTimeout> | undefined
   let completedVerdict: number | undefined
   let teardownFailed = false
+  let ownerRequestedStop = false
   let groupNeedsCleanup = false
   let lastGroupMembers: TrackedProcess[] = []
   let trackedDescendants: TrackedProcess[] | undefined
@@ -477,9 +478,13 @@ function startCommand(
         const survivors = trackedDescendants!.filter(entry => ProcessTree.sameProcess(current.get(entry.pid), entry))
         groupNeedsCleanup = lastGroupMembers.some(entry => ProcessTree.sameProcess(current.get(entry.pid), entry))
         if (survivors.length > 0) {
-          teardownFailed = true
+          // A requested tree stop joins descendants after the parent; their order of exit is
+          // not a leak. Unrequested parent exit still fails, even if cleanup later succeeds.
+          teardownFailed ||= !ownerRequestedStop
           const line = Buffer.from(
-            `Child exited ${exitCode ?? 'by signal'} with owned processes still running `
+            `Child exited ${exitCode ?? 'by signal'} with owned processes ${
+              ownerRequestedStop ? 'still stopping' : 'still running'
+            } `
               + `(${survivors.map(entry => entry.pid).join(', ')}); stopping them before returning.\n`,
           )
           if (outputHasWrapperSink) {
@@ -615,7 +620,12 @@ function startCommand(
     get signalCode() {
       return child.signalCode
     },
-    kill: signal => stopProcessTree(signal ?? 'SIGTERM'),
+    kill: signal => {
+      if (child.exitCode === null && child.signalCode === null) {
+        ownerRequestedStop = true
+      }
+      return stopProcessTree(signal ?? 'SIGTERM')
+    },
     onceClose: listener => {
       void closePromise.then(result => listener(result.exitCode, result.signal))
     },

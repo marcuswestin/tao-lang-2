@@ -444,3 +444,19 @@ Standalone performance retry `performance-cf746baf-b6d1-499a-a3ff-4004d3315327` 
 inconclusive: another `verify-complement` lane was active and load was 15.57 on 18 CPUs,
 above the unchanged quiet threshold of 9. No timing stages ran. Quiet qualification and
 paired trials remain required; this integration does not establish a new numerical gain.
+
+## Hosted cleanup retry, 2026-10-07
+
+PR #81's first hosted Verify (`37693128510`, head `073aca140`) failed Chrome cleanup
+in partitions 3 and 7; the run was canceled promptly. The same head's host complement
+passed in 98.2 seconds. The Linux failure reported supervised exit 1 with no signal;
+that report alone did not distinguish a native exit from the wrapper's synthesized verdict.
+A real process regression reproduces the latter: an explicitly stopped parent exits zero
+before its owned descendant finishes, and supervision reports a false leak despite joining
+and stopping that exact descendant. Owner-requested shutdown now retains the parent verdict
+while still joining every owned process. Spontaneous leaks, nonzero parent exits, inspection
+uncertainty, bounds and escalation retain their failure rules. Chrome also retains its profile
+on any cleanup failure and reports both supervised and direct exit codes. The lifecycle
+witness fails with the old behavior; hosted Linux proof remains required on the retry head.
+This changes teardown only. The pinned ABBA measurements above remain historical evidence;
+no active compilation path, numerical ceiling, admission rule or timeout changed.
