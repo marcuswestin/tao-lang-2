@@ -154,4 +154,12 @@
   The unchanged exact test then passed in isolation, including wrapper cleanup, in 9.2 seconds:
   `.artifacts/logs/dev-test/2026-10-07T16-54-52-379Z-35576-fd26f194/language_project-tooling_receipt-inputs.log`.
   This does not establish the cause of the native unreadability or replace complete landing proof.
+  The next full landing attempt at `d4107b6c9` failed the same inspection in a different suite:
+  `ProjectConcurrentWriters.integration.test.ts` passed all assertions before PID 61075 returned
+  zero bytes while still signalable (requested root PID 60660). Log:
+  `.artifacts/logs/verify-full/2026-10-07T16-56-27-873Z-37159-6ed6d689/language_project-tooling_1.log`.
+  That unchanged exact test passed in isolation in 5.8 seconds:
+  `.artifacts/logs/dev-test/2026-10-07T17-01-05-320Z-62074-a2d5bddb/language_project-tooling.log`.
+  Later exact-PID probes found both reported PIDs absent and root 60660's group empty. Those
+  observations do not retroactively prove that the failed inspection observed safe ownership.
 - **Source:** 2026-09-17 process-teardown implementation.
