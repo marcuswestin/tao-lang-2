@@ -1004,20 +1004,27 @@ Describe('Tao runtime app generation', () => {
         Expect(await FS.readText(publicationPath)).toBe(lastWorkingPublication)
 
         let secondAttemptCount = 0
+        const rejectedPhases: string[] = []
         await Expect(Runtime.generateApp(appPath, {
           preview: previewOptions(3, {
-            acceptSourceSnapshot: async () => ++secondAttemptCount === 1,
+            acceptSourceSnapshot: async phase => {
+              rejectedPhases.push(phase)
+              return ++secondAttemptCount === 1
+            },
           }),
           runtimePackageRoot,
         })).rejects.toThrow('Preview source inputs changed before publication')
         Expect(secondAttemptCount).toBe(2)
+        Expect(rejectedPhases).toEqual(['compiled', 'publication'])
         Expect(await generatedGraph(runtimePackageRoot)).toEqual(lastWorkingGraph)
         Expect(await FS.readText(publicationPath)).toBe(lastWorkingPublication)
 
         let acceptedAttemptCount = 0
+        const acceptedPhases: string[] = []
         const current = await Runtime.generateApp(appPath, {
           preview: previewOptions(4, {
-            acceptSourceSnapshot: async () => {
+            acceptSourceSnapshot: async phase => {
+              acceptedPhases.push(phase)
               acceptedAttemptCount++
               return true
             },
@@ -1028,6 +1035,7 @@ Describe('Tao runtime app generation', () => {
         const currentPublication = await FS.readText(publicationPath)
 
         Expect(acceptedAttemptCount).toBe(2)
+        Expect(acceptedPhases).toEqual(['compiled', 'publication'])
         Expect(current.previewRevision).toBe(4)
         Expect(current.previewPublicationSkipped).toBe(false)
         Expect(currentGraph).not.toEqual(lastWorkingGraph)

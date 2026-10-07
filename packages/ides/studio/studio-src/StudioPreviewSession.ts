@@ -293,7 +293,7 @@ export async function openStudioPreviewSession(
         const generated = await Runtime.generateApp(session.entryPath, {
           appName: request.appName,
           preview: {
-            acceptSourceSnapshot: async () => {
+            acceptSourceSnapshot: async phase => {
               if (attemptInputEpoch !== toolingInputEpoch) {
                 return false
               }
@@ -313,7 +313,10 @@ export async function openStudioPreviewSession(
                   return false
                 }
               }
-              const sourceInputsCurrent = !previewFirst
+              // Compilation already closes its own independent native inspection. Keep both
+              // source-version checks, and audit the complete tooling graph at the final
+              // publication barrier rather than repeating that audit during metadata assembly.
+              const sourceInputsCurrent = !previewFirst || phase === 'compiled'
                 || (await toolingWatch!.auditPreview?.(sourceVersions, SourceActions.studioSourceVersion) ?? false)
               return sourceInputsCurrent && attemptInputEpoch === toolingInputEpoch
             },

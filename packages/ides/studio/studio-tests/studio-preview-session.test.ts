@@ -37,7 +37,11 @@ const clearTimeoutSlot = testOverrideSlot({
   },
 })
 
-function observeProjectTooling(root: string, beforeRefresh?: (refreshCount: number) => Promise<void>) {
+function observeProjectTooling(
+  root: string,
+  beforeRefresh?: (refreshCount: number) => Promise<void>,
+  acceptAudit?: (auditCount: number) => boolean,
+) {
   const originalWatch = ProjectTooling.watch
   let refreshes = 0
   let audits = 0
@@ -58,6 +62,9 @@ function observeProjectTooling(root: string, beforeRefresh?: (refreshCount: numb
       },
       async auditPreview(sourceVersions, versionOfSource) {
         audits += 1
+        if (acceptAudit?.(audits) === false) {
+          return false
+        }
         return await watch.auditPreview?.(sourceVersions, versionOfSource) ?? false
       },
       async dispose() {
@@ -446,6 +453,7 @@ Test(
               const initial = await preview.session.compileInitial()
               Expect(initial.status).toBe('compiled')
               Expect(tooling.refreshes).toBe(1)
+              const initialAudits = tooling.audits
               preview.session.registerPreview({ previewInstanceId: 'existing-preview' })
 
               const file = await preview.session.readFile('Garden.tao')
@@ -459,7 +467,7 @@ Test(
               Expect(saved.saved).toBe(true)
               Expect(saved.compile?.status).toBe('compiled')
               Expect(saved.compile?.compileRevision).toBe(2)
-              Expect(tooling.audits).toBeGreaterThan(0)
+              Expect(tooling.audits - initialAudits).toBe(2)
               Expect(tooling.refreshes).toBe(1)
               Expect(timers.pendingCount).toBe(1)
               const generatedRoot = FS.resolvePath('_gen_tao-app', previewRuntimeRoot)
@@ -572,6 +580,79 @@ Test('Studio does not publish a failed fast compile and recovers it through an a
         }
       },
     )
+  } finally {
+    await FS.remove(previewRuntimeRoot)
+  }
+})
+
+Test('Studio retains an independent final input audit before publication and recovers its rejection', async () => {
+  const previewRuntimeRoot = await mkTestDir('tao-studio-final-audit-runtime-')
+  try {
+    await withTaoFiles('tao-studio-final-audit-project-', {
+      'Garden.tao': `
+        use Text from @tao/ui
+        app Garden { id "tao-studio-final-audit" version "1.0.0" name "Garden" view Main }
+        view Main() { render Text("Before") }
+      `,
+    }, async (paths, root) => {
+      let rejectAudit = Infinity
+      const tooling = observeProjectTooling(root, undefined, count => count !== rejectAudit)
+      const originalGenerateApp = Runtime.generateApp
+      const recoveryStarted = Deferred<void>()
+      const releaseRecovery = Deferred<void>()
+      const restoreGenerate = runtimeGenerateAppSlot.install(async (entryPath, options) => {
+        if (options?.preview?.revision === 3) {
+          recoveryStarted.resolve()
+          await releaseRecovery.promise
+        }
+        return await originalGenerateApp(entryPath, options)
+      })
+      try {
+        const preview = await openStudioPreviewSession({
+          entryPath: paths['Garden.tao'],
+          previewFirst: true,
+          previewRuntimeRoot,
+          projectRoot: root,
+        })
+        try {
+          Expect((await preview.session.compileInitial()).status).toBe('compiled')
+          preview.session.registerPreview({ previewInstanceId: 'final-audit-preview' })
+          const generatedRoot = FS.resolvePath('_gen_tao-app', previewRuntimeRoot)
+          const publicationPath = FS.resolvePath('TaoStudioPublication.ts', generatedRoot)
+          const baseline = await FS.readText(publicationPath)
+          const initialAudits = tooling.audits
+          // Eligibility succeeds; reject the later independent publication audit.
+          rejectAudit = initialAudits + 2
+          const file = await preview.session.readFile('Garden.tao')
+          const failed = await preview.session.syncDraft({
+            content: file.content.replace('Before', 'Recovered'),
+            path: file.path,
+            sourceVersion: file.sourceVersion,
+            writeId: 'final-audit-rejected-save',
+          })
+          Expect(tooling.audits - initialAudits).toBe(2)
+          Expect(failed.compile?.status).toBe('error')
+          Expect(failed.compile?.compileRevision).toBe(2)
+          await recoveryStarted.promise
+          Expect(await FS.readText(publicationPath)).toBe(baseline)
+          Expect(await FS.readText(FS.resolvePath('TaoApp.tsx', generatedRoot))).toContain('Before')
+          releaseRecovery.resolve()
+          await until(() => {
+            const snapshot = preview.session.compileSnapshot()
+            return snapshot.compileRevision === 3 && snapshot.status === 'compiled'
+          }, { description: 'the authoritative recovery after a rejected final input audit' })
+          Expect(await FS.readText(publicationPath)).toContain('"compileRevision":3')
+          Expect(await FS.readText(FS.resolvePath('TaoApp.tsx', generatedRoot))).toContain('Recovered')
+        } finally {
+          releaseRecovery.resolve()
+          await preview.close()
+        }
+      } finally {
+        releaseRecovery.resolve()
+        restoreGenerate()
+        tooling.restore()
+      }
+    })
   } finally {
     await FS.remove(previewRuntimeRoot)
   }

@@ -11,6 +11,24 @@ timings.
 
 ### Current qualification, 2026-10-07
 
+The integrated browser custody repair passes the complete local changed-scope gate at
+`120ef1ee7`. Control `45ee218b9` and that candidate each completed all six canonical cases
+quietly with correct computed paint and cleanup, and both passed language budgets. Both still
+failed numerical Studio ceilings; the direct-delivery qualification stage did not run.
+Their exact runs and phase results are recorded in the
+[execution plan](<Studio preview speed execution plan.md#current-qualification-state-2026-10-07>).
+No qualified gain or hosted merge proof exists.
+
+Further narrow work prepares immutable effect indexes once per snapshot, carries validation's
+native inspection only into the immediate implicit-root compile, and avoids the metadata-phase
+tooling audit while retaining source/epoch checks and the independent final publication audit.
+Focused tests and compiler mutations pass; current integrated gates and fresh paired measurements
+remain required. Synchronous authoritative processing still blocks saves under actual overlap;
+worker/admission, shared-snapshot and dependency-directed changes remain a separate scope.
+Landing authorization remains valid, and all ceilings and scheduling limits are preserved.
+
+### Earlier browser cleanup qualification
+
 Candidate `661bef5a8` passes the complete local changed-scope gate. The approved common compiler
 repair brings control's standalone language stage within all budgets (995ms session checking).
 Its first full control run still fails: two publication-on journeys write all paint rows and then
