@@ -8,8 +8,8 @@ import { Errors, Platform } from '@shared'
  * each run publishes a digest of the whole plan, so whatever joins the machines' verdicts can refuse
  * a set of runs that disagreed about it.
  *
- * The prepare phase is not divided: fixers and generators run on every machine, because the readers
- * there depend on what they write. Only readers are units.
+ * The prepare phase is not divided: the generators, and locally the fixers, run on every machine,
+ * because the readers there depend on what they write. Only readers are units.
  */
 
 /** PartitionUnit is one node to place: a reader gate, or one test process with the files it covers. */
