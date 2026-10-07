@@ -8,15 +8,20 @@ import { gitHubPulls, isMerged, mustSucceed, type PullRequest, requirePrBranch }
  * moment `Verify` is green, and the local complement lane may still be running then; when it fails
  * after the merge, `main` already holds the change, so the fix goes to `main` directly rather than
  * through a second pull request and a second hosted run of everything. The route is deliberate:
- * fetch `origin/main`, merge this branch into it with a merge commit, push, and record a receipt.
+ * fetch `origin/main`, put the branch's fix on top of it as one commit, push, and record a receipt.
  * No verification runs here — the fix is for a gate that already failed, and the author ran that
  * gate before committing the fix.
  *
- * The merge is built without touching any checkout: `git merge-tree --write-tree` produces the
- * merged tree from the two commits, `git commit-tree` makes the commit, and the push moves `main`
- * on the remote. A conflict refuses the whole command before anything is written; `main` is then
- * merged into the branch by hand and the command run again. Local `main` follows afterwards through
- * `sync-main`, which only fast-forwards and leaves a dirty checkout of `main` alone.
+ * The squash that GitHub made is a different commit from the pull request's own, so the branch's
+ * history is not `main`'s: it holds the pre-squash commits and any merge of `main`. The new commit
+ * therefore has `origin/main` as its only parent, and its tree applies just the fix — the change
+ * from the merged head to the branch head — onto `origin/main`. Nothing of the pre-squash history
+ * reaches `main`. It is built without touching any checkout: `git merge-tree --write-tree
+ * --merge-base=<merged head>` produces the tree, `git commit-tree` makes the commit, and the push
+ * moves `main` on the remote. A conflict refuses the whole command before anything is written;
+ * `main` is then merged into the branch by hand and the command run again. Local `main` follows
+ * afterwards through `sync-main`, which only fast-forwards and leaves a dirty checkout of `main`
+ * alone.
  */
 
 const REMOTE = 'origin'
@@ -95,8 +100,6 @@ export const LandFixCommand = {
           + ' land-fix lands only commits added to the merged branch.',
       )
     }
-    const fixCommits = (await git(dependencies, root, ['log', '--format=%s', `${mergedHead}..${fixHead}`])).stdout
-      .split('\n').filter(line => line !== '')
 
     report(`Fetching ${REMOTE}/${MAIN}...`)
     await git(dependencies, root, ['fetch', REMOTE, MAIN])
@@ -114,8 +117,25 @@ export const LandFixCommand = {
       )
     }
 
+    // The fix is what the branch added beyond the merged head and `main` does not already hold: a merge
+    // of `main` into the branch brings main's own commits into the range, and they are not the fix.
+    const fixCommits = (await git(dependencies, root, [
+      'log',
+      '--format=%s',
+      '--no-merges',
+      `${mergedHead}..${fixHead}`,
+      `^${mainBefore}`,
+    ])).stdout.split('\n').filter(line => line !== '')
+    if (fixCommits.length === 0) {
+      Errors.throwUserInput(
+        `Every commit ${branch} added beyond #${pr.number}'s merged head is already on ${REMOTE}/${MAIN};`
+          + ' there is no fix to land.',
+      )
+    }
+
+    // Applying the diff from the merged head to the fix onto `main` leaves the pre-squash history behind.
     const merge = await dependencies.run('git', {
-      args: ['merge-tree', '--write-tree', '--messages', mainBefore, fixHead],
+      args: ['merge-tree', '--write-tree', '--messages', `--merge-base=${mergedHead}`, mainBefore, fixHead],
       cwd: root,
       stdio: 'pipe',
     })
@@ -136,8 +156,6 @@ export const LandFixCommand = {
       tree,
       '-p',
       mainBefore,
-      '-p',
-      fixHead,
       '-m',
       message,
     ])).stdout.trim()

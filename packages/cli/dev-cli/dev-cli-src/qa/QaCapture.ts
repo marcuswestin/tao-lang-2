@@ -1,5 +1,6 @@
 import { Errors, FS, Platform } from '@shared'
 import ts from 'typescript'
+import { QaTutorialProject } from './QaTutorialProject'
 
 type CaptureOptions = { app: string; output: string }
 type Capture = (project: string, options: { appName: string; artifactRoot: string }) => Promise<unknown>
@@ -41,6 +42,10 @@ export class QaCapture {
     stagedProject: string
     status: string
   }> {
+    // The tutorial's app is authored in Markdown, so its project exists only once a capture stages it.
+    if (QaTutorialProject.isProject(this.root, project)) {
+      await QaTutorialProject.stage(this.root)
+    }
     const sourceRoot = await FS.realPath(FS.resolvePath(project, this.root))
     const repositoryRoot = await FS.realPath(this.root)
     if (

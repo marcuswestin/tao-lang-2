@@ -25,7 +25,7 @@ const COMMAND_PREFIXES = new Set(['sudo', 'command', 'time', 'nice', 'env', 'exe
  * — is a report whose output is the product, where filtering is ordinary work and the status is
  * incidental. That split is why the pipe rule denies in one place and warns in the other.
  */
-const GATE_SUBCOMMANDS = new Set(['check', 'finalize', 'fix', 'fmt', 'fmt-file', 'setup'])
+const GATE_SUBCOMMANDS = new Set(['check', 'finalize', 'fix', 'fmt', 'setup'])
 
 export const PREFIX_WARNING =
   'A command beginning with `cd `, `export `, or a `VAR=value ` prefix falls outside its permission allow rule in this worktree and goes to permission review instead. Commands here run from the worktree root with paths relative to it.'

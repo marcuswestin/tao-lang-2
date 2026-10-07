@@ -15,6 +15,8 @@ export type QaScenarioApp = {
 type QaScenarioDiscovery = {
   apps: QaScenarioApp[]
   failures: { source: string; error: string }[]
+  /** Apps whose project declares scenarios yet gives them none; reported, but not a discovery failure. */
+  uncovered: { source: string; app: string }[]
 }
 
 const excludedDirectories = new Set([
@@ -55,17 +57,30 @@ export class QaScenarioApps {
   constructor(private readonly root: string) {}
 
   async discover(paths?: readonly string[]): Promise<QaScenarioDiscovery> {
-    const discovery: QaScenarioDiscovery = { apps: [], failures: [] }
+    const discovery: QaScenarioDiscovery = { apps: [], failures: [], uncovered: [] }
     const pathList = paths === undefined ? await this.gitPaths() : [...paths]
     const realRoot = await FS.realPath(this.root)
     const sources: Source[] = []
-    for (const path of [...new Set(pathList)].sort()) {
+    const listed = new Set(pathList)
+    for (const path of [...listed].sort()) {
       if (!this.isAuthoredAppSource(path)) {
         continue
       }
       const absolutePath = FS.resolvePath(path, this.root)
       try {
         if (await FS.isSymbolicLink(absolutePath)) {
+          // A link to another discovered source adds nothing the target does not; any other link would
+          // otherwise vanish without a trace.
+          const target = await FS.realPath(absolutePath).catch(() => undefined)
+          const targetPath = target !== undefined && FS.pathIsWithin(target, realRoot)
+            ? FS.relativePath(realRoot, target)
+            : undefined
+          if (targetPath === undefined || !listed.has(targetPath) || !this.isAuthoredAppSource(targetPath)) {
+            discovery.failures.push({
+              source: path,
+              error: 'Authored Tao source is a symbolic link that does not resolve to another authored source here.',
+            })
+          }
           continue
         }
         if (!await FS.isFile(absolutePath)) {
@@ -147,6 +162,14 @@ export class QaScenarioApps {
         ].sort()
         const parseResults = await workspace.parseFiles(entryPaths)
         const resultsByEntry = new Map(parseResults.map(result => [result.entry.path, result]))
+        const unparsed = scenarioMembers.filter(source => !resultsByEntry.has(source.absolutePath))
+        if (unparsed.length > 0) {
+          discovery.failures.push(...unparsed.map(source => ({
+            source: source.path,
+            error: 'Workspace did not return the scenario source parse.',
+          })))
+          continue
+        }
         const scenarioResults = scenarioMembers.map(source => resultsByEntry.get(source.absolutePath)!)
         const scenarioErrors = scenarioResults.flatMap(result =>
           result.diagnostics.filter(diagnostic => diagnostic.severity === 'error').map(diagnostic => ({
@@ -191,15 +214,18 @@ export class QaScenarioApps {
                   group: scenario.group,
                   label: scenario.name,
                 }))
-              if (cells.length > 0) {
-                discovery.apps.push({
-                  id: `visual:${project}/${app.name}`,
-                  project,
-                  entry: FS.relativePath(projectRoot, source.absolutePath),
-                  app: app.name,
-                  cells,
-                })
+              if (cells.length === 0) {
+                // Some apps are deliberately uncaptured, so this is reported beside the failures rather than as one.
+                discovery.uncovered.push({ source: source.path, app: app.name })
+                continue
               }
+              discovery.apps.push({
+                id: `visual:${project}/${app.name}`,
+                project,
+                entry: FS.relativePath(projectRoot, source.absolutePath),
+                app: app.name,
+                cells,
+              })
             } catch (error) {
               discovery.failures.push({ source: source.path, error: Errors.formatForUser(error) })
             }
@@ -226,6 +252,9 @@ export class QaScenarioApps {
         || left.label.localeCompare(right.label)
       ),
     }))
+    discovery.uncovered.sort((left, right) =>
+      left.source.localeCompare(right.source) || left.app.localeCompare(right.app)
+    )
     discovery.failures.sort((left, right) =>
       left.source.localeCompare(right.source) || left.error.localeCompare(right.error)
     )

@@ -200,4 +200,19 @@
   also passed with no owned survivors, invocation `c908be29-6975-4dee-b803-c3ca76ec1b11`.
   Primary references: [full-record security policy](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/proc_info.c)
   and [process-table handler and start-time fields](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_sysctl.c).
+- **Cause of the unreadable live identity (2026-10-07):** It recurred on `feat/repository-pass-2026-10-07`
+  at `47be7fec9`, where `studio-proof-real-app` passed 4 of 4 tests and then failed cleanup with
+  `identity-unreadable`, `returnedBytes: 0` and `probeStatus: live` for PID 51753, under two concurrent
+  lanes at load 17.6 on 18 CPUs:
+  `.artifacts/logs/verify-complement/2026-10-07T17-24-09-940Z-42461-3395525a/studio-proof-real-app.log`.
+  A probe reproduced the signature deterministically. `PROC_PIDTBSDINFO` returned 0 bytes for a live
+  child running the setuid-root `/usr/bin/top`, while `kill(pid, 0)` succeeded and
+  `PROC_PIDT_SHORTBSDINFO` returned its full 64 bytes. A plain `/bin/sleep` child returned all 136
+  bytes. `/bin/ps` is also setuid root on macOS, and tested code runs it as a descendant:
+  `StudioLaunchManifest.ts:434`, `ProcessTree.ts:137`, `FS.ts:1182` and `ProjectDevSession.ts:260`.
+  The kernel restricts the full BSD record to the caller's effective user, so any ownership poll that
+  enumerates a short-lived `ps` child fails, and load widens that window. That PID 51753 was a `ps` is
+  inferred: the failure did not record its command. The privileged-helper correction above reads
+  such a child's identity through `KERN_PROC_PID`; the descendant `ps` calls listed here remain, and
+  replacing them with the in-process libproc reader would remove the setuid children altogether.
 - **Source:** 2026-09-17 process-teardown implementation.

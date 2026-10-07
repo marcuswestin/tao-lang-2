@@ -90,7 +90,7 @@ test.describe('First-hour tutorial in the browser', () => {
     expect(aboutBounds).not.toBeNull()
     expect(libraryBounds!.height).toBeGreaterThanOrEqual(44)
     expect(aboutBounds!.x - libraryBounds!.x - libraryBounds!.width).toBeGreaterThanOrEqual(8)
-    await capture(page, 'phone-light')
+    const phoneLight = await capture(page, 'phone-light')
     const phoneReading = await reading.boundingBox()
     const phoneFinished = await finished.boundingBox()
     expect(phoneReading).not.toBeNull()
@@ -104,7 +104,15 @@ test.describe('First-hour tutorial in the browser', () => {
     await expect(reading).toBeVisible()
     // The tutorial deliberately owns a light paper palette in either system scheme.
     await expect(reading).toHaveCSS('color', 'rgb(27, 27, 31)')
-    await capture(page, 'phone-dark')
+    // The same palette means the same pixels, so the dark-scheme view is compared with the light one
+    // instead of storing a second, identical image as if it were separate evidence.
+    const phoneDark = await page.screenshot({ fullPage: true })
+    expect(
+      phoneDark.equals(phoneLight),
+      'The dark system scheme must render the tutorial exactly as the light one does',
+    ).toBe(
+      true,
+    )
     for (let index = 1; index <= 8; index += 1) {
       await addBook(page, `Book ${index}`, index)
     }
@@ -128,10 +136,11 @@ async function savedBooks(page: Page): Promise<string> {
   )
 }
 
-async function capture(page: Page, name: string): Promise<void> {
+/** capture stores a full-page screenshot as evidence and returns its bytes for comparison. */
+async function capture(page: Page, name: string): Promise<Buffer> {
   const root = Platform.runtimeProcess.env['TAO_HOST_TEST_ARTIFACTS']
   if (!root) {
     Errors.throwUnexpected('Tutorial browser evidence needs an artifact directory.')
   }
-  await page.screenshot({ path: FS.resolvePath(`tutorial-${name}.png`, root), fullPage: true })
+  return await page.screenshot({ path: FS.resolvePath(`tutorial-${name}.png`, root), fullPage: true })
 }

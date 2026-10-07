@@ -25,7 +25,6 @@ export const JUST_COMMANDS = [
   // policy excludes. An agent has to be able to reach it by the name the failure prints.
   'fix-agent-config',
   'fmt',
-  'fmt-file',
   'ide-extension-package',
   'land',
   // Merges a fix committed after GitHub merged the branch into fetched origin/main and pushes it,

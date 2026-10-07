@@ -20,10 +20,6 @@
     "architecture": "arm64",
     "runtime": "bun:1.4.2"
   },
-  "inputs": {
-    "source": "Docs/MVP Roadmap/Plan - Initial release QA.md",
-    "dependencySnapshot": "Docs/QA/inputs/1b8ea0038e4a1018886700293ba031b97d41de1e474b00f5bb81e7db38f253b5.json"
-  },
   "surfaceId": "story:CLI10",
   "dimension": "text",
   "outcome": "fail",

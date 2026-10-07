@@ -97,7 +97,7 @@ Describe('Immutable public release surfaces', () => {
         Expect(value.commands).not.toContain('agents')
         Expect(value.commands).not.toContain('review')
         Expect(value.commands).toContain('bindings')
-        for (const deferred of ['bridge', 'secrets', 'instantdb', 'connect', 'jazz', 'convex', 'pylon', 'firebase']) {
+        for (const deferred of ['secrets', 'instantdb', 'connect', 'jazz', 'convex', 'pylon', 'firebase']) {
           Expect(value.commands).not.toContain(deferred)
         }
         Expect(value.create).toContain('--provider')

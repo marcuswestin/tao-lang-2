@@ -36,9 +36,25 @@ Describe('contributor Linux container runner', () => {
         'version',
         'info',
         'info --format {{.Architecture}} {{.Driver}} {{json .DriverStatus}}',
+        'info --format {{.MemTotal}}',
       ])
       Expect(result.stdout).toContain('disk_hard_limit=enforcement-not-proven')
       Expect(result.stdout).toContain('not enforcement of the 30 GiB budget')
+    })
+  })
+
+  Test('refuses to build when Docker cannot hold the 16 GiB guest, naming the setting to raise', async () => {
+    await withFixture(async fixture => {
+      // Docker Desktop's 8 GB setting: verify outgrew it and the VM's OOM killer ended the run.
+      const small = { ...fixture, env: { ...fixture.env, TAO_TEST_DOCKER_MEMORY: '8317214720' } }
+      const refused = await run(small, [])
+      Expect(refused.exitCode).toBe(2)
+      Expect(refused.stderr).toContain('Docker has 7931 MiB of memory; the contributor guest needs 16 GiB.')
+      Expect(refused.stderr).toContain('Settings > Resources')
+      const unreadable = { ...fixture, env: { ...fixture.env, TAO_TEST_DOCKER_MEMORY: 'unknown' } }
+      Expect((await run(unreadable, [])).exitCode).toBe(1)
+      const calls = (await FS.readText(fixture.log)).trim().split('\n')
+      Expect(calls.some(call => call.startsWith('build') || call.startsWith('create'))).toBe(false)
     })
   })
 
@@ -61,6 +77,7 @@ Describe('contributor Linux container runner', () => {
         'version',
         'info',
         'info --format {{.Architecture}} {{.Driver}} {{json .DriverStatus}}',
+        'info --format {{.MemTotal}}',
         'image ls --all --filter reference=tao-contributor-linux-base:20260926T161634Z-57262 --format {{.ID}} {{.Repository}}:{{.Tag}}',
         'container ls --all --no-trunc --filter name=^/tao-contributor-linux-20260926T161634Z-57262-(cold|tools|cached)$ --format {{.ID}} {{.Names}} {{.Status}} owner={{.Label "tao.owner"}} run={{.Label "tao.run"}}',
       ])
@@ -487,6 +504,7 @@ Describe('contributor Linux container runner', () => {
       await FS.writeText(guest, await FS.readText(Repo.resolvePath(`${ENVIRONMENT}/guest-smoke.sh`)))
       await FS.writeText(FS.resolvePath('.gitignore', root), '.artifacts/\ncalls.log\n')
       await writeVersionTools(root)
+      await writeJourneyStub(root)
       for (const name of ['.config/bootstrap-tao-dev-env', 'agent']) {
         const path = FS.resolvePath(name, root)
         await FS.writeText(
@@ -524,6 +542,48 @@ Describe('contributor Linux container runner', () => {
         'check --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
         'test-all --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
         'verify --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
+        // The shared journey runs after the lanes that judge the committed tree, in its fixed order.
+        ...JOURNEY_ACTIONS.map(action => `journey ${action}`),
+      ])
+      const steps = (await FS.readText(FS.resolvePath('.artifacts/contributor-linux/guest-cached/steps.tsv', root)))
+        .trim().split('\n').map(line => line.split('\t')[0])
+      Expect(steps.slice(-6)).toEqual([
+        'dev-loop-start',
+        'dev-loop-serve',
+        'toolchain-change',
+        'dev-loop-restart',
+        'dev-loop-reflect',
+        'dev-loop-stop',
+      ])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('skips later journey actions after a failure but always stops the dev loop and fails the guest', async () => {
+    const root = await mkGitTestDir('tao-contributor-linux-journey-')
+    try {
+      const guest = FS.resolvePath(`${ENVIRONMENT}/guest-smoke.sh`, root)
+      await FS.writeText(guest, await FS.readText(Repo.resolvePath(`${ENVIRONMENT}/guest-smoke.sh`)))
+      await FS.writeText(FS.resolvePath('.gitignore', root), '.artifacts/\ncalls.log\nfail-*\n')
+      await writeVersionTools(root)
+      await writeJourneyStub(root)
+      await FS.writeText(FS.resolvePath('fail-loop-serve', root), '')
+      for (const name of ['.config/bootstrap-tao-dev-env', 'agent']) {
+        const path = FS.resolvePath(name, root)
+        await FS.writeText(path, '#!/bin/sh\nprintf "%s\\n" "$*" >> calls.log\n')
+        await FS.chmod(path, 0o755)
+      }
+      const result = await CLI.run('/bin/sh', {
+        args: ['-c', 'du() { :; }; df() { :; }; . "$0"', guest, 'cached'],
+        cwd: root,
+      })
+      Expect(result.exitCode).toBe(1)
+      const calls = (await FS.readText(FS.resolvePath('calls.log', root))).trim().split('\n')
+      Expect(calls.filter(call => call.startsWith('journey '))).toEqual([
+        'journey loop-start',
+        'journey loop-serve',
+        'journey loop-stop',
       ])
     } finally {
       await FS.remove(root)
@@ -596,6 +656,20 @@ async function seedRecovery(fixture: Fixture, id: string, state: string): Promis
   await FS.writeText(FS.resolvePath('.artifacts/base-image.txt', fixture.root), `tao-contributor-linux-base:${id}\n`)
 }
 
+const JOURNEY_ACTIONS = ['loop-start', 'loop-serve', 'toolchain-change', 'loop-restart', 'loop-reflect', 'loop-stop']
+
+/** The real journey order with a recording action script; a `fail-<action>` file makes that action fail. */
+async function writeJourneyStub(root: string): Promise<void> {
+  await FS.writeText(
+    FS.resolvePath(`${ENVIRONMENT}/contributor-journey.sh`, root),
+    await FS.readText(Repo.resolvePath(`${ENVIRONMENT}/contributor-journey.sh`)),
+  )
+  await FS.writeText(
+    FS.resolvePath(`${ENVIRONMENT}/contributor-journey-step.sh`, root),
+    'printf "journey %s\\n" "$1" >> calls.log\n[ ! -f "fail-$1" ]\n',
+  )
+}
+
 async function writeVersionTools(root: string): Promise<void> {
   for (const tool of ['bun', 'node', 'zsh', 'just', 'python3', 'nix']) {
     const executable = FS.resolvePath(`.devenv/profile/bin/${tool}`, root)
@@ -639,7 +713,11 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
         'printf "%s\\n" "$*" >> "$TAO_TEST_DOCKER_LOG"',
         'case "$1" in',
         '  version) [ "$TAO_TEST_DOCKER_FAILURE" != version ] || exit 6; printf "Docker fixture\\n" ;;',
-        '  info) printf "%s overlayfs fixture\\n" "${TAO_TEST_DOCKER_ARCH:-aarch64}" ;;',
+        '  info)',
+        '    case "$*" in',
+        '      *MemTotal*) printf "%s\\n" "${TAO_TEST_DOCKER_MEMORY:-16608174080}" ;;',
+        '      *) printf "%s overlayfs fixture\\n" "${TAO_TEST_DOCKER_ARCH:-aarch64}" ;;',
+        '    esac ;;',
         '  build) printf "base build output\\n" ;;',
         '  create)',
         '    [ "$TAO_TEST_DOCKER_FAILURE" != create-before ] || exit 9',

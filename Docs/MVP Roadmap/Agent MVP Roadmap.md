@@ -352,7 +352,7 @@ Repository iOS setup is the first bounded slice: `just setup-ios` / the named `s
 operation inspects explicit Xcode and simulator-runtime versions, supports a side-by-side local
 Xcode archive installation with automatic detection in Downloads and a download-and-resume prompt,
 Apple's runtime download/import, and hands off account, license,
-and administrator steps. The [developer workflow documentation](../../packages/cli/dev-cli/README.md#ios-simulator-setup)
+and administrator steps. The [developer workflow documentation](../../packages/cli/dev-cli/README.md#apple-development-setup)
 owns its commands and limits. Public CLI integration, a shared target requirements graph, Android
 installation, and complete clean-machine acceptance remain open.
 

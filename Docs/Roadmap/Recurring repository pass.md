@@ -6,18 +6,17 @@ notes after each completed pass; Git history is the longer record.
 
 ## Current status
 
-- **Reviewed through:** `5d9330f85e402a0a9bf28bf5b4de2700b6094fc8` (2026-10-06), the 91 first-parent landings after `39aac77c`. The [October 6 repository health review](<October 6 repository health review.md>) records findings, dispositions and evidence boundaries. Repairs landed from `feat/repository-pass-2026-10-06`.
-- **Repairs:** Partition proof and complement admission in hosted verification; patch-aware install cache keys; `tao secrets grant` no longer trusts the committed recipient list; the output hook lets Codex read files; reclaim spares fresh worktrees; naturally exiting launches retire their process records; `dev-loop status` survives one bad receipt; source-path module indexing; standalone acceptance's `--provider`; the installed CLI's TypeScript default libraries and Bun cache; a Linux-only barrier test wait. Stale tutorial, spec, skill and help text corrected.
-- **Health:** Agent worktrees grew from about 29 GiB to 279 GiB in eight days; `./agent reclaim` classifies 16 reclaimable, not executed. Routing audit found no mismatch; the context reminder was measured and retired. The [dependency advisory follow-up](<Dependency advisory follow-up.md>) records this pass's remediation.
-- **Acceptance:** The A3 follow-up fixed installed native-binding input roots resolving to `/` and waiting on Network Volumes consent. Fresh vanilla (`2e53518c2`) and prepared Xcode (`0c0566f40`, audit-policy-only follow-up) each passed 22/22 and their normal audits with zero disallowed changes; protected OS paths remain unreadable. The ARM64 contributor guest found P1 (fixed) and P2 (an outside kill, now named in the log; cause unproven). Details and evidence paths are in the [health review](<October 6 repository health review.md>).
+- **Reviewed through:** `a198e71b6` (2026-10-06), the 26 first-parent landings after `5d9330f85`, with all eleven standing health checks run for the first time. The [October 7 repository health review](<October 7 repository health review.md>) records findings, dispositions and evidence boundaries. Repairs landed from `feat/repository-pass-2026-10-07`.
+- **Repairs:** `land-fix` lands one commit; `sync-main` and `open-pr` tell git errors and cancelled runs apart; QA dependency snapshots and their writer removed; QA capture stages the tutorial project and discovery reports what it skips; the tutorial's printed commands are tested as written; platform-dependent tests report skips; the formatter re-indents item-type actions; duplicate release, format, test and bridge commands removed. `CONTRIBUTING.md` gives one getting-started path; `contributor-macos-test` runs it in a fresh vanilla Tart clone, and both contributor guests end with a dev loop that must pick up a compiler edit; `contributor-linux-test` refuses a Docker VM too small for its guest.
+- **Health:** Tracked blobs fell from 47.6 to 42.4 MB. Process records tripled to 920 behind R2's open prune rule. Worktrees: `~/.codex/worktrees` 124.5 GiB (down from 176), `tao-lang-2.worktrees` about 116 GiB. Routing audit found no mismatch.
+- **Acceptance:** Not established. The macOS contributor run stalled 100 minutes in the Nix install until its VM crashed; Ubuntu passed cold but its cached `verify` ran Docker out of memory; Tart vanilla, Xcode and `performance-check` did not run.
 
 ## Consider next time
 
-- Start after `5d9330f8` or a newer explicitly reviewed first-parent boundary.
-- Developer decisions recorded in the health review: requiring `Verify (host)` in the `main` ruleset (C2); a prune rule for the existing uncertain process records (R2); reclaiming the 16 reclaimable worktrees; trimming `packages/AGENTS.md` under its 6,000-character budget.
-- If a Linux test node is again killed from outside (P2), read its log's signal line and the step's `.memory.txt` `oom_kill` count before diagnosing further.
-- Agent worktrees under `~/.codex/worktrees` are now the largest disk holder (176 GiB); consider a retention rule.
-- The smaller items listed under the health review's findings table: the per-save project rescan, formatter re-indentation, the WDA port hold, `ci-macos`'s empty gate list, `merge-pr` and `land-fix` gaps.
+- Start after `a198e71b6` or a newer explicitly reviewed first-parent boundary.
+- Developer decisions recorded in the health review: `land-fix` pre-push gates or requiring `Verify (host)` (L1, and C2 of October 6); an `argsPolicy` for the `remote` operations and the other unpolicied host operations (U1, U2); a prune rule for process records (R2 of October 6); worktree retention and the 8 reclaimable worktrees; the dead-feature candidates (K2, K3) and the language migration shims; the formatter's configuration-list layout (F2); the audience of package READMEs (D3); trimming `packages/AGENTS.md` (D4); removing three unused dependencies and the lagging majors; whether QA's renderer hash should cover all of `packages/` (Q7); a Sonnet row in the routing table.
+- Run the isolation checks first, on a quiet machine whose Docker has at least 16 GB. Read the Nix install log on the retained clone `tao-contributor-1791348473-74633` before rerunning `contributor-macos-test`; a stall with no CPU suggests a permission or keychain dialog a headless VM cannot show.
+- The six tutorial QA observations need a recheck on a current commit.
 - Keep ARM64 Linux, native amd64, hosted cloud, installed CLI, native builds, devices, signing and distribution as distinct evidence boundaries. Explicit prerelease installation and WordFlower outline export remain deferred until after MVP.
 
 ## Periodic isolation checks
@@ -38,6 +37,10 @@ and [contributor verification workflow](<Developer environment upgrades/DEVENV-C
   environment and installed CLI behavior, not native app builds or simulator launches.
 - Run both cold and cached Ubuntu contributor verification against the intended committed HEAD.
   Record bootstrap and repository verification separately from actual hosted-cloud compatibility.
+- Prove the contributor path from a clean machine on both macOS (a fresh vanilla Tart clone) and
+  Ubuntu: following only the documented getting-started instructions, set up the repository, run
+  its tests, start a development loop, make a language or toolchain change, and see it take effect.
+  Record each step's time and friction, not just whether it passed.
 - Inspect failures and fix repository-owned defects within the approved pass scope, then rerun
   the affected checks. Record external blockers and every unrun check explicitly.
 - Inspect retained clones, containers, image caches, and cleanup behavior. Distinguish reusable
@@ -47,7 +50,7 @@ and [contributor verification workflow](<Developer environment upgrades/DEVENV-C
   outcomes, and each retained resource's owner, purpose, and cleanup condition.
 
 For now, designate exactly one isolation-test agent in the approved pass plan, with ownership
-across all worktrees on the account. That agent runs vanilla, prepared Xcode, and Linux checks
+across all worktrees on the account. That agent runs vanilla, prepared Xcode, macOS contributor, and Linux checks
 sequentially, completing evidence collection and resource accounting before starting the next.
 Other worktrees must defer isolation runs until the owner explicitly hands off or finishes.
 This is manual coordination, not a scheduler or a parallel-execution facility: Tart's existing
@@ -83,11 +86,35 @@ force-release a lease. The procedure depends on all participants observing the s
    output pricing. Weigh completed-task cost and review quality before recommending a tier change,
    since an API-equivalent estimate is not a plan or subscription bill; the change itself is the
    Developer's choice, never a silent switch.
-6. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
+6. Run the standing health checks, reporting each against the previous pass's figures:
+   - **Committed growth:** generated, evidence, or snapshot files entering Git, and repository
+     object size; each needs an owner, a reader, and a retention rule.
+   - **`main` and CI:** red runs on `main`, `land-fix` uses, Verify retries and cancellations, and
+     the hosted Verify duration trend.
+   - **Test suite:** skipped and early-returning tests, the slowest suites, flaky tests, and tests
+     that assume a platform, user (non-root), or filesystem.
+   - **Unsandboxed surface:** what `.rulesync/permissions.jsonc` and the `./agent unsandboxed`
+     operations gained since the boundary, and whether each addition is still justified.
+   - **Hook overrides:** `.artifacts/logs/hook-overrides.jsonl` across worktrees; tune any rule
+     that is overridden routinely.
+   - **Instruction and document drift:** skill and `AGENTS.md` budgets, broken links, specifications
+     against `Decisions.md` and the implementation, and stale or already-done MVP Roadmap items.
+   - **Dependency hygiene:** unused dependencies, duplicate versions, lagging major versions, and
+     dead exports, beyond the advisory record.
+   - **Branches and pull requests:** unmerged pushed branches, stale pull requests, and orphaned
+     remote branches.
+   - **Developer-environment ledger:** entry age, duplicates, and entries already fixed but not
+     archived.
+   - **Dead and duplicate features:** commands, flags, recipes, modules, and workflows that are
+     unused, superseded, or near-duplicates of another way to do the same thing. Tao keeps as few
+     ways to do something as stay ergonomic and discoverable; propose removals with their callers.
+   - **Deferred findings:** close or re-defer each item from the previous **Consider next time**
+     with evidence, rather than carrying it forward unexamined.
+7. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
    from host or external acceptance that was not exercised. For each unresolved dependency advisory,
    keep a short live record of its disposition, owner, review-by date, and primary evidence; close
    it explicitly when resolved.
-7. When the approved work is complete, replace **Current status** and **Consider next time** with the
+8. When the approved work is complete, replace **Current status** and **Consider next time** with the
    new reviewed-through commit, a brief account of what actually ran, material omissions, the outcome,
    and only the few notes that would help the next orchestrator.
 

@@ -646,6 +646,72 @@ Describe('open-pr', () => {
     Expect(calls).not.toContain(checkSuitesKey())
   })
 
+  Test(
+    'does not count a cancelled Verify run as the checks appearing, and names it when nothing replaces it',
+    async () => {
+      const routes = openedPullRequestRoutes(2)
+      routes[checkCountKey()] = { stdout: '{"total_count":0}' }
+      routes[verifyRunsKey()] = {
+        stdout: JSON.stringify({
+          workflow_runs: [{
+            conclusion: 'cancelled',
+            head_sha: HEAD_SHA,
+            html_url: 'https://github.com/tao/tao/actions/runs/9',
+            id: 9,
+            status: 'completed',
+          }],
+        }),
+      }
+      const { calls, dependencies, sleeps } = fakeDependencies(routes)
+
+      const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
+
+      Expect(result.exitCode).toBe(1)
+      Expect(sleeps.filter(ms => ms === 5_000)).toHaveLength(35)
+      Expect(result.lines.some(line => line.startsWith('PASS  Verify run 9 exists'))).toBe(false)
+      Expect(result.lines.at(-1)).toStartWith(
+        'FAIL  Verify run 9 on headsha1 was cancelled (https://github.com/tao/tao/actions/runs/9) and no other run'
+          + ' started within 180s of the push.',
+      )
+      Expect(calls.some(call => call === 'followChecks' || call.startsWith('gh pr merge'))).toBe(false)
+      Expect(calls).not.toContain('runComplement')
+    },
+  )
+
+  Test('counts a live Verify run beside a cancelled one as the checks appearing', async () => {
+    const routes = openedPullRequestRoutes(2)
+    routes[checkCountKey()] = { stdout: '{"total_count":0}' }
+    routes[verifyRunsKey()] = {
+      stdout: JSON.stringify({
+        workflow_runs: [
+          {
+            conclusion: 'cancelled',
+            head_sha: HEAD_SHA,
+            html_url: 'https://github.com/tao/tao/actions/runs/9',
+            id: 9,
+            status: 'completed',
+          },
+          {
+            conclusion: null,
+            head_sha: HEAD_SHA,
+            html_url: 'https://github.com/tao/tao/actions/runs/10',
+            id: 10,
+            status: 'queued',
+          },
+        ],
+      }),
+    }
+    const { dependencies } = fakeDependencies(routes)
+    mergesAfterChecks(dependencies, 2)
+
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(result.lines).toContain(
+      'PASS  Verify run 10 exists for headsha1 (queued); GitHub starts its jobs as runners free up.',
+    )
+  })
+
   Test('refreshes maintained native bindings before the push, only when the complement runs', async () => {
     const landing = fakeDependencies(openedPullRequestRoutes(2))
     mergesAfterChecks(landing.dependencies, 2)

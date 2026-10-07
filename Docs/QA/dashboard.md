@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 197 applicable release acceptance cells are incomplete.
 
-Candidate source: `1b8a44f0d840a8ab2ccbe2aad454939f8baa511f`. Tree digest `537bf38960256d4d`; content hashes are stored per observation.
+Candidate source: `de122e9dd8724c29ac44189e350b878164f86ae5`. Tree digest `31c5f667a24df02e`; content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -46,19 +46,19 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 
 | Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | text      | 434            | 12       | 1            | 11            | 422     | 0       | 0        | 0    | 2.8%       | 0.2%     |
+| 1                | text      | 442            | 12       | 0            | 12            | 430     | 0       | 0        | 0    | 2.7%       | 0.0%     |
 
 ## Screenshot sets (development evidence)
 
 | Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | visual    | 40             | 3        | 3            | 0             | 37      | 0       | 0        | 0    | 7.5%       | 7.5%     |
+| 1                | visual    | 40             | 3        | 0            | 3             | 37      | 0       | 0        | 0    | 7.5%       | 0.0%     |
 
 ## Development checks
 
 | Introduced phase | Dimension  | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | ---------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | functional | 3              | 3        | 2            | 1             | 0       | 0       | 0        | 0    | 100.0%     | 66.7%    |
+| 1                | functional | 3              | 3        | 0            | 3             | 0       | 0       | 0        | 0    | 100.0%     | 0.0%     |
 
 ## Scenario discovery
 
@@ -74,12 +74,12 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - [visual:notebook / visual / notes-groceries / agent](results/20261003173525288-3fb34a34-8931-4d5c-983d-bb016da95455.json): **pass**, needs-recheck; execution profile development.
 - [visual:notebook / visual / notes-ideas / agent](results/20261003173525898-a95130d7-6b03-47fa-8008-49d8922ac23a.json): **pass**, needs-recheck; execution profile development.
 - [visual:notebook / visual / tablet-dark / agent](results/20261003173524612-e3558bf0-b9c2-4fa8-af68-2bd1d6de7c35.json): **pass**, needs-recheck; execution profile development.
-- [visual:reading-list / visual / phone-light / agent](results/20261006191118086-f5fee980-e927-4e8f-8530-c998930276a0.json): **pass**, current; execution profile development.
-- [visual:reading-list / visual / desktop / agent](results/20261006191130428-8133991f-5ccc-4f40-8a4f-dd4025447ef7.json): **pass**, current; execution profile development.
-- [visual:reading-list / visual / phone-dark / agent](results/20261006191143283-21680c5d-f992-49ae-8c4e-bb6b4e9c5923.json): **pass**, current; execution profile development.
-- [source:tutorial-replay / functional / source-test / agent](results/20261006191508618-ac0373eb-ea22-4663-9180-0fb7f7ee67d0.json): **pass**, current; execution profile development.
+- [visual:reading-list / visual / phone-light / agent](results/20261006191118086-f5fee980-e927-4e8f-8530-c998930276a0.json): **pass**, needs-recheck; execution profile development.
+- [visual:reading-list / visual / desktop / agent](results/20261006191130428-8133991f-5ccc-4f40-8a4f-dd4025447ef7.json): **pass**, needs-recheck; execution profile development.
+- [visual:reading-list / visual / phone-dark / agent](results/20261006191143283-21680c5d-f992-49ae-8c4e-bb6b4e9c5923.json): **pass**, needs-recheck; execution profile development.
+- [source:tutorial-replay / functional / source-test / agent](results/20261006191508618-ac0373eb-ea22-4663-9180-0fb7f7ee67d0.json): **pass**, needs-recheck; execution profile development.
 - [doc:README.md / text / source / agent](results/20261003205750252-56902b36-9574-4f84-be2f-fcd6e665e57a.json): **pass**, needs-recheck; execution profile development.
-- [doc:Docs/Tutorials/Your First Tao App.md / text / source / agent](results/20261006191520308-4aaddedc-5273-4cff-89e2-d8bfdb6c01a0.json): **pass**, current; execution profile development.
+- [doc:Docs/Tutorials/Your First Tao App.md / text / source / agent](results/20261006191520308-4aaddedc-5273-4cff-89e2-d8bfdb6c01a0.json): **pass**, needs-recheck; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-data/SKILL.md / text / source / agent](results/20261003205752366-4daddc71-50f1-421e-8a2b-456b56efe373.json): **pass**, needs-recheck; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-run-and-ship/SKILL.md / text / source / agent](results/20261003205754511-613435ca-99fb-4756-95c5-55ab0e584a7a.json): **pass**, needs-recheck; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-testing/SKILL.md / text / source / agent](results/20261003205755510-555b36a3-00d8-4e85-ab87-b34d248e6f54.json): **pass**, needs-recheck; execution profile development.
@@ -93,7 +93,7 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - [visual:notebook / visual / tablet-dark / developer](results/20261003215642084-91c248d9-653a-46de-883b-0936ebfd4f4c.json): **pass**, needs-recheck; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-create/SKILL.md / text / source / agent](results/20261003205751575-29aa8baa-6053-49ba-8ea0-614742016167.json): **pass**, needs-recheck; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-project/SKILL.md / text / source / agent](results/20261003205753790-3f282d51-cff3-4af7-bf17-8cd415f2eed2.json): **pass**, needs-recheck; execution profile development.
-- [source:tutorial-replay / functional / browser-preview / agent](results/20261006191100850-4980bc1b-437a-4549-b0d8-59c50c1a4287.json): **pass**, current; execution profile development.
+- [source:tutorial-replay / functional / browser-preview / agent](results/20261006191100850-4980bc1b-437a-4549-b0d8-59c50c1a4287.json): **pass**, needs-recheck; execution profile development.
 
 ## Unresolved findings and accepted limitations
 
@@ -101,7 +101,10 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - QA-TUTORIAL-ENTRY (fixed-awaiting-qa; major; phase 1): the tutorial omits the execution instructions
 - QA-README-AVAILABILITY (fixed-awaiting-qa; major; phase 1): the front door mixes future and initial release surfaces
 - QA-NOTEBOOK-DARK-CAPTURE (triaged; major; phase 1): one starter scenario has no usable image
+- QA-TUTORIAL-NAVIGATION (closure-needs-recheck; major; phase 1): navigation choices read as one label
+- QA-TUTORIAL-VERTICAL-SPACE (closure-needs-recheck; minor; phase 1): phone sections are separated by a large empty area
 - QA-TUTORIAL-DARK-PALETTE (accepted-limitation; minor; phase 1): dark scenario retains the light presentation
+- QA-CAPTURE-OVERLAY (closure-needs-recheck; minor; phase 1): desktop evidence contains a transient zoom indicator
 - QA-HNREADER-CAPTURE (triaged; major; phase 2): The wrapping state remains unreviewed
 - QA-IDE-README-SHIPPING (fixed-awaiting-qa; minor; phase 1): Extension README promises shipping and links a checkout-only route
 - QA-README-COMMAND-PREFIX (fixed-awaiting-qa; minor; phase 1): README command table uses tao where only ./tao works
@@ -115,6 +118,7 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - QA-SKILL-TESTING-REVIEW (fixed-awaiting-qa; major; phase 1): Testing skill sends users to tao review
 - QA-STARTER-AGENTS-LATER-TOOLS (fixed-awaiting-qa; major; phase 1): Starter agent guide makes tao review part of the edit loop
 - QA-STARTER-DESIGN-COMMENT (fixed-awaiting-qa; minor; phase 1): Release-1 starter design comment names removed element defaults
+- QA-TUTORIAL-RENAME-PROSE (closure-needs-recheck; minor; phase 1): Tutorial explains syntax its snippet does not use
 - QA-NOTEBOOK-PANEL-STRETCH (closure-needs-recheck; major; phase 1): Notebook panels and rows grow to fill spare height
 - QA-NOTEBOOK-TABLET-COLUMN (closure-needs-recheck; minor; phase 1): the Notebook column hugs the left edge on tablet
 - QA-HNREADER-SKETCH-FIXTURES (fixed-awaiting-qa; minor; phase 2): committed Studio sketches ship inside the HNReader demo

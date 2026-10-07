@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, Platform, ReleaseCapabilities } from '@shared'
 import { QaScenarioApps } from './QaScenarioApps'
+import { QaTutorialProject } from './QaTutorialProject'
 
 const storyPlan = 'Docs/MVP Roadmap/Plan - Initial release QA.md'
 const internalDocument = /^(?:Docs\/(?:QA|Roadmap|MVP Roadmap)\/|agents\/|\.rulesync\/)|(?:^|\/)(?:AGENTS|CLAUDE)\.md$/u
@@ -271,11 +272,11 @@ export class QaInventory {
           desktop: 'QA views/desktop',
         },
         captureApp: 'ReadingList',
-        captureProject: '.artifacts/qa/tutorial-review',
+        captureProject: QaTutorialProject.path,
         captureSources: {
-          'phone-light': 'ReadingList.tao',
-          'phone-dark': 'ReadingList.tao',
-          desktop: 'ReadingList.tao',
+          'phone-light': QaTutorialProject.file,
+          'phone-dark': QaTutorialProject.file,
+          desktop: QaTutorialProject.file,
         },
       },
     ]
@@ -408,7 +409,7 @@ export class QaInventory {
       return 'Generated, vendor, or task artifact; not an authored repository document.'
     }
     if (
-      /^Docs\/QA\/(?:inventory\.json|dashboard\.md|capabilities\.md|release-\d\.md|results\/|runs\/|findings\/|evidence\/|inputs\/)/u
+      /^Docs\/QA\/(?:inventory\.json|dashboard\.md|capabilities\.md|release-\d\.md|results\/|runs\/|findings\/|evidence\/)/u
         .test(path)
     ) {
       return 'QA evidence or generated register output; excluded from its own freshness inputs.'

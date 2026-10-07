@@ -1,6 +1,7 @@
 import { Errors, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { QaCapture } from '../dev-cli-src/qa/QaCapture'
+import { QaTutorialProject } from '../dev-cli-src/qa/QaTutorialProject'
 
 async function review(artifactRoot: string, statuses: string[]): Promise<{ manifestPath: string }> {
   const manifestPath = FS.resolvePath('manifest.json', artifactRoot)
@@ -193,6 +194,23 @@ Describe('isolated QA capture', () => {
     await Expect(capture.run('app', { app: 'App', output: '.artifacts/absolute-json' })).rejects.toThrow(
       'QA capture was blocked',
     )
+  })
+
+  Test('stages the tutorial project from its committed source when the checkout has none', async () => {
+    const root = await mkTestDir('qa-capture-tutorial-')
+    await FS.writeText(FS.resolvePath(QaTutorialProject.source, root), 'use Text from @tao/ui\n// tutorial\n')
+    const staged: string[] = []
+    const capture = new QaCapture(root, async (project, options) => {
+      staged.push(await FS.readText(FS.resolvePath(QaTutorialProject.file, project)))
+      return await review(options.artifactRoot, ['captured'])
+    })
+    await capture.run(QaTutorialProject.path, { app: 'ReadingList', output: '.artifacts/tutorial-capture' })
+    Expect(staged).toEqual(['use Text from @tao/ui\n// tutorial\n'])
+    const receipt = await FS.readJson<{ originalProject: string; status: string }>(
+      FS.resolvePath('.artifacts/tutorial-capture/source-snapshot.json', root),
+    )
+    Expect(receipt.originalProject).toBe(await FS.realPath(FS.resolvePath(QaTutorialProject.path, root)))
+    Expect(receipt.status).toBe('complete')
   })
 
   Test('rejects scratch ancestors before making any output or staging directories', async () => {

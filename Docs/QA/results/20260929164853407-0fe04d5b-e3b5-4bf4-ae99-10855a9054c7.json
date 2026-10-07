@@ -19,10 +19,6 @@
     "architecture": "arm64",
     "runtime": "bun:1.4.2"
   },
-  "inputs": {
-    "source": "packages/cli/tao-cli",
-    "dependencySnapshot": "Docs/QA/inputs/05cbff5f9dfc1dec547312675fc241fe7cc49dfa9a7d639908466aceb22f3c0a.json"
-  },
   "surfaceId": "visual:notebook",
   "dimension": "visual",
   "outcome": "friction",

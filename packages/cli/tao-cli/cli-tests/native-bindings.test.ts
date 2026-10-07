@@ -97,7 +97,7 @@ action Exercise() {
   Test('reruns the CLI with identical output and leaves unchanged files untouched', async () => {
     await withTaoFixture(checkedProjectFile, async root => {
       const out = FS.resolvePath('Generated', root)
-      const args = ['bridge', 'expo-haptics', '--source', 'expo', '--from', fromDirectory, '--out', out]
+      const args = ['bindings', 'generate', 'expo-haptics', '--source', 'expo', '--from', fromDirectory, '--out', out]
       const generated = await runTaoCliForTest(args)
       Expect(generated.exitCode).toBe(0)
       Expect(generated.stdout).toContain('Generated native bindings')
