@@ -52,7 +52,9 @@ whether other `Verify` runs are in flight, with the sizing reasoning beside the 
 and repository variables overriding them; read the workflow for the current numbers. Every
 partition and the aggregate read that resolved count. A cancelled or failed partition records no
 green tree. It proves the portable gates and, through `--hosted-linux`, the host gates the
-catalog marks `runsOnHostedLinux`; the local complement proves the rest. Read the
+catalog marks `runsOnHostedLinux`; the local complement proves the rest. Each hosted browser gate
+reserves its whole runner (its catalog `cost` equals the runner's vCPUs): packed beside other nodes
+they ran two to four times their solo time and flaked, and the idle slots cost about 40 s a gate. Read the
 current workflow and lane membership when deciding what the complement is; a gate the workflow
 admits leaves the local list.
 

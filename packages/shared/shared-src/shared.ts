@@ -79,6 +79,7 @@ export {
   VerificationTimeouts,
 }
 
+export { waitForProcessReadiness } from './ProcessReadiness'
 export { ReleaseToolchain } from './ReleaseToolchain'
 
 export { type FirebaseConnection, readFirebaseConnections } from './FirebaseConnections'

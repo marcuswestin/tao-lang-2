@@ -3,8 +3,8 @@ import {
   inspectMaintainedNativeBindings,
   stageNativeBindingResources,
 } from '@native-bindings'
-import { Errors, FS, HCI, Platform, ReleaseCapabilities, type ReleasePhase } from '@shared'
-import { context } from 'esbuild'
+import { Errors, FS, HCI, Platform, ProcessTree, ReleaseCapabilities, type ReleasePhase } from '@shared'
+import { context, stop } from 'esbuild'
 import {
   BUILD_RECORD_NAME,
   buildInputIdentity,
@@ -230,5 +230,28 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
 }
 
 if (import.meta.main) {
-  await buildIdeExtension()
+  let buildFailed = false
+  try {
+    await buildIdeExtension()
+  } catch (error) {
+    buildFailed = true
+    throw error
+  } finally {
+    if (!Platform.runtimeProcess.argv.includes('--watch')) {
+      try {
+        let owned: ReturnType<typeof ProcessTree.descendants>
+        try {
+          owned = ProcessTree.descendants(Platform.runtimeProcess.pid)
+        } finally {
+          await stop()
+        }
+        await ProcessTree.waitForTrackedExit(owned)
+      } catch (error) {
+        if (!buildFailed) {
+          throw error
+        }
+        HCI.logProcessError('editor', `Build cleanup could not be verified: ${Errors.messageOf(error)}`)
+      }
+    }
+  }
 }

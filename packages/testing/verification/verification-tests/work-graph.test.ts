@@ -1,5 +1,5 @@
-import { Errors, FS, ProcessTree, type TrackedProcess } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
+import { Errors, FS, Platform, ProcessTree, type TrackedProcess } from '@shared'
+import { Deferred, Describe, Expect, mkTestDir, settle, Test, testOverrideSlot, until } from '@shared/test'
 import {
   type WorkCommand,
   WorkGraph,
@@ -8,6 +8,19 @@ import {
   type WorkRunResult,
   type WorkState,
 } from '../verification-src/WorkGraph'
+
+const mutableProcessTree = ProcessTree as unknown as {
+  groupMembers: typeof ProcessTree.groupMembers
+  signalGroup: typeof ProcessTree.signalGroup
+}
+const groupMembersOverride = testOverrideSlot({
+  read: () => ProcessTree.groupMembers,
+  write: value => mutableProcessTree.groupMembers = value,
+})
+const signalGroupOverride = testOverrideSlot({
+  read: () => ProcessTree.signalGroup,
+  write: value => mutableProcessTree.signalGroup = value,
+})
 
 async function publishedProcess(path: string): Promise<TrackedProcess | undefined> {
   if (!await FS.isFile(path)) {
@@ -455,6 +468,31 @@ Describe('work graph scheduling', () => {
     Expect(run.started).toEqual(['blocker', 'wide', 'cheap'])
   })
 
+  Test('runs a node as wide as the whole run with nothing beside it', async () => {
+    // A hosted browser smoke reserves all four slots of a 4-vCPU runner (HOSTED_BROWSER_LANE_COST):
+    // it waits for running work to drain, and nothing starts beside it until it finishes.
+    const run = schedule([
+      { held: true, name: 'before', priority: 2 },
+      { cost: 4, held: true, name: 'browser', priority: 1 },
+      { name: 'after-a' },
+      { name: 'after-b' },
+    ], { jobs: 4 })
+    await settle(2)
+
+    Expect(run.started).toEqual(['before'])
+    run.release('before')
+    await until(() => run.started.includes('browser'), { description: 'the full-width node to be admitted' })
+    await settle(2)
+
+    Expect(run.started).toEqual(['before', 'browser'])
+    Expect(run.stateOf('browser').slots).toBe(4)
+    run.release('browser')
+    const result = await run.finished
+
+    Expect(result.capacity).toBe(4)
+    Expect(run.started.slice(2).toSorted()).toEqual(['after-a', 'after-b'])
+  })
+
   Test('starts a higher-priority node first, whatever the measured durations say', async () => {
     const run = schedule([
       { name: 'cheap' },
@@ -613,7 +651,7 @@ Describe('work graph scheduling', () => {
       run: {
         args: [
           '-c',
-          'echo $$ > "$3"; sleep 300 & echo $! > "$1"; echo ready; while [ ! -f "$2" ]; do sleep 0.01; done; echo armed; exit 0',
+          'echo $$ > "$3"; sleep 300 & echo $! > "$1"; echo ready; while [ ! -f "$2" ]; do sleep 0.01; done; echo armed; while :; do sleep 300; done',
           'work-graph',
           descendantPath,
           releasePath,
@@ -653,6 +691,333 @@ Describe('work graph scheduling', () => {
       idleTimeoutMs: 30_000,
     })
     await assertDescendantTimeout(state, descendantPath, releasePath, 100)
+  })
+
+  Test('a retained child cannot orphan a new child from its termination handler', async () => {
+    const root = await mkTestDir('work-graph-late-child-')
+    const release = FS.resolvePath('release', root)
+    const state = WorkGraph.createState({
+      name: 'late-child',
+      run: {
+        command: '/bin/sh',
+        args: [
+          '-c',
+          `sh -c 'trap "trap \\\"\\\" TERM; sleep 300 & echo late:\\$!; exit 0" TERM; echo held:$$; while :; do :; done' & echo parent:$$; while [ ! -f ${
+            JSON.stringify(release)
+          } ]; do sleep 0.01; done; exit 7`,
+        ],
+      },
+      timeoutMs: 30_000,
+    })
+    let finished = false
+    let group: number | undefined
+    const run = WorkGraph.run([state], { timeoutPolicy: 'bounded', watchInterrupt: () => () => {} })
+      .finally(() => {
+        finished = true
+      })
+    try {
+      await until(() => state.fullOutput.includes('held:') && state.fullOutput.includes('parent:'), {
+        timeoutPolicy: 'bounded',
+      })
+      group = Number(/parent:(\d+)/.exec(state.fullOutput)?.[1])
+      await FS.writeText(release, '')
+      const latePid = await until(() => Number(/late:(\d+)/.exec(state.fullOutput)?.[1]) || undefined, {
+        timeoutPolicy: 'bounded',
+      })
+      await until(() => finished, { description: 'late child teardown', timeoutPolicy: 'bounded' })
+      await run
+      Expect(state.exitCode).toBe(7)
+      Expect(ProcessTree.identities([latePid]).has(latePid)).toBe(false)
+    } finally {
+      await FS.writeText(release, '')
+      if (group !== undefined) {
+        ProcessTree.signalGroup(group, 'SIGKILL')
+      }
+      await run
+      await FS.remove(root)
+    }
+  })
+
+  Test(
+    'a failed command tears down inherited-pipe and redirected descendants after preserving its verdict',
+    async () => {
+      const root = await mkTestDir('tao-work-graph-failed-descendants-')
+      const parentPath = FS.resolvePath('parent.pid', root)
+      const inheritedPath = FS.resolvePath('inherited.pid', root)
+      const redirectedPath = FS.resolvePath('redirected.pid', root)
+      const releasePath = FS.resolvePath('release', root)
+      const childScript = `process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)`
+      const script = `
+      import { existsSync, writeFileSync } from 'node:fs'
+      import { spawn } from 'node:child_process'
+      writeFileSync(${JSON.stringify(parentPath)}, String(process.pid))
+      const childScript = ${JSON.stringify(childScript)}
+      const inherited = spawn(process['execPath'], ['-e', childScript], {
+        detached: true,
+        stdio: ['ignore', 'inherit', 'inherit'],
+      })
+      const redirected = spawn(process['execPath'], ['-e', childScript], {
+        detached: true,
+        stdio: 'ignore',
+      })
+      writeFileSync(${JSON.stringify(inheritedPath)}, String(inherited.pid))
+      writeFileSync(${JSON.stringify(redirectedPath)}, String(redirected.pid))
+      inherited.unref()
+      redirected.unref()
+      process['stdout'].write('suite ready\\n')
+      const poll = setInterval(() => {
+        if (existsSync(${JSON.stringify(releasePath)})) {
+          clearInterval(poll)
+          process['stdout'].write('suite verdict: deliberate failure\\n')
+          process['exit'](7)
+        }
+      }, 10)
+    `
+      const state = WorkGraph.createState({
+        name: 'failed-suite-with-descendants',
+        run: { args: ['-e', script], command: Platform.runtimeProcess.execPath },
+      })
+      const finished = WorkGraph.run([state], { timeoutPolicy: 'bounded', watchInterrupt: () => () => {} })
+      const owned: TrackedProcess[] = []
+      try {
+        const parent = await until(() => publishedProcess(parentPath), {
+          description: 'failed suite parent to publish a process identity',
+        })
+        owned.push(parent)
+        for (const path of [inheritedPath, redirectedPath]) {
+          owned.push(
+            await until(() => publishedProcess(path), {
+              description: 'failed suite descendant to publish a process identity',
+            })!,
+          )
+        }
+        await until(() => state.fullOutput.includes('suite ready\n'), {
+          description: 'failed suite to publish its release handshake',
+        })
+        await FS.writeText(releasePath, '')
+        const result = await finished
+
+        Expect(state.status).toBe('failed')
+        Expect(state.exitCode).toBe(7)
+        Expect(state.failure?.kind).toBe('nonzero-exit')
+        Expect(state.fullOutput).toContain('suite verdict: deliberate failure')
+        Expect(state.fullOutput).toContain('Owned child processes outlived the command (')
+        Expect(state.fullOutput).toContain('terminated 2.')
+        for (const process of owned.slice(1)) {
+          Expect(ProcessTree.sameProcess(ProcessTree.identities([process.pid]).get(process.pid), process)).toBe(false)
+        }
+        Expect(WorkGraph.exitCodeFor(result)).toBe(1)
+      } finally {
+        await FS.writeText(releasePath, '')
+        for (const process of owned) {
+          if (ProcessTree.sameProcess(ProcessTree.identities([process.pid]).get(process.pid), process)) {
+            ProcessTree.signalTracked(ProcessTree.descendants(process.pid), 'SIGKILL')
+            if (ProcessTree.processGroupOf(process.pid) === process.pid) {
+              ProcessTree.signalGroup(process.pid, 'SIGKILL')
+            }
+            ProcessTree.signalTracked([process], 'SIGKILL')
+          }
+        }
+        await finished
+        await FS.remove(root)
+      }
+    },
+  )
+
+  Test('a successful command with a lingering owned child fails explicitly and is cleaned up', async () => {
+    const root = await mkTestDir('tao-work-graph-success-with-descendant-')
+    const parentPath = FS.resolvePath('parent.pid', root)
+    const descendantPath = FS.resolvePath('descendant.pid', root)
+    const releasePath = FS.resolvePath('release', root)
+    const script = `
+      import { existsSync, writeFileSync } from 'node:fs'
+      import { spawn } from 'node:child_process'
+      writeFileSync(${JSON.stringify(parentPath)}, String(process.pid))
+      const child = spawn(process['execPath'], ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], {
+        detached: true,
+        stdio: 'ignore',
+      })
+      writeFileSync(${JSON.stringify(descendantPath)}, String(child.pid))
+      child.unref()
+      process['stdout'].write('suite ready\\n')
+      const poll = setInterval(() => {
+        if (existsSync(${JSON.stringify(releasePath)})) {
+          clearInterval(poll)
+          process['stdout'].write('suite verdict: success\\n')
+          process['exit'](0)
+        }
+      }, 10)
+    `
+    const state = WorkGraph.createState({
+      name: 'successful-suite-with-descendant',
+      run: { args: ['-e', script], command: Platform.runtimeProcess.execPath },
+    })
+    const finished = WorkGraph.run([state], { timeoutPolicy: 'bounded', watchInterrupt: () => () => {} })
+    const owned: TrackedProcess[] = []
+    try {
+      owned.push(
+        await until(() => publishedProcess(parentPath), {
+          description: 'successful suite parent to publish a process identity',
+        })!,
+      )
+      owned.push(
+        await until(() => publishedProcess(descendantPath), {
+          description: 'successful suite descendant to publish a process identity',
+        })!,
+      )
+      await until(() => state.fullOutput.includes('suite ready\n'), {
+        description: 'successful suite to publish its release handshake',
+      })
+      await FS.writeText(releasePath, '')
+      const result = await finished
+
+      Expect(state.status).toBe('failed')
+      Expect(state.exitCode).toBe(1)
+      Expect(state.failure?.kind).toBe('nonzero-exit')
+      Expect(state.fullOutput).toContain('suite verdict: success')
+      Expect(state.fullOutput).toContain('Owned child processes outlived the command (')
+      Expect(state.fullOutput).toContain('terminated 1.')
+      Expect(ProcessTree.sameProcess(ProcessTree.identities([owned[1]!.pid]).get(owned[1]!.pid), owned[1]!)).toBe(false)
+      Expect(WorkGraph.exitCodeFor(result)).toBe(1)
+    } finally {
+      await FS.writeText(releasePath, '')
+      for (const process of owned) {
+        if (ProcessTree.sameProcess(ProcessTree.identities([process.pid]).get(process.pid), process)) {
+          ProcessTree.signalTracked(ProcessTree.descendants(process.pid), 'SIGKILL')
+          if (ProcessTree.processGroupOf(process.pid) === process.pid) {
+            ProcessTree.signalGroup(process.pid, 'SIGKILL')
+          }
+          ProcessTree.signalTracked([process], 'SIGKILL')
+        }
+      }
+      await finished
+      await FS.remove(root)
+    }
+  })
+
+  Test('a healthy command without descendants passes without teardown diagnostics', async () => {
+    const state = WorkGraph.createState({
+      name: 'healthy-command',
+      run: { args: ['-e', "process['stdout'].write('healthy\\n')"], command: Platform.runtimeProcess.execPath },
+    })
+
+    const result = await WorkGraph.run([state], { timeoutPolicy: 'bounded', watchInterrupt: () => () => {} })
+
+    Expect(state.status).toBe('passed')
+    Expect(state.fullOutput).toContain('healthy\n')
+    Expect(state.fullOutput).not.toContain('Owned child processes outlived the command')
+    Expect(WorkGraph.exitCodeFor(result)).toBe(0)
+  })
+
+  Test('a failed command without descendants keeps its exit code and output without teardown diagnostics', async () => {
+    const state = WorkGraph.createState({
+      name: 'failed-command-without-descendants',
+      run: {
+        args: ['-e', "process['stdout'].write('suite verdict: deliberate failure\\n'); process['exit'](7)"],
+        command: Platform.runtimeProcess.execPath,
+      },
+    })
+
+    const result = await WorkGraph.run([state], { timeoutPolicy: 'bounded', watchInterrupt: () => () => {} })
+
+    Expect(state.status).toBe('failed')
+    Expect(state.exitCode).toBe(7)
+    Expect(state.failure?.kind).toBe('nonzero-exit')
+    Expect(state.fullOutput).toContain('suite verdict: deliberate failure\n')
+    Expect(state.fullOutput).not.toContain('Owned child processes outlived the command')
+    Expect(WorkGraph.exitCodeFor(result)).toBe(1)
+  })
+
+  Test('group-inspection failures preserve failed verdicts and clean tracked children', async () => {
+    let denyGroupOperations = false
+    let groupMembersDenied = 0
+    let signalGroupDenied = 0
+    const originalGroupMembers = ProcessTree.groupMembers
+    const originalSignalGroup = ProcessTree.signalGroup
+    const restoreGroupMembers = groupMembersOverride.install(group => {
+      if (denyGroupOperations) {
+        groupMembersDenied += 1
+        Errors.throwHostEnvironment('fixture denied groupMembers', {
+          details: { fixtureInspection: 'proc_listpids', detail: 'x'.repeat(8_000) },
+        })
+      }
+      return originalGroupMembers(group)
+    })
+    const restoreSignalGroup = signalGroupOverride.install((group, signal) => {
+      if (denyGroupOperations) {
+        signalGroupDenied += 1
+        Errors.throwHostEnvironment('fixture denied signalGroup')
+      }
+      return originalSignalGroup(group, signal)
+    })
+    try {
+      for (const childExitCode of [0, 7]) {
+        const root = await mkTestDir(`work-graph-inspection-fault-${childExitCode}-`)
+        const childPath = FS.resolvePath('child.pid', root)
+        const releasePath = FS.resolvePath('release', root)
+        const script = `
+          import { existsSync, writeFileSync } from 'node:fs'
+          import { spawn } from 'node:child_process'
+          const child = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], {
+            detached: true,
+            stdio: 'ignore',
+          })
+          writeFileSync(${JSON.stringify(childPath)}, String(child.pid))
+          child.unref()
+          process['stdout'].write('inspection ready\\n')
+          const poll = setInterval(() => {
+            if (existsSync(${JSON.stringify(releasePath)})) {
+              clearInterval(poll)
+              process['exit'](${childExitCode})
+            }
+          }, 10)
+        `
+        const state = WorkGraph.createState({
+          name: `inspection-fault-${childExitCode}`,
+          run: { args: ['-e', script], command: Platform.runtimeProcess.execPath },
+        })
+        const finished = WorkGraph.run([state], { timeoutPolicy: 'bounded', watchInterrupt: () => () => {} })
+        let child: TrackedProcess | undefined
+        try {
+          child = await until(() => publishedProcess(childPath), {
+            description: 'inspection-fault child to publish its exact identity',
+          })
+          await until(() => state.fullOutput.includes('inspection ready\n'), {
+            description: 'inspection-fault parent to reach its release handshake',
+          })
+          denyGroupOperations = true
+          await FS.writeText(releasePath, '')
+          const result = await finished
+
+          Expect(groupMembersDenied).toBeGreaterThan(0)
+          Expect(signalGroupDenied).toBeGreaterThan(0)
+          Expect(state.exitCode).toBe(childExitCode === 0 ? 1 : 7)
+          Expect(state.failure?.kind).toBe('nonzero-exit')
+          Expect(state.fullOutput).toContain('Process cleanup inspection was incomplete:')
+          Expect(state.fullOutput).toContain('fixture denied groupMembers')
+          Expect(state.fullOutput).toContain('"fixtureInspection":"proc_listpids"')
+          Expect(state.fullOutput.length).toBeLessThan(4_500)
+          Expect(state.fullOutput).toContain(`(${child.pid})`)
+          Expect(ProcessTree.sameProcess(ProcessTree.identities([child.pid]).get(child.pid), child)).toBe(false)
+          Expect(WorkGraph.exitCodeFor(result)).toBe(1)
+        } finally {
+          denyGroupOperations = false
+          await FS.writeText(releasePath, '')
+          if (
+            child !== undefined && ProcessTree.sameProcess(ProcessTree.identities([child.pid]).get(child.pid), child)
+          ) {
+            ProcessTree.signalTracked([child], 'SIGKILL')
+            await ProcessTree.waitForTrackedExit([child])
+          }
+          await finished
+          await FS.remove(root)
+        }
+      }
+    } finally {
+      denyGroupOperations = false
+      restoreSignalGroup()
+      restoreGroupMembers()
+    }
   })
 
   Test('fail-fast stops an owned process tree and leaves an unrelated process alone', async () => {
@@ -763,6 +1128,24 @@ Describe('work graph scheduling', () => {
     Expect(state.exitCode).toBeNull()
     // The process never started, so there is nothing to have measured; absent, never a false `0`.
     Expect(state.cpuMs).toBeUndefined()
+  })
+
+  Test('names a signal the run never sent, in the reason and in the log a reader opens', async () => {
+    // The kernel's out-of-memory killer leaves a child no chance to print, so its log ends mid-test.
+    // A child that kills itself stands in for it: same signal, no output, nothing the graph sent.
+    const state = WorkGraph.createState({
+      name: 'killed-from-outside',
+      run: { args: ['-c', 'echo started; kill -KILL $$'], command: '/bin/sh' },
+    })
+
+    await WorkGraph.run([state], { timeoutPolicy: 'bounded', watchInterrupt: () => () => {} })
+
+    Expect(state.status).toBe('failed')
+    Expect(state.exitCode).toBeNull()
+    Expect(state.signal).toBe('SIGKILL')
+    Expect(state.failure?.message).toContain('killed by SIGKILL, which this run did not send')
+    Expect(state.fullOutput).toContain('started')
+    Expect(state.fullOutput).toContain('out-of-memory killer')
   })
 
   // PID-reuse safety moved with the code: `ProcessTree.signalTracked` now owns it, and

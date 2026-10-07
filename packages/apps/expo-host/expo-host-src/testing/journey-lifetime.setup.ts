@@ -1,5 +1,6 @@
 import { afterAll, beforeEach } from '@jest/globals'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { FS, Platform } from '@shared'
 
 // Nothing a device runs keeps a process alive, but journeys run on Node, where anything left open
 // holds the Jest worker after its journeys pass. Provider SDKs do leave things open: InstantDB's
@@ -54,10 +55,17 @@ globalThis.clearInterval = ((timer?: Parameters<typeof clearInterval>[0]) => {
   platform.clearInterval(timer)
 }) as typeof clearInterval
 
-afterAll(() => {
+afterAll(async () => {
   finished = true
   for (const timer of pending) {
     platform.clearTimeout(timer as Parameters<typeof clearTimeout>[0])
   }
   pending.clear()
+  const directory = Platform.runtimeProcess.env['TAO_TEST_RESOURCE_DIRECTORY']
+  if (directory !== undefined) {
+    await FS.writeJson(
+      FS.resolvePath(`worker-${Platform.runtimeProcess.pid}.json`, directory),
+      Platform.runtimeProcess.getActiveResourcesInfo(),
+    )
+  }
 })

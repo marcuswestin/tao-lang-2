@@ -206,6 +206,7 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
           : costs,
         files: remaining,
         fixedMs,
+        maxShards: tuning.maxShards,
         measuredMs: suiteMs === undefined
           ? undefined
           : fixedMs + Math.max(0, suiteMs - fixedMs) * TestShards.weightShare(remaining, inventory, costs),

@@ -500,9 +500,15 @@ export const runtimeProcess = {
   cwd: process.cwd.bind(process),
   env: process.env,
   execPath: process.execPath,
+  /** Resource kind snapshots are diagnostic evidence, rather than a claim of which handle leaked. */
+  getActiveResourcesInfo: () => process.getActiveResourcesInfo(),
   /** The current process id, for recording which process owns a resource. */
   get pid(): number {
     return process.pid
+  },
+  /** The current parent process id, without spawning a process-table command. */
+  get ppid(): number {
+    return process.ppid
   },
   /** The user id on POSIX hosts, or undefined where the platform has none. */
   get uid(): number | undefined {

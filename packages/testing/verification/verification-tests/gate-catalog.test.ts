@@ -286,8 +286,11 @@ Describe('gate catalog metadata', () => {
     // Shared preparation pays compiler startup once; a shard pays only its warm CLI overhead.
     Expect(GateCatalog.suiteTuning('tao-apps').fixedMs).toBe(800)
     Expect(GateCatalog.suiteTuning('tao-apps').shardCost).toBe(2)
-    // Jest's own pool already parallelizes its whole run, so splitting it only adds startups.
-    Expect(GateCatalog.suiteTuning('runtime-jest').shardable).toBe(false)
+    // Jest's own pool already fills one machine, so its shards are machines' worth: three, each
+    // keeping the whole suite's three-worker reservation, cold or measured.
+    Expect(GateCatalog.suiteTuning('runtime-jest').maxShards).toBe(3)
+    Expect(GateCatalog.suiteTuning('runtime-jest').coldShardCount).toBe(3)
+    Expect(GateCatalog.suiteTuning('runtime-jest').shardCost).toBe(3)
     Expect(GateCatalog.suiteTuning('tao-apps').shardable).toBeUndefined()
     Expect(GateCatalog.suiteTuning('cli/dev-cli').fixedMs).toBeUndefined()
     Expect(GateCatalog.BUN_SUITE_FIXED_MS).toBe(600)
@@ -410,9 +413,21 @@ Describe('gate catalog metadata', () => {
   Test('pins only the two claims measurement cannot make: the prepare chain and the gui floor', () => {
     // A Studio lane spends its wall time waiting on Metro, a browser, or a simulator, so one
     // accounting slot lets those host waits overlap the CPU-heavy package nodes.
+    // A browser smoke ported to hosted Linux after studio-agent-browser starved there packed beside
+    // other gates instead reserves the whole 4-vCPU runner, so its partition runs it alone.
+    const reservedHosted = [
+      'keyboard-navigation-smoke',
+      'studio-dialog-browser',
+      'studio-metro-refresh',
+      'studio-network-simulation',
+      'studio-smoke-simulated-user',
+    ]
     for (const name of HOST_ONLY_GATES) {
-      Expect(nodeOf(name).cost).toBe(GateCatalog.STUDIO_LANE_COST)
+      Expect(nodeOf(name).cost).toBe(
+        reservedHosted.includes(name) ? GateCatalog.HOSTED_BROWSER_LANE_COST : GateCatalog.STUDIO_LANE_COST,
+      )
     }
+    Expect(GateCatalog.HOSTED_BROWSER_LANE_COST).toBe(4)
     for (const name of STUDIO_BROWSER_SMOKES) {
       Expect(nodeOf(name).priority).toBeUndefined()
     }
@@ -445,7 +460,14 @@ Describe('gate catalog metadata', () => {
 
   Test('only browser gates proved on hosted Linux stay in a hosted Linux lane that skips unsandboxed gates', () => {
     const hostedLinux = HOST_ONLY_GATES.filter(name => GateCatalog.metadata(name).runsOnHostedLinux === true)
-    Expect(hostedLinux.toSorted()).toEqual(['studio-dialog-browser', 'studio-metro-refresh', 'studio-smoke'])
+    Expect(hostedLinux.toSorted()).toEqual([
+      'keyboard-navigation-smoke',
+      'studio-dialog-browser',
+      'studio-metro-refresh',
+      'studio-network-simulation',
+      'studio-smoke',
+      'studio-smoke-simulated-user',
+    ])
     for (const name of HOST_ONLY_GATES) {
       // A local sandboxed lane skips every one of them, hosted-Linux or not.
       Expect(GateCatalog.skippedUnsandboxed(name)).toBe(true)
@@ -454,6 +476,16 @@ Describe('gate catalog metadata', () => {
     // The native canary needs macOS, so no Linux runner can be its home.
     Expect(GateCatalog.metadata('studio-canary').runsOnHostedLinux).toBeUndefined()
     Expect(GateCatalog.skippedUnsandboxed('_typecheck', { hostedLinux: true })).toBe(false)
+  })
+
+  Test('refuses --hosted-linux anywhere but a Linux lane that skips unsandboxed gates', () => {
+    const refusal = GateCatalog.hostedLinuxRefusal({ hostedLinux: true }, 'linux')
+    Expect(refusal).toContain('goes with --skip-unsandboxed')
+    // A local lane does not keep these gates in the complement: verify-full runs them.
+    Expect(refusal).toContain('verify-complement leaves them to hosted Verify')
+    Expect(GateCatalog.hostedLinuxRefusal({ hostedLinux: true, skipUnsandboxed: true }, 'darwin')).toBe(refusal)
+    Expect(GateCatalog.hostedLinuxRefusal({ hostedLinux: true, skipUnsandboxed: true }, 'linux')).toBeUndefined()
+    Expect(GateCatalog.hostedLinuxRefusal({ skipUnsandboxed: true }, 'darwin')).toBeUndefined()
   })
 
   Test('marks every browser and native UI lane as requiring an unsandboxed host', () => {
@@ -549,7 +581,9 @@ Describe('gate catalog scheduling', () => {
       [
         'studio-smoke',
         'studio-proof-real-app',
-        'studio-smoke-simulated-user',
+        // studio-smoke-simulated-user reserves the whole hosted runner (HOSTED_BROWSER_LANE_COST), so
+        // a one-slot browser smoke stands in for it here.
+        'studio-agent-browser',
         'studio-canary',
         '_typecheck',
         '_tao-check',

@@ -4,10 +4,10 @@
 // handler, the mode gate, the two cloud gates, and the approval round trip that runs across two HTTP calls.
 import { loadSemanticSnapshot, Workspace } from '@compiler/workspace'
 import { FS } from '@shared'
-import { AfterAll, Deferred, Describe, Expect, mkTestDir, Test, until } from '@shared/test'
+import { AfterAll, Deferred, Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 import { AgentChatProvider } from '../studio-src/agent-chat/AgentChatProvider'
-import { conversationForTesting } from '../studio-src/agent-chat/AgentChatServer'
+import { AgentChat, conversationForTesting, streamTurn } from '../studio-src/agent-chat/AgentChatServer'
 import type { StudioProjectSession } from '../studio-src/StudioProjectSession'
 
 const PATH = 'App.tao'
@@ -147,6 +147,55 @@ function chat(
 }
 
 Describe('Studio agent chat server', () => {
+  Test(
+    'a cancelled response retains the completed conversation verdict instead of a closed-controller failure',
+    async () => {
+      const release = Deferred()
+      const model = new MockLanguageModelV3({
+        doStream: async () => ({
+          stream: new ReadableStream<StreamPart>({
+            async start(controller) {
+              controller.enqueue({ id: '0', type: 'text-start' })
+              controller.enqueue({ delta: 'early ', id: '0', type: 'text-delta' })
+              await release.promise
+              controller.enqueue({ delta: 'complete', id: '0', type: 'text-delta' })
+              controller.enqueue({ id: '0', type: 'text-end' })
+              controller.enqueue({
+                finishReason: { raw: undefined, unified: 'stop' },
+                type: 'finish',
+                usage: { inputTokens: { total: 1 }, outputTokens: { total: 1 } },
+              })
+              controller.close()
+            },
+          }) as never,
+        }),
+      })
+      const subject = session([])
+      const provider = new AgentChatProvider({}, model)
+      await AgentChat.handle(subject, 'enable', { enabled: true }, undefined, undefined, provider)
+      let history: { history: { status?: string; text?: string }[] } | undefined
+      try {
+        const captured = await withCapturedOutput(async () => {
+          const reader = streamTurn(subject, 'send', { message: 'answer' }, undefined, undefined, provider).getReader()
+          const early = await reader.read()
+          Expect(new TextDecoder().decode(early.value)).toContain('early ')
+          const cancelled = reader.cancel('fixture disconnect')
+          release.resolve()
+          await cancelled
+          await until(async () => {
+            history = await AgentChat.handle(subject, 'history', {}) as typeof history
+            return history?.history.at(-1)?.status !== undefined
+          })
+        })
+        Expect(captured.stdout).toContain('fixture disconnect')
+        Expect(history?.history.at(-1)?.status).toBe('complete')
+        Expect(history?.history.at(-1)?.text).toBe('early complete')
+      } finally {
+        release.resolve()
+      }
+    },
+  )
+
   Test('a mode change serializes behind an active turn and silences its stale stream', async () => {
     const started = Deferred()
     const release = Deferred()

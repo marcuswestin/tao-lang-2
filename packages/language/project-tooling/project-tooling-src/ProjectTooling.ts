@@ -14,6 +14,10 @@ export type ProjectToolingOptions = {
   onResult?: (result: ProjectToolingResult) => void
   /** Receives watcher or refresh failures that cannot be returned from a file event. */
   onError?: (error: unknown) => void
+  /** Cancels watch startup; a completed watch is owned by its dispose method. */
+  startupSignal?: AbortSignal
+  /** Reports the current initial-refresh or watcher readiness wait. */
+  onStartupProgress?: (phase: string) => void
 }
 
 /** One span in a generated contract and its exact originating Tao span. */

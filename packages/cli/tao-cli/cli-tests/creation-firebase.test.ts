@@ -29,7 +29,8 @@ Describe('tao create Firebase', () => {
     Expect(plain['ANotebookFor.test.tao']).not.toContain('use Firebase')
 
     // The validation-tools lowering only adds lines to the plain project, so the one journey below,
-    // run on the validation-tools project, also stands for the plain project.
+    // run on the validation-tools project, also stands for the plain project's journeys; the plain
+    // project is still validated on its own, since an added line could supply what it lacks.
     const files = lowerCreationPlan(plan, { provider: 'firebase', validationTools: true })
     Expect(files['Auth.tao']).toContain('set Flow.Email = "tao-hosted-validation@example.test"')
     Expect(files['Auth.tao']).toContain('set Flow.Password = "Tao-validation-only-2026!"')
@@ -44,31 +45,46 @@ Describe('tao create Firebase', () => {
       }
     }
 
-    // Swap the sign-in app's auth for a probe that rejects the wrong registration mode and add a
-    // sign-up twin, so the same journey proves both registration values reach the provider.
     const testFile = 'ANotebookFor.test.tao'
+    const plainRoot = await mkTestDir('tao-create-firebase-plain-')
+    try {
+      await writeCreationFiles(plainRoot, plain)
+      await ProjectIdentity.ensure(plainRoot)
+      await runFix(plainRoot, { cwd: plainRoot })
+      Expect(await errorsIn(await Workspace.open(plainRoot), plainRoot, ['App.tao', 'Scenarios.tao', testFile]))
+        .toEqual([])
+    } finally {
+      await FS.remove(plainRoot)
+    }
+
+    // The generated sign-in journeys stay as generated, on the stock TestAuth. Beside them, probe
+    // twins of the sign-in app reject the wrong registration mode, so the same run also proves both
+    // registration values reach the provider.
     const source = files[testFile]!
     const signInApp = source.match(/app ANotebookForSignInTest \{[\s\S]*?\n\}/u)?.[0]
-    Expect(signInApp).toBeDefined()
-    Expect(source).toContain('test "creates an account" {\n      run ANotebookForSignInTest')
+    const signInJourney = source.match(/ {3}test "signs in with an existing account" \{[\s\S]*?\n {3}\}/u)?.[0]
+    const createJourney = source.match(/ {3}test "creates an account" \{[\s\S]*?\n {3}\}/u)?.[0]
+    Expect(signInApp).toContain('Auth TestAuth { }')
+    Expect(signInJourney).toContain('run ANotebookForSignInTest')
+    Expect(createJourney).toContain('run ANotebookForSignInTest')
+    const probeApp = (twin: string, expectedRegister: boolean) =>
+      signInApp!.replaceAll('SignInTest', `${twin}Test`).replace('sign-in-test', `${twin.toLowerCase()}-test`)
+        .replace('Auth TestAuth { }', `Auth ProbeAuth { ExpectedRegister ${expectedRegister} }`)
+    const probeJourney = (journey: string, name: string, twin: string) =>
+      journey.replace(/test "[^"]*"/u, `test "${name}"`).replace(
+        'run ANotebookForSignInTest',
+        `run ANotebookFor${twin}Test`,
+      )
     files[testFile] = source.replace(
       'use TestAuth from @tao/auth/testing',
       'use TestAuth from @tao/auth/testing\nuse ProbeAuth from ./ProbeAuth',
     )
+      .replace(signInApp!, `${signInApp!}\n\n${probeApp('ProbeSignIn', false)}\n\n${probeApp('ProbeSignUp', true)}`)
       .replace(
-        signInApp!,
-        `${signInApp!.replace('Auth TestAuth { }', 'Auth ProbeAuth { ExpectedRegister false }')}
-
-${
-          signInApp!.replaceAll('SignInTest', 'SignUpTest').replace('sign-in-test', 'sign-up-test').replace(
-            'Auth TestAuth { }',
-            'Auth ProbeAuth { ExpectedRegister true }',
-          )
+        createJourney!,
+        `${createJourney!}\n${probeJourney(signInJourney!, 'signs in without the registration flag', 'ProbeSignIn')}\n${
+          probeJourney(createJourney!, 'creates an account with the registration flag', 'ProbeSignUp')
         }`,
-      )
-      .replace(
-        'test "creates an account" {\n      run ANotebookForSignInTest',
-        'test "creates an account" {\n      run ANotebookForSignUpTest',
       )
     files['ProbeAuth.tao'] = PROBE_AUTH_TAO
     files['ProbeAuth.ts'] = PROBE_AUTH_TS
@@ -79,16 +95,7 @@ ${
       await ProjectIdentity.ensure(root)
       await runFix(root, { cwd: root })
       const workspace = await Workspace.open(root)
-      const problems: string[] = []
-      for (const entry of ['App.tao', 'Scenarios.tao', testFile]) {
-        const result = await workspace.validate(FS.resolvePath(entry, root))
-        problems.push(
-          ...result.diagnostics.filter(diagnostic => diagnostic.severity === 'error').map(diagnostic =>
-            `${entry}: ${diagnostic.message}`
-          ),
-        )
-      }
-      Expect(problems).toEqual([])
+      Expect(await errorsIn(workspace, root, ['App.tao', 'Scenarios.tao', testFile])).toEqual([])
       const compiled = await workspace.compile(FS.resolvePath('App.tao', root))
       Expect([compiled.code, ...compiled.files.map(file => file.code)].join('\n')).toMatch(
         /\["DisplayName"\]:\s*\{[^}]*defaultValue: ""/u,
@@ -126,6 +133,24 @@ ${
       .toThrow(ReleaseCapabilities.diagnostic('auth', ReleaseCapabilities.profile(1)))
   })
 })
+
+/** errorsIn lists each entry's error diagnostics, prefixed with the entry, so a failure names its file. */
+async function errorsIn(
+  workspace: Awaited<ReturnType<typeof Workspace.open>>,
+  root: string,
+  entries: readonly string[],
+): Promise<string[]> {
+  const problems: string[] = []
+  for (const entry of entries) {
+    const result = await workspace.validate(FS.resolvePath(entry, root))
+    problems.push(
+      ...result.diagnostics.filter(diagnostic => diagnostic.severity === 'error').map(diagnostic =>
+        `${entry}: ${diagnostic.message}`
+      ),
+    )
+  }
+  return problems
+}
 
 /** Whether `extended` holds every line of `plain`, in order, with only lines added between them. */
 function linesExtend(plain: string, extended: string): boolean {

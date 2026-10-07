@@ -130,14 +130,14 @@ Test('Studio Metro serves new modules, fast-refreshes edits, and draws after a C
     })()`)
     await Time.sleep(500)
     await dragRenderBetween(browser, previewUrl, 'Updated', 'First', 'Second')
-    try {
-      await waitForSourceOrder(sourcePath, ['Text("First")', 'Text("Updated")', 'Text("Second")'])
-    } catch (error) {
+    const order = await waitForSourceOrder(sourcePath, ['Text("First")', 'Text("Updated")', 'Text("Second")'])
+    if (!order.inOrder) {
+      // The server refuses a Draw carrying a stale source version, so the order never changes: that is
+      // a product regression, so it fails as an assertion, carrying what the page sent and showed.
       const actions = await browser.evaluate('window.__taoMetroRefreshActions')
       const status = await browser.evaluate(`document.querySelector('.studio-status')?.textContent`)
-      Errors.throwHostEnvironment(`Draw after Code was not saved: ${JSON.stringify({ actions, status })}`, {
-        cause: error,
-      })
+      Expect({ drawSaved: false, actions, status, source: order.source })
+        .toEqual({ drawSaved: true, actions, status, source: order.source })
     }
     Expect(await browser.evaluate<number>('window.__taoMetroRefreshFrameLoads')).toBe(0)
     Expect(browser.browserFailures()).toEqual([])
@@ -295,9 +295,13 @@ async function replaceEditorSource(browser: StudioCdp, source: string): Promise<
   await browser.pressShortcut('s')
 }
 
-async function waitForSourceOrder(path: string, ordered: readonly string[]): Promise<void> {
+/** Waits for the source to hold `ordered` in that order; reports whether it did, with the last source read. */
+async function waitForSourceOrder(
+  path: string,
+  ordered: readonly string[],
+): Promise<{ inOrder: boolean; source: string }> {
   let source = ''
-  const updated = await Time.pollUntil(async () => {
+  const inOrder = await Time.pollUntil(async () => {
     source = await FS.readText(path)
     let previous = -1
     for (const text of ordered) {
@@ -309,11 +313,7 @@ async function waitForSourceOrder(path: string, ordered: readonly string[]): Pro
     }
     return true
   }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
-  if (!updated) {
-    Errors.throwHostEnvironment(
-      `Timed out waiting for Studio source order ${ordered.join(', ')}. Last source:\n${source}`,
-    )
-  }
+  return { inOrder: inOrder === true, source }
 }
 
 /** Drops the render reading `moved` midway between the renders reading `before` and `after`. */

@@ -126,9 +126,14 @@ export const ProjectTooling: ProjectToolingService = {
     return await refreshProject(inputRoot, options)
   },
   async watch(root, options) {
+    options.startupSignal?.throwIfAborted()
+    options.onStartupProgress?.('locating project')
     const projectRoot = await findProjectRoot(root) ?? FS.resolvePath(root)
     const { startProjectFileWatch } = await import('./ProjectFileWatch')
+    options.onStartupProgress?.('inspecting maintained native bindings')
     const inspected = await inspectMaintainedNativeBindings(options.nativeBindings)
+    options.startupSignal?.throwIfAborted()
+    options.onStartupProgress?.('preparing project packages')
     const receipt = inspected.status === 'fresh' && await FS.isDirectory(FS.resolvePath('.tao', projectRoot))
       ? new ProjectRefreshReceipt(
         projectRoot,

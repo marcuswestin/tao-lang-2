@@ -121,6 +121,12 @@ The Developer requests an explicit check-in before removing any temporary route 
 Implementation update (2026-09-22): the first `tao run` slice now generates its Expo host in the
 selected project's `.tao/cache/dev/runtime`, keeps Expo and dev-data state in that project, and uses a
 shared CLI/Studio owner with retained `.tao/local/sessions/` records. Bare `tao run` opens no target.
+Implementation update (2026-10-06): installed native-binding inspection uses its packaged declaration
+inputs, without module-relative repository roots. `tao run` announces project preparation and bounds
+its initial tooling watch to 120 seconds, reporting the phase still pending. Startup stop signals
+release the project lease. Installed Metro launch provenance stays in durable
+`.tao/local/resource-inventory/` state, discoverable through `tao resources`; source runs retain the
+machine resource index.
 The next branch implements local static web exports, local Electrobun `.app` builds, desktop dev
 opening, retained `.tao/local/builds/` records, and interactive build cleanup; it does not yet package
 or publish the standalone CLI, or implement native builds and shipping.

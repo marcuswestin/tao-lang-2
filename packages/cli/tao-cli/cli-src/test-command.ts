@@ -7,6 +7,7 @@ import { inPlace } from './in-place-files'
 import { findTaoFiles } from './tao-files'
 import { type FingerprintRequest, TestCache } from './test-cache'
 import { TestOutput, type TestOutputMode } from './test-output'
+import { testRunnerCompletion } from './test-runner-lifecycle'
 import { maintainedNativeBindingIdentity } from './toolchain-packages'
 
 /** CompiledTaoTests declares the files and generated manifest for one Tao test run. */
@@ -160,6 +161,7 @@ export async function runSharedTaoTestRun(
   HCI.logProcessInfo('test', 'Running shared Tao tests')
   const run = await runCompiledTaoTests(compiled, mode, options.name, testPaths)
   const failed = run.result === undefined || run.result.error !== undefined || run.result.exitCode !== 0
+    || run.result.signal !== null
   // The work graph owns a distinct log for every shard; writing the normal run-root log here would
   // make concurrent readers overwrite one another.
   TestOutput.reportFinishedRun({ failed, mode, output: run.output })
@@ -640,10 +642,17 @@ async function runCompiledTaoTests(
   // An installed Tao resolves the host's packages, Jest among them, on first use and links them beside
   // the host's files, where Jest looks; inside a checkout this does nothing.
   await HostDependencies.ensure()
+  // Shared compiled runs may serve several shards concurrently. Each child owns its snapshots.
+  const resourceDirectory = FS.resolvePath(`jest-resources-${Platform.randomUUID()}`, compiled.runRoot)
+  await FS.mkdir(resourceDirectory)
   const result = await RuntimeTesting.JestTransformCache.run(
     runtimeRoot,
     async cacheDirectory =>
       await CLI.run(await testNodePath(), {
+        completion: testRunnerCompletion(),
+        processPolicy: 'test',
+        detached: true,
+        idleOutputMs: 120_000,
         args: [
           await testJestPath(runtimeRoot),
           '--config',
@@ -663,6 +672,7 @@ async function runCompiledTaoTests(
           [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath,
           [RuntimeTesting.TestHarnessFiles.ENTRYPOINTS_ENV]: entrypoints.directory,
           [RuntimeTesting.JestTransformCache.ENV]: cacheDirectory,
+          TAO_TEST_RESOURCE_DIRECTORY: resourceDirectory,
           ...(journeyObservationDirectory === undefined
             ? {}
             : { [RuntimeTesting.JourneyObservations.ENV]: journeyObservationDirectory }),
@@ -675,6 +685,7 @@ async function runCompiledTaoTests(
       }),
   )
   writer?.flush()
+  await FS.remove(resourceDirectory)
   return { output: Buffer.concat(chunks).toString('utf8'), result }
 }
 

@@ -57,11 +57,54 @@
   FFI calls have no documented saved-errno guarantee. Preserve zombie identities, uncertain-identity
   errors and bundled Node-helper behavior. No fallback, permission change or inspection weakening
   was introduced in the native bridge work.
+- **Related observation (2026-10-06):** `feat/test-process-termination` stopped `verify-changed` at five
+  `project-dev-session.test.ts` assertions expecting a version-2 identity record and receiving version 1.
+  The unchanged focused file reproduced all five failures. `ProjectDevSession.acquire` still uses
+  `ProcessTree.processTable`, whose Darwin implementation launches `ps`; a direct bounded probe was
+  denied with `operation not permitted: ps`. The named host capability probe reported process-table
+  access available. Retain this as a sandbox verification limitation, not proof of successful full
+  verification or a reason to weaken identity inspection. Logs:
+  `.artifacts/logs/verify-changed/2026-10-06T17-35-43-839Z-65220-22a913f9/shared_4.log`,
+  `.artifacts/logs/agent/test-file/2026-10-06T17-36-14-969Z-71871.log`, and
+  `.artifacts/logs/agent/capabilities/2026-10-06T17-41-04-678Z-32576.log`.
+  The session acquisition dependency is now removed: the shared runtime exposes the current
+  parent PID, and acquisition reads both exact kernel identities directly. The focused file
+  passes all nine cases, including a denied process-table fixture and the existing orphan
+  confirmation, PID-reuse and refusal checks. This preserves the conservative legacy fallback
+  when exact identity inspection fails. Log:
+  `.artifacts/logs/agent/test-file/2026-10-06T18-15-41-071Z-2831.log`.
+  This fixes one repository dependency; it does not establish general subprocess or signal access.
+  The same session could inspect the start identity of its failed wrapper, but an exact-PID
+  `Platform.signalProcess(pid, 'SIGTERM')` returned `kill() failed: EPERM: Operation not permitted`.
+  Its test children were independently absent; stopping that wrapper required the Developer's
+  terminal. Do not interpret failed signalling as completed cleanup.
+- **Host inspection follow-up (2026-10-06):** A passing Studio launch smoke test in
+  `.artifacts/logs/verify-complement/2026-10-06T19-25-40-697Z-77059-d294c94c/studio-smoke.log`
+  failed its outer cleanup inspection. The native descendant query returned zero bytes for an
+  enumerated PID while its liveness probe succeeded. Bounded error details now preserve the
+  inspection kind, requested owner, failing PID, returned size, backend and probe status.
+  The wrapper returned failure promptly and stopped its known children; this does not establish
+  the native failure's cause. The inspector now rechecks an incomplete enumerated identity up to
+  three times and validates its parent relationship before accepting a descendant. Persistent
+  unreadability, denied liveness probes and changed ownership still fail inspection. Focused
+  fixtures cover transient reads, permanent failures, exact identities and the shared helper
+  failure envelope; current host acceptance remains required.
+- **Identity and retry follow-up (2026-10-06):** The next Studio complement again passed the inner
+  launch test but failed cleanup with `identity-unreadable`, zero returned bytes and `probeStatus: live`:
+  `.artifacts/logs/verify-complement/2026-10-06T19-42-16-038Z-70048-2c40ccd5/studio-smoke.log`.
+  Three immediate native retries did not establish an exact identity. Retries now yield five
+  milliseconds between incomplete reads, for at most ten milliseconds on enumeration and fifteen
+  on a direct query. This is a bounded race mitigation, not a diagnosis of the original failure.
+  Direct identity queries also verify a zombie-aware record or an `ESRCH` result before returning
+  absence; unreadable live records can no longer bypass exact-identity joins. Confirmed zombies
+  still count as stopped for direct queries, while enumeration retains their identities. The
+  focused native fixture suite passes 41 cases, including permanent uncertainty and the shared
+  helper envelope. Final host acceptance remains unproved.
 - **Related observation (2026-10-06):** On `feat/tutorial-first-hour` at `eb1c7f95a`, sandboxed
   `verify-changed` stopped at five `project-dev-session.test.ts` assertions: `markParentReused`
   expected owner record version 2 but received 1. The unchanged focused test reproduced all five
-  failures. `ProjectDevSession.acquire` obtains its parent through `ProcessTree.processTable()`;
-  that Darwin path still invokes `ps` and throws on unsuccessful inspection, which `acquire`
+  failures. At that head, `ProjectDevSession.acquire` obtained its parent through `ProcessTree.processTable()`;
+  that Darwin path invoked `ps` and threw on unsuccessful inspection, which `acquire`
   catches before safely falling back to a v1 record. The denied-table cause is inferred from this
   path and the existing finding; these runs did not retain the swallowed inspection error. Logs:
   `.artifacts/logs/verify-changed/2026-10-06T17-20-10-490Z-11437-d3570906/shared_4.log` and
@@ -69,4 +112,38 @@
   The broad lane skipped 555 checks after this failure. No permissions or ownership policy changed.
 - **Acceptance:** Either a sandboxed lane's `processTable()` returns the real table, or the code and its
   tests state that the non-Darwin branch is out of scope on this host and nothing in a lane relies on it.
+- **Reviewed recovery (2026-10-06):** After explicit approval, a fresh start-time probe matched the
+  task's old wrapper, but sandboxed TERM still returned `operation not permitted`. The new named
+  `processes stop` host operation requires the exact kernel start identity and an isolated process
+  group with no children; it refuses changed identity, uncertain inspection and other group members.
+  TERM precedes KILL, with a fixed wait budget and final group-absence check. That operation stopped
+  the reviewed wrapper and its pending tool session returned. This adds a guarded recovery path,
+  rather than establishing general sandbox signal access. A reparented full-record zombie also no
+  longer triggers a live parent-change error; exact identities remain recorded and live mismatches
+  still fail. The focused native suite passes 42 cases; mutation tests reject removal of the zombie
+  exception and PID-reuse guard. The native transient-read failures still need host acceptance.
+- **Polling and group-join follow-up (2026-10-06):** Repeated ownership polls were synchronously
+  retrying already exited retained PIDs and recursively rewalking attached subtrees. A direct
+  incomplete read now returns immediately only when `ESRCH` proves absence; live and denied
+  observations retain the fixed retries and failure envelope. Ordinary polls walk attached trees
+  once, while cancellation and escalation still rewalk live retained owners for late forks.
+  Darwin group joins also inspect full kernel records after a successful signal probe, so an
+  unreaped zombie-only group does not keep a wrapper pending. Unreadable live members still fail.
+  Deterministic work-count, escaped-child, cancellation, zombie-only group and denied-read fixtures
+  cover these paths, with mutations rejecting removal of the early-absence and final-owner checks.
+  Complete final host verification remains required.
+- **Final review follow-up (2026-10-06):** An empty native group enumeration after a successful
+  signal probe is rechecked. Only `ESRCH` establishes absence; a still-signalable group or denied
+  probe reports the group, native routine, returned bytes and probe status. The fully identified
+  zombie-only case requires two matching observations of exact identities. A second enumeration
+  also discovers children forked after their listed parent exited. Deterministic live, denied,
+  absent, late-fork and changed-zombie fixtures cover those races.
+- **Retained host evidence (2026-10-06):** The final-source complement under concurrent iteration
+  failed after the launch assertions passed: `proc_pidinfo` returned zero bytes for a PID whose
+  signal probe still succeeded. The report preserved the PID, native routine and live probe status,
+  and the wrapper stopped survivors before returning. The same unchanged launch check then passed
+  separately in 49.7 seconds; direct native audits found both run roots, the reported PID and groups
+  absent. This does not establish why the first observation was unreadable. Its log remains at
+  `.artifacts/logs/verify-complement/2026-10-06T21-36-44-146Z-52210-94cdcad6/studio-smoke.log`.
+  Complete host proof must be renewed after integrating main.
 - **Source:** 2026-09-17 process-teardown implementation.

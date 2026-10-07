@@ -164,6 +164,8 @@ export type SuiteTuning = {
    * is the measurement — rather than guessing.
    */
   fixedMs?: number
+  /** The most shards this suite may become, for a runner whose own pool already fills a machine. */
+  maxShards?: number
   priority?: number
   /** File classes the suite reads; narrower than the default only where that is provable. */
   reads?: readonly SourceClass[]
@@ -270,13 +272,25 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
     reads: ['gen-parser', 'tao', 'ts'],
   }],
 
-  // Jest's own worker pool already parallelizes the whole run, so splitting it into single-worker
-  // processes adds startups without adding parallelism: 30 files in one process at `--maxWorkers=3`
-  // measure 19.7s, and the same files as three processes at one worker each measure 21.3s. It is
-  // handed a reservation and the matching `--maxWorkers`, and left whole.
+  // Jest's own worker pool already parallelizes a run, so on one machine more processes add startups
+  // without adding parallelism: 30 files in one process at `--maxWorkers=3` measured 19.7s, and as
+  // three single-worker processes 21.3s. Hosted Verify is many machines, though, and one process can
+  // only use one of them: in run 37503086586 this suite was a single 237s node, the longest in the
+  // run, and partition 2 took 355s because of it. Three shards, each keeping the whole suite's
+  // three-worker reservation, let the partition plan put each on its own machine; on one machine
+  // they wait for room like any other node. The count is a number of machines, not a quotient of the
+  // duration, which at the planner's 4s target would ask for dozens of Jest startups.
   [
     'runtime-jest',
-    { afterPreflight: true, cost: 3, priority: 4, reads: ['gen-parser', 'tao', 'ts'], shardable: false },
+    {
+      afterPreflight: true,
+      coldShardCount: 3,
+      cost: 3,
+      maxShards: 3,
+      priority: 4,
+      reads: ['gen-parser', 'tao', 'ts'],
+      shardCost: 3,
+    },
   ],
   // The Tao behavior tests validate and compile once per lane, then each `./tao test` shard runs
   // Jest against its own app roots in the shared compiled run.
@@ -439,6 +453,17 @@ const TYPECHECK_COST = 3
  * this lane's own graph, and machine-wide once `GateRunner` takes the lease of the same name.
  */
 const STUDIO_LANE_COST = 1
+/**
+ * A browser smoke ported to hosted Linux reserves the whole ubuntu-24.04 runner (4 vCPUs, the
+ * `runs-on` of every Verify job), so its partition runs it with nothing beside it. Packed beside
+ * other gates every ported smoke ran two to four times its solo time (studio-smoke 15 s to 64 s,
+ * studio-metro-refresh 80 s to 142 s), and studio-agent-browser starved outright: Verify run
+ * 37529644139 failed it twice on partition 7/11 at load ~10 on 4 CPUs, first an approval-box settle
+ * timeout, then a DevToolsActivePort timeout. The two gates ported at one slot then failed the same
+ * way: studio-metro-refresh in run 37535079423 (partition 19/20, load 9.5) and studio-dialog-browser
+ * in run 37543031174 (partition 3/20, load 6.9), both timing out on DevToolsActivePort.
+ */
+const HOSTED_BROWSER_LANE_COST = 4
 /** The release proof runs CPU-heavy Expo exports rather than waiting on an interactive host. */
 const SHIP_BUNDLE_PROOF_COST = 3
 /** Generous against a healthy canary run; a bound against a post-report hang regressing. */
@@ -602,6 +627,8 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       'studio-smoke',
       {
         ...studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts'),
+        // One slot, not HOSTED_BROWSER_LANE_COST: it drives no browser, and packed beside other gates
+        // it slows (15 s to 64 s) but passes, so reserving the runner would only lengthen the partition.
         runsOnHostedLinux: true,
       },
     ],
@@ -611,17 +638,25 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ],
     [
       'studio-smoke-simulated-user',
-      studioSmoke(
-        'studio-smoke-simulated-user',
-        'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts',
-      ),
+      {
+        ...studioSmoke(
+          'studio-smoke-simulated-user',
+          'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts',
+        ),
+        cost: HOSTED_BROWSER_LANE_COST,
+        runsOnHostedLinux: true,
+      },
     ],
     [
       'keyboard-navigation-smoke',
-      studioSmoke(
-        'keyboard-navigation-smoke',
-        'packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts',
-      ),
+      {
+        ...studioSmoke(
+          'keyboard-navigation-smoke',
+          'packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts',
+        ),
+        cost: HOSTED_BROWSER_LANE_COST,
+        runsOnHostedLinux: true,
+      },
     ],
     [
       'studio-dialog-browser',
@@ -630,6 +665,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
           'studio-dialog-browser',
           'packages/ides/studio-tooling/studio-smoke/studio-dialog-browser.test.ts',
         ),
+        cost: HOSTED_BROWSER_LANE_COST,
         runsOnHostedLinux: true,
       },
     ],
@@ -640,6 +676,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
           'studio-metro-refresh',
           'packages/ides/studio-tooling/studio-smoke/studio-metro-refresh.test.ts',
         ),
+        cost: HOSTED_BROWSER_LANE_COST,
         runsOnHostedLinux: true,
       },
     ],
@@ -649,10 +686,14 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ],
     [
       'studio-network-simulation',
-      studioSmoke(
-        'studio-network-simulation',
-        'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts',
-      ),
+      {
+        ...studioSmoke(
+          'studio-network-simulation',
+          'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts',
+        ),
+        cost: HOSTED_BROWSER_LANE_COST,
+        runsOnHostedLinux: true,
+      },
     ],
     // The canary is the one `gui` node `verify-full` runs, and a serial floor of its own, so it starts
     // at t=0, ahead of work that can be packed later. `gui` is also the resource name `GateRunner` takes a machine-wide lease under for
@@ -697,6 +738,21 @@ function isPrepare(name: string): boolean {
 function skippedUnsandboxed(name: string, options: { hostedLinux?: boolean } = {}): boolean {
   const gate = metadata(name)
   return gate.requiresUnsandboxed === true && !(options.hostedLinux === true && gate.runsOnHostedLinux === true)
+}
+
+/**
+ * hostedLinuxRefusal says why a lane may not take `--hosted-linux`, or nothing when it may: the flag
+ * belongs to a hosted Verify Linux partition, which also skips unsandboxed gates.
+ */
+function hostedLinuxRefusal(
+  options: { hostedLinux?: boolean; skipUnsandboxed?: boolean },
+  hostPlatform: string,
+): string | undefined {
+  if (options.hostedLinux !== true || (options.skipUnsandboxed === true && hostPlatform === 'linux')) {
+    return undefined
+  }
+  return '--hosted-linux is for a hosted Verify Linux runner and goes with --skip-unsandboxed; locally,'
+    + ' verify-full runs those gates and verify-complement leaves them to hosted Verify.'
 }
 
 /**
@@ -858,6 +914,7 @@ export const GateCatalog = {
   GUI_PRIORITY,
   GUI_LEASE_HELD_ENV_KEY,
   GUI_RESOURCE,
+  HOSTED_BROWSER_LANE_COST,
   PREPARE_PRIORITY,
   STUDIO_LANE_COST,
   STUDIO_SMOKE_POOL,
@@ -865,6 +922,7 @@ export const GateCatalog = {
   TAO_TEST_BUDGET_KEY: WorkGraph.BUDGET_ENV_KEYS.taoTest,
   TYPECHECK_COST,
   dependenciesOf,
+  hostedLinuxRefusal,
   isPrepare,
   isRecordable,
   machineWidth,
