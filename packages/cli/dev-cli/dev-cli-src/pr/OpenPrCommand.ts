@@ -17,9 +17,10 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
  * `open-pr` is the one command that pushes a branch, opens (or reuses) its pull request against
  * `main`, and stays attached to watch the checks the push starts. Auto-merge stays off unless the
  * caller explicitly enables it; with it on, the command is the whole landing route: it also starts
- * the local complement lane (`verify-complement`, the host-only gates hosted Verify does not admit)
- * in parallel with the hosted run, and the two halves conclude together through the `Verify (host)`
- * status the lane posts on the head. A complement failure while Verify still runs cancels that run
+ * the local complement lane (`verify-complement`, the host-only gates hosted Verify does not run)
+ * in parallel with the hosted run, and posts its verdict as the `Verify (host)` status on the head.
+ * That status is not a required check, so GitHub can merge on a green Verify before the complement
+ * finishes; the halves are not joined by GitHub. A complement failure while Verify still runs cancels that run
  * and turns auto-merge off, since the head will not land as it is; one after GitHub already merged
  * names `land-fix` as the way the fix reaches `main`. The reviewed
  * merge message is the pull request's title and description and, verbatim, auto-merge's commit

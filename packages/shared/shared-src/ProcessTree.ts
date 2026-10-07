@@ -73,6 +73,41 @@ function darwinDescendantProcesses(rootPid: number): TrackedProcess[] {
   return inspectDarwinProcesses('descendants', [rootPid]).map(({ group: _group, ...process }) => process)
 }
 
+/**
+ * refreshDescendants retains every owned identity and discovers children of escaped owners.
+ * A recursive root walk already covers its attached descendants; rewalking each of them would
+ * multiply synchronous kernel work on every poll. Only retained identities absent from that walk
+ * need another walk. Inspection failures propagate so callers cannot claim verified cleanup.
+ */
+function refreshDescendants(
+  rootPid: number | undefined,
+  retained: readonly TrackedProcess[],
+  seams = { descendants: descendantProcesses, identities: currentProcessIdentities },
+): TrackedProcess[] {
+  const key = (process: TrackedProcess) => `${process.pid}:${process.startedAt}`
+  const current = rootPid === undefined ? [] : seams.descendants(rootPid)
+  const covered = new Set(current.map(key))
+  const escaped = retained.filter(process => !covered.has(key(process)))
+  const identities = seams.identities(escaped.map(process => process.pid))
+  for (const owner of escaped) {
+    if (!covered.has(key(owner)) && sameProcess(identities.get(owner.pid), owner)) {
+      const descendants = seams.descendants(owner.pid)
+      for (const descendant of descendants) {
+        covered.add(key(descendant))
+      }
+      current.unshift(...descendants)
+    }
+  }
+  // Fresh deepest-first walks precede retained owners, including newly forked escaped children.
+  const remembered = new Map(current.map(process => [key(process), process]))
+  for (const process of retained) {
+    if (!remembered.has(key(process))) {
+      remembered.set(key(process), process)
+    }
+  }
+  return [...remembered.values()]
+}
+
 /** processGroupOf reads the kernel process group rather than trusting the spawn options. */
 function processGroupOf(pid: number): number | undefined {
   requireProcessInspectionPlatform()
@@ -233,7 +268,11 @@ async function waitForProcessGroupExit(pid: number | undefined): Promise<void> {
 function processGroupIsAlive(
   pid: number,
   probe: typeof Platform.signalProcess = Platform.signalProcess,
-  seams: { platform?: typeof Platform.hostPlatform; linuxGroupIsAlive?: (group: number) => boolean } = {},
+  seams: {
+    platform?: typeof Platform.hostPlatform
+    linuxGroupIsAlive?: (group: number) => boolean
+    darwinGroupIsAlive?: (group: number) => boolean
+  } = {},
 ): boolean {
   const platform = seams.platform ?? Platform.hostPlatform
   requireProcessInspectionPlatform(platform)
@@ -242,7 +281,12 @@ function processGroupIsAlive(
     // The proc table filters exited members and refuses unreadable or malformed identities.
     return (seams.linuxGroupIsAlive ?? linuxProcesses.groupIsAlive)(pid)
   }
-  return probe(-pid, 0)
+  if (!probe(-pid, 0)) {
+    return false
+  }
+  // A signalable group can consist entirely of unreaped zombies. Require full kernel records
+  // before omitting them; an unreadable live member still fails inspection rather than hanging.
+  return (seams.darwinGroupIsAlive ?? (group => inspectDarwinProcesses('live-group', [group]).length > 0))(pid)
 }
 
 /**
@@ -275,6 +319,7 @@ async function stopTree(pid: number | undefined, options: { graceMs?: number } =
 export const ProcessTree = {
   FORCE_KILL_GRACE_MS,
   descendants: descendantProcesses,
+  refreshDescendants,
   identities: currentProcessIdentities,
   isGroupAlive: processGroupIsAlive,
   processGroupOf,

@@ -11,9 +11,13 @@ records the stale-link reproduction and repair.
 
 | Item                                                                                                  | Disposition                                                                                                                                                                                     | Owner                          | Review by  |
 | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ---------- |
-| [`uuid` advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq)                                  | Locked `xcode@3.0.1 → uuid@7.0.3` remains; no affected call found in the last installed-parent review. Recheck callers and upstream releases.                                                   | the Developer, until delegated | 2026-10-05 |
-| [`stream-json` advisory](https://github.com/uhop/stream-json/security/advisories/GHSA-528h-pc64-c93x) | Locked `jayson@4.3.0 → stream-json@1.9.1` remains; the last installed-parent review found only excluded `StreamValues` use. Recheck compatible upstream remediation.                            | the Developer, until delegated | 2026-10-05 |
-| Nixpkgs glibc input                                                                                   | The pinned patch lacks newer CVE markers; a realized Linux closure and updated-input acceptance remain unproved. The interrupted run was recovered; arrange the input update and closure proof. | the Developer, until delegated | 2026-09-30 |
+| [`uuid` advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq)                                  | Locked `xcode@3.0.1 → uuid@7.0.3` remains; no affected call found in the last installed-parent review. Recheck callers and upstream releases.                                                   | the Developer, until delegated | 2026-10-20 |
+| [`stream-json` advisory](https://github.com/uhop/stream-json/security/advisories/GHSA-528h-pc64-c93x) | Locked `jayson@4.3.0 → stream-json@1.9.1` remains; the last installed-parent review found only excluded `StreamValues` use. Recheck compatible upstream remediation.                            | the Developer, until delegated | 2026-10-20 |
+| `basic-ftp` advisory                                                                                  | Locked `get-uri → basic-ftp@5.3.1` remains; the fix is `6.2.1`, a new major that `get-uri` (latest `8.0.1`, `^5.3.1`) does not accept. Recheck `get-uri`.                                       | the Developer, until delegated | 2026-10-20 |
+| `braces` and `node-forge` advisories                                                                  | `braces@3.0.3` and `node-forge@1.4.0` are the newest published releases of their lines; no patched release exists yet. Recheck the registry.                                                    | the Developer, until delegated | 2026-10-20 |
+| `sprintf-js` advisory                                                                                 | Locked `argparse@1.0.10 → sprintf-js@1.0.3` (`~1.0.2`) remains; `1.1.3` is the newest release and is still affected. Recheck the registry.                                                      | the Developer, until delegated | 2026-10-20 |
+| `@opentelemetry/core` advisory                                                                        | Locked `1.30.1` (`@google-cloud/pubsub`, no 1.x fix) and `2.7.1` copies pinned exactly by the `jazz-tools` OpenTelemetry `0.216.0` packages remain. Recheck on the next `jazz-tools` bump.      | the Developer, until delegated | 2026-10-20 |
+| Nixpkgs glibc input                                                                                   | The pinned patch lacks newer CVE markers; a realized Linux closure and updated-input acceptance remain unproved. The interrupted run was recovered; arrange the input update and closure proof. | the Developer, until delegated | 2026-10-20 |
 
 At each review, record the new evidence and either close the item or set a new review date and
 owner. A review date schedules reassessment; it does not claim the advisory is fixed.
@@ -92,6 +96,37 @@ not the updated Nixpkgs input. The earlier transfer log names two glibc paths, w
 identify the realized runtime closure. Retain the Developer as owner until delegated, review
 by September 30, and require the updated-input Linux closure proof described below before
 closing. No package or lockfile changed in this review.
+
+### 2026-10-06 review
+
+At `5d9330f8`, `bun audit --json` reported 64 records (2 critical, 27 high, 31 moderate, 4 low)
+across 24 families. After this change it reports 9 (3 high, 6 moderate) across 7 families.
+
+Lockfile-only bumps within the parent's declared range: `proxy-addr@2.0.8`, `compression@1.8.2`,
+`source-map-js@1.2.2`, `ip-address@10.7.3`, `@modelcontextprotocol/client@2.2.0`, and the
+`brace-expansion@5.0.12` root entry (dependency, integrity, and tarball taken from the registry).
+For the first five, a temporary root override forced the resolution and was then removed; the
+following `./agent setup --refresh-lockfile` kept it.
+
+Root overrides pinned within the major the parent already uses, because the parents pin exact
+versions or sit below the fix: `axios@1.20.0`, `sharp@0.35.5`, `@modelcontextprotocol/sdk@1.31.0`
+(`rulesync` pins `1.30.0`), `smol-toml@1.9.0`, `@grpc/grpc-js@1.14.5` (this also moves
+`@firebase/firestore`'s `~1.9.0` copy within major 1), plus new pins for the existing `fast-uri`
+(`3.1.8`), `morgan` (`1.12.1`), `shell-quote` (`1.11.0`), and `undici` (`7.29.1`) overrides.
+Parent-scoped overrides keep other majors untouched: `rulesync → js-yaml@5.4.2` and
+`@opentelemetry/otlp-transformer → protobufjs@8.6.6`. Bun applies a scoped override only to the
+named parent's direct dependency.
+
+Left open (see the register): `uuid` and `stream-json` as before; `basic-ftp` (fix only in the
+next major); `braces`, `node-forge`, and `sprintf-js` (no patched release published);
+`@opentelemetry/core` (the `1.30.1` copy has no fix; scoped overrides on the `jazz-tools`
+`0.216.0` packages left exact-pinned `2.7.1` copies under `resources` and `sdk-trace-base`, so the
+override set was reverted rather than widened).
+
+Iteration evidence: `./agent typecheck` passed. `./agent test-changed` failed on three tests that
+do not touch changed code: two project-tooling file-watch sidecar tests timed out, and one
+packaged-language-server test found no generated IDE extension bundle. Hosted `Verify` is the
+merge proof. The Nixpkgs input is unchanged and unreviewed in this pass.
 
 ## Bun/npm graph
 

@@ -1,7 +1,7 @@
 // Studio agent chat: the endpoint, and the one conversation a project session holds.
 
 import { declarationSource, resolveTarget, type SemanticSnapshot } from '@compiler/workspace'
-import { FS, Repo } from '@shared'
+import { Errors, FS, HCI, Repo } from '@shared'
 import type { ToolSet } from 'ai'
 import type { StudioProjectSession } from '../StudioProjectSession'
 import type { StudioTestRunner } from '../StudioTestRunner'
@@ -508,6 +508,7 @@ class AgentChatConversation {
             app: this.#session.appName,
             model: this.#provider.modelId,
             status: turn.status,
+            ...(turn.message === undefined ? {} : { message: turn.message.slice(0, 4_000) }),
             steps: turn.steps,
             text: turn.text,
             toolCalls: turn.toolCalls,
@@ -578,9 +579,23 @@ export function streamTurn(
   const conversation = conversationFor(session, secrets, provider)
   conversation.useTestRunner(tests)
   const encoder = new TextEncoder()
+  let cancelled = false
   return new ReadableStream<Uint8Array>({
+    cancel(reason) {
+      cancelled = true
+      HCI.logProcessInfo(
+        'studio',
+        `Chat response cancelled: ${
+          reason === undefined ? 'consumer disconnected' : Errors.messageOf(reason).slice(0, 1_000)
+        }`,
+      )
+    },
     async start(controller) {
-      const write = (value: unknown) => controller.enqueue(encoder.encode(`${JSON.stringify(value)}\n`))
+      const write = (value: unknown) => {
+        if (!cancelled) {
+          controller.enqueue(encoder.encode(`${JSON.stringify(value)}\n`))
+        }
+      }
       try {
         const onEvent = (event: AgentChatEvent) => write(event)
         const message = String(body['message'] ?? '').trim()
@@ -597,7 +612,9 @@ export function streamTurn(
           type: 'done',
         })
       } finally {
-        controller.close()
+        if (!cancelled) {
+          controller.close()
+        }
       }
     },
   })

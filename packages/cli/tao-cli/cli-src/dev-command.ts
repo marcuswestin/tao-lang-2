@@ -22,6 +22,85 @@ type TaoDevCommandOptions = {
   startupTargets?: readonly DevStartupTarget[]
   control?: DevLoopControlHooks
   acquireSession?: typeof ProjectDevSession.acquire
+  watchProject?: typeof ProjectTooling.watch
+  onSignal?: typeof Platform.onProcessSignal
+  startupTimeoutMs?: number
+}
+
+const DEFAULT_STARTUP_TIMEOUT_MS = 120_000
+
+type StartupRaceResult<T> =
+  | { kind: 'value'; value: T }
+  | { kind: 'signal'; exitCode: number }
+  | { kind: 'failure'; error: unknown }
+
+type StartupSignalMonitor = {
+  controller: AbortController
+  stopped: Promise<number>
+  dispose(): void
+}
+
+function createStartupSignalMonitor(
+  register: typeof Platform.onProcessSignal,
+): StartupSignalMonitor {
+  const controller = new AbortController()
+  let resolveStopped: (exitCode: number) => void = () => {}
+  let exitCode: number | undefined
+  const stopped = new Promise<number>(resolve => {
+    resolveStopped = resolve
+  })
+  const remove = [
+    register('SIGINT', () => stop(130)),
+    register('SIGTERM', () => stop(143)),
+    register('SIGHUP', () => stop(129)),
+  ]
+  function stop(code: number): void {
+    if (exitCode !== undefined) {
+      return
+    }
+    exitCode = code
+    resolveStopped(code)
+    controller.abort(Errors.abortError('Tao run startup was stopped.'))
+  }
+  return {
+    controller,
+    stopped,
+    dispose: () => {
+      for (const unsubscribe of remove) {
+        unsubscribe()
+      }
+    },
+  }
+}
+
+async function raceStartup<T>(
+  operation: Promise<T>,
+  monitor: StartupSignalMonitor,
+  disposeLate?: (value: T) => Promise<void>,
+): Promise<Exclude<StartupRaceResult<T>, { kind: 'failure' }>> {
+  let interrupted = false
+  const settled = Promise.resolve(operation).then<StartupRaceResult<T>, StartupRaceResult<T>>(
+    value => {
+      if (interrupted && disposeLate !== undefined) {
+        void disposeLate(value).catch(error =>
+          HCI.logProcessError('tao-run-startup-cleanup', Errors.formatForUser(error))
+        )
+      }
+      return { kind: 'value', value }
+    },
+    error => ({ kind: 'failure', error }),
+  )
+  const result = await Promise.race([
+    settled,
+    monitor.stopped.then(exitCode => {
+      interrupted = true
+      return { kind: 'signal', exitCode } as const
+    }),
+  ])
+  if (result.kind === 'failure') {
+    throw result.error
+  }
+  return result
 }
 
 /** runTaoDev discovers, selects, and runs apps until the dev loop exits. */
@@ -71,51 +150,109 @@ export async function runTaoDev(
   control ??= managed
   let lease: Awaited<ReturnType<typeof ProjectDevSession.acquire>> | undefined
   let toolingWatch: ProjectToolingWatch | undefined
+  let startupSignals: StartupSignalMonitor | undefined
   try {
+    startupSignals = createStartupSignalMonitor(options.onSignal ?? Platform.onProcessSignal)
+    HCI.writeLine('Preparing Tao project…', options)
     while (true) {
       if (control?.stopRequested?.()) {
         return exitTaoDev(0, options)
       }
       if (lease === undefined) {
+        const monitor = startupSignals!
         const foregroundInteractive = !managedRequest && control === undefined && HCI.isInteractive(options)
-        lease = await (options.acquireSession ?? ProjectDevSession.acquire)(currentApp.projectRoot, 'cli', {
-          ...(!managedRequest && control === undefined ? { foregroundInteractive } : {}),
-          ...(foregroundInteractive
-            ? {
-              confirmOrphan: async owner =>
-                await HCI.askConfirm({
-                  ...options,
-                  defaultValue: true,
-                  message: `Stop orphaned Tao run ${owner.id} (PID ${owner.pid}) and continue?`,
-                }),
-            }
-            : {}),
-          onOrphanCleanup: (phase, owner) => {
-            if (phase === 'stopping') {
-              HCI.writeLine(`Stopping confirmed orphaned Tao run (PID ${owner.pid})…`, options)
-            } else if (phase === 'stopped') {
-              HCI.writeLine(`Stopped orphaned Tao run (PID ${owner.pid}).`, options)
-            } else {
-              HCI.writeErrorLine(`Could not stop orphaned Tao run (PID ${owner.pid}).`, options)
-            }
-          },
-        })
-        await TaoAppModules.ensureProject(currentApp.projectRoot)
-        toolingWatch = await ProjectTooling.watch(currentApp.projectRoot, {
+        const acquired = await raceStartup(
+          (options.acquireSession ?? ProjectDevSession.acquire)(currentApp.projectRoot, 'cli', {
+            ...(!managedRequest && control === undefined ? { foregroundInteractive } : {}),
+            ...(foregroundInteractive
+              ? {
+                confirmOrphan: async owner =>
+                  await HCI.askConfirm({
+                    ...options,
+                    defaultValue: true,
+                    message: `Stop orphaned Tao run ${owner.id} (PID ${owner.pid}) and continue?`,
+                  }),
+              }
+              : {}),
+            onOrphanCleanup: (phase, owner) => {
+              if (phase === 'stopping') {
+                HCI.writeLine(`Stopping confirmed orphaned Tao run (PID ${owner.pid})…`, options)
+              } else if (phase === 'stopped') {
+                HCI.writeLine(`Stopped orphaned Tao run (PID ${owner.pid}).`, options)
+              } else {
+                HCI.writeErrorLine(`Could not stop orphaned Tao run (PID ${owner.pid}).`, options)
+              }
+            },
+          }),
+          monitor,
+          lateLease => lateLease.release(),
+        )
+        if (acquired.kind === 'signal') {
+          return exitTaoDev(acquired.exitCode, options)
+        }
+        lease = acquired.value
+        const ensured = await raceStartup(TaoAppModules.ensureProject(currentApp.projectRoot), monitor)
+        if (ensured.kind === 'signal') {
+          return exitTaoDev(ensured.exitCode, options)
+        }
+        let startupPhase = 'initial project refresh'
+        const watchPromise = (options.watchProject ?? ProjectTooling.watch)(currentApp.projectRoot, {
           runtimeRoot: TaoAppModules.runtimeRoot(),
+          startupSignal: monitor.controller.signal,
+          onStartupProgress: phase => {
+            startupPhase = phase
+          },
           onResult: result => {
             if (result.status === 'stale') {
               for (const diagnostic of result.diagnostics) {
-                HCI.writeErrorLine(DiagnosticReport.renderDiagnostic(diagnostic))
+                HCI.writeErrorLine(DiagnosticReport.renderDiagnostic(diagnostic), options)
               }
             }
           },
-          onError: error => HCI.writeErrorLine(Errors.formatForUser(error)),
+          onError: error => HCI.writeErrorLine(Errors.formatForUser(error), options),
         })
+        let timeout: ReturnType<typeof setTimeout> | undefined
+        const timeoutPromise = new Promise<StartupRaceResult<ProjectToolingWatch>>(resolve => {
+          timeout = setTimeout(() => {
+            const error = new Errors.HostEnvironmentError(
+              `Tao could not prepare ${currentApp.projectRoot}: timed out waiting for ${startupPhase} after ${
+                options.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS
+              } ms. Check the host environment and retry.`,
+            )
+            resolve({
+              kind: 'failure',
+              error,
+            })
+            monitor.controller.abort(error)
+            void watchPromise.then(watch => watch.dispose(), () => undefined).catch(error =>
+              HCI.writeErrorLine(`Could not clean up Tao startup: ${Errors.formatForUser(error)}`, options)
+            )
+          }, options.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS)
+        })
+        let watched: StartupRaceResult<ProjectToolingWatch>
+        try {
+          watched = await Promise.race([
+            raceStartup(watchPromise, monitor, watch => watch.dispose()),
+            timeoutPromise,
+          ])
+        } finally {
+          if (timeout !== undefined) {
+            clearTimeout(timeout)
+          }
+        }
+        if (watched.kind === 'signal') {
+          return exitTaoDev(watched.exitCode, options)
+        }
+        if (watched.kind === 'failure') {
+          throw watched.error
+        }
+        toolingWatch = watched.value
         if (toolingWatch.lastResult.status !== 'fresh') {
           return exitTaoDev(1, options)
         }
       }
+      startupSignals?.dispose()
+      startupSignals = undefined
       const previousProject = currentApp.projectRoot
       const outcome = await runLoop(currentApp, options.device)
       if (control?.stopRequested?.()) {
@@ -125,7 +262,17 @@ export async function runTaoDev(
         exit: async exit => exit.exitCode,
         restart: async () => undefined,
         'select-app': async () => {
-          const selection = await interactiveSelection(target, options, currentApp)
+          startupSignals = createStartupSignalMonitor(options.onSignal ?? Platform.onProcessSignal)
+          const selectionResult = await raceStartup(
+            interactiveSelection(target, options, currentApp),
+            startupSignals,
+          )
+          if (selectionResult.kind === 'signal') {
+            startupSignals.dispose()
+            startupSignals = undefined
+            return selectionResult.exitCode
+          }
+          const selection = selectionResult.value
           return Switch.kind<typeof selection, number | undefined>(selection, {
             cancel: () => undefined,
             exit: exit => exit.exitCode,
@@ -144,9 +291,12 @@ export async function runTaoDev(
         toolingWatch = undefined
         await lease.release()
         lease = undefined
+        startupSignals ??= createStartupSignalMonitor(options.onSignal ?? Platform.onProcessSignal)
+        HCI.writeLine('Preparing Tao project…', options)
       }
     }
   } finally {
+    startupSignals?.dispose()
     try {
       await toolingWatch?.dispose()
     } finally {

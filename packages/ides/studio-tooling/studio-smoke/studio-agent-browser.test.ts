@@ -1,9 +1,10 @@
-import { Errors, FS, Platform, Repo, Time, VerificationTimeouts } from '@shared'
+import { Errors, FS, HCI, Platform, Repo, Time, VerificationTimeouts } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import {
   AgentChatProvider,
   openStudioPreviewSession,
   startStudioSessionServer,
+  StudioClientAssets,
   StudioSessionManager,
 } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
@@ -117,6 +118,10 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     Expect(compiled.status).toBe('compiled')
     manager = new StudioSessionManager()
     const current = manager.add({ session: preview.session })
+    // Match StudioDev's readiness boundary: build the real shell before starting UI assertions.
+    HCI.logProcessInfo('studio', 'Preparing the browser client for the agent journey.')
+    await StudioClientAssets.bundle()
+    HCI.logProcessInfo('studio', 'Browser client ready for the agent journey.')
     studio = await startStudioSessionServer(manager, {
       agentProvider: provider,
       hostname: '127.0.0.1',
@@ -141,7 +146,9 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
         timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity,
       })
     } catch (cause) {
-      const page = await browser.evaluate<string>('document.body.innerText')
+      const page = await browser.evaluate<{ url: string; state: string; text: string }>(
+        '({ url: location.href, state: document.readyState, text: document.body.innerText })',
+      )
       Errors.throwHostEnvironment(
         `Studio chat did not become ready: ${JSON.stringify({ page, browser: browser.browserFailures() })}`,
         { cause },
@@ -194,6 +201,10 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
         && document.querySelector('.chat-input')?.disabled === true
         && document.querySelector('.chat-send')?.disabled === true
     })()`)
+    // A model or tool may produce no bytes for longer than Bun's ten-second idle limit.
+    // Keep this real HTTP stream quiet long enough to prove the per-request lifetime override.
+    await Time.sleep(16_000)
+    Expect(await browser.evaluate<boolean>(`document.querySelector('.chat-input')?.disabled === true`)).toBe(true)
     Expect(model.calls).toBe(1)
     Expect(await browser.evaluate<string>("document.querySelector('.chat-announcer')?.textContent ?? ''")).toBe('')
     await browser.evaluate(`(() => {
@@ -227,7 +238,7 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     ).toBe(1)
 
     await sendPrompt(browser, 'Change MainView to say Agent.')
-    await waitForApproval(browser, 'The agent wants to change your app')
+    await waitForApproval(browser, 'The agent wants to change your app', () => model.calls)
     const applyDiff = await currentApprovalDiff(browser)
     Expect(applyDiff).toContain('Text("Before")')
     Expect(applyDiff).toContain('Text("Agent")')
@@ -237,7 +248,7 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
       && document.querySelector('.chat-log')?.textContent?.includes('Applied the agent edit.') === true`)
 
     await sendPrompt(browser, 'Undo that agent change.')
-    await waitForApproval(browser, 'The agent wants to change your app')
+    await waitForApproval(browser, 'The agent wants to change your app', () => model.calls)
     const undoDiff = await currentApprovalDiff(browser)
     Expect(undoDiff).toContain('-   render Text("Agent")')
     Expect(undoDiff).toContain('+   render Text("Before")')
@@ -256,12 +267,35 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     await waitForSource(sourcePath, source => source === manualSource)
     await browser.click('.studio-rail-button[data-panel="agent"]')
     await browser.waitFor(`document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'false'`)
-    // Expanding animates the panel's size, so a click aimed at the approval button's mid-transition
-    // center lands beside it.
-    await browser.waitFor(`document.querySelector('.studio-agent-panel')?.getAnimations().length === 0`)
+    // Observe the actual click target, as for the cloud switch above. An animation query can
+    // report no animations before the browser starts the expansion transition.
+    await browser.waitFor(`(() => {
+      const button = document.querySelector('.studio-agent-card-actions button[data-variant="primary"]')
+      if (!(button instanceof HTMLButtonElement) || button.disabled) return false
+      const rect = button.getBoundingClientRect()
+      const box = [rect.left, rect.top, rect.width, rect.height].join(',')
+      const settled = window.__taoSmokeApprovalBox === box
+      window.__taoSmokeApprovalBox = box
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      return settled && rect.width > 0 && rect.height > 0 && button.contains(hit)
+    })()`)
     await browser.click('.studio-agent-card-actions button[data-variant="primary"]')
-    await browser.waitFor(`document.querySelector('.chat-input')?.disabled === false
-      && document.querySelector('.chat-log')?.textContent?.includes('Undo refused because the source changed.') === true`)
+    try {
+      await browser.waitFor(`document.querySelector('.chat-input')?.disabled === false
+        && document.querySelector('.chat-log')?.textContent?.includes('Undo refused because the source changed.') === true`)
+    } catch (cause) {
+      const state = await browser.evaluate(`({
+        busy: document.querySelector('.chat-input')?.disabled,
+        approval: document.querySelector('.studio-agent-card-actions')?.textContent,
+        chat: document.querySelector('.chat-log')?.textContent,
+      })`)
+      Errors.throwHostEnvironment(
+        `Studio stale undo did not finish: ${
+          JSON.stringify({ state, calls: model.calls, browser: browser.browserFailures() })
+        }`,
+        { cause },
+      )
+    }
 
     Expect(await FS.readText(sourcePath)).toBe(manualSource)
     Expect(
@@ -321,16 +355,39 @@ async function sendPrompt(browser: StudioCdp, prompt: string): Promise<void> {
   await browser.click('.chat-send')
 }
 
-async function waitForApproval(browser: StudioCdp, heading: string): Promise<void> {
-  await browser.waitFor(
-    `(() => {
+async function waitForApproval(browser: StudioCdp, heading: string, calls: () => number): Promise<void> {
+  let last: { ready: boolean; error: string; chat: string; url: string; busy: boolean | undefined } | undefined
+  try {
+    await browser.waitFor(
+      `(() => {
     const cards = [...document.querySelectorAll('.studio-agent-card')]
-    return cards.at(-1)?.querySelector('strong')?.textContent === ${JSON.stringify(heading)}
+    return { ready: cards.at(-1)?.querySelector('strong')?.textContent === ${JSON.stringify(heading)}
       && cards.at(-1)?.querySelector('.studio-agent-card-actions button[data-variant="primary"]')
-        instanceof HTMLButtonElement
+        instanceof HTMLButtonElement,
+      error: document.querySelector('.chat-log .studio-agent-line[data-tone="error"]')?.textContent?.slice(-1000) ?? '',
+      chat: document.querySelector('.chat-log')?.textContent?.slice(-4000) ?? '',
+      url: location.href,
+      busy: document.querySelector('.chat-input')?.disabled }
   })()`,
-    { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
-  )
+      {
+        timeoutMs: 30_000,
+        predicate(value) {
+          last = value as typeof last
+          if (last?.error) {
+            Errors.throwHostEnvironment(`Studio approval turn failed: ${last.error}; calls=${calls()}`)
+          }
+          return last?.ready === true
+        },
+      },
+    )
+  } catch (cause) {
+    Errors.throwHostEnvironment(
+      `Studio approval failed: ${
+        JSON.stringify({ last, calls: calls(), browser: browser.browserFailures() }).slice(0, 8_000)
+      }`,
+      { cause },
+    )
+  }
 }
 
 async function currentApprovalDiff(browser: StudioCdp): Promise<string> {

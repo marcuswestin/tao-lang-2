@@ -9,14 +9,34 @@ import {
 } from 'node:child_process'
 import { createHash, createPrivateKey, sign, timingSafeEqual } from 'node:crypto'
 import { EventEmitter } from 'node:events'
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { availableParallelism, constants, getPriority, loadavg, setPriority } from 'node:os'
+import { dirname } from 'node:path'
 import { Readable, Writable } from 'node:stream'
+import { runInThisContext } from 'node:vm'
 import { asError, throwHostEnvironment, throwUnexpected } from './core/Errors'
 
 /** createModuleRequire loads CommonJS dependencies relative to an installed module entry. */
 export function createModuleRequire(moduleEntryPath: string): NodeRequire {
   return createRequire(moduleEntryPath)
+}
+
+/**
+ * evaluateCommonJsFile runs one plain-JavaScript CommonJS file and returns its exports, resolving
+ * its own requires beside it. Unlike `require`, the source goes straight to the engine rather than
+ * through Bun's module transpiler, whose on-disk cache for large files is placed once at startup:
+ * the installed CLI sets `BUN_RUNTIME_TRANSPILER_CACHE_PATH` too late to move it out of the user's
+ * home directory.
+ */
+export function evaluateCommonJsFile(path: string): unknown {
+  const module = { exports: {} as unknown }
+  const wrapper = runInThisContext(
+    `(function (exports, require, module, __filename, __dirname) {${readFileSync(path, 'utf8')}\n})`,
+    { filename: path },
+  ) as (exports: unknown, require: NodeRequire, module: { exports: unknown }, filename: string, dirname: string) => void
+  wrapper(module.exports, createRequire(path), module, path, dirname(path))
+  return module.exports
 }
 
 export type ProcessEnv = NodeJS.ProcessEnv
@@ -480,9 +500,15 @@ export const runtimeProcess = {
   cwd: process.cwd.bind(process),
   env: process.env,
   execPath: process.execPath,
+  /** Resource kind snapshots are diagnostic evidence, rather than a claim of which handle leaked. */
+  getActiveResourcesInfo: () => process.getActiveResourcesInfo(),
   /** The current process id, for recording which process owns a resource. */
   get pid(): number {
     return process.pid
+  },
+  /** The current parent process id, without spawning a process-table command. */
+  get ppid(): number {
+    return process.ppid
   },
   /** The user id on POSIX hosts, or undefined where the platform has none. */
   get uid(): number | undefined {

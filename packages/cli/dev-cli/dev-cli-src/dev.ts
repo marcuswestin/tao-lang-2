@@ -29,6 +29,7 @@ import { landingHostGateMessage, prepareLandingHost } from './doctor/LandingHost
 import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { stopProcess } from './doctor/StopProcess'
 import { MergeRecovery } from './git/MergeRecovery'
 import { SyncLocalMainCommand } from './git/SyncLocalMain'
 import { CancelVerifyCommand } from './pr/CancelVerify'
@@ -122,15 +123,47 @@ await runWithCommands(commands => {
 
   commands
     .command('qa-capture')
-    .description('Capture headless review evidence; requires a separate visual judgment.')
-    .argument('<project>')
-    .requiredOption('--app <name>')
+    .description(
+      'Capture one app, or discover and capture every scenario app with bounded headless runs; needs visual judgment.',
+    )
+    .argument('[project]')
+    .option('--app <name>', 'App in the explicit project')
     .requiredOption('--output <path>')
-    .action(async (project: string, options: { app: string; output: string }) => {
+    .option('--timeout <seconds>', 'Deadline per app in a discovered batch (default: 300)')
+    .action(async (project: string | undefined, options: { app?: string; output: string; timeout?: string }) => {
+      if (project === undefined) {
+        if (options.app !== undefined) {
+          Errors.throwUserInput('--app requires a project; omit both to capture all discovered scenario apps.')
+        }
+        const { QaScenarioCaptures } = await import('./qa/QaScenarioCaptures')
+        const result = await new QaScenarioCaptures(Repo.getRoot()).run({
+          output: options.output,
+          timeoutSeconds: Number(options.timeout ?? 300),
+        })
+        HCI.writeLine(JSON.stringify(result, null, 2))
+        if (result.status !== 'complete') {
+          Platform.runtimeProcess.setExitCode(1)
+        }
+        return
+      }
+      if (!options.app) {
+        Errors.throwUserInput('An explicit QA capture project requires --app; omit both to discover all scenario apps.')
+      }
+      if (options.timeout !== undefined) {
+        Errors.throwUserInput(
+          '--timeout applies to discovered batches; omit the project and --app to use a per-app deadline.',
+        )
+      }
       const { runStudioReview } = await import('@studio-tooling/StudioReview')
       const { QaCapture } = await import('./qa/QaCapture')
-      const result = await new QaCapture(Repo.getRoot(), runStudioReview).run(project, options)
+      const result = await new QaCapture(Repo.getRoot(), runStudioReview).run(project, {
+        app: options.app,
+        output: options.output,
+      })
       HCI.writeLine(JSON.stringify(result, null, 2))
+      if (result.status !== 'complete') {
+        Platform.runtimeProcess.setExitCode(1)
+      }
     })
 
   commands
@@ -219,7 +252,7 @@ await runWithCommands(commands => {
     )
     .option(
       '--app <subject>',
-      'Explicit subject: hnreader, clockwork, native-navigation, native-bridge, syntax2, or watchhello (watchos only).',
+      'Explicit subject: hnreader, clockwork, reading-list (browser only), native-navigation, native-bridge, syntax2, or watchhello (watchos only).',
       'hnreader',
     )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')
@@ -513,10 +546,9 @@ await runWithCommands(commands => {
         // the host gates still pending are reported, so a summary never looks fuller than it is.
         const admission = hostedCi ? CiGateAdmission.select(gates, options.ciHostGates ?? '') : undefined
         const lane = admission === undefined ? gates : admission.gates
-        if (options.hostedLinux === true && (options.skipUnsandboxed !== true || Platform.hostPlatform !== 'linux')) {
-          Errors.throwUserInput(
-            '--hosted-linux is for a hosted Verify Linux runner and goes with --skip-unsandboxed; a local lane keeps those gates in the complement.',
-          )
+        const hostedLinuxRefusal = GateCatalog.hostedLinuxRefusal(options, Platform.hostPlatform)
+        if (hostedLinuxRefusal !== undefined) {
+          Errors.throwUserInput(hostedLinuxRefusal)
         }
         const runnable = options.skipUnsandboxed === true
           ? lane.filter(name => !GateCatalog.skippedUnsandboxed(name, { hostedLinux: options.hostedLinux }))
@@ -581,7 +613,7 @@ await runWithCommands(commands => {
   commands
     .command('verify-complement')
     .description(
-      'Run the host-only gates hosted Verify does not admit, as one locked lane, and report them as the Verify (host) status on HEAD.',
+      'Run the host-only gates hosted Verify does not run, derived from the catalog and ci-macos.yml, as one locked lane, and report them as the Verify (host) status on HEAD.',
     )
     .argument('<gates...>', "The full lane's gate list; the host-only complement is derived from it and the workflow.")
     .option('--show-studio', 'Permit selected native Studio tests to open windows.')
@@ -1311,6 +1343,15 @@ await runWithCommands(commands => {
     .action(async (options: { json?: boolean } = {}) => {
       const { StudioLifecycleCommand } = await import('@studio-tooling/StudioLifecycleCommand')
       Platform.runtimeProcess.exit(await StudioLifecycleCommand.ps({ json: options.json === true }))
+    })
+
+  commands
+    .command('process-stop <pid> <started-at>')
+    .description('Stop one reviewed isolated process, checking its exact kernel start identity.')
+    .action(async (pid: string, startedAt: string) => {
+      HCI.writeLine(`Stopping reviewed process ${pid} ...`)
+      await stopProcess(Number(pid), startedAt)
+      HCI.writeLine(`Process ${pid} has exited.`)
     })
 
   commands

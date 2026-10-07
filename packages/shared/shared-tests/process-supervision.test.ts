@@ -1,5 +1,5 @@
 import { AfterEach, Describe, Expect, Test, testOverrideSlot, until, withCapturedOutput } from '@shared/test'
-import { CLI, Platform, ProcessTree, Time, type TrackedProcess } from '../shared-src/shared'
+import { CLI, Errors, Platform, ProcessTree, Time, type TrackedProcess } from '../shared-src/shared'
 
 /**
  * These tests start real process trees, so each one registers what it started for cleanup: a leaked
@@ -21,6 +21,29 @@ const clearTimeoutSlot = testOverrideSlot<ClearTimeoutCall>({
   read: () => globalThis.clearTimeout,
   write: value => {
     globalThis.clearTimeout = value as typeof globalThis.clearTimeout
+  },
+})
+const mutableProcessTree = ProcessTree as unknown as {
+  groupMembers: typeof ProcessTree.groupMembers
+  signalGroup: typeof ProcessTree.signalGroup
+  refreshDescendants: typeof ProcessTree.refreshDescendants
+}
+const refreshDescendantsSlot = testOverrideSlot<typeof ProcessTree.refreshDescendants>({
+  read: () => ProcessTree.refreshDescendants,
+  write: value => {
+    mutableProcessTree.refreshDescendants = value
+  },
+})
+const groupMembersSlot = testOverrideSlot<typeof ProcessTree.groupMembers>({
+  read: () => ProcessTree.groupMembers,
+  write: value => {
+    mutableProcessTree.groupMembers = value
+  },
+})
+const signalGroupSlot = testOverrideSlot<typeof ProcessTree.signalGroup>({
+  read: () => ProcessTree.signalGroup,
+  write: value => {
+    mutableProcessTree.signalGroup = value
   },
 })
 
@@ -144,6 +167,160 @@ async function waitForGone(tracked: TrackedProcess, description: string): Promis
 }
 
 Describe('CLI process policy', () => {
+  Test('cancellation rewalks retained owners while the direct child is still live', async () => {
+    const started = await startTree({ processPolicy: 'test' })
+    const refresh = ProcessTree.refreshDescendants
+    let refreshedLiveOwners = false
+    const restore = refreshDescendantsSlot.install((rootPid, retained, seams) => {
+      if (
+        rootPid === undefined && isAlive(started.child)
+        && retained.some(owner =>
+          owner.pid === started.grandchild.pid && ProcessTree.sameProcess(owner, started.grandchild)
+        )
+      ) {
+        refreshedLiveOwners = true
+      }
+      return refresh(rootPid, retained, seams)
+    })
+    try {
+      started.command.kill('SIGTERM')
+      await started.command.waitForClose()
+      Expect(refreshedLiveOwners).toBe(true)
+      Expect(isAlive(started.child)).toBe(false)
+      Expect(isAlive(started.grandchild)).toBe(false)
+    } finally {
+      restore()
+      started.command.kill('SIGKILL')
+      await started.command.waitForClose()
+    }
+  })
+
+  for (const verdict of [0, 7]) {
+    Test(`reports failed cleanup inspection while retaining child verdict ${verdict}`, async () => {
+      let output = ''
+      const command = CLI.start('/bin/sh', {
+        args: ['-c', `sleep 300 & echo $!; read reply; exit ${verdict}`],
+        detached: true,
+        processPolicy: 'test',
+        onOutput: (_stream, chunk) => {
+          output += chunk.toString()
+        },
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeoutMs: 30_000,
+        timeoutPolicy: 'bounded',
+      })
+      let restore = () => {}
+      let restoreSignal = () => {}
+      try {
+        const pid = await until(() => Number(/^(\d+)/.exec(output)?.[1]) || undefined, { timeoutPolicy: 'bounded' })
+        abandoned.push(pid)
+        const identity = ProcessTree.identities([pid]).get(pid)!
+        const denyInspection = () =>
+          Errors.throwHostEnvironment('fixture group inspection denied', {
+            details: { fixtureInspection: 'proc_listpids', detail: 'x'.repeat(8_000) },
+          })
+        restore = groupMembersSlot.install(denyInspection)
+        restoreSignal = signalGroupSlot.install(denyInspection)
+        command.writeStdin('exit\n')
+        const result = await command.waitForClose()
+        Expect(result.exitCode).toBe(verdict || 1)
+        Expect(output).toContain('Test process cleanup could not be verified')
+        Expect(output).toContain('fixture group inspection denied')
+        Expect(output).toContain('"fixtureInspection":"proc_listpids"')
+        Expect(output.length).toBeLessThan(4_500)
+        Expect(isAlive(identity)).toBe(false)
+      } finally {
+        restore()
+        restoreSignal()
+        command.kill('SIGKILL')
+        await command.waitForClose()
+        command.dispose()
+      }
+    })
+  }
+
+  Test('stops an isolated child forked from the direct child termination handler', async () => {
+    let output = ''
+    const command = CLI.start('/bin/sh', {
+      args: ['-c', 'trap \'trap "" TERM; sleep 300 & echo late:$!; exit 7\' TERM; echo ready; while :; do :; done'],
+      detached: true,
+      processPolicy: 'test',
+      onOutput: (_stream, chunk) => {
+        output += chunk.toString()
+      },
+      stdio: 'pipe',
+      timeoutMs: 30_000,
+      timeoutPolicy: 'bounded',
+    })
+    try {
+      await until(() => output.includes('ready'), { timeoutPolicy: 'bounded' })
+      command.kill('SIGTERM')
+      const pid = await until(() => Number(/late:(\d+)/.exec(output)?.[1]) || undefined, { timeoutPolicy: 'bounded' })
+      abandoned.push(pid)
+      const result = await command.waitForClose()
+      Expect(result.exitCode).toBe(7)
+      Expect(Platform.processIsAlive(pid)).toBe(false)
+    } finally {
+      command.kill('SIGKILL')
+      await command.waitForClose()
+    }
+  })
+
+  Test('waits for a descendant that closes its pipes and ignores termination after its parent closes', async () => {
+    let output = ''
+    const command = CLI.start('/bin/sh', {
+      args: ['-c', 'sh -c \'trap "" TERM; echo $$; exec >/dev/null 2>&1; while :; do :; done\' & wait'],
+      processPolicy: 'test',
+      onOutput: (_stream, chunk) => {
+        output += chunk.toString()
+      },
+      stdio: 'pipe',
+      timeoutMs: 30_000,
+      timeoutPolicy: 'bounded',
+    })
+    try {
+      const pid = await until(() => Number(/^(\d+)/.exec(output)?.[1]) || undefined)
+      abandoned.push(pid)
+      const identity = ProcessTree.identities([pid]).get(pid)!
+      Expect(identity).toBeDefined()
+      command.kill('SIGTERM')
+      await command.waitForClose()
+      // Assert at the join, with no later wait that could hide premature cleanup completion.
+      Expect(isAlive(identity)).toBe(false)
+    } finally {
+      command.kill('SIGKILL')
+      await command.waitForClose()
+    }
+  })
+
+  Test('preserves a failed parent exit while stopping a child holding its output pipes', async () => {
+    let output = ''
+    const command = CLI.start('/bin/sh', {
+      args: ['-c', 'sleep 300 & echo $!; read reply; echo "original suite failure" >&2; exit 7'],
+      processPolicy: 'test',
+      onOutput: (_stream, chunk) => {
+        output += chunk.toString()
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeoutMs: 30_000,
+      timeoutPolicy: 'bounded',
+    })
+    try {
+      const pid = await until(() => Number(/^(\d+)/.exec(output)?.[1]) || undefined)
+      abandoned.push(pid)
+      const identity = ProcessTree.identities([pid]).get(pid)!
+      Expect(identity).toBeDefined()
+      command.writeStdin('exit\n')
+      const result = await command.waitForClose()
+      Expect(result.exitCode).toBe(7)
+      Expect(result.signal).toBe(null)
+      Expect(output).toContain('original suite failure')
+      Expect(isAlive(identity)).toBe(false)
+    } finally {
+      command.kill('SIGKILL')
+      await command.waitForClose()
+    }
+  })
   Test('no policy detaches a child; only the caller decides its process group', async () => {
     const ownGroup = ProcessTree.processGroupOf(Platform.runtimeProcess.pid)
     const toolChild = await startTree()

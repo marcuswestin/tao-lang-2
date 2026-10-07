@@ -294,6 +294,7 @@ export async function startStudioSessionServer(
         }
         // The bundle is one asset whether the page asked for it at the root or under its own window.
         if (at(request, route?.pathname ?? url.pathname, StudioRoutes.clientBundle)) {
+          configureRequestLifetime(request, bunServer, StudioRoutes.clientBundle.path)
           return javascriptResponse(await clientAssets.bundle())
         }
         if (route === undefined) {
@@ -416,13 +417,17 @@ export async function startStudioSessionServer(
   }
 }
 
-/** Shipping can be quiet for minutes while Apple processes a build; Bun otherwise resets it after ten seconds. */
+/** Builds and agent turns can be quiet while working; Bun otherwise resets their requests after ten seconds. */
 function configureRequestLifetime(
   request: Request,
   server: Pick<Bun.Server<StudioSocketData>, 'timeout'>,
   pathname: string,
 ): void {
-  if (at(request, pathname, routes.shipBeta)) {
+  if (
+    at(request, pathname, routes.shipBeta)
+    || at(request, pathname, routes.agentChatStream)
+    || at(request, pathname, StudioRoutes.clientBundle)
+  ) {
     server.timeout(request, 0)
   }
 }

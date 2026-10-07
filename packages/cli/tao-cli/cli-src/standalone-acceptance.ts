@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo, Text, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo, Text, waitForProcessReadiness } from '@shared'
 import { StandaloneScenarios } from './standalone-scenarios'
 
 /**
@@ -187,7 +187,7 @@ async function accept(release: string): Promise<void> {
       },
       {
         name: 'create a deterministic starter outside a checkout',
-        run: () => shell(home, 'tao create "A tally counter" --ai none --yes --skip-tests'),
+        run: () => shell(home, 'tao create "A tally counter" --provider local --ai none --yes --skip-tests'),
       },
       {
         name: 'newly created app selects native appearance defaults',
@@ -261,7 +261,7 @@ async function accept(release: string): Promise<void> {
       {
         name: 'create with journeys and reuse the host in a second project',
         run: async () => {
-          await shell(home, 'tao create "A reading list" --ai none --yes')
+          await shell(home, 'tao create "A reading list" --provider local --ai none --yes')
           const second = await shell(FS.resolvePath('a-reading-list', home), 'tao build --web')
           if (second.includes(HOST_INSTALL_NOTICE)) {
             Errors.throwUnexpected('A second project installed the host again instead of sharing the first install.')
@@ -323,9 +323,21 @@ async function watchRefreshesSavedBridge(environment: Platform.ProcessEnv, proje
     stdio: 'pipe',
   })
   try {
-    await waitForFreshWatchRevision(watch, () => output, 1)
+    await waitForProcessReadiness(
+      watch,
+      () => [...output.matchAll(/Tao project fresh \(revision \d+\)\./gu)].length >= 1,
+      () => output,
+      'tao watch revision 1',
+      DEV_START_TIMEOUT_MS,
+    )
     await FS.writeText(taoPath, 'function Answer() returns number {\n   return Answer() from ./WatchProbe.ts\n}\n')
-    await waitForFreshWatchRevision(watch, () => output, 2)
+    await waitForProcessReadiness(
+      watch,
+      () => [...output.matchAll(/Tao project fresh \(revision \d+\)\./gu)].length >= 2,
+      () => output,
+      'tao watch revision 2',
+      DEV_START_TIMEOUT_MS,
+    )
     if (!await FS.isFile(contractPath)) {
       Errors.throwUnexpected(`tao watch reported a refresh but wrote no ${contractPath}.`)
     }
@@ -334,20 +346,6 @@ async function watchRefreshesSavedBridge(environment: Platform.ProcessEnv, proje
     await watch.waitForClose()
     await FS.remove(taoPath)
     await FS.remove(typescriptPath)
-  }
-}
-
-async function waitForFreshWatchRevision(
-  watch: ReturnType<typeof CLI.start>,
-  output: () => string,
-  expected: number,
-): Promise<void> {
-  const deadline = Date.now() + DEV_START_TIMEOUT_MS
-  while ([...output().matchAll(/Tao project fresh \(revision \d+\)\./gu)].length < expected) {
-    if (watch.exitCode !== null || Date.now() > deadline) {
-      Errors.throwUnexpected(`tao watch did not report fresh revision ${expected}:\n${output()}`)
-    }
-    await Time.sleep(250)
   }
 }
 
@@ -543,14 +541,30 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
     stdio: 'pipe',
   })
   try {
-    const deadline = Date.now() + DEV_START_TIMEOUT_MS
     let port: string | undefined
-    while (port === undefined) {
-      port = /Waiting on http:\/\/localhost:(\d+)/.exec(output)?.[1]
-      if (port === undefined && (dev.exitCode !== null || Date.now() > deadline)) {
-        Errors.throwUnexpected(`tao run did not start Metro:\n${output}`)
+    try {
+      await waitForProcessReadiness(
+        dev,
+        () => {
+          port = /Waiting on http:\/\/localhost:(\d+)/.exec(output)?.[1]
+          return port !== undefined
+        },
+        () => output,
+        'tao run Metro',
+        DEV_START_TIMEOUT_MS,
+      )
+    } catch (cause) {
+      // Report the startup verdict before sampling a still-running child. Exited children already
+      // carry captured diagnostics, and collecting a dead PID cannot improve their startup stack.
+      HCI.writeErrorLine(Errors.formatForUser(cause))
+      if (dev.error === undefined && dev.exitCode === null && dev.signalCode === null) {
+        try {
+          await collectDevStartupDiagnostics(dev.pid)
+        } catch (diagnosticError) {
+          HCI.writeErrorLine(`Startup diagnostic collection failed: ${Errors.messageOf(diagnosticError)}`)
+        }
       }
-      await Time.sleep(250)
+      throw cause
     }
     const response = await fetch(`http://127.0.0.1:${port}/index.bundle?platform=web&dev=true&minify=false`, {
       signal: AbortSignal.timeout(DEV_START_TIMEOUT_MS),
@@ -591,6 +605,43 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
     await dev.waitForClose()
     if (ACCEPTANCE_LOG_DIR !== undefined) {
       await FS.writeText(FS.resolvePath('dev-loop.log', ACCEPTANCE_LOG_DIR), output)
+    }
+  }
+}
+
+/** Preserve the live startup stack before terminating a failed installed run. */
+async function collectDevStartupDiagnostics(pid: number | undefined): Promise<void> {
+  if (ACCEPTANCE_LOG_DIR === undefined) {
+    return
+  }
+  const commands = [
+    { name: 'dev-start-processes.log', command: '/bin/ps', args: ['-axo', 'pid,ppid,etime,%cpu,command'] },
+    ...(pid === undefined
+      ? []
+      : [{
+        name: 'dev-start-sample-command.log',
+        command: '/usr/bin/sample',
+        args: [String(pid), '5', '-file', FS.resolvePath('dev-start-sample.log', ACCEPTANCE_LOG_DIR)],
+      }, { name: 'dev-start-open-files.log', command: '/usr/sbin/lsof', args: ['-p', String(pid)] }]),
+    {
+      name: 'dev-start-diagnostic-reports.log',
+      command: '/bin/sh',
+      args: [
+        '-c',
+        'for report in /Library/Logs/DiagnosticReports/tao_*.diag; do [ -f "$report" ] || continue; printf "\\n%s\\n" "$report"; /bin/cat "$report"; done',
+      ],
+    },
+  ]
+  for (const diagnostic of commands) {
+    try {
+      const result = await CLI.run(diagnostic.command, {
+        args: diagnostic.args,
+        processPolicy: 'test',
+        timeoutMs: 30_000,
+      })
+      await FS.writeText(FS.resolvePath(diagnostic.name, ACCEPTANCE_LOG_DIR), result.stdout + result.stderr)
+    } catch (error) {
+      await FS.writeText(FS.resolvePath(diagnostic.name, ACCEPTANCE_LOG_DIR), Errors.formatForUser(error))
     }
   }
 }

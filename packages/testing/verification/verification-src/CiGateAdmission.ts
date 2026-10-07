@@ -67,7 +67,11 @@ function parseAdmission(admittedHostGates: string, gates: readonly string[]): st
       Errors.throwUserInput(`CI host gate '${name}' is not in this lane's gate list.`)
     }
     if (!VerifyComplement.isHostGate(name)) {
-      Errors.throwUserInput(`CI host gate '${name}' is a portable gate; hosted Verify already runs it.`)
+      Errors.throwUserInput(
+        GateCatalog.metadata(name).runsOnHostedLinux === true
+          ? `CI host gate '${name}' runs in hosted Verify's Linux partitions; CI macOS has nothing to admit.`
+          : `CI host gate '${name}' is a portable gate; hosted Verify already runs it.`,
+      )
     }
     admitted.add(name)
   }

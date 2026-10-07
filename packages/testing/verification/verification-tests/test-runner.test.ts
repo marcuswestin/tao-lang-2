@@ -28,7 +28,6 @@ const SPLIT_PROJECT_PARTITIONS = [
   'native-service',
   'native-bodies',
   'native-receipt',
-  'native-receipt-signatures',
   'native-typescript',
   'native-typescript-consumers',
   'receipt-repairs',
@@ -814,7 +813,7 @@ Describe('test runner suite registry', () => {
 
   Test('narrows the Jest child to the slots actually admitted after another lane joins', async () => {
     const { byName } = await nodesFor({ kind: 'full' })
-    const run = byName.get('runtime-jest')?.node.run
+    const run = byName.get('runtime-jest#1')?.node.run
 
     // The node's command is built after admission, so a narrowed grant reaches the child rather
     // than the width the catalog hoped for.
@@ -912,7 +911,10 @@ Describe('test runner suite registry', () => {
     Expect(byName.get('tao-apps#1')?.node.cost).toBe(2)
     Expect(byName.get('tao-apps#2')?.node.cost).toBe(2)
     Expect(byName.get('tao-apps#1')?.node.priority).toBe(5)
-    Expect(byName.get('runtime-jest')?.node.cost).toBe(3)
+    // Each Jest shard keeps the whole suite's three-worker reservation: its pool is its parallelism.
+    Expect(['runtime-jest#1', 'runtime-jest#2', 'runtime-jest#3'].map(name => byName.get(name)?.node.cost))
+      .toEqual([3, 3, 3])
+    Expect(byName.has('runtime-jest#4')).toBe(false)
     Expect(byName.get('apps/expo-host')?.node.cost).toBe(2)
     // An untuned Bun suite is one unsharded process that cannot use more than one core, so it
     // reserves one slot and the scheduler packs the rest of the run around it.

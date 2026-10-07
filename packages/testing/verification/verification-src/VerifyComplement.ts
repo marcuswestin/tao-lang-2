@@ -8,7 +8,8 @@ import { RunArtifacts } from './RunArtifacts'
  * keep in step with the Justfile and the `CI macOS` workflow; it is derived from both. Every gate of the full
  * lane that the catalog marks host-only is a candidate, and the workflow's `CI_HOST_GATES` names
  * the ones a hosted runner already admits, so what remains is exactly what nobody else runs. A
- * workflow with no such key admits none, and the complement is then every host gate.
+ * workflow with no such key admits none, and the complement is then every host gate. A workflow that
+ * does not run on pull requests proves nothing before a merge, so its admission counts as none too.
  *
  * The prepare nodes those gates read come along by the catalog's own edges, because the work graph
  * waits only on dependencies present in the run: a lane holding `studio-smoke` without
@@ -25,6 +26,9 @@ export const STATUS_CONTEXT = 'Verify (host)'
 export const RECEIPT_FILE = 'complement.json'
 
 const ADMISSION_LINE = new RegExp(`^\\s*${CI_HOST_GATES_KEY}:\\s*'([^']*)'`, 'mu')
+/** The top-level `on:` key, through the lines indented under it. */
+const TRIGGER_BLOCK = /^on:[^\n]*(?:\n(?:[ \t][^\n]*|[ \t]*))*/mu
+const PULL_REQUEST_TRIGGER = /(?<![\w-])pull_request(?![\w-])/u
 
 /** ComplementPlan is what the lane will run, and why each host gate is or is not in it. */
 export type ComplementPlan = {
@@ -61,8 +65,20 @@ export function admittedHostGates(workflowText: string): { admitted: string[]; p
 }
 
 /**
+ * runsOnPullRequests reports whether the workflow's `on:` declares a `pull_request` trigger, in the
+ * block, flow, or scalar spelling. Comments are dropped first: a workflow that only mentions the
+ * trigger in prose does not run on one, and a host gate it admits is proved on no pull request.
+ */
+export function runsOnPullRequests(workflowText: string): boolean {
+  const block = TRIGGER_BLOCK.exec(workflowText)?.[0] ?? ''
+  return PULL_REQUEST_TRIGGER.test(block.replace(/#[^\n]*/gu, ''))
+}
+
+/**
  * isHostGate names the gates only an unsandboxed macOS host can run. A gate hosted `Verify`'s Linux
  * partitions run (`runsOnHostedLinux`) is not one: `Verify` proves it, so the complement leaves it out.
+ * That holds only while verify.yml's partition step passes `--hosted-linux`; without it the
+ * partitions skip the gate, and verify-complement.test.ts reads the workflow to keep the two tied.
  */
 export function isHostGate(name: string): boolean {
   const gate = GateCatalog.metadata(name)
@@ -74,7 +90,9 @@ export function isHostGate(name: string): boolean {
 
 /** plan derives the lane from the full lane's membership and the workflow's admission. */
 export function plan(laneGates: readonly string[], workflowText: string): ComplementPlan {
-  const admission = admittedHostGates(workflowText)
+  const reported = admittedHostGates(workflowText)
+  // The workflow's gates are proved on a pull request's head only if it runs on pull requests.
+  const admission = runsOnPullRequests(workflowText) ? reported : { ...reported, admitted: [] }
   const admitted = new Set(admission.admitted)
   const host = laneGates.filter(name => isHostGate(name) && !admitted.has(name))
   const gates = new Set<string>()
@@ -128,5 +146,6 @@ export const VerifyComplement = {
   plan,
   readPlan,
   receiptPath,
+  runsOnPullRequests,
   writeReceipt,
 } as const

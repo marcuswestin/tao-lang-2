@@ -2973,10 +2973,12 @@
       "lastWallMs": 28957
     },
     "keyboard-navigation-smoke": {
-      "emaMs": 78318,
-      "lastMs": 86053,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 65000,
+      "lastMs": 65000,
+      "lastRunAt": "2026-10-06T16:57:00Z",
+      "lastWallMs": 65000,
+      "samples": 1,
+      "source": "wall"
     },
     "language/ast-utils": {
       "emaMs": 31052,
@@ -3247,14 +3249,6 @@
       "lastMs": 97698,
       "lastRunAt": "2026-10-06T12:46:16Z",
       "lastWallMs": 97698,
-      "samples": 1,
-      "source": "wall"
-    },
-    "language/project-tooling:native-receipt-signatures": {
-      "emaMs": 140175,
-      "lastMs": 140175,
-      "lastRunAt": "2026-10-06T12:46:16Z",
-      "lastWallMs": 140175,
       "samples": 1,
       "source": "wall"
     },
@@ -3834,6 +3828,30 @@
       "lastWallMs": 231822,
       "source": "wall"
     },
+    "runtime-jest#1": {
+      "emaMs": 77679,
+      "lastMs": 77679,
+      "lastRunAt": "2026-10-06T12:46:16Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 77679
+    },
+    "runtime-jest#2": {
+      "emaMs": 77671,
+      "lastMs": 77671,
+      "lastRunAt": "2026-10-06T12:46:16Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 77671
+    },
+    "runtime-jest#3": {
+      "emaMs": 77673,
+      "lastMs": 77673,
+      "lastRunAt": "2026-10-06T12:46:16Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 77673
+    },
     "services/account-server": {
       "emaMs": 102156,
       "lastMs": 102156,
@@ -4038,11 +4056,21 @@
       "samples": 1,
       "source": "wall"
     },
+    "studio-metro-refresh": {
+      "emaMs": 80200,
+      "lastMs": 80800,
+      "lastRunAt": "2026-10-06T18:39:40Z",
+      "lastWallMs": 80800,
+      "samples": 2,
+      "source": "wall"
+    },
     "studio-network-simulation": {
-      "emaMs": 51079,
-      "lastMs": 51293,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 44000,
+      "lastMs": 44000,
+      "lastRunAt": "2026-10-06T16:57:00Z",
+      "lastWallMs": 44000,
+      "samples": 1,
+      "source": "wall"
     },
     "studio-proof-real-app": {
       "emaMs": 238002,
@@ -4051,16 +4079,20 @@
       "samples": 1
     },
     "studio-smoke": {
-      "emaMs": 29673,
-      "lastMs": 30112,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 15000,
+      "lastMs": 15000,
+      "lastRunAt": "2026-10-06T16:57:00Z",
+      "lastWallMs": 15000,
+      "samples": 1,
+      "source": "wall"
     },
     "studio-smoke-simulated-user": {
-      "emaMs": 61598,
-      "lastMs": 61466,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 132000,
+      "lastMs": 132000,
+      "lastRunAt": "2026-10-06T16:57:00Z",
+      "lastWallMs": 132000,
+      "samples": 1,
+      "source": "wall"
     },
     "tao-apps": {
       "emaMs": 858993,

@@ -17,3 +17,53 @@
   dispatching the single physical click. Keep the existing fold assertions and retain failed-run
   evidence; this does not establish a shared click-helper fix or ten consecutive green complements.
 - **Source:** Second and third landings of `feat/landing-route-tooling` (#25), 2026-10-06.
+- **Related tutorial readiness evidence (2026-10-06):** On `feat/tutorial-first-hour`, all eight
+  host gates passed in complement `2026-10-06T17-39-44-872Z-12983-62f979ab`; its overall receipt
+  failed because preparation formatted three generated QA reports. After committing only that
+  formatting as `d3bad8c8a`, complement `2026-10-06T17-47-10-621Z-66961-57078d7d` failed the final
+  stale-undo wait at `studio-agent-browser.test.ts:263`: input re-enabled plus refusal text did not
+  appear. Bun also reported a request idle timeout after 10 seconds; four lanes overlapped and load
+  peaked at 88.1 on 18 CPUs. The unchanged isolated command passed one test and 21 assertions in
+  42.7 seconds, with its receipt at
+  `.artifacts/logs/agent/studio-smoke/2026-10-06T17-48-52-063Z-46943.log`. This establishes an
+  intermittent failure, not its cause or ten consecutive passing complements. A stalled request
+  and a missed approval click remain distinguishable hypotheses; capture approval controls, chat
+  input state, chat-log tail and model-call count on recurrence. No assertions, timeouts or
+  ownership checks were weakened.
+- **Separate request-lifetime evidence (2026-10-06):** PR #59 merged before its complement
+  failed at initial chat readiness (`2026-10-06T18-52-53-172Z-55524-86256e74`); an unchanged
+  retry failed later waiting for the stale-undo refusal (`2026-10-06T18-57-56-270Z-45344-fcd47cac`).
+  Both `studio-agent-browser.log` files report Bun's ten-second request idle timeout, without
+  identifying the request. The streamed approval response can wait quietly for the turn to finish;
+  the lazy browser bundle also awaits a build before responding. Studio now exempts these exact
+  GET bundle and POST stream routes, alongside beta shipping, from the request idle timeout.
+  Ordinary requests retain their default timeout. This closes an HTTP lifetime gap; it does not
+  prove which request timed out in either retained failure or settle the shared click-helper work.
+- **Startup boundary follow-up (2026-10-06):** The recovery complement
+  `2026-10-06T19-07-03-229Z-70886-3846e816` still failed with a blank initial page, but no Bun
+  timeout warning. The direct-server fixture now awaits the real browser client bundle before
+  opening Chrome, matching `StudioDev`'s existing readiness boundary. Its UI wait and overall
+  journey deadline are unchanged. Initial-readiness failures now include the document URL and
+  ready state as well as text and browser failures, so a remaining navigation failure can be
+  distinguished from client startup. The retained failures remain separate evidence.
+- **Approval follow-up (2026-10-06):** Complement
+  `2026-10-06T19-14-19-314Z-41579-3a25a34c` reached edits and failed at the final stale-undo
+  approval, without a Bun timeout warning. That click now waits for the approval button's
+  settled box and center hit target, following the earlier cloud-switch fix, rather than only
+  checking the panel's animation list. A failure now records approval state, input busy state,
+  chat text, scripted model calls and browser failures. The refusal and unchanged-source
+  assertions remain intact; the shared click-helper acceptance is still open.
+- **Ownership-poll follow-up (2026-10-06):** Isolated first-approval waits reproduced with two
+  scripted model calls, an unchanged URL, a busy input and no browser failures. Proposal staging
+  took about 33 seconds while Chrome was supervised. Ignoring Chrome output did not change it;
+  temporarily disabling ownership polling reduced staging to 105 milliseconds. Polls now avoid
+  duplicate attached-subtree walks and synchronous retries once `ESRCH` proves a retained PID
+  absent. With supervision retained, staging measured 112 milliseconds. The normal journey then
+  passed all 22 assertions and cleanup in 39.7 seconds
+  (`.artifacts/logs/agent/studio-smoke/2026-10-06T21-17-05-637Z-2215.log`); direct kernel inspection
+  found its Chrome PID and group absent. Temporary pipeline profiling produced separate 180-second
+  cleanup timeouts and was removed; those are not proof of a normal cleanup defect. Approval waits
+  retain their last healthy DOM state and original cause, without an extra CDP request after failure.
+  A disconnected response no longer changes a server-owned turn's verdict through a closed
+  controller error, and run logs retain bounded failure messages. This is focused source and host
+  evidence; the shared click-helper acceptance and complete complement proof remain separate.

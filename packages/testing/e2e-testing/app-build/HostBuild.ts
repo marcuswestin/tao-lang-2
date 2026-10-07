@@ -1,7 +1,8 @@
 import Runtime from '@expo-host'
 import { CLI, Errors, FS, Platform, Repo, Switch } from '@shared'
+import { recordedCommand } from '../CommandReceipts'
 
-export type HostSubject = 'clockwork' | 'hnreader' | 'native-navigation' | 'native-bridge' | 'syntax2'
+export type HostSubject = 'clockwork' | 'hnreader' | 'native-navigation' | 'native-bridge' | 'syntax2' | 'reading-list'
 export type HostApplicationFault = 'clockwork-countdown-frozen' | 'hnreader-reading-history-no-write'
 export type HostFaultProvenance = Readonly<{
   expectedVisibleAssertion: string
@@ -47,8 +48,23 @@ export async function prepareHostApp(options: PrepareHostAppOptions): Promise<Ho
   await FS.mkdir(root)
   await copyProductionHostFiles(runtimeToolchainRoot, root)
   await FS.symlink(FS.resolvePath('node_modules', runtimeToolchainRoot), FS.resolvePath('node_modules', root))
-  const sourcePath = FS.resolvePath(subject.sourcePath, repositoryRoot)
-  const entrySourceDigest = Platform.sha256Hex(await FS.readText(sourcePath))
+  let sourcePath = FS.resolvePath(subject.sourcePath, repositoryRoot)
+  const source = await FS.readText(sourcePath)
+  const entrySourceDigest = Platform.sha256Hex(source)
+  if (options.subject === 'reading-list') {
+    const final = /```tao final\n([\s\S]*?)\n```/u.exec(source)?.[1]
+    if (final === undefined) {
+      Errors.throwUnexpected('The first-app tutorial needs its complete Tao program for browser replay.')
+    }
+    sourcePath = FS.resolvePath('tutorial/ReadingList.tao', root)
+    await FS.writeText(FS.resolvePath('tutorial/.tao/.gitkeep', root), '')
+    await FS.writeText(sourcePath, `${final}\n`)
+    await recordedCommand('tutorial-check', 'bun', {
+      args: [Repo.resolvePath('packages/cli/tao-cli/cli-src/tao-cli.ts'), 'check', sourcePath],
+      cwd: repositoryRoot,
+      env: { ...Platform.runtimeProcess.env, TAO_HOME: FS.resolvePath('tutorial-home', options.artifactRoot) },
+    }, options.artifactRoot)
+  }
   const appId = `dev.tao.taohost${options.subject.replaceAll('-', '')}${options.runId.replaceAll('-', '')}`
   await Runtime.generateApp(sourcePath, { appName: subject.appName, runtimePackageRoot: root })
   const fault = options.fault === undefined
@@ -111,6 +127,7 @@ export async function exportHostWeb(build: HostBuild, options: { artifactRoot: s
 
 function subjectSource(subject: HostSubject): { appName: string; sourcePath: string } {
   return Switch(subject, {
+    'reading-list': () => ({ appName: 'ReadingList', sourcePath: 'Docs/Tutorials/Your First Tao App.md' }),
     hnreader: () => ({ appName: 'HNReaderStub', sourcePath: 'Apps/HNReader/HNReader.tao' }),
     clockwork: () => ({
       appName: 'Clockwork',

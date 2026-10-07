@@ -46,7 +46,12 @@ function locations(options: MaintainedBindingOptions): Locations {
       options.stdlibRoot ?? TaoStdlib.declaredRoot() ?? FS.resolvePath('../../stdlib', import.meta.dirname),
     ),
     sourceRoots: (options.sourceRoots
-      ?? [FS.resolvePath('../../expo-host', import.meta.dirname), FS.resolvePath('../../../..', import.meta.dirname)])
+      // Installed binaries use the staged declaration payload. Module-relative
+      // repository roots belong only to source execution; in a compiled binary
+      // they can resolve to the filesystem root and reach macOS automounts.
+      ?? (TaoResources.declaredRoot() === undefined
+        ? [FS.resolvePath('../../expo-host', import.meta.dirname), FS.resolvePath('../../../..', import.meta.dirname)]
+        : []))
       .map(path => FS.resolvePath(path)),
     explicitSources: options.sourceRoots !== undefined && options.sourceRoots.length > 0,
   }
@@ -254,7 +259,7 @@ function entries(value: unknown): value is Entry[] {
 async function readManifest(path: string, captured?: Uint8Array | null): Promise<Manifest> {
   Assert.input(
     captured !== null && (captured !== undefined || !await FS.isSymbolicLink(path) && await FS.isFile(path)),
-    `Maintained native binding manifest is missing at '${path}'.`,
+    `Maintained native binding manifest is missing at '${path}'. Generate maintained native bindings with tao bindings generate --maintained.`,
   )
   const value = Json.tryParse(
     captured === undefined ? await FS.readText(path) : new TextDecoder('utf-8', { fatal: true }).decode(captured),

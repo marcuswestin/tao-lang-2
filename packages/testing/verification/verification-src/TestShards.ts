@@ -58,6 +58,12 @@ export type PlanShardsOptions = {
   fixedMs: number
   /** Relative per-file cost, summed from the ledger's per-test durations. */
   fileCostMs: ReadonlyMap<string, number>
+  /**
+   * The most processes this suite may become, whatever its duration says. For a runner whose own
+   * worker pool already fills a machine, more shards only pay off once each lands on a machine of
+   * its own, so the count is the number of machines worth spending, not a duration quotient.
+   */
+  maxShards?: number
   /** The suite's measured wall duration, or undefined on a cold checkout. */
   measuredMs?: number
   /** False for a suite that must stay one process. */
@@ -87,8 +93,9 @@ function planShards(options: PlanShardsOptions): ShardPlan {
   if (files.length < 2) {
     return whole('one unit')
   }
+  const maxShards = Math.max(1, options.maxShards ?? Number.MAX_SAFE_INTEGER)
   if (options.measuredMs === undefined) {
-    const count = Math.min(files.length, Math.max(1, options.coldShardCount ?? 1))
+    const count = Math.min(files.length, maxShards, Math.max(1, options.coldShardCount ?? 1))
     if (count > 1) {
       return {
         reason: `${count} initial shards: no recorded duration yet`,
@@ -104,7 +111,7 @@ function planShards(options: PlanShardsOptions): ShardPlan {
   const variableMs = Math.max(0, options.measuredMs - options.fixedMs)
   const target = Math.max(1, Math.round(variableMs / TARGET_SHARD_MS))
   const cap = startupCap(variableMs, options.fixedMs)
-  const count = Math.max(1, Math.min(target, cap, files.length))
+  const count = Math.max(1, Math.min(target, cap, files.length, maxShards))
   if (count === 1) {
     return whole(
       `${formatSeconds(options.measuredMs)} measured, ${formatSeconds(options.fixedMs)} startup: one shard pays least`,
@@ -115,7 +122,7 @@ function planShards(options: PlanShardsOptions): ShardPlan {
       formatSeconds(options.fixedMs)
     } startup, ${formatSeconds(TARGET_SHARD_MS)} target, ${
       cap === Number.MAX_SAFE_INTEGER ? 'no' : cap
-    } the startup cap, ${files.length} units`,
+    } the startup cap, ${files.length} units${options.maxShards === undefined ? '' : `, ${maxShards} at most`}`,
     shards: packFiles(files, options.fileCostMs, count),
     suite: options.suite,
   }

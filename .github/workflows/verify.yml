@@ -6,12 +6,13 @@ name: Verify
 # readers; the final `Verify` job is the one verdict, and it refuses a set of partitions that did not
 # compute the same plan, because a disagreement there means some node ran nowhere.
 #
-# What this does not prove: the host-only lanes (Studio smokes, browser, native shell, canary),
-# which need a window server and an unsandboxed host, except the host gates the catalog marks
-# `runsOnHostedLinux`, which these runners do run. The landing route runs the rest locally while
-# this workflow runs (`agents/skills/verification-lanes/references/hosted-verification.md`).
-# The `CI macOS` workflow (`ci-macos.yml`) is where they move, one gate at a time; it is a workflow
-# of its own so a run here ends when the Linux partitions do.
+# Host gates: the ones the catalog marks `runsOnHostedLinux` run here (studio-smoke,
+# studio-smoke-simulated-user, keyboard-navigation-smoke, studio-dialog-browser, studio-metro-refresh,
+# studio-network-simulation). What this does not prove is the rest: studio-proof-real-app and
+# studio-agent-browser, not ported to these runners, and studio-canary, which needs macOS.
+# The landing route runs those locally while this workflow runs (`agents/skills/landing/SKILL.md`).
+# The `CI macOS` workflow (`ci-macos.yml`) is where a macOS-only gate moves, one at a time; it is a
+# workflow of its own so a run here ends when the Linux partitions do.
 #
 # The contributor-agreement check is a job here rather than a workflow of its own, so a push to a
 # pull request shows as one run in the Actions list instead of two. It runs on the same token as
@@ -274,7 +275,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.NODE_MODULES_PATHS }}
-          key: tao-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'devenv.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'packages/apps/providers/*/package.json', 'Apps/Hosted CRUD/package.json') }}
+          key: tao-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'devenv.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'packages/apps/providers/*/package.json', 'Apps/Hosted CRUD/package.json', 'patches/*.patch') }}
 
       # Bun's download cache matters only when it has to install, so it is restored only then.
       - name: Restore Bun's download cache

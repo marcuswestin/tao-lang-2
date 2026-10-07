@@ -1,0 +1,15 @@
+test-file: running — log /Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/logs/agent/test-file/2026-10-06T19-00-51-723Z-88013.log
+parser generate: up to date
+[32mCompiled /Users/ro/.codex/worktrees/5894/tao-lang-2/Apps/WordFlower/1 - Current/WordFlower.tao -> /Users/ro/.codex/worktrees/5894/tao-lang-2/Apps/WordFlower/1 - Current/.tao/cache/_gen_tao-app/App.tsx
+[0m
+Test selection:
+- selected cli/tao-cli: exact requested file
+dev-test: running 1 node — logs: .artifacts/logs/dev-test/2026-10-06T19-02-08-484Z-4551-d389ff61
+cli/tao-cli: started at 15:02:08
+
+REPORT:
+test-file: failed (exit 143) in 197.1s
+/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/logs/agent/test-file/2026-10-06T19-00-51-723Z-88013.log
+
+timed out with no output for 120s
+error: Recipe `test-file` was terminated on line 368 by signal 15

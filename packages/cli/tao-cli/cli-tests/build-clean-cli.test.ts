@@ -1,5 +1,5 @@
-import { CLI, Errors, FS, Platform, Repo } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
+import { CLI, Errors, FS, Platform, Repo, waitForProcessReadiness } from '@shared'
+import { Deferred, Describe, Expect, mkTestDir, settle, Test } from '@shared/test'
 import { type BuildRecord, executeBuildTargets } from '../cli-src/build-command'
 
 const fixtureRoot = Repo.resolvePath('packages/testing/e2e-testing/fixtures/Clockwork')
@@ -84,13 +84,18 @@ Describe('Tao local build and clean CLI', () => {
       await FS.symlink(FS.resolvePath('web/secret.txt', firstRoot), FS.resolvePath('web/site/escape', firstRoot))
       await servesOnlyContainedFiles(firstRoot)
 
-      const second = await runTao(['build', '--web', FS.resolvePath('Clockwork.tao', root)])
+      // The second build only has to show that a rebuild of unchanged source is retained beside the
+      // first under the same source digest, and the digest is taken from the snapshot before any
+      // target runs, so compiling without exporting a second static site proves the same thing.
+      const second = await runTao(['build', '--web', '--compile-only', FS.resolvePath('Clockwork.tao', root)])
       Expect(second).toMatchObject({ exitCode: 0 })
       const ids = (await FS.listDir(buildsRoot)).filter(name => !name.startsWith('.'))
       Expect(ids).toHaveLength(2)
       Expect(ids).toContain(firstId)
       const secondId = ids.find(id => id !== firstId)!
       const secondRecord = await FS.readJson<BuildRecord>(FS.resolvePath(`${secondId}/build.json`, buildsRoot))
+      Expect(secondRecord.mode).toBe('compile-only')
+      Expect(secondRecord.results.web?.status).toBe('succeeded')
       Expect(secondRecord.sourceDigest).toBe(firstRecord.sourceDigest)
 
       const clean = await runTao(['clean', root])
@@ -109,21 +114,37 @@ async function servesOnlyContainedFiles(buildRoot: string): Promise<void> {
     args: ['serve.ts'],
     cwd: FS.resolvePath('web', buildRoot),
     env: { PORT: '0' },
+    processPolicy: 'test',
+    timeoutMs: 120_000,
     onOutput: (_stream, chunk) => output += chunk.toString(),
     stdio: 'pipe',
   })
   try {
-    const port = await until(() => {
-      const value = Number(output.match(/Serving http:\/\/localhost:(\d+)/)?.[1])
-      return value > 0 ? value : undefined
-    }, { description: 'the standalone web server to announce its bound port', timeoutMs: 90_000 })
-    await until(async () => {
-      try {
-        return (await fetch(`http://127.0.0.1:${port}/`)).status === 200 ? true : undefined
-      } catch {
-        return undefined
-      }
-    }, { description: `the standalone web server to start: ${output}`, timeoutMs: 90_000 })
+    let port: number | undefined
+    await waitForProcessReadiness(
+      server,
+      () => {
+        const value = Number(output.match(/Serving http:\/\/localhost:(\d+)/)?.[1])
+        port = value > 0 ? value : undefined
+        return port !== undefined
+      },
+      () => output,
+      'the standalone web server port',
+      90_000,
+    )
+    await waitForProcessReadiness(
+      server,
+      async signal => {
+        try {
+          return (await fetch(`http://127.0.0.1:${port}/`, { signal } as RequestInit)).status === 200
+        } catch {
+          return false
+        }
+      },
+      () => output,
+      'the standalone web server response',
+      90_000,
+    )
     Expect((await fetch(`http://127.0.0.1:${port}/%252e%252e/secret.txt`)).status).toBe(400)
     Expect((await fetch(`http://127.0.0.1:${port}/escape`)).status).toBe(400)
     Expect((await fetch(`http://127.0.0.1:${port}/missing`)).status).toBe(404)

@@ -471,9 +471,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
         contention: machineLane.report(),
         location,
         machineLane,
-        onProgress: options.outputMode === undefined || options.outputMode === 'quiet'
-          ? undefined
-          : message => HCI.writeLine(message),
+        onProgress: message => HCI.writeLine(message),
         runNode,
         states,
       })
@@ -595,8 +593,15 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   // A partition never stands for its lane: the rest of the lane ran on other machines.
   const recordsLane = wholeLaneRecordable && unstable.size === 0 && partition === undefined
   if (options.greenTree !== undefined && summary.status === 'passed' && !result.interrupted) {
+    // A suite with a shard on another partition never saw that shard here, so "every shard I ran
+    // passed" would record the whole suite green while its other shards were unproved; a sibling
+    // partition restoring the store would then skip them. Only an unpartitioned run, or a suite
+    // wholly inside this partition, can vouch for a suite.
+    const splitSuites = new Set(
+      (testPlan?.states ?? []).filter(state => elsewhere(state.name)).map(state => state.suite),
+    )
     await recordGreen({
-      canStandOnRecord,
+      canStandOnRecord: name => canStandOnRecord(name) && !splitSuites.has(name),
       lane: recordsLane,
       key: startingKey,
       lanes: options.greenTree.lanes,

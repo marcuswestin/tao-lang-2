@@ -1,0 +1,45 @@
+{
+  "id": "20261006173732719-714dfe4c-491f-4ffe-9ade-c38fa5b2f8f8",
+  "runId": "20261006173228989-5fb7f13c-8705-44df-b55e-749ddea89064",
+  "createdAt": "2026-10-06T17:37:32.718Z",
+  "recordedAt": "2026-10-06T17:37:32.718Z",
+  "commit": "8d6e3ac40ac11e6fb32acb3b9652afccfa10fbda",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/tutorial-first-hour/README.md",
+      "Docs/QA/evidence/tutorial-first-hour/source.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/61f63a185b453faa2badedbf1c35701445938ae086e3aba607ff7306066a9818.json"
+  },
+  "surfaceId": "doc:Docs/Tutorials/Your First Tao App.md",
+  "dimension": "text",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "source",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/README.md",
+      "sha256": "e4402dd4626d5c52bc16c334f85ccbb8b995cc21710e7ee834948270f09bac72"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/source.json",
+      "sha256": "d5bdec24152b06cb05a48d4d6723bda1899560327bd434e5eec1da3510a2bbab"
+    }
+  ],
+  "notes": "Reviewed current setup/project-marker instructions, run/check/test commands against live help, cumulative snippet parity, platform tab wording, layout sizing, intentional light palette, failing-test exercise, persistence and retry/reset instructions. Required outside uncoached-reader acceptance remains pending. Rechecked query CurrentlyReading = Books with against adjacent prose: names and filtering syntax agree.",
+  "sourceHash": "2e8549e78cb526c248696410b2379c48d18c372d8267f17937a6c21dac7b08ef",
+  "rendererHash": "not-applicable",
+  "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
+}

@@ -1,5 +1,5 @@
 import { Errors, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, settle, Test } from '@shared/test'
 import {
   StudioCdp,
   type StudioCdpTransport,
@@ -34,6 +34,7 @@ class FakeCdpTransport implements StudioCdpTransport {
   private readonly listeners = new Map<string, Set<(params: unknown) => void>>()
   private intercepting = false
   failMouseType: string | undefined
+  failMethod: string | undefined
 
   listenerCount(method: string): number {
     return this.listeners.get(method)?.size ?? 0
@@ -44,6 +45,9 @@ class FakeCdpTransport implements StudioCdpTransport {
     params: Record<string, unknown> = {},
   ): Promise<Result> {
     this.calls.push({ method, params })
+    if (method === this.failMethod) {
+      Errors.throwHostEnvironment('CDP configuration failed')
+    }
     if (method === 'Input.setInterceptDrags') {
       this.intercepting = params['enabled'] === true
     }
@@ -98,6 +102,169 @@ class FakeCdpTransport implements StudioCdpTransport {
 }
 
 Describe('Studio browser CDP harness', () => {
+  Test('joins owned Chrome cleanup after a natural exit before disposing its observers', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-cleanup-')
+    const joined = Deferred<{ exitCode: number; signal: null }>()
+    const events: string[] = []
+    const cleanup = StudioCdp.testing.stopChrome(
+      {
+        exitCode: 0,
+        signalCode: null,
+        kill: () => {
+          events.push('kill')
+          return true
+        },
+        waitForClose: () => {
+          events.push('join')
+          return joined.promise
+        },
+        closeOutput: async () => {
+          events.push('output')
+        },
+        dispose: () => events.push('dispose'),
+      },
+      profile,
+      'SIGTERM',
+    )
+    await settle()
+    Expect(events).toEqual(['join'])
+    Expect(await FS.isDirectory(profile)).toBe(true)
+    joined.resolve({ exitCode: 0, signal: null })
+    await cleanup
+    Expect(events).toEqual(['join', 'output', 'dispose'])
+    Expect(await FS.isDirectory(profile)).toBe(false)
+  })
+
+  Test('retains cleanup failures while still disposing Chrome output and removing its profile', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-cleanup-')
+    const events: string[] = []
+    const original = new Errors.HostEnvironmentError('original ownership join failure')
+    let caught: unknown
+    try {
+      await StudioCdp.testing.stopChrome(
+        {
+          exitCode: 19,
+          signalCode: null,
+          kill: () => true,
+          waitForClose: async () => {
+            throw original
+          },
+          closeOutput: async () => {
+            events.push('output')
+            Errors.throwHostEnvironment('output drain failure')
+          },
+          dispose: () => events.push('dispose'),
+        },
+        profile,
+        'SIGKILL',
+      )
+    } catch (error) {
+      caught = error
+    }
+    Expect(caught).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect((caught as Errors.HostEnvironmentError).cause).toBe(original)
+    Expect(Errors.formatForLog(caught)).toContain('output drain failure')
+    Expect(events).toEqual(['output', 'dispose'])
+    Expect(await FS.isDirectory(profile)).toBe(false)
+  })
+
+  Test('rejects a stale DevTools port after Chrome failed with its original startup output', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-startup-')
+    await FS.writeText(FS.resolvePath('DevToolsActivePort', profile), '9222\n/browser/token')
+    await Expect(
+      StudioCdp.testing.waitForActivePort(
+        profile,
+        { exitCode: 19, signalCode: null },
+        () => 'Executable: fixture Chrome\noriginal Chrome failure',
+      ),
+    )
+      .rejects.toThrow(
+        'Chrome DevToolsActivePort failed to start (exit 19):\nExecutable: fixture Chrome\noriginal Chrome failure',
+      )
+  })
+
+  Test('accepts the DevTools port only while its Chrome child remains healthy', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-startup-')
+    await FS.writeText(FS.resolvePath('DevToolsActivePort', profile), '9222\n/browser/token')
+    Expect(await StudioCdp.testing.waitForActivePort(profile, { exitCode: null, signalCode: null })).toBe(9222)
+  })
+
+  Test('attaches without activating or resizing a borrowed target and disconnects only once', async () => {
+    const transport = new FakeCdpTransport()
+    let disconnects = 0
+    const browser = await StudioCdp.testing.attach(transport, {}, async () => {
+      disconnects++
+    })
+    Expect(transport.calls).toEqual([
+      { method: 'Page.enable', params: {} },
+      { method: 'Runtime.enable', params: {} },
+    ])
+    await browser.close()
+    await browser.close()
+    Expect(disconnects).toBe(1)
+    Expect(transport.listenerCount('Runtime.executionContextCreated')).toBe(0)
+    Expect(transport.calls.map(call => call.method)).toEqual(['Page.enable', 'Runtime.enable'])
+  })
+
+  Test('applies only explicitly requested attachment viewport and foreground activation', async () => {
+    const transport = new FakeCdpTransport()
+    const browser = await StudioCdp.testing.attach(transport, {
+      viewport: { width: 1440, height: 900 },
+      activate: true,
+    })
+    Expect(transport.calls).toEqual([
+      { method: 'Page.enable', params: {} },
+      { method: 'Runtime.enable', params: {} },
+      {
+        method: 'Emulation.setDeviceMetricsOverride',
+        params: { deviceScaleFactor: 1, height: 900, mobile: false, width: 1440 },
+      },
+      { method: 'Page.bringToFront', params: {} },
+    ])
+    await browser.close()
+  })
+
+  Test('disconnects a failed attachment and rejects invalid viewport dimensions before configuration', async () => {
+    for (const invalidViewport of [true, false]) {
+      const transport = new FakeCdpTransport()
+      transport.failMethod = 'Runtime.enable'
+      let disconnects = 0
+      await Expect(StudioCdp.testing.attach(
+        transport,
+        invalidViewport ? { viewport: { width: 0, height: 900 } } : {},
+        async () => {
+          disconnects++
+        },
+      )).rejects.toThrow(invalidViewport ? 'width must be a positive integer' : 'CDP configuration failed')
+      Expect(disconnects).toBe(1)
+      Expect(transport.listenerCount('Runtime.executionContextCreated')).toBe(0)
+      if (invalidViewport) {
+        Expect(transport.calls).toEqual([])
+      }
+    }
+  })
+
+  Test('retains the attachment configuration error when disconnect also fails', async () => {
+    const transport = new FakeCdpTransport()
+    transport.failMethod = 'Runtime.enable'
+    let disconnects = 0
+    let caught: unknown
+    try {
+      await StudioCdp.testing.attach(transport, {}, async () => {
+        disconnects++
+        Errors.throwHostEnvironment('Disconnect failed')
+      })
+    } catch (error) {
+      caught = error
+    }
+    Expect(caught).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect(Errors.messageOf(caught)).toBe('CDP configuration failed')
+    Expect(Errors.formatForLog((caught as Errors.HostEnvironmentError).cause)).toContain('CDP configuration failed')
+    Expect(Errors.formatForLog(caught)).toContain('Disconnect failed')
+    Expect(disconnects).toBe(1)
+    Expect(transport.listenerCount('Runtime.executionContextCreated')).toBe(0)
+  })
+
   Test('sets explicit deterministic desktop viewport dimensions', async () => {
     const transport = new FakeCdpTransport()
     const browser = StudioCdp.testing.create(transport)
@@ -572,6 +739,37 @@ Describe('Studio browser CDP harness', () => {
       StudioCdp.testing.create(productFailure).waitFor('window.ready === true', { timeoutMs: 10_000 }),
     ).rejects.toThrow('Preview handler failed after dispatch.')
     Expect(productFailure.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
+  })
+
+  Test('retains structured wait probes across context replacement and keeps predicate failures', async () => {
+    const transport = new FakeCdpTransport()
+    transport.evaluateResults.push(
+      new Errors.HostEnvironmentError('Execution context was destroyed.'),
+      { ready: false, message: 'working' },
+      { ready: true, message: 'complete' },
+    )
+    const probes: unknown[] = []
+    await StudioCdp.testing.create(transport).waitFor('window.state', {
+      predicate(value) {
+        probes.push(value)
+        return (value as { ready: boolean }).ready
+      },
+    })
+    Expect(probes).toEqual([
+      { ready: false, message: 'working' },
+      { ready: true, message: 'complete' },
+    ])
+    const failed = new FakeCdpTransport()
+    failed.evaluateResults.push({ ready: false })
+    const failure = new Errors.HostEnvironmentError('Execution context was destroyed: fixture product failure')
+    await Expect(
+      StudioCdp.testing.create(failed).waitFor('window.state', {
+        predicate: () => {
+          throw failure
+        },
+      }),
+    ).rejects.toBe(failure)
+    Expect(failed.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
   })
 
   Test('retries frame replacement only before dispatching the page action', async () => {

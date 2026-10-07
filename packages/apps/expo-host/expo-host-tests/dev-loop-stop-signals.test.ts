@@ -46,8 +46,8 @@ Describe('development-loop shutdown', () => {
     }
   })
 
-  Test('root exit before descendant capture refuses cleanup even when its original group is empty', async () => {
-    const root = await mkTestDir('loop-exited-ancestry-')
+  Test('a root that exits by itself with an empty group retires its record without a stop', async () => {
+    const root = await mkTestDir('loop-natural-exit-')
     const indexRoot = FS.resolvePath('index', root)
     const exit = FS.resolvePath('exit', root)
     const tree = await startStudioProcessTree(Platform.runtimeProcess.execPath, {
@@ -61,15 +61,75 @@ Describe('development-loop shutdown', () => {
       resourceIndexRoot: indexRoot,
     })
     try {
+      Expect((await FS.listDir(indexRoot)).length).toBe(1)
       await FS.writeText(exit, 'exit')
       await tree.waitForClose()
-      await Expect(stopStudioProcessTree(tree)).rejects.toThrow('Descendant cleanup remains uncertain')
-      Expect((await FS.listDir(indexRoot)).length).toBe(1)
+      Expect(await FS.listDir(indexRoot)).toEqual([])
+      tree.assertCleanup!()
     } finally {
       tree.dispose()
       await FS.remove(root)
     }
   })
+
+  Test('a root that exits by itself keeps a record while a group member survives', async () => {
+    const root = await mkTestDir('loop-natural-exit-survivor-')
+    const indexRoot = FS.resolvePath('index', root)
+    const survivorPid = FS.resolvePath('survivor.pid', root)
+    const tree = await startStudioProcessTree(Platform.runtimeProcess.execPath, {
+      args: [
+        '-e',
+        `import { FS, Platform } from ${JSON.stringify(sharedModule)};
+        const survivor = Platform.spawn(Platform.runtimeProcess.execPath,
+          { args: ['-e', 'setInterval(() => {}, 1000)'], stdio: 'ignore' });
+        await FS.writeText(${JSON.stringify(survivorPid)}, String(survivor.pid));
+        Platform.runtimeProcess.exit(0);`,
+      ],
+      cwd: root,
+      resourceIndexRoot: indexRoot,
+    })
+    let survivor: ReturnType<typeof ProcessTree.identities> | undefined
+    try {
+      await tree.waitForClose()
+      const pid = Number(await FS.readText(survivorPid))
+      survivor = ProcessTree.identities([pid])
+      Expect(survivor.has(pid)).toBe(true)
+      const records = await FS.listDir(indexRoot)
+      Expect(records.length).toBe(1)
+      const record = await FS.readJson<{ children: { pid: number }[] }>(FS.resolvePath(records[0]!, indexRoot))
+      Expect(record.children.map(process => process.pid)).toContain(pid)
+      Expect(tree.isRunning()).toBe(true)
+      ProcessTree.signalTracked([...survivor.values()], 'SIGKILL')
+      await until(() => !tree.isRunning(), { description: 'survivor stopped' })
+      tree.assertCleanup!()
+      Expect(await FS.listDir(indexRoot)).toEqual([])
+    } finally {
+      if (survivor !== undefined) {
+        ProcessTree.signalTracked([...survivor.values()], 'SIGKILL')
+      }
+      tree.dispose()
+      await FS.remove(root)
+    }
+  })
+
+  Test('disposing before an exit was observed leaves an uncertain record', async () => {
+    const root = await mkTestDir('loop-dispose-running-')
+    const indexRoot = FS.resolvePath('index', root)
+    const tree = await startStudioProcessTree(Platform.runtimeProcess.execPath, {
+      args: ['-e', 'setInterval(() => {}, 1000)'],
+      cwd: root,
+      resourceIndexRoot: indexRoot,
+    })
+    try {
+      tree.dispose()
+      Expect(await FS.listDir(indexRoot)).toHaveLength(1)
+      Expect(() => tree.assertCleanup!()).toThrow('Descendant cleanup remains uncertain')
+    } finally {
+      await withCapturedOutput(() => tree.kill('SIGKILL'))
+      await FS.remove(root)
+    }
+  })
+
   Test('an unrecordable launch refuses allocation before the executable can run', async () => {
     const root = await mkTestDir('loop-refused-allocation-')
     const blocked = FS.resolvePath('index-file', root)

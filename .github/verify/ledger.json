@@ -5520,16 +5520,6 @@
       "outcome": "passed",
       "suite": "language/project-tooling"
     },
-    "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceiptSignatures.test.ts::seeded file cost": {
-      "durationMs": 109425,
-      "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceiptSignatures.test.ts",
-      "fileIdentity": "seeded",
-      "id": "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceiptSignatures.test.ts::seeded file cost",
-      "lastRunAt": "2026-10-06T00:00:00.000Z",
-      "name": "seeded file cost",
-      "outcome": "passed",
-      "suite": "language/project-tooling"
-    },
     "language/project-tooling::packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScriptConsumers.test.ts::seeded file cost": {
       "durationMs": 109530,
       "file": "packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScriptConsumers.test.ts",

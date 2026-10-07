@@ -175,9 +175,8 @@ async function barrier(mode: 'short' | 'escape' = 'short') {
       const members = ProcessTree.groupMembers(capture.group)
       if (
         worker !== undefined || Platform.processIsAlive(capture.worker.pid)
-        || capture.trackedDescendants.some(process =>
-          descendants.has(process.pid) || Platform.processIsAlive(process.pid)
-        )
+        // A tracked descendant escaped the supervisor, so nothing in the group reaps it.
+        || capture.trackedDescendants.some(process => descendants.has(process.pid) || escapedStillRuns(process.pid))
         || members.length !== 1 || members[0]!.pid !== capture.supervisor.pid
         || !ProcessTree.sameProcess(members[0], capture.supervisor)
         || child.exitCode !== null || child.signalCode !== null
@@ -388,7 +387,7 @@ Test(
       Expect(
         await Time.pollUntil(
           () =>
-            ProcessTree.identities([escaped!.pid]).has(escaped!.pid) || Platform.processIsAlive(escaped!.pid)
+            escapedStillRuns(escaped!.pid)
               ? undefined
               : true,
           { intervalMs: 25, timeoutMs: 30_000 },
@@ -396,12 +395,12 @@ Test(
       ).toBe(true)
       Expect((await f.finish()).exitCode).toBe(0)
     } finally {
-      if (escaped && Platform.processIsAlive(escaped.pid)) {
+      if (escaped && escapedStillRuns(escaped.pid)) {
         ProcessTree.signalTracked([escaped], 'SIGTERM')
         Expect(
           await Time.pollUntil(
             () =>
-              ProcessTree.identities([escaped!.pid]).has(escaped!.pid) || Platform.processIsAlive(escaped!.pid)
+              escapedStillRuns(escaped!.pid)
                 ? undefined
                 : true,
             { intervalMs: 25, timeoutMs: 30_000 },
@@ -412,3 +411,12 @@ Test(
     }
   },
 )
+
+/**
+ * A killed orphan stays an unreaped zombie in a container whose first process does not reap, and
+ * kill(0) still succeeds on a zombie. Linux's proc table already leaves zombies out of identities,
+ * so only Darwin, where launchd reaps promptly, also asks kill(0).
+ */
+function escapedStillRuns(pid: number): boolean {
+  return ProcessTree.identities([pid]).has(pid) || (Platform.hostPlatform !== 'linux' && Platform.processIsAlive(pid))
+}

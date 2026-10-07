@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, ReleaseCapabilities } from '@shared'
+import { CLI, Errors, FS, HCI, Json, Platform, ReleaseCapabilities } from '@shared'
 import { type QaDimension, QaInventory, type QaInventoryData, type QaReviewer, type QaSurface } from './QaInventory'
 
 const IMAGE_PATTERN = /\.(png|jpe?g|webp)$/iu
@@ -73,7 +73,7 @@ type Options = { phase?: string; scope?: string; resume?: string; file?: string 
 
 /** QaRegister stores immutable runs and observations, and derives current coverage from evidence. */
 export class QaRegister {
-  constructor(private readonly root: string) {}
+  constructor(private readonly root: string, private readonly runSourceCheck: typeof CLI.run = CLI.run) {}
 
   async command(action: string, options: Options): Promise<void> {
     const handlers: Record<string, () => Promise<unknown>> = {
@@ -84,6 +84,8 @@ export class QaRegister {
           documents: result.surfaces.filter(surface => surface.kind === 'document').length,
           stories: 49,
           exclusions: result.exclusions.length,
+          scenarioApps: result.surfaces.filter(surface => surface.kind === 'screenshot-set').length,
+          scenarioDiscoveryFailures: result.scenarioDiscoveryFailures,
         }
       },
       run: () => this.run(Number(options.phase ?? 1), options.scope ?? 'changed', options.resume),
@@ -186,17 +188,19 @@ export class QaRegister {
         await this.atomic(`${dir}/links.json`, links, true)
       }
       if (run.selected.includes('story:DOC1') && !await FS.exists(this.path(`${dir}/tutorial.json`))) {
-        const result = await CLI.run('./agent', {
-          args: ['test-file', 'packages/cli/tao-cli/cli-tests/tutorials.test.ts'],
+        const result = await this.runSourceCheck('./agent', {
+          // Stream preparation and retry progress. Test workers capture their own output until
+          // completion, so silence is not a hang signal; bound the whole replay instead.
+          args: ['test-file', '--verbose', 'packages/cli/tao-cli/cli-tests/tutorials.test.ts'],
           cwd: this.root,
           processPolicy: 'test',
           timeoutMs: 600_000,
-          idleOutputMs: 120_000,
+          timeoutPolicy: 'bounded',
         })
         const log = `${dir}/tutorial.log`
         await FS.writeText(this.path(log), `${result.stdout}\n${result.stderr}`)
         await this.atomic(`${dir}/tutorial.json`, {
-          command: './agent test-file packages/cli/tao-cli/cli-tests/tutorials.test.ts',
+          command: './agent test-file --verbose packages/cli/tao-cli/cli-tests/tutorials.test.ts',
           outcome: result.exitCode === 0 ? 'pass' : CLI.isSandboxDenial(result) ? 'blocked' : 'fail',
           evidence: log,
           scope: 'source tests only; no text, visual, installed artifact, or human acceptance',
@@ -569,6 +573,14 @@ export class QaRegister {
       }. Tree digest \`${inventory.treeDigest.slice(0, 16)}\`; content hashes are stored per observation.\n\n`
       + 'Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.\n\n'
       + '[Pilot and annotated findings](pilot.md) · [Finding records](findings.json) · [Capability availability](capabilities.md)\n\n'
+    const discoveryText = `\n\n## Scenario discovery\n\n${
+      inventory.scenarioDiscoveryFailures.length
+        ? inventory.scenarioDiscoveryFailures.map(item => `- ${item.source}: **failed discovery** — ${item.error}`)
+          .join('\n')
+        : `${
+          inventory.surfaces.filter(surface => surface.kind === 'screenshot-set').length
+        } scenario apps discovered. Capture availability and visual judgment remain separate.`
+    }`
     const tableHeader =
       '| Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n'
     const table = ([
@@ -623,14 +635,14 @@ export class QaRegister {
         `- ${surface.id}: ${surface.title} — ${surface.scopeNote}`
       ).join('\n') || 'None.'
     }`
-    const text = `${header}${table}${assessedText}${findingsText}\n\n## Applicable gaps\n\n${
+    const text = `${header}${table}${discoveryText}${assessedText}${findingsText}\n\n## Applicable gaps\n\n${
       gaps.join('\n') || 'No recorded gaps.'
     }${deferred}${exclusions}\n`
     const packet = `Docs/QA/release-${phase}.md`
     await this.atomic(packet, text)
     await this.atomic(
       'Docs/QA/dashboard.md',
-      `${header}${table}${assessedText}${findingsText}\n\nFull applicable gaps and exclusions: [release ${phase} packet](release-${phase}.md).\n`,
+      `${header}${table}${discoveryText}${assessedText}${findingsText}\n\nFull applicable gaps and exclusions: [release ${phase} packet](release-${phase}.md).\n`,
     )
     return { packet, dashboard: 'Docs/QA/dashboard.md' }
   }
@@ -732,13 +744,24 @@ export class QaRegister {
         'A visual pass requires an inspected image, not capture success or unchanged digests alone.',
       )
     }
-    type Cell = { group?: unknown; label?: unknown; status?: unknown; sha256?: unknown; screenshot?: unknown }
+    type Cell = {
+      key?: unknown
+      group?: unknown
+      label?: unknown
+      status?: unknown
+      sha256?: unknown
+      screenshot?: unknown
+    }
+    const sourceOf = (cell: Cell): unknown => {
+      const key = typeof cell.key === 'string' ? Json.tryParse(cell.key) : undefined
+      return Array.isArray(key) ? key[0] : undefined
+    }
     const cells: Cell[] = []
     let snapshots = 0
     for (const item of evidence.filter(entry => entry.path.endsWith('.json'))) {
       const value = await FS.readJson<unknown>(this.path(item.path)).catch(() => undefined)
       const record = value && typeof value === 'object'
-        ? value as { owner?: unknown; status?: unknown; cells?: unknown; app?: unknown }
+        ? value as { owner?: unknown; status?: unknown; cells?: unknown; app?: unknown; originalProject?: unknown }
         : {}
       if (record.owner !== 'qa-capture') {
         continue
@@ -748,13 +771,31 @@ export class QaRegister {
           `${surface.id} is shown by captures of ${surface.captureApp}; ${item.path} captured ${String(record.app)}.`,
         )
       }
+      if (
+        surface.captureProject
+        && record.originalProject !== await FS.realPath(this.path(surface.captureProject))
+      ) {
+        Errors.throwUserInput(`${surface.id} requires a capture of ${surface.captureProject}.`)
+      }
       if (record.status !== 'complete') {
         Errors.throwUserInput(
           `A visual pass cannot cite an incomplete capture: ${item.path} is ${String(record.status)}.`,
         )
       }
+      const captured = Array.isArray(record.cells) ? record.cells as Cell[] : []
+      for (const [captureChannel, expected] of Object.entries(surface.captureCells ?? {})) {
+        if (
+          !captured.some(cell =>
+            cell.status === 'captured' && `${String(cell.group)}/${String(cell.label)}` === expected
+            && (surface.captureSources?.[captureChannel] === undefined
+              || sourceOf(cell) === surface.captureSources[captureChannel])
+          )
+        ) {
+          Errors.throwUserInput(`Capture is missing a required captured cell: ${expected}.`)
+        }
+      }
       snapshots += 1
-      cells.push(...(Array.isArray(record.cells) ? record.cells as Cell[] : []))
+      cells.push(...captured)
     }
     if (reviewer === 'agent' && !snapshots) {
       Errors.throwUserInput("An agent visual pass must cite the capture's complete source-snapshot.json.")
@@ -780,7 +821,13 @@ export class QaRegister {
         'Every cited image must be the screenshot of a captured cell in the cited capture snapshot.',
       )
     }
-    if (expected && !shown.some(cell => `${String(cell!.group)}/${String(cell!.label)}` === expected)) {
+    const expectedSource = surface.captureSources?.[channel]
+    if (
+      expected && !shown.some(cell => {
+        return `${String(cell!.group)}/${String(cell!.label)}` === expected
+          && (expectedSource === undefined || sourceOf(cell!) === expectedSource)
+      })
+    ) {
       Errors.throwUserInput(`Channel ${channel} is shown by capture cell ${expected}; cite that cell's image.`)
     }
   }

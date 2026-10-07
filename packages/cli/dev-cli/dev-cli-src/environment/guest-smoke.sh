@@ -52,9 +52,21 @@ step() {
   read -r producer_result < "$logs/$label.exit-code" || producer_result=1
   [ "$producer_result" -eq 0 ] || step_result=$producer_result
   printf '%s\t%s\t%s\n' "$label" "$step_result" "$(($(date +%s) - started))" >> "$logs/steps.tsv"
+  record_memory "$label"
   printf 'Contributor Linux: %s finished (exit %s, %ss); log: %s/%s.log\n' \
     "$label" "$step_result" "$(($(date +%s) - started))" "$logs" "$label"
   return "$step_result"
+}
+
+# A process the kernel kills for memory prints nothing, and a test runner sees only a signal.
+# The container's cgroup counts each kill and keeps the high-water mark, so record both after
+# every step: an `oom_kill` that rose during a step names that step's silent deaths.
+record_memory() {
+  for counter in memory.events memory.peak memory.max; do
+    if [ -r "/sys/fs/cgroup/$counter" ]; then
+      printf '%s %s\n' "$counter" "$(tr '\n' ' ' < "/sys/fs/cgroup/$counter")"
+    fi
+  done > "$logs/$1.memory.txt" 2>&1 || true
 }
 
 record_tool_versions() {

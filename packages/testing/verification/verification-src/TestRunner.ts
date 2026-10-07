@@ -124,6 +124,8 @@ type SuiteSource = {
    * a retry, an exact path, a changed plan's app roots — ignores these and uses what it was given.
    */
   shardUnits?: readonly string[]
+  /** Complete cost inventory, when recursive execution roots combine several units. */
+  estimationUnits?: readonly string[]
   /** Relative cost per unit, for units the ledger cannot time because it keys the suite as one. */
   unitCostMs?: ReadonlyMap<string, number>
 }
@@ -180,9 +182,11 @@ async function suiteRegistry(repositoryRoot = Shared.Repo.getRoot()): Promise<Su
       build: (roots, selection) => taoAppsSuite(roots, selection.pattern, repositoryRoot),
       files: [TestSelection.ALL_APPS],
       name: TAO_APPS,
-      // `./tao test` takes app roots, so the roots are what its shards can be split across. The
+      // `./tao test` searches roots recursively, so a parent owns its nested journey folders too.
+      // Keep those folders in the cost inventory without scheduling them a second time. The
       // ledger still keys the suite as the one synthetic `Apps` unit whose identity it can hash.
-      shardUnits: [...taoAppUnits.keys()],
+      shardUnits: disjointTaoRoots([...taoAppUnits.keys()]),
+      estimationUnits: [...taoAppUnits.keys()],
       unitCostMs: taoAppUnits,
     },
   ]
@@ -200,7 +204,8 @@ function selectSuites(
     if (selection.suites !== undefined && !selection.suites.has(source.name)) {
       continue
     }
-    const files = selection.files?.get(source.name) ?? source.files
+    const requested = selection.files?.get(source.name) ?? source.files
+    const files = source.name === TAO_APPS ? disjointTaoRoots(requested) : requested
     if (files.length > 0) {
       const shardUnits = source.shardUnits === undefined || selection.files?.has(source.name) === true
         ? undefined
@@ -208,7 +213,7 @@ function selectSuites(
       result.selected.push({
         buildProcess: (nodeName, nodeUnits, slots) =>
           source.build(nodeUnits, selection, { ...context, nodeName, slots }),
-        estimationUnits: source.shardUnits ?? source.files,
+        estimationUnits: source.estimationUnits ?? source.shardUnits ?? source.files,
         files,
         name: source.name,
         ...(shardUnits === undefined ? {} : { shardUnits }),
@@ -217,6 +222,12 @@ function selectSuites(
     }
   }
   return result
+}
+
+/** Recursive Tao roots must be disjoint before the planner can put them in different processes. */
+function disjointTaoRoots(roots: readonly string[]): string[] {
+  const unique = [...new Set(roots)]
+  return unique.filter(root => !unique.some(ancestor => root.startsWith(`${ancestor}/`))).sort()
 }
 
 /** discoverTestSuites answers one selection from this checkout's registry. */
@@ -466,7 +477,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
       contention: machineLane.report(),
       location,
       machineLane,
-      onProgress: mode === 'quiet' ? undefined : message => Shared.HCI.writeLine(message),
+      onProgress: message => Shared.HCI.writeLine(message),
       states: graphStates,
     })
   }

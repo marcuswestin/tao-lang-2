@@ -95,7 +95,7 @@ export const JUST_COMMANDS = [
   // the same way a developer does: by completing a prefix, not by recalling which flag it took.
   'verify',
   'verify-changed',
-  // The local half of a landing: only the host-only gates hosted Verify does not admit.
+  // The local half of a landing: only the host-only gates hosted Verify does not run.
   'verify-complement',
   'verify-full',
   'diagnose-verification',
