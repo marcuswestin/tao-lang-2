@@ -215,9 +215,7 @@ export function renderLanguagePerformance(report: LanguagePerformanceReport): st
       ? 'every steady-state median is within its budget'
       : `over budget: ${
         breaches.map(breach =>
-          `${breach.stage} ${breach.strategy} median ${formatElapsed(breach.medianMs)} against ${
-            formatElapsed(breach.budgetMs)
-          }`
+          `${breach.stage} ${breach.strategy} median ${breach.medianMs}ms against ${breach.budgetMs}ms`
         ).join('; ')
       }`,
   )
@@ -296,6 +294,11 @@ async function run(): Promise<void> {
   try {
     const iterations = parseIterations(Platform.runtimeProcess.argv[2])
     const report = await runLanguagePerformance(iterations)
+    const artifactRoot = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PERFORMANCE_ARTIFACT_ROOT']
+    if (artifactRoot) {
+      await FS.mkdir(artifactRoot)
+      await FS.writeJson(FS.resolvePath('language.json', artifactRoot), report)
+    }
     HCI.write(renderLanguagePerformance(report))
     if (budgetBreaches(report).length > 0) {
       Platform.runtimeProcess.setExitCode(1)

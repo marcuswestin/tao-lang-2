@@ -46,6 +46,14 @@ The scope decision is pending. Landing authorization remains valid, but hosted m
 not started. The workflow blocker is also recorded in
 [DEVENV-WORDFLOWER-CHECK-EXCEEDS-QUIET-PERFORMANCE-BUDGET](<Developer environment upgrades/DEVENV-WORDFLOWER-CHECK-EXCEEDS-QUIET-PERFORMANCE-BUDGET.md>).
 
+Main `c4b48ea1b` subsequently integrated without conflicts, preserving native inspection caching
+and locking. Both setups pass. Retry `performance-192ca37b-b81e-47ab-9e8b-80f01c184e29`
+also fails session checking, with no peers and load 2.4717–3.4600 on 18 CPUs. Its rounded output
+shows both median and ceiling as 1.3 seconds; the failure remains authoritative. The language
+reporter now names breaches in unrounded milliseconds and retains every raw sample in
+`language.json` under the standalone run's artifact root. That reporting fix changes neither
+the measured operations nor ceilings, and its focused regression passes.
+
 ### Historical starting state
 
 1. New managed worktree: `/Users/ro/.codex/worktrees/studio-preview-speed-execution/tao-lang-2`;
