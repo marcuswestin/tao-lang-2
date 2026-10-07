@@ -31,6 +31,9 @@ function fixture(options: {
   unreadableReads?: number
   unreadableUntilYield?: boolean
   nativeErrno?: number
+  shortReturnedBytes?: number
+  shortPid?: number
+  shortStatus?: number
   group?: number
   probe?: 'live' | 'EPERM' | 'EIO' | 'ESRCH' | 'uncoded' | 'undefined'
   probeErrno?: number
@@ -81,8 +84,16 @@ function fixture(options: {
       return 1
     },
     proc_pidinfo: (pid: number, kind: number, arg: number, bytes: Uint8Array) => {
-      identityReads++
       Expect([701, 702].includes(pid)).toBe(true)
+      if (kind === 13) {
+        Expect(arg).toBe(1)
+        Expect(bytes.byteLength).toBe(64)
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+        view.setUint32(0, options.shortPid ?? pid, true)
+        view.setUint32(12, options.shortStatus ?? 2, true)
+        return options.shortReturnedBytes ?? bytes.byteLength
+      }
+      identityReads++
       Expect(kind).toBe(3)
       Expect(arg).toBe(expectedArg === 0 && identityReads > 1 ? 1 : expectedArg)
       if (
@@ -316,6 +327,40 @@ for (const kind of ['group', 'descendants'] as const) {
   })
 }
 
+for (const kind of ['identities', 'descendants', 'group'] as const) {
+  Test(`Darwin ${kind} omits a denied full record only when a matching short record proves zombie status`, () => {
+    const host = fixture({ unreadable: true, nativeErrno: 1, shortStatus: 5, probe: 'live' })
+    Expect(host.inspect(kind)).toEqual([])
+    // The short record proves execution ended; it never becomes an owned signal target.
+    Expect(host.probes).toEqual(kind === 'identities' ? [{ pid: 701, signal: 0 }] : [])
+    Expect(host.closes()).toBe(1)
+  })
+}
+
+for (
+  const observation of [
+    { shortStatus: 2 },
+    { shortStatus: 5, shortPid: 702 },
+    { shortStatus: 5, shortReturnedBytes: 60 },
+    { shortStatus: 5, shortReturnedBytes: 0 },
+    { shortStatus: 5, nativeErrno: 13 },
+  ] as const
+) {
+  Test(`Darwin refuses a denied identity with inconclusive short observation ${JSON.stringify(observation)}`, () => {
+    const host = fixture({ unreadable: true, nativeErrno: 1, probe: 'live', ...observation })
+    Expect(() => host.inspect('descendants')).toThrow(Errors.HostEnvironmentError)
+    Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
+    Expect(host.closes()).toBe(1)
+  })
+}
+
+Test('Darwin group joins reject a short zombie record without exact identity proof', () => {
+  const host = fixture({ unreadable: true, nativeErrno: 1, shortStatus: 5, probe: 'live' })
+  Expect(() => host.inspect('live-group')).toThrow(Errors.HostEnvironmentError)
+  Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
+  Expect(host.closes()).toBe(1)
+})
+
 Test('Darwin group inspection refuses a member that moved to another group during inspection', () => {
   const host = fixture({ group: 800 })
   Expect(() => host.inspect('group')).toThrow('changed process group during inspection')
@@ -440,6 +485,24 @@ for (
         expectedBytes: 136,
         probeStatus: 'live',
         nativeErrno: 13,
+      },
+    },
+    {
+      name: 'denied full identity with live short record',
+      kind: 'descendants',
+      options: { unreadable: true, probe: 'live', nativeErrno: 1, shortStatus: 2 },
+      expected: {
+        failureKind: 'identity-unreadable',
+        routine: 'proc_pidinfo',
+        pid: 701,
+        returnedBytes: 0,
+        expectedBytes: 136,
+        probeStatus: 'live',
+        nativeErrno: 1,
+        shortReturnedBytes: 64,
+        shortPid: 701,
+        shortStatus: 2,
+        shortUid: 0,
       },
     },
     {

@@ -80,6 +80,22 @@ try {
     const details = { routine: 'proc_pidinfo', pid, returnedBytes, expectedBytes: bytes.byteLength,
       ...(nativeErrno ? { nativeErrno } : {}) };
     if (returnedBytes < bytes.byteLength) {
+      if (nativeErrno === 1) {
+        const shortBytes = new Uint8Array(64);
+        const shortView = new DataView(shortBytes.buffer);
+        details.shortReturnedBytes = library.symbols.proc_pidinfo(pid, 13, 1, ptr(shortBytes), shortBytes.byteLength);
+        if (details.shortReturnedBytes === shortBytes.byteLength) {
+          details.shortPid = shortView.getUint32(0, true);
+          details.shortStatus = shortView.getUint32(12, true);
+          details.shortUid = shortView.getUint32(36, true);
+          // SHORTBSDINFO is exempt from the full record's same-user policy. A complete
+          // matching SZOMB record proves execution ended, but grants no signal authority.
+          // Group joins still require the full exact identities across both snapshots.
+          if (details.shortPid === pid && details.shortStatus === 5 && request.kind !== 'live-group') {
+            return undefined;
+          }
+        }
+      }
       return unreadableIdentity(pid, { ...details, failureKind: 'identity-unreadable' });
     }
     if (view.getUint32(12, true) !== pid) {
@@ -242,6 +258,10 @@ function inspectionFailureFields(value: unknown): Errors.ErrorDetails {
       'expectedBytes',
       'probeErrno',
       'nativeErrno',
+      'shortReturnedBytes',
+      'shortPid',
+      'shortStatus',
+      'shortUid',
       'helperStatus',
       'expectedParentPid',
       'actualParentPid',

@@ -168,4 +168,16 @@
   errno propagation through the shared failure envelope. Two bounded live child-exit probes did not
   reproduce the failure (62 Bun-parent reads and 523 Node-parent reads, zero failures); this does not
   establish its cause. The next complete landing run collects the missing native error if it recurs.
+- **Denied identity follow-up (2026-10-07):** The next full landing run captured native `EPERM`
+  after all 1,193 CLI assertions passed: PID 96340 returned zero full BSD record bytes while its
+  signal probe succeeded (root 83565). Log:
+  `.artifacts/logs/verify-full/2026-10-07T17-10-16-339Z-66710-6851a228/cli_dev-cli.log`.
+  The unchanged CLI suite and wrapper passed separately in 125.6 seconds. The denial's precise
+  policy and the target's status at that observation remain unproved. Apple exempts the shorter
+  BSD record from the full record's same-user check. After an `EPERM`, a complete short record
+  matching the requested PID and `SZOMB` now permits omitting that finished process without
+  granting identity or signal authority. Live, partial, mismatched and denied short records still
+  fail; process-group joins retain their full exact-identity and two-snapshot proof. Deterministic
+  fixtures cover those boundaries, and removing the zombie-status guard makes the live-record
+  refusal regression fail. Complete landing verification remains the final acceptance gate.
 - **Source:** 2026-09-17 process-teardown implementation.
