@@ -183,7 +183,6 @@ const commands = new Map<string, ReleaseCapability>([
     [name, 'app-commands'] as const
   ),
   ['ship', 'ship'],
-  ['bridge', 'native-bindings'],
   ...[
     'secrets',
     'secrets identity',

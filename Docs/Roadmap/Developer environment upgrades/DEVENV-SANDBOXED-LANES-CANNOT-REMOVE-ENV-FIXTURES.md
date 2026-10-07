@@ -16,6 +16,7 @@
   permitted`. The sandbox policy denies every `**/.env` path, including the fixtures a test writes in
   its own scratch directory. The unchanged tests pass unsandboxed. DEVENV-040 records the same
   denial for Expo's checked-in `.env` fixture under `node_modules`.
+  A second report, `feat/landing-route-tooling` the same day (`.artifacts/logs/verify-changed/2026-10-06T03-37-45-442Z-55413-815de3e5/shared.log`), had no change under `packages/shared` and still failed the suite; `./agent test-file packages/shared/shared-tests/resource-inventory.test.ts` reproduced two of the three failures alone. It was filed separately and merged here by the 2026-10-07 repository pass.
 - **Workaround:** Run the lane on the host, or run `./agent test-file` on the other changed
   suites and let hosted `Verify` prove `shared`. Remove the stranded scratch directories from an
   unsandboxed shell.

@@ -352,7 +352,7 @@ Repository iOS setup is the first bounded slice: `just setup-ios` / the named `s
 operation inspects explicit Xcode and simulator-runtime versions, supports a side-by-side local
 Xcode archive installation with automatic detection in Downloads and a download-and-resume prompt,
 Apple's runtime download/import, and hands off account, license,
-and administrator steps. The [developer workflow documentation](../../packages/cli/dev-cli/README.md#ios-simulator-setup)
+and administrator steps. The [developer workflow documentation](../../packages/cli/dev-cli/README.md#apple-development-setup)
 owns its commands and limits. Public CLI integration, a shared target requirements graph, Android
 installation, and complete clean-machine acceptance remain open.
 
@@ -412,6 +412,10 @@ from the development loop, which no virtualization approach can do.
   build and opens the app in it. Publishing zips it beside the Android host on the same release.
   Proven with HNReader on an iPhone 17 simulator; the first, unsigned build carried no entitlements
   and CloudKit aborted it, which the build now refuses.
+- The iOS Expo Go fallback now prepares the SDK-matched client automatically before opening the
+  simulator URL. It checks Expo's published client version, caches the app under project-owned Expo
+  state, and installs through the same fixed-UDID launch boundary as Companion. Focused tests cover
+  missing and incompatible clients, cache reuse, cancellation and failed installation.
 - Landed 2026-09-25, physical Android: `tao run`'s phone path prepares a phone the way it prepares an
   emulator, installing a compatible Companion only when the phone's copy differs, and reaches Metro
   over `adb reverse` on the phone's own loopback, or at the Mac's LAN address when that fails.
@@ -428,8 +432,8 @@ from the development loop, which no virtualization approach can do.
   2. In `expo-runner/run-targets.ts`, replace the iOS Simulator's Expo Go branch (`/_expo/open`,
      `expoLink('ios')`, then `EXPO_GO_URL`) and the install-failure fallback with the Companion
      development-client URL. If the host is unavailable or installation fails, report that and skip
-     opening the simulator. Replace `simulatorOpenFailure`'s `bunx expo start --ios` Expo Go remedy
-     with a host installation or download remedy, while retaining its useful LaunchServices detail.
+     opening the simulator. Retire the automatic Expo Go preparation together with that fallback,
+     while retaining useful LaunchServices detail and Companion installation/download recovery.
   3. In `expo-runner/physical-device.ts`, replace the Android phone's Expo Go URL for USB reverse and
      LAN fallback with the Companion's development-client URL for the selected Metro host. Replace
      `Try ... in Expo Go` and the no-device Expo Go wording with Companion recovery steps. Keep the

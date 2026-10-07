@@ -73,11 +73,12 @@ export function emitReferences(
       define(definition)
     }
     const actions = associatedActions.get(reference.name) ?? []
+    // The block uses the formatter's canonical layout: one member per line, indented one level.
     tao.push(
       origin,
       ...physical.tao,
       `public type ${reference.name} is ${reference.base ?? 'item'}${
-        actions.length > 0 ? ` with { ${actions.join('\n   ')}\n}` : ''
+        actions.length > 0 ? ` with {\n${actions.map(action => `   ${action}`).join('\n')}\n}` : ''
       }`,
       '',
     )

@@ -466,12 +466,12 @@ The pairing landed with defaults an agent chose on five points; the Developer de
       key also names the issuer. Options: keep the subject, or qualify it by issuer.
       **Recommended:** keep it; an app has one auth provider, and custody already names the issuer.
 
-### R16 — Public phases for `tao bridge` and `tao secrets`
+### R16 — Public phases for explicit-package `tao bindings generate` and `tao secrets`
 
 Both commands arrived after the staged release plan. Until they have a phase, the release catalog
 (`packages/shared/shared-src/ReleaseCapabilities.ts`) defers them from every public build.
 
-- [ ] **Before MVP — `tao bridge`.** It generates experimental Tao bindings for native API actions
+- [ ] **Before MVP — `tao bindings generate <package>`.** It generates experimental Tao bindings for native API actions
       from installed Expo and React Native packages, distinct from release 2's typed data adapters.
       Options: keep it deferred, or give it a phase together with the acceptance that proves
       generated bindings on that phase's execution surfaces. **Recommended:** keep it deferred until

@@ -14,6 +14,9 @@
   worktree directory from the old `main` tip to the new one, which the mirror rule allows (any
   clean detached checkout at the old tip) but nobody had decided. The review of the project
   (2026-10-06) also noted that `sync-main` reports every `merge-base` error as "diverged".
+  The October 7 repository pass fixed that one in `sync-main` only: a `merge-base --is-ancestor`
+  exit of 1 is "diverged", any other failure warns and reports `failed`, and an unreadable mirror
+  status is reported as unreadable rather than dirty. The other two copies still differ.
 - **Workaround:** None needed; the behaviour is consistent today because the copies still agree.
 - **Proposed change:** One helper in `packages/testing/verification` that fast-forwards `main` and
   moves mirrors, called from all three, taking the mirror scope as an argument. The scope is the

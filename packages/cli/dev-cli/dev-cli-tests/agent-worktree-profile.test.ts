@@ -831,7 +831,7 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(names).not.toContain('test-flakes')
     Expect(names).not.toContain('test-slowest')
     // The test family shares one prefix, so it completes together under `just test<TAB>`.
-    Expect(names).toContain('test-studio')
+    Expect(names).toContain('test-file')
     Expect(names).not.toContain('studio-test')
   })
 

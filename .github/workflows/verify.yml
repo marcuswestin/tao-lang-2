@@ -99,13 +99,16 @@ env:
   # the bootstrap, which runs the generator. The compiled WordFlower app and its stamp likewise.
   # Neither generator trusts a stamp alone: each re-hashes its inputs and its own output first, so a
   # restore from another key, or a stale one, costs a regeneration and never a stale tree. The keys
-  # are those inputs, approximately; the stamp decides, the key only sets the hit rate.
+  # are those inputs, approximately; the stamp decides, the key only sets the hit rate. The app's
+  # module-link manifest travels with it: it is how a recompile recognises the tree's `node_modules`
+  # link as its own and removes it before publishing, and without it that recompile refuses the link.
   PARSER_GEN_PATHS: |
     packages/language/parser/parser-src/_gen_tao-parser
     packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes
     .artifacts/parser-generate-stamp.json
   WORD_FLOWER_PATHS: |
     Apps/WordFlower/1 - Current/.tao/cache/_gen_tao-app
+    Apps/WordFlower/1 - Current/.tao/cache/_gen_tao-app.tao-module-links.json
     .artifacts/compile-app-stamp.json
 
 jobs:

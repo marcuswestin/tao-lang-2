@@ -1,5 +1,5 @@
 import Workspace from '@compiler/workspace'
-import { Assert, FS, Repo } from '@shared'
+import { Assert, CLI, FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { runFix } from '../cli-src/source-commands'
 import { runTaoCliForTest, withTaoHome } from './test-cli-files'
@@ -174,7 +174,66 @@ Describe('Docs tutorials', () => {
       await FS.remove(root)
     }
   }, 120_000)
+
+  Test(
+    'the literal ./tao commands in Your First Tao App run from the checkout root against the project it creates',
+    async () => {
+      const tutorial = await FS.readText(Repo.resolvePath(FIRST_APP_TUTORIAL))
+      const blocks = tutorialBlocks(tutorial)
+      const commands = tutorialCommands(tutorial)
+      const root = await mkTestDir('tao-tutorial-literal-')
+      try {
+        // The mkdir line is the reader's setup; every `./tao` line after it runs exactly as printed.
+        const marker = /^mkdir -p ([\w/.-]+)\n/mu.exec(tutorial)?.[1]
+        Assert.defined(marker, 'The tutorial must tell readers how to mark their project root.')
+        await FS.writeText(FS.resolvePath(`${marker}/.gitkeep`, root), '')
+        const first = blocks.find(block => block.directives.includes('program'))
+        Assert.defined(first, 'The tutorial needs its first program snippet.')
+        const entry = commands.find(command => command[0] === 'check')?.[1]
+        Assert.defined(entry, 'The tutorial must name the first source file to check.')
+        await FS.writeText(FS.resolvePath(entry, root), first.source)
+
+        Expect(commands.map(command => command[0])).toEqual(['check', 'run', 'test'])
+        const tao = Repo.resolvePath('tao')
+        const env = { TAO_HOME: FS.resolvePath('.tao', root), TAO_DEV_LOOP_WORKER_CREDENTIALS: '' }
+        const check = await CLI.run(tao, { args: commands[0]!, cwd: root, env })
+        Expect(`${check.stdout}${check.stderr}`).not.toContain('Something went wrong')
+        Expect(check.exitCode).toBe(0)
+
+        // `run` keeps watching until stopped, so its selection is read without starting the loop.
+        const run = await CLI.run(tao, {
+          args: commands[1]!,
+          cwd: root,
+          env: { ...env, TAO_DEV_LOOP_SELECTION_ONLY: '1' },
+        })
+        Expect(run.exitCode).toBe(0)
+        Expect((JSON.parse(run.stdout.trim()) as { appName: string }).appName).toBe('ReadingList')
+
+        await FS.writeText(FS.resolvePath(entry, root), finishedFile(blocks))
+        const test = await CLI.run(tao, { args: commands[2]!, cwd: root, env })
+        Expect(`${test.stdout}${test.stderr}`).toContain('Tests:       1 passed, 1 total')
+        Expect(test.exitCode).toBe(0)
+      } finally {
+        await FS.remove(root)
+      }
+    },
+    180_000,
+  )
 })
+
+/** tutorialCommands lists the arguments of every `./tao` line in the tutorial's shell blocks, as printed. */
+function tutorialCommands(markdown: string): string[][] {
+  const commands: string[][] = []
+  let inShell = false
+  for (const line of markdown.split('\n')) {
+    if (line.startsWith('```')) {
+      inShell = line === '```sh' || line === '```bash'
+    } else if (inShell && line.startsWith('./tao ')) {
+      commands.push(line.slice('./tao '.length).trim().split(/\s+/))
+    }
+  }
+  return commands
+}
 
 /** tutorialBlocks reads every fenced `tao` snippet in a tutorial, with the `##` heading above it. */
 function tutorialBlocks(markdown: string): TutorialBlock[] {

@@ -30,7 +30,7 @@ develop internally without becoming promises of these releases. `tao review` in 
 binary remains deferred unless separately decided; release 3's interactive review is in Studio.
 
 **Decided 2026-09-29 for entry points added after this plan:** `tao build --visionos` and
-`--watchos` are deferred beyond release 5 alongside Android. `tao bridge` (native API binding
+`--watchos` are deferred beyond release 5 alongside Android. `tao bindings generate` with an explicit package (native API binding
 generation) and `tao secrets` (encrypted project secrets) are deferred from every public phase until a
 pre-MVP decision gives each a phase and public acceptance; `tao instantdb push` follows the deferred
 hosted-data scope. The capability catalog classifies every CLI command and option explicitly, and a

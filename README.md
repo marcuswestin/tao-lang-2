@@ -60,10 +60,12 @@ just doctor           # diagnose the checkout; each FAIL line names its fix
 Setup offers direnv so later terminals load the environment automatically (zsh; it writes
 `~/.tao-dev` and one line in your zsh startup file). `./enter-tao-dev-env --setup-only` reruns setup
 without a shell, and `./dev shell-setup --configure` changes the direnv choice.
+[CONTRIBUTING.md](CONTRIBUTING.md) walks a fresh macOS or Linux machine from installing Nix to a
+running dev loop; on Linux, `./.config/bootstrap-tao-dev-env` takes the place of `./enter-tao-dev-env`.
 
 Three entry points cover everything: `./tao` is the Tao CLI (an installed release will be plain
 `tao`), `just` is the task menu (`just help`), and `./dev` runs repository workflows
-(`./dev help`). `./agent` belongs to coding agents.
+(`./dev help`). Coding agents use an entry point of their own.
 
 **Build and run apps**
 

@@ -11,7 +11,10 @@
   run through `sh -c 'cd <sibling> && …'` fails for all 19 projects with `TS5033: Could not write file
   '<sibling>/packages/ast-utils/tsconfig.tsbuildinfo': EPERM`, because the sandbox write allowlist
   covers only the session worktree. `bun --cwd <sibling> test <file>` reports `Script not found "test"`;
-  `bun test --cwd <sibling> <file>` runs sandboxed because it writes nothing.
+  `bun test --cwd <sibling> <file>` runs sandboxed because it writes nothing. 2026-10-07, repository
+  pass: every implementer subagent launched with worktree isolation (a fresh worktree under
+  `tao-lang-2.worktrees/agent-*`) inherited the parent's sandbox, whose write roots name the
+  parent's worktree, so `./agent setup` and each focused test in its own worktree ran unsandboxed.
 - **Workaround:** Start a task rooted in the sibling worktree, or have the Developer run its
   `./agent verify` from a normal terminal. Use `bun test --cwd <worktree> <files>` for focused
   read-only tests from this task. There is no named operation for an agent to verify another checkout.

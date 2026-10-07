@@ -1,6 +1,6 @@
 # DEVENV-LAND-FIX-PUSHES-UNGATED-PRE-SQUASH-COMMITS — `land-fix` pushes ungated pre-squash commits
 
-- **Status:** Candidate
+- **Status:** In progress
 - **Section:** External
 - **Area:** `./agent unsandboxed land-fix`, `LandFixCommand.ts`
 - **Impact:** `land-fix` exists for a complement failure found after GitHub merged the squash: it
@@ -23,7 +23,11 @@
   alternative the review raised is a ruleset change: require `Verify (host)` on `main`, so the
   complement must be green before GitHub merges and `land-fix` is rarely needed. Both change an
   unsandboxed operation or a repository setting and need the Developer's approval.
-- **Dependencies:** The Developer's decision between the two shapes.
+- **Progress:** The October 7 repository pass made `land-fix` land one commit: it lists the fix
+  commits after the fetch (`<mergedHead>..<fixHead> ^<mainBefore>`, merges excluded) and refuses
+  when there are none, builds the tree with `merge-tree --merge-base=<mergedHead>`, and commits it
+  with `main` as the only parent. The pre-push gates and the ruleset alternative are untouched.
+- **Dependencies:** The Developer's decision between the two shapes for the gate half.
 - **Acceptance:** A `land-fix` of a branch that merged `main` lands one commit on `main`, and a
   fix with a type error is refused before the push, with the error quoted.
 - **Source:** Red `main` incident and the CI completion review, 2026-10-06.

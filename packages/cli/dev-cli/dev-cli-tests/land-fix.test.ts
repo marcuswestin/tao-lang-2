@@ -1,5 +1,5 @@
-import { CLI, Errors } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { CLI, Errors, FS } from '@shared'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 import { CancelVerifyCommand } from '../dev-cli-src/pr/CancelVerify'
 import { LandFixCommand, type LandFixDependencies } from '../dev-cli-src/pr/LandFixCommand'
 
@@ -18,6 +18,7 @@ const TREE = 'e'.repeat(40)
 const COMMIT = 'ffff111122223333'
 
 type Script = {
+  alreadyOnMain?: boolean
   branch?: string
   conflict?: boolean
   dirty?: string
@@ -72,8 +73,8 @@ function fakeDependencies(script: Script = {}) {
       if (args === `merge-base --is-ancestor ${MERGED} ${head}`) {
         return result(spec, '', head === FIX ? 0 : 1)
       }
-      if (args === `log --format=%s ${MERGED}..${head}`) {
-        return result(spec, 'Name the receipt\nFix the canary\n')
+      if (args === `log --format=%s --no-merges ${MERGED}..${head} ^${MAIN}`) {
+        return result(spec, script.alreadyOnMain === true ? '' : 'Name the receipt\nFix the canary\n')
       }
       if (args === 'rev-parse origin/main') {
         return result(spec, `${MAIN}\n`)
@@ -119,11 +120,14 @@ Describe('land-fix', () => {
     const archive = fake.calls.indexOf(`git push origin ${FIX}:refs/heads/merged/example`)
     Expect(fetch).toBeGreaterThan(-1)
     Expect(mergeTree).toBeGreaterThan(fetch)
-    Expect(fake.calls[mergeTree]).toContain(`${MAIN} ${FIX}`)
+    // The fix is the change from the merged head to the branch head, applied onto main.
+    Expect(fake.calls[mergeTree]).toContain(`--merge-base=${MERGED} ${MAIN} ${FIX}`)
     Expect(commitTree).toBeGreaterThan(mergeTree)
+    // One parent: the branch's pre-squash history never becomes main's.
     Expect(fake.calls[commitTree]).toContain(
-      `${TREE} -p ${MAIN} -p ${FIX} -m Fix after #3: Fix the canary\n\n- Name the receipt\n- Fix the canary`,
+      `${TREE} -p ${MAIN} -m Fix after #3: Fix the canary\n\n- Name the receipt\n- Fix the canary`,
     )
+    Expect(fake.calls[commitTree]).not.toContain(`-p ${FIX}`)
     Expect(push).toBeGreaterThan(commitTree)
     Expect(archive).toBeGreaterThan(push)
     Expect(fake.calls.indexOf('syncLocalMain')).toBeGreaterThan(archive)
@@ -169,6 +173,13 @@ Describe('land-fix', () => {
     },
   )
 
+  Test('refuses a branch whose commits beyond the merged head are all already on main', async () => {
+    const fake = fakeDependencies({ alreadyOnMain: true })
+    await Expect(LandFixCommand.run({ repositoryRoot: ROOT }, fake.dependencies)).rejects.toThrow(/no fix to land/u)
+    Expect(fake.calls.some(call => call.startsWith('git merge-tree') || call.startsWith('git push'))).toBe(false)
+    Expect(fake.written).toEqual([])
+  })
+
   Test('refuses a main that does not yet hold the merge it fixes, and a dirty tree', async () => {
     const stale = fakeDependencies({ mainHoldsSquash: false })
     await Expect(LandFixCommand.run({ repositoryRoot: ROOT }, stale.dependencies)).rejects.toThrow(
@@ -180,6 +191,109 @@ Describe('land-fix', () => {
     Expect(dirty.calls.some(call => call.startsWith('gh'))).toBe(false)
   })
 })
+
+/**
+ * The scripted tests above prove which commands run; only real repositories prove what `main` ends
+ * up holding. Here `git` is real against a bare `origin` in a temporary directory, and only `gh` is
+ * scripted, so nothing reaches a real remote.
+ */
+Describe('land-fix against real repositories', () => {
+  Test('lands one commit on main for a branch that merged main, leaving the pre-squash history behind', async () => {
+    const parent = await mkGitTestDir('tao-land-fix-')
+    const seed = FS.resolvePath('seed', parent)
+    await initGitTestRepository(seed, { commit: { files: { 'seed.txt': 'seed\n' }, message: 'seed' } })
+    const origin = FS.resolvePath('origin.git', parent)
+    await git(parent, ['clone', '--quiet', '--bare', seed, origin])
+    const checkout = FS.resolvePath('checkout', parent)
+    await git(parent, ['clone', '--quiet', origin, checkout])
+    await identify(checkout)
+
+    // The pull request's own commits, then GitHub's squash of them and an unrelated landing behind it.
+    await git(checkout, ['switch', '--quiet', '-c', 'feat/example'])
+    await commitFiles(checkout, { 'a.txt': 'a\n' }, 'Pre-squash a')
+    await commitFiles(checkout, { 'b.txt': 'b\n' }, 'Pre-squash b')
+    const mergedHead = await git(checkout, ['rev-parse', 'HEAD'])
+    const preSquash = await git(checkout, ['rev-parse', 'HEAD~1'])
+    const other = FS.resolvePath('other', parent)
+    await git(parent, ['clone', '--quiet', origin, other])
+    await identify(other)
+    await commitFiles(other, { 'a.txt': 'a\n', 'b.txt': 'b\n' }, 'Squash of the pull request')
+    const squash = await git(other, ['rev-parse', 'HEAD'])
+    await commitFiles(other, { 'c.txt': 'c\n' }, 'Unrelated landing')
+    await git(other, ['push', '--quiet', 'origin', 'main'])
+    const mainBefore = await git(other, ['rev-parse', 'HEAD'])
+
+    // The fix: the branch merges main, then commits the repair.
+    await git(checkout, ['fetch', '--quiet', 'origin', 'main'])
+    await git(checkout, ['merge', '--quiet', '--no-edit', 'origin/main'])
+    await commitFiles(checkout, { 'd.txt': 'd\n' }, 'Repair the complement gate')
+
+    const lines: string[] = []
+    const outcome = await LandFixCommand.run({ repositoryRoot: checkout }, {
+      now: () => new Date('2026-10-06T01:02:03.456Z'),
+      run: (command, spec) =>
+        command === 'gh'
+          ? Promise.resolve({
+            args: [...(spec?.args ?? [])],
+            command,
+            cwd: spec?.cwd,
+            exitCode: 0,
+            signal: null,
+            stderr: '',
+            stdout: JSON.stringify([{
+              auto_merge: null,
+              base: { ref: 'main' },
+              draft: false,
+              head: { ref: 'feat/example', sha: mergedHead },
+              html_url: 'https://github.com/owner/repo/pull/3',
+              merge_commit_sha: squash,
+              merged_at: '2026-10-05T00:00:00Z',
+              number: 3,
+              state: 'closed',
+            }]),
+          })
+          : CLI.run(command, spec),
+      syncLocalMain: async () => undefined,
+      writeJson: async () => undefined,
+      writeLine: line => lines.push(line),
+    })
+
+    Expect(outcome.exitCode).toBe(0)
+    const landed = await git(origin, ['rev-parse', 'refs/heads/main'])
+    Expect(await git(origin, ['rev-list', '--parents', '-n', '1', landed])).toBe(`${landed} ${mainBefore}`)
+    Expect(await git(origin, ['rev-list', '--count', `${mainBefore}..${landed}`])).toBe('1')
+    Expect(await git(origin, ['log', '-1', '--format=%s', landed])).toBe('Fix after #3: Repair the complement gate')
+    Expect(
+      (await CLI.run('git', { args: ['merge-base', '--is-ancestor', preSquash, landed], cwd: origin, stdio: 'pipe' }))
+        .exitCode,
+    )
+      .toBe(1)
+    Expect(await git(origin, ['ls-tree', '--name-only', landed])).toBe('a.txt\nb.txt\nc.txt\nd.txt\nseed.txt')
+    Expect(await git(origin, ['rev-parse', 'refs/heads/merged/example'])).toBe(
+      await git(checkout, ['rev-parse', 'HEAD']),
+    )
+  })
+})
+
+/** identify gives a clone the fixed author every commit here, and `land-fix`'s own, is made as. */
+async function identify(repository: string): Promise<void> {
+  await git(repository, ['config', 'user.name', 'Tao Test'])
+  await git(repository, ['config', 'user.email', 'tao@example.test'])
+}
+
+async function commitFiles(repository: string, files: Record<string, string>, message: string): Promise<void> {
+  for (const [name, content] of Object.entries(files)) {
+    await FS.writeText(FS.resolvePath(name, repository), content)
+    await git(repository, ['add', name])
+  }
+  await git(repository, ['commit', '--quiet', '--no-verify', '-m', message])
+}
+
+async function git(cwd: string, args: readonly string[]): Promise<string> {
+  const result = await CLI.run('git', { args, cwd, stdio: 'pipe' })
+  Expect(result.exitCode).toBe(0)
+  return result.stdout.trim()
+}
 
 Describe('cancel-verify', () => {
   for (const allWorkflows of [false, true]) {

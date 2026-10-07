@@ -67,3 +67,10 @@
   A disconnected response no longer changes a server-owned turn's verdict through a closed
   controller error, and run logs retain bounded failure messages. This is focused source and host
   evidence; the shared click-helper acceptance and complete complement proof remain separate.
+- **Post-journey hang (2026-10-07):** PR #77's complement
+  `2026-10-07T18-09-29-210Z-2811-1cda99d3` at `55aa0f5f` recorded all 22 assertions and then hit
+  the test's 180-second deadline with no further output, so the journey finished and something after
+  it, most likely cleanup, never returned. The lane ran alone (peak load 11.2 on 18 CPUs, not
+  contended). The same gate passed in about 58 seconds on that branch's two previous complements.
+  On recurrence, record which cleanup step was pending; DEVENV-068 records a separate cleanup
+  inspection failure on setuid-root children.

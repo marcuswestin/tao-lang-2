@@ -76,9 +76,9 @@ Each `Generated/` directory is disposable. Never edit its files by hand. These m
 are committed; regenerate from the installed host declarations with:
 
 ```sh
-./tao bridge expo-haptics --source expo --from packages/apps/expo-host --out "Apps/Test Apps/Native Bridge/Haptics/Generated"
-./tao bridge react-native --source react-native --export Vibration --from packages/apps/expo-host --out "Apps/Test Apps/Native Bridge/Vibration/Generated"
-./tao bridge expo-clipboard --source expo --from packages/apps/expo-host --out "Apps/Test Apps/Native Bridge/Clipboard/Generated" --exclude ClipboardPasteButton isPasteButtonAvailable
+./tao bindings generate expo-haptics --source expo --from packages/apps/expo-host --out "Apps/Test Apps/Native Bridge/Haptics/Generated"
+./tao bindings generate react-native --source react-native --export Vibration --from packages/apps/expo-host --out "Apps/Test Apps/Native Bridge/Vibration/Generated"
+./tao bindings generate expo-clipboard --source expo --from packages/apps/expo-host --out "Apps/Test Apps/Native Bridge/Clipboard/Generated" --exclude ClipboardPasteButton isPasteButtonAvailable
 ./tao fix "Apps/Test Apps/Native Bridge"
 ./dev gates _fix-dprint
 ```

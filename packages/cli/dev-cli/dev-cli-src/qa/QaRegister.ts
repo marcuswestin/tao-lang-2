@@ -14,7 +14,6 @@ type Observation = Snapshot & {
   phase: number
   executionProfile: 'development' | number
   environment: { platform: string; architecture: string; runtime: string }
-  inputs: { source: string; dependencySnapshot: string }
   artifact?: { version: string; digest: string; sourceCommit: string }
   reviewedUrl?: string
   provenance: {
@@ -314,10 +313,6 @@ export class QaRegister {
         'Release acceptance needs an artifact identity built for the selected release phase; development-source evidence is supplementary.',
       )
     }
-    const dependencySnapshot = `Docs/QA/inputs/${Platform.sha256Hex(JSON.stringify(run.inventory.dependencies))}.json`
-    if (!await FS.exists(this.path(dependencySnapshot))) {
-      await this.atomic(dependencySnapshot, run.inventory.dependencies)
-    }
     const observation: Observation = {
       id: this.newId(),
       runId,
@@ -336,7 +331,6 @@ export class QaRegister {
         architecture: Platform.hostArch,
         runtime: `bun:${Platform.runtimeBunVersion ?? 'unknown'}`,
       },
-      inputs: { source: surface.source, dependencySnapshot },
       ...(artifact ? { artifact } : {}),
       ...(typeof reviewedUrl === 'string' ? { reviewedUrl } : {}),
       surfaceId,
@@ -771,11 +765,12 @@ export class QaRegister {
           `${surface.id} is shown by captures of ${surface.captureApp}; ${item.path} captured ${String(record.app)}.`,
         )
       }
-      if (
-        surface.captureProject
-        && record.originalProject !== await FS.realPath(this.path(surface.captureProject))
-      ) {
-        Errors.throwUserInput(`${surface.id} requires a capture of ${surface.captureProject}.`)
+      if (surface.captureProject) {
+        // A project nothing has captured yet cannot match any snapshot; say so rather than failing to resolve it.
+        const project = this.path(surface.captureProject)
+        if (!await FS.exists(project) || record.originalProject !== await FS.realPath(project)) {
+          Errors.throwUserInput(`${surface.id} requires a capture of ${surface.captureProject}.`)
+        }
       }
       if (record.status !== 'complete') {
         Errors.throwUserInput(

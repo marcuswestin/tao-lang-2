@@ -184,6 +184,7 @@ probe_host() {
   docker version > "$output/docker-version.txt" 2>&1
   docker info > "$output/docker-info.txt" 2>&1
   docker info --format '{{.Architecture}} {{.Driver}} {{json .DriverStatus}}' > "$output/docker-storage.txt" 2>&1
+  docker info --format '{{.MemTotal}}' > "$output/docker-memory-bytes.txt" 2>&1
   printf '%s\n' \
     'disk_budget_bytes=32212254720' \
     'disk_hard_limit=enforcement-not-proven' \
@@ -248,6 +249,21 @@ if [ -n "$inspect_run" ]; then
   done < "$output/inspection-containers.txt"
   printf 'Shared images and builder caches were not changed.\n'
   exit 0
+fi
+
+# The guest is a 16 GiB machine. A smaller Docker VM does not shrink that limit: verify
+# outgrows the VM and the kernel kills a test with SIGKILL an hour or more into the run
+# (7.9 GB peak inside a 7.75 GiB VM on 2026-10-07). Docker Desktop reports a little less
+# than its memory setting, so 15 GiB admits a 16 GB setting.
+docker_memory_bytes=
+read -r docker_memory_bytes < "$output/docker-memory-bytes.txt" || true
+case "$docker_memory_bytes" in
+  ''|*[!0-9]*) printf 'Cannot read Docker'"'"'s total memory; see docker-memory-bytes.txt.\n' >&2; exit 1 ;;
+esac
+if [ "$docker_memory_bytes" -lt 16106127360 ]; then
+  printf 'Docker has %s MiB of memory; the contributor guest needs 16 GiB. Raise Docker'"'"'s memory limit to 16 GB or more (Docker Desktop: Settings > Resources) and rerun.\n' \
+    "$((docker_memory_bytes / 1048576))" >&2
+  exit 2
 fi
 
 started=$(date +%s)
@@ -319,7 +335,7 @@ git show "HEAD:$environment/Dockerfile" > "$output/context/Dockerfile"
 git archive --format=tar HEAD .config/bootstrap-tao-dev-env devenv.lock "$environment" > "$output/tools.tar"
 printf '%s\n' \
   "platform=$platform" 'guest_cpus=4' 'guest_memory_bytes=17179869184' \
-  'guest_memory_swap_bytes=17179869184' 'guest_timeout_seconds=7200' \
+  'guest_memory_swap_bytes=17179869184' "docker_memory_bytes=$docker_memory_bytes" 'guest_timeout_seconds=7200' \
   'base_image_build_cpu_memory_limits=not-enforced' \
   'host_only_native_ui_lanes=unrun' \
   'source=git archive HEAD; uncommitted changes excluded' > "$output/resources.txt"
