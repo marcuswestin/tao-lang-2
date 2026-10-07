@@ -1,6 +1,10 @@
 import { AST } from '@parser'
 import { Assert } from '@shared'
-import type { CallableEffectFactInputs, SourceDiscoveryContext } from './callable-effect-facts'
+import {
+  type CallableEffectFactInputs,
+  createCallableEffectFactDiscovery,
+  type SourceDiscoveryContext,
+} from './callable-effect-facts'
 import {
   assertCanonicalEffectSnapshot,
   type CanonicalCallableDescriptor,
@@ -11,6 +15,7 @@ import {
 export type CallableEffectPublications = Readonly<{
   inputs: CallableEffectFactInputs
   context: SourceDiscoveryContext
+  discoverFacts: ReturnType<typeof createCallableEffectFactDiscovery>
 }>
 
 /**
@@ -26,10 +31,11 @@ export function projectCallableEffectPublications(
 ): CallableEffectPublications {
   assertCanonicalEffectSnapshot(snapshot)
 
-  let inputs = callableEffectFactInputsBySnapshot.get(snapshot)
-  if (!inputs) {
-    inputs = projectCallableEffectFactInputs(snapshot)
-    callableEffectFactInputsBySnapshot.set(snapshot, inputs)
+  let inventory = callableEffectInventoriesBySnapshot.get(snapshot)
+  if (!inventory) {
+    const inputs = projectCallableEffectFactInputs(snapshot)
+    inventory = Object.freeze({ inputs, discoverFacts: createCallableEffectFactDiscovery(inputs) })
+    callableEffectInventoriesBySnapshot.set(snapshot, inventory)
   }
 
   const descriptor = snapshot.descriptors.get(owner)
@@ -40,12 +46,12 @@ export function projectCallableEffectPublications(
     ...(root ? { root } : {}),
     covered: snapshot.covered,
   })
-  return Object.freeze({ inputs, context })
+  return Object.freeze({ ...inventory, context })
 }
 
-const callableEffectFactInputsBySnapshot = new WeakMap<
+const callableEffectInventoriesBySnapshot = new WeakMap<
   CanonicalEffectIndependentSnapshot,
-  CallableEffectFactInputs
+  Pick<CallableEffectPublications, 'inputs' | 'discoverFacts'>
 >()
 
 function projectCallableEffectFactInputs(snapshot: CanonicalEffectIndependentSnapshot): CallableEffectFactInputs {

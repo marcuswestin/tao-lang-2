@@ -11,13 +11,18 @@ import {
   type ReleaseProfile,
 } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
-import Compiler, { type CompileOptions, type CompileResult } from '../compiler'
+import Compiler, { type CompileOptions, type CompileResult, compileWorkspaceAttempt } from '../compiler'
 import { createWorkspaceServices, type WorkspaceServices } from './langium-services'
 import { createProjectContext, type ProjectContext, refreshProjectContext } from './workspace-utils'
 
 type CompileTestPlanOptions = {
   skipValidation?: boolean
 }
+
+type ValidationAttempt = Readonly<{
+  validationResult: ValidationResult
+  nativeInspection: Awaited<ReturnType<typeof inspectMaintainedNativeBindings>>
+}>
 
 /** Workspace coordinates project-rooted parsing, validation, and compilation. */
 export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> {
@@ -205,10 +210,14 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
    * project at all.
    */
   async validateFiles(entryFiles: readonly string[]): Promise<ValidationResult> {
+    return (await this.validateFilesAttempt(entryFiles)).validationResult
+  }
+
+  private async validateFilesAttempt(entryFiles: readonly string[]): Promise<ValidationAttempt> {
     const parsed = await this.parseFiles(entryFiles)
     const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
     const startedAt = profile ? performance.now() : 0
-    const validated = await this.validateParsedFiles(parsed)
+    const attempt = await this.validateParsedFilesAttempt(parsed)
     if (profile) {
       HCI.logProcessInfo(
         'workspace',
@@ -217,16 +226,20 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
           operation: 'validate',
           root: this.root,
           entries: parsed.length,
-          files: validated.files.length,
+          files: attempt.validationResult.files.length,
           validateMs: performance.now() - startedAt,
         }),
       )
     }
-    return validated
+    return attempt
   }
 
   /** validateParsedFiles validates what one `parseFiles` call returned; see `validateFiles`. */
   async validateParsedFiles(parsedEntries: readonly ParseResult[]): Promise<ValidationResult> {
+    return (await this.validateParsedFilesAttempt(parsedEntries)).validationResult
+  }
+
+  private async validateParsedFilesAttempt(parsedEntries: readonly ParseResult[]): Promise<ValidationAttempt> {
     Assert(parsedEntries.length > 0, 'workspace validation has at least one entry file')
     const filesByPath = new Map<string, ParseResult['entry']>()
     for (const parsed of parsedEntries) {
@@ -255,16 +268,19 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     )
 
     return {
-      diagnostics: Diagnostics.unique(diagnostics),
-      entry: parsedEntries[0]!.entry,
-      files: batchFiles,
-      associatedEffects: effects.length === validations.length
-        ? {
-          descriptors: new Map(effects.flatMap(context => [...context.descriptors])),
-          analyses: new Map(effects.flatMap(context => [...context.analyses])),
-          creatorAnalyses: new Map(effects.flatMap(context => [...context.creatorAnalyses ?? []])),
-        }
-        : undefined,
+      validationResult: {
+        diagnostics: Diagnostics.unique(diagnostics),
+        entry: parsedEntries[0]!.entry,
+        files: batchFiles,
+        associatedEffects: effects.length === validations.length
+          ? {
+            descriptors: new Map(effects.flatMap(context => [...context.descriptors])),
+            analyses: new Map(effects.flatMap(context => [...context.analyses])),
+            creatorAnalyses: new Map(effects.flatMap(context => [...context.creatorAnalyses ?? []])),
+          }
+          : undefined,
+      },
+      nativeInspection: nativeBindings,
     }
   }
 
@@ -276,11 +292,11 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
 
   /** compileFiles compiles the union of several entry graphs while keeping the first as the app entry. */
   async compileFiles(entryFiles: readonly string[], options: CompileOptions = {}): Promise<CompileResult> {
-    const validationResult = await this.validateFiles(entryFiles)
+    const attempt = await this.validateFilesAttempt(entryFiles)
     const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
     const startedAt = profile ? performance.now() : 0
     const compiled = await this.withValidationReuse(() =>
-      Compiler.compileValidated(validationResult, this.compilerContext(), options)
+      compileWorkspaceAttempt(attempt.validationResult, this.compilerContext(), options, attempt.nativeInspection)
     )
     if (profile) {
       HCI.logProcessInfo(

@@ -32,6 +32,24 @@ standalone quiet qualification and paired Studio editor-save paint measurements 
 Apply this compiler-only change to both comparison roots when isolating Studio preview delivery.
 Worker admission, shared workspaces and dependency-directed compilation remain separate work.
 
+### Prepared inventory indexes and immediate inspection attempts
+
+The immutable snapshot now also owns its completed discovery indexes. Each callable still
+creates fresh traversal, facts and analysis; mutable raw-input discovery always prepares cold
+indexes. The owning 360-test suite passes ordered cold parity, changed native evidence,
+missing-to-valid recovery and distinct snapshot identity. A deterministic inventory scan witness
+fails when preparation is repeated per owner. One ten-iteration diagnostic reports session check
+934ms and compile 471ms (`2026-10-07T21-01-24-459Z-58834.log`). This is an unpaired diagnostic,
+not evidence of an additional latency gain.
+
+Workspace batch compilation carries only the native inspection from its immediately preceding
+validation into the same attempt. Standalone compilation and explicit native-root options stay
+cold. The final inspection remains independent and checks identity; native inspection cache and
+locking implementations are unchanged. Real workspace tests prove two inspections per implicit
+attempt, cold standalone/explicit-root behavior, stale-output rejection and recovery. Disabled
+reuse and disabled final identity mutations fail their respective witnesses. Keep these compiler
+changes common to both comparison roots before restarting paired Studio measurements.
+
 ## 1. Summary
 
 1. **The slowness is ours, not the stack's.** An uncached `tao check` of WordFlower (13 files, 2,442

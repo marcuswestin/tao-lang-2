@@ -8,7 +8,7 @@ import {
   ownAssociatedMethods,
   ownAssociatedViews,
 } from './associated-methods'
-import { discoverCallableEffectFacts, type NativeEffectPublication } from './callable-effect-facts'
+import type { NativeEffectPublication } from './callable-effect-facts'
 import { projectCallableEffectPublications } from './callable-effect-publications'
 import { analyzeCallableEffects, type CallableAnalysis, type PurityContract } from './callable-effects'
 import { publishCanonicalEffectSnapshot } from './canonical-effect-snapshot'
@@ -115,7 +115,7 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
       || AST.isActionDeclaration(declaration)
     ) {
       const publication = projectCallableEffectPublications(snapshot, declaration)
-      const facts = discoverCallableEffectFacts(declaration, publication.inputs, publication.context)
+      const facts = publication.discoverFacts(declaration, publication.context)
       const analysis = analyzeCallableEffects(declaration, facts)
       // Action failure discovery owns joined outcomes, deferred cleanup and detached execution.
       // Seal its effective contract alongside the independent purity discovery before admission.

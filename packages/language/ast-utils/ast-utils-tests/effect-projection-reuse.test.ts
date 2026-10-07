@@ -1,6 +1,6 @@
 import { AST, Parser } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
-import { discoverCallableEffectFacts } from '../ast-utils-src/callable-effect-facts'
+import { createCallableEffectFactDiscovery, discoverCallableEffectFacts } from '../ast-utils-src/callable-effect-facts'
 import { projectCallableEffectPublications } from '../ast-utils-src/callable-effect-publications'
 import { analyzeCallableEffects } from '../ast-utils-src/callable-effects'
 import { publishCanonicalEffectSnapshot } from '../ast-utils-src/canonical-effect-snapshot'
@@ -19,6 +19,7 @@ Describe('Snapshot-owned effect projection', () => {
     const second = projectCallableEffectPublications(snapshot, right)
 
     Expect(second.inputs === first.inputs).toBe(true)
+    Expect(second.discoverFacts === first.discoverFacts).toBe(true)
     Expect(Object.isFrozen(first.inputs)).toBe(true)
     Expect(Object.isFrozen(first.inputs.calls)).toBe(true)
     Expect(first.inputs.calls.every(Object.isFrozen)).toBe(true)
@@ -28,13 +29,16 @@ Describe('Snapshot-owned effect projection', () => {
     Expect(first.context.root?.node === left).toBe(true)
     Expect(second.context.root?.node === right).toBe(true)
     Expect(second.context).not.toBe(first.context)
+    Expect(first.discoverFacts(left, first.context)).not.toBe(first.discoverFacts(left, first.context))
+    Expect(() => first.discoverFacts(right, first.context)).toThrow('source root identity')
 
     for (const owner of [right, left, right]) {
       const warm = projectCallableEffectPublications(snapshot, owner)
       const cold = projectCallableEffectPublications(publishCanonicalEffectSnapshot([file]), owner)
       Expect(warm.inputs === first.inputs).toBe(true)
       Expect(cold.inputs === first.inputs).toBe(false)
-      const facts = discoverCallableEffectFacts(owner, warm.inputs, warm.context)
+      Expect(cold.discoverFacts === first.discoverFacts).toBe(false)
+      const facts = warm.discoverFacts(owner, warm.context)
       const coldFacts = discoverCallableEffectFacts(owner, cold.inputs, cold.context)
       Expect(facts).toHaveLength(coldFacts.length)
       facts.forEach(({ node, executes, ...fact }, index) => {
@@ -56,6 +60,48 @@ Describe('Snapshot-owned effect projection', () => {
         failures: { cases: [], open: false },
       })
     }
+  })
+
+  Test('indexes immutable rows once while raw discovery keeps mutable inputs cold', async () => {
+    const file = await parse(`
+      func Echo(Value text) fails never -> text { return Value }
+      func Left(Value text) fails never -> text { return Echo(Value) }
+      func Right(Value text) fails never -> text { return Echo(Value) }
+    `)
+    const left = namedFunction(file, 'Left')
+    const right = namedFunction(file, 'Right')
+    const publication = projectCallableEffectPublications(publishCanonicalEffectSnapshot([file]), left)
+    let scans = 0
+    const calls = new Proxy(publication.inputs.calls, {
+      get(target, key, receiver) {
+        if (key === Symbol.iterator) {
+          return function*() {
+            scans++
+            yield* target
+          }
+        }
+        return Reflect.get(target, key, receiver)
+      },
+    })
+    const inputs = Object.freeze({ ...publication.inputs, calls })
+    const discover = createCallableEffectFactDiscovery(inputs)
+    Expect(scans).toBe(2)
+    for (const owner of [right, left, right]) {
+      const context = projectCallableEffectPublications(publishCanonicalEffectSnapshot([file]), owner).context
+      const facts = discover(owner, context)
+      Expect(facts[0]?.node).toBe(owner)
+    }
+    Expect(scans).toBe(2)
+    discoverCallableEffectFacts(left, inputs, publication.context)
+    Expect(scans).toBe(4)
+    discoverCallableEffectFacts(left, inputs, publication.context)
+    Expect(scans).toBe(6)
+    const mutableInputs = { ...publication.inputs, calls: [...publication.inputs.calls] }
+    const rawEffects = () =>
+      analyzeCallableEffects(left, discoverCallableEffectFacts(left, mutableInputs, publication.context)).effects
+    Expect(rawEffects().purity.open).toBe(false)
+    mutableInputs.calls.length = 0
+    Expect(rawEffects().purity.open).toBe(true)
   })
 
   Test('keeps different native evidence cold even when linked source identities are unchanged', async () => {
@@ -84,10 +130,11 @@ Describe('Snapshot-owned effect projection', () => {
     const old = projectCallableEffectPublications(snapshot(['io'], ['ReadFailed']), owner)
     const fresh = projectCallableEffectPublications(snapshot([], []), owner)
     Expect(fresh.inputs === old.inputs).toBe(false)
+    Expect(fresh.discoverFacts === old.discoverFacts).toBe(false)
     Expect(old.inputs.natives[0]?.failures.cases).toEqual(['ReadFailed'])
     Expect(fresh.inputs.natives[0]?.failures.cases).toEqual([])
     const effects = (projection: typeof old) =>
-      analyzeCallableEffects(owner, discoverCallableEffectFacts(owner, projection.inputs, projection.context)).effects
+      analyzeCallableEffects(owner, projection.discoverFacts(owner, projection.context)).effects
     Expect(effects(old)).toEqual({
       purity: { violations: ['io'], open: true },
       failures: { cases: ['ReadFailed'], open: true },
@@ -111,7 +158,7 @@ Describe('Snapshot-owned effect projection', () => {
         projection,
         analysis: analyzeCallableEffects(
           owner,
-          discoverCallableEffectFacts(owner, projection.inputs, projection.context),
+          projection.discoverFacts(owner, projection.context),
         ),
       }
     }

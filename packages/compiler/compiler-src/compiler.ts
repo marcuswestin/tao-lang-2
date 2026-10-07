@@ -130,9 +130,37 @@ async function compileValidated(
   context: CompilerContext,
   options: CompileOptions = {},
 ): Promise<CompileResult> {
+  return await compileValidatedWithInspection(validationResult, context, options)
+}
+
+/**
+ * compileWorkspaceAttempt carries an inspection from the immediately preceding workspace
+ * validation attempt into its compilation. The receipt belongs only to this call chain; custom
+ * native roots and standalone compilation keep the cold inspection path.
+ */
+export async function compileWorkspaceAttempt(
+  validationResult: ValidationResult,
+  context: CompilerContext,
+  options: CompileOptions,
+  nativeInspection: Awaited<ReturnType<typeof inspectMaintainedNativeBindings>>,
+): Promise<CompileResult> {
+  return await compileValidatedWithInspection(
+    validationResult,
+    context,
+    options,
+    context.nativeBindings === undefined ? nativeInspection : undefined,
+  )
+}
+
+async function compileValidatedWithInspection(
+  validationResult: ValidationResult,
+  context: CompilerContext,
+  options: CompileOptions,
+  initialInspection?: Awaited<ReturnType<typeof inspectMaintainedNativeBindings>>,
+): Promise<CompileResult> {
   const trace = options.studio && Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true'
   const startedAt = trace ? performance.now() : 0
-  const nativeBindings = await inspectMaintainedNativeBindings(context.nativeBindings)
+  const nativeBindings = initialInspection ?? await inspectMaintainedNativeBindings(context.nativeBindings)
   const nativeBeforeAt = trace ? performance.now() : 0
   const releaseDiagnostics = Validator.releaseDiagnostics(Validator.createContext(
     context.packagesContext,
