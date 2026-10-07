@@ -83,11 +83,32 @@ force-release a lease. The procedure depends on all participants observing the s
    output pricing. Weigh completed-task cost and review quality before recommending a tier change,
    since an API-equivalent estimate is not a plan or subscription bill; the change itself is the
    Developer's choice, never a silent switch.
-6. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
+6. Run the standing health checks, reporting each against the previous pass's figures:
+   - **Committed growth:** generated, evidence, or snapshot files entering Git, and repository
+     object size; each needs an owner, a reader, and a retention rule.
+   - **`main` and CI:** red runs on `main`, `land-fix` uses, Verify retries and cancellations, and
+     the hosted Verify duration trend.
+   - **Test suite:** skipped and early-returning tests, the slowest suites, flaky tests, and tests
+     that assume a platform, user (non-root), or filesystem.
+   - **Unsandboxed surface:** what `.rulesync/permissions.jsonc` and the `./agent unsandboxed`
+     operations gained since the boundary, and whether each addition is still justified.
+   - **Hook overrides:** `.artifacts/logs/hook-overrides.jsonl` across worktrees; tune any rule
+     that is overridden routinely.
+   - **Instruction and document drift:** skill and `AGENTS.md` budgets, broken links, specifications
+     against `Decisions.md` and the implementation, and stale or already-done MVP Roadmap items.
+   - **Dependency hygiene:** unused dependencies, duplicate versions, lagging major versions, and
+     dead exports, beyond the advisory record.
+   - **Branches and pull requests:** unmerged pushed branches, stale pull requests, and orphaned
+     remote branches.
+   - **Developer-environment ledger:** entry age, duplicates, and entries already fixed but not
+     archived.
+   - **Deferred findings:** close or re-defer each item from the previous **Consider next time**
+     with evidence, rather than carrying it forward unexamined.
+7. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
    from host or external acceptance that was not exercised. For each unresolved dependency advisory,
    keep a short live record of its disposition, owner, review-by date, and primary evidence; close
    it explicitly when resolved.
-7. When the approved work is complete, replace **Current status** and **Consider next time** with the
+8. When the approved work is complete, replace **Current status** and **Consider next time** with the
    new reviewed-through commit, a brief account of what actually ran, material omissions, the outcome,
    and only the few notes that would help the next orchestrator.
 
