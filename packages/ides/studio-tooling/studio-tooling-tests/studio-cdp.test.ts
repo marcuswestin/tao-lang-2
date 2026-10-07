@@ -183,6 +183,42 @@ Describe('Studio browser CDP harness', () => {
       )
   })
 
+  Test('appends the stall report when a live Chrome never exposes its DevTools port', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-startup-')
+    // budget-ok: the deadline is the behavior; no Chrome runs, and a short one keeps the fixture quick.
+    await Expect(
+      StudioCdp.testing.waitForActivePort(
+        profile,
+        { exitCode: null, signalCode: null },
+        () => 'Executable: fixture Chrome',
+        200,
+        () => 'Stall snapshot:\nload: 9.2\n',
+      ),
+    )
+      .rejects.toThrow(
+        'Chrome DevToolsActivePort did not become ready within 200 ms:\nExecutable: fixture Chrome\nStall snapshot:\nload: 9.2\n',
+      )
+  })
+
+  Test('leaves a failed Chrome child to its own startup output without a stall report', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-startup-')
+    let reports = 0
+    await Expect(
+      StudioCdp.testing.waitForActivePort(
+        profile,
+        { exitCode: 19, signalCode: null },
+        () => 'original failure',
+        200,
+        () => {
+          reports++
+          return 'unexpected report'
+        },
+      ),
+    )
+      .rejects.toThrow('Chrome DevToolsActivePort failed to start (exit 19):\noriginal failure')
+    Expect(reports).toBe(0)
+  })
+
   Test('accepts the DevTools port only while its Chrome child remains healthy', async () => {
     const profile = await mkTestDir('tao-studio-cdp-startup-')
     await FS.writeText(FS.resolvePath('DevToolsActivePort', profile), '9222\n/browser/token')
