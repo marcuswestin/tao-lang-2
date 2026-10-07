@@ -671,12 +671,34 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         `window.__taoLatencyProbe.watch.push(${JSON.stringify(project.expectedStyle(finalEdit, marker))})`,
         { world: 'page' },
       )
+      // A revert can already be visible before its queued write runs. Observe actual save responses
+      // so a matching old paint or source version cannot stand in for the final requested save.
+      await browser.evaluate(`(() => {
+        window.__taoRapidSaveResults = []
+        window.__taoRapidOriginalFetch = window.fetch
+        window.fetch = async (...args) => {
+          const response = await window.__taoRapidOriginalFetch(...args)
+          if (String(args[0]).endsWith('/api/file/draft')) {
+            window.__taoRapidSaveResults.push(await response.clone().json())
+          }
+          return response
+        }
+      })()`)
       for (let edit = EDITS_PER_MODE + 1; edit <= finalEdit; edit += 1) {
         await browser.click('.cm-content')
         await browser.pressShortcut('a')
         await browser.insertText(project.sourceFor(`Edit${edit}rapid`))
         await browser.pressShortcut('s')
       }
+      await browser.waitFor('window.__taoRapidSaveResults.length === 4', { timeoutMs: 30_000 })
+      const rapidResults = await browser.evaluate<{ saved: boolean; content: string }[]>(`(() => {
+        window.fetch = window.__taoRapidOriginalFetch
+        return window.__taoRapidSaveResults.map(result => ({ saved: result.saved, content: result.file.content }))
+      })()`)
+      Expect(rapidResults.map(result => result.saved)).toEqual([true, true, true, true])
+      Expect(rapidResults.map(result => result.content)).toEqual(
+        Array.from({ length: 4 }, (_, index) => project.sourceFor(`Edit${EDITS_PER_MODE + 1 + index}rapid`)),
+      )
       const rapidPaint = await Time.pollUntil(async () =>
         await browser!.evaluateInFrame<boolean>(
           previewUrl,
