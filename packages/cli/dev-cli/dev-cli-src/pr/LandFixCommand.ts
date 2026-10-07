@@ -9,8 +9,10 @@ import { gitHubPulls, isMerged, mustSucceed, type PullRequest, requirePrBranch }
  * after the merge, `main` already holds the change, so the fix goes to `main` directly rather than
  * through a second pull request and a second hosted run of everything. The route is deliberate:
  * fetch `origin/main`, put the branch's fix on top of it as one commit, push, and record a receipt.
- * No verification runs here — the fix is for a gate that already failed, and the author ran that
- * gate before committing the fix.
+ * Before the push the branch runs the cheap gates (`LAND_FIX_GATES`: typecheck, lint and the suites
+ * the branch changed) and a failure refuses the command, because an ungated fix that did not compile
+ * once turned `main` red for every landing behind it. The gate that failed after the merge is the
+ * author's to rerun before committing the fix; it is usually a host lane too slow to repeat here.
  *
  * The squash that GitHub made is a different commit from the pull request's own, so the branch's
  * history is not `main`'s: it holds the pre-squash commits and any merge of `main`. The new commit
@@ -27,6 +29,14 @@ import { gitHubPulls, isMerged, mustSucceed, type PullRequest, requirePrBranch }
 const REMOTE = 'origin'
 const MAIN = 'main'
 const RECEIPT_DIR = '.artifacts/logs/land-fix'
+/** The gates a fix passes on the branch before it is pushed; none rewrites the tree. */
+export const LAND_FIX_GATES = [
+  '_parser-gen',
+  '_compile-word-flower-app',
+  '_repo-lint',
+  '_typecheck',
+  '_test-changed',
+] as const
 
 /** LandFixDependencies isolates process, filesystem, and output effects for testing. */
 export type LandFixDependencies = {
@@ -149,6 +159,16 @@ export const LandFixCommand = {
     const tree = merge.stdout.split('\n')[0]?.trim() ?? ''
     if (!/^[0-9a-f]{40}$/u.test(tree)) {
       Errors.throwUnexpected(`git merge-tree printed no tree id: ${merge.stdout.slice(0, 200)}`)
+    }
+    report(`Checking the fix before pushing: ${LAND_FIX_GATES.join(' ')}...`)
+    const gates = await dependencies.run('./dev', {
+      args: ['gates', ...LAND_FIX_GATES, '--lane', 'land-fix'],
+      cwd: root,
+      stdio: 'inherit',
+    })
+    if (gates.exitCode !== 0 || gates.error !== undefined || gates.signal !== null) {
+      report('FAIL  The fix failed its gates; nothing was pushed.')
+      Errors.throwUserInput('Fix what the gates reported, commit it, and run land-fix again.')
     }
     const message = mergeMessage(pr, branch, fixCommits)
     const commit = (await git(dependencies, root, [

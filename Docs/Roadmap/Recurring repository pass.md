@@ -12,25 +12,27 @@ notes after each completed pass; Git history is the longer record.
   - repo-lint rejects duplicate MVP roadmap item IDs. The three existing duplicates are renumbered A31–A33.
   - The native-binding manifest error prints its regeneration hint once.
   - `tao test` cleans up its Jest resource directory when a run fails.
+  - `app-dev --ios` opens the installed Expo Go when Expo's version check cannot be reached (E1).
+  - `land-fix` runs typecheck, lint and the changed suites before it pushes `main`.
 - **Health:** The machine had just been cleaned, so worktree and cache totals fell from about 250 GiB to under 10 GiB, and process records from 920 to 2. Tracked blobs are 42.6 MB. The routing audit found no mismatch. Haiku 5.5's price fell to a tenth.
-- **Acceptance:** Not established. Every macOS Tart check fails at provisioning from this host account, which is uid 503 where provisioning needs 501. The Ubuntu check needs Docker raised to 16 GB. `performance-check` was inconclusive: language check timings ran slightly over budget while Spotlight indexed the machine.
+- **Developer decisions:** Keep `app-dev --ios`'s Expo Go download. Delete the six remote heads already in `main`. Raise Docker to 16 GB. Provision Tart guests without host-side ownership, though the approved route turned out not to work for the vanilla image (below).
+- **Acceptance:** Not established. Every macOS Tart check fails at provisioning from this host account, which is uid 503 where provisioning needs 501. The Ubuntu check did not run: Docker was stopped when the pass ended. `performance-check` was inconclusive: language check timings ran slightly over budget while Spotlight indexed the machine.
 
 ## Consider next time
 
 - Start after `fe7a4da74`, or after a newer first-parent boundary that has been explicitly reviewed.
 - Decisions left to the Developer in the two October 7 reviews:
-  - `app-dev --ios` changed what it downloads and installs without telling the Developer. Its offline fallback (E1) and an ownership check for `processes stop` are open too (U1).
+  - An ownership check for `processes stop` (U1).
   - `argsPolicy` for the operations that lack one (October 7 U1/U2).
-  - `land-fix`: gates before push, or requiring `Verify (host)` (L1).
   - Test-process survivors and the idle bound (T2, T4).
-  - Docker memory.
-  - The six remote heads already contained in `main`, and the six stale branches.
+  - The six stale branches with unlanded work.
   - The QA renderer-hash scope (Q7, Q8).
   - Dead features and duplicate tooling (K2–K4).
   - Unused dependencies and lagging majors.
   - Package README audience (D3), `packages/AGENTS.md` over budget (D4), and configuration-list layout (F2).
   - A Sonnet row in the routing table.
-- Before the macOS isolation checks, settle `DEVENV-TART-PROVISIONING-REQUIRES-HOST-UID-501`, or run them from a uid-501 account. The vanilla base is cached.
+- Before the macOS isolation checks, choose a route in `DEVENV-TART-PROVISIONING-REQUIRES-HOST-UID-501`, or run them from a uid-501 account. Copying the harness in after boot cannot carry in the guest agent, which the vanilla image lacks. The vanilla base is cached.
+- Run the Ubuntu contributor check once Docker has 16 GB.
 - Recheck the six tutorial QA observations and regenerate the QA dashboard once Q7 is decided.
 - Watch hosted Chrome startup. The next `DevToolsActivePort` timeout carries `fe7a4da74`'s stall snapshot; read it before changing the timeout.
 - Keep each evidence boundary distinct: ARM64 Linux, native amd64, hosted cloud, the installed CLI, native builds, devices, signing and distribution. Explicit prerelease installation and WordFlower outline export stay deferred until after MVP.
