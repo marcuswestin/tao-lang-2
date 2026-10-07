@@ -49,6 +49,7 @@ export const TypesFormatter = {
       ...f.node.accepts,
       ...f.node.supports,
       ...f.node.implementations,
+      ...f.node.actions,
       ...f.node.methods,
       ...f.node.views,
       ...f.node.converters,

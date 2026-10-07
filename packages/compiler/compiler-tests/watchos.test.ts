@@ -89,10 +89,9 @@ Describe('compiler: watchOS SwiftUI', () => {
     Expect(scene).toContain('TaoValues.text(0.000001)')
   })
 
-  Test('formats numeric text at ECMAScript notation boundaries in Swift', async () => {
-    if (Platform.hostPlatform !== 'darwin') {
-      return
-    }
+  // Swift's numeric formatting is checked with swiftc, which only macOS hosts provide.
+  const SwiftTest = Platform.hostPlatform === 'darwin' ? Test : Test['skip']
+  SwiftTest('formats numeric text at ECMAScript notation boundaries in Swift', async () => {
     const result = await Compiler.compileCode(source, { target: 'watchos' })
     const helper = result.files.find(file => file.relativePath === 'TaoValues.swift')!.code
     const script = `${helper}

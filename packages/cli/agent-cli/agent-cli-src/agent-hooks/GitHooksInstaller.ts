@@ -7,8 +7,6 @@ import * as FS from '@shared/FS'
 
 const GIT_HOOK_MARKER = '# tao-warn-only-git-hook'
 const GIT_HOOK_SCRIPT = 'packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh'
-/** The pre-split location, tried second so a worktree that has not yet merged the split still works. */
-const GIT_HOOK_SCRIPT_LEGACY = 'packages/dev/dev-src/cli/agent-git-hooks.zsh'
 const GIT_HOOK_EVENTS = ['commit-msg', 'pre-commit'] as const
 
 /** gitHooksDir resolves the directory Git reads this worktree's hooks from, which linked
@@ -33,7 +31,6 @@ ${GIT_HOOK_MARKER} ${event}
 # Written by \`./agent setup\`. Asks the committing worktree for its own copy; never fails a commit.
 worktree="$(git rev-parse --show-toplevel 2>/dev/null)"
 script="$worktree/${GIT_HOOK_SCRIPT}"
-[ -x "$script" ] || script="$worktree/${GIT_HOOK_SCRIPT_LEGACY}"
 [ -n "$worktree" ] && [ -x "$script" ] && "$script" ${event} "$@"
 exit 0
 `

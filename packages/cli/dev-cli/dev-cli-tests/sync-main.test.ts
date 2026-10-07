@@ -40,6 +40,24 @@ async function sync(root: string): Promise<{ lines: string[]; outcome: string }>
   return { lines, outcome }
 }
 
+/** A real run in which the git subcommand `subcommand` fails with `exitCode` and says `stderr`. */
+async function syncWithFailing(
+  root: string,
+  subcommand: string,
+  exitCode: number,
+  stderr: string,
+): Promise<{ lines: string[]; outcome: string }> {
+  const lines: string[] = []
+  const outcome = await SyncLocalMainCommand.run({ repositoryRoot: root }, {
+    run: async (command, spec) =>
+      spec?.args?.[0] === subcommand
+        ? { ...(await CLI.run(command, spec)), exitCode, stderr, stdout: '' }
+        : CLI.run(command, spec),
+    writeLine: line => lines.push(line),
+  })
+  return { lines, outcome }
+}
+
 async function git(cwd: string, args: readonly string[]): Promise<string> {
   const result = await CLI.run('git', { args, cwd, stdio: 'pipe' })
   Expect(result.exitCode).toBe(0)
@@ -107,6 +125,36 @@ Describe('sync-main', () => {
     Expect(lines.some(line => line.includes('is not an ancestor of origin/main') && line.includes('refusing'))).toBe(
       true,
     )
+  })
+
+  Test('reports a failed ancestry check as a git error, not as divergence', async () => {
+    const { checkout, stale } = await fixture()
+
+    const { lines, outcome } = await syncWithFailing(checkout, 'merge-base', 128, 'fatal: Not a valid commit name')
+
+    Expect(outcome).toBe('failed')
+    Expect(await git(checkout, ['rev-parse', 'refs/heads/main'])).toBe(stale)
+    Expect(lines.some(line => line.startsWith('WARN  Could not compare local main') && line.includes('Not a valid')))
+      .toBe(
+        true,
+      )
+    Expect(lines.some(line => line.includes('is not an ancestor'))).toBe(false)
+  })
+
+  Test('reports a checkout of main whose status cannot be read as unreadable, with the reason', async () => {
+    const { checkout, stale } = await fixture()
+
+    const { lines, outcome } = await syncWithFailing(checkout, 'status', 128, 'fatal: index file corrupt')
+
+    Expect(outcome).toBe('unreadable')
+    Expect(await git(checkout, ['rev-parse', 'HEAD'])).toBe(stale)
+    Expect(
+      lines.some(line =>
+        line.startsWith('WARN  Could not read the status of main at') && line.includes('index file corrupt')
+      ),
+    )
+      .toBe(true)
+    Expect(lines.some(line => line.includes('uncommitted'))).toBe(false)
   })
 
   Test('compares with the last fetched origin/main when the fetch fails', async () => {

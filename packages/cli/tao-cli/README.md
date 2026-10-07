@@ -62,8 +62,10 @@ From a Tao checkout, open an ordinary app in the installed Tao Companion without
 `--device <name-or-id>` selects an attached/paired physical iPhone or iPad by name or ID, or an
 Android phone by serial. Duplicate names require an ID. iOS uses Tao Companion's development-client
 link to this session's Metro server; it applies no Studio scenarios. Keep the phone unlocked and
-on the same network as the Mac. `--ios` still selects the simulator, and bare `tao run` opens no
-target. The interactive `p` shortcut opens the sole connected device or presents a device picker.
+on the same network as the Mac. `--ios` selects the simulator and installs its compatible runtime
+automatically when needed: a compatible Tao Companion when available, otherwise the Expo Go client
+published for this Tao version's SDK. Bare `tao run` opens no target. The interactive `p` shortcut
+opens the sole connected device or presents a device picker.
 
 Install the iOS shell once with `./dev studio-companion-install --device roPhone`. A missing shell
 or failed device launch reports what to fix while Metro keeps running; press `p` to retry. Stop any
@@ -71,14 +73,14 @@ existing Studio/dev session for that project first: project ownership remains ex
 
 ## Generated native bindings (proof of concept)
 
-`tao bridge` imports the public declarations of an already installed package. Expo and React Native
+`tao bindings generate <package>` imports the public declarations of an already installed package. Expo and React Native
 have separate source adapters feeding the same catalog and Tao/TypeScript emitter in
 [`@native-bindings`](../../apps/native-bindings/README.md). The CLI only handles arguments and reporting.
 From this repository:
 
 ```sh
-./tao bridge expo-haptics --source expo --from packages/apps/expo-host --out .artifacts/haptics
-./tao bridge react-native --source react-native --export Vibration --from packages/apps/expo-host --out .artifacts/vibration
+./tao bindings generate expo-haptics --source expo --from packages/apps/expo-host --out .artifacts/haptics
+./tao bindings generate react-native --source react-native --export Vibration --from packages/apps/expo-host --out .artifacts/vibration
 ```
 
 Choose a dedicated generated output directory. The command writes `Bindings.tao`, its generated `Bindings.ts`

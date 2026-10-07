@@ -197,8 +197,12 @@ function scan(directory) {
       if (entry.isDirectory()) {
         pending.push(item)
       } else if (entry.isFile()) {
-        const stat = fs.statSync(item)
-        files.push({ path: item, bytes: stat.size, modifiedMs: stat.mtimeMs })
+        // Active Jest workers publish transforms by renaming temporary files. Enumeration
+        // can see the old name after publication; only ENOENT is safe to omit from this scan.
+        const stat = fs.statSync(item, { throwIfNoEntry: false })
+        if (stat !== undefined) {
+          files.push({ path: item, bytes: stat.size, modifiedMs: stat.mtimeMs })
+        }
       }
     }
   }

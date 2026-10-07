@@ -478,6 +478,26 @@ Describe('gate catalog metadata', () => {
     Expect(GateCatalog.skippedUnsandboxed('_typecheck', { hostedLinux: true })).toBe(false)
   })
 
+  Test('a hosted Linux lane skips the fixers and keeps the generators', () => {
+    const fixers = ['_fix-just-fmt', '_fix-dprint', '_fix-ledger-index', '_fix-tao']
+    const generators = ['_parser-gen', '_compile-word-flower-app', '_ide-extension-build']
+    for (const name of fixers) {
+      // The hosted workflow fails a rewritten tree, so a fixer there is only a slower check gate.
+      Expect(GateCatalog.metadata(name).canonicalises).toBe(true)
+      Expect(GateCatalog.skippedOnHostedLinux(name, { hostedLinux: true })).toBe(true)
+      // Locally the fixers are the prepare phase; nothing but the hosted flag skips them.
+      Expect(GateCatalog.skippedOnHostedLinux(name)).toBe(false)
+      Expect(GateCatalog.skippedOnHostedLinux(name, { hostedLinux: false })).toBe(false)
+    }
+    for (const name of [...generators, '_dprint-check', '_tao-check', '_repo-lint', '_typecheck']) {
+      Expect(GateCatalog.skippedOnHostedLinux(name, { hostedLinux: true })).toBe(false)
+    }
+    // Every fixer's defect has a check gate the hosted lane still runs.
+    for (const name of ['_dprint-check', '_tao-check', '_repo-lint']) {
+      Expect(GateCatalog.isPrepare(name)).toBe(false)
+    }
+  })
+
   Test('refuses --hosted-linux anywhere but a Linux lane that skips unsandboxed gates', () => {
     const refusal = GateCatalog.hostedLinuxRefusal({ hostedLinux: true }, 'linux')
     Expect(refusal).toContain('goes with --skip-unsandboxed')

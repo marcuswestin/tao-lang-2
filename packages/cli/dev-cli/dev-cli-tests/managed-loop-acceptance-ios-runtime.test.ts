@@ -200,7 +200,10 @@ async function fixture(
       ) {
         Errors.throwHostEnvironment('Injected child publication denial')
       }
-      await FS.writeText(path, JSON.stringify(value))
+      // Replace the file whole, as the live save does; an in-place write can expose a truncated journal.
+      const temporary = `${path}.${Platform.randomUUID()}.tmp`
+      await FS.writeText(temporary, JSON.stringify(value))
+      await FS.move(temporary, path)
     },
     resources: {
       acquire: options => MachineResources.acquire(scoped(options)),

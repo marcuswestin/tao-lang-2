@@ -223,6 +223,8 @@ Describe('QA evidence register', () => {
         }),
       )
       Expect(result.sourceHash.startsWith('historical:')).toBe(true)
+      Expect('inputs' in result).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('Docs/QA/inputs', root))).toBe(false)
       await qa.report(1)
       Expect(await FS.readText(FS.resolvePath('Docs/QA/release-1.md', root))).toContain(
         'doc:README.md / text / source / agent: needs-recheck',
@@ -372,6 +374,39 @@ Describe('QA evidence register', () => {
           artifact: { version: '0.1.0', digest: 'a'.repeat(64), sourceCommit: dirtyManifest.inventory.commit },
         }),
       )).rejects.toThrow('uncommitted inputs')
+    },
+  )
+
+  Test(
+    'a tutorial visual pass without a capture of the tutorial project says so instead of failing on a path',
+    async () => {
+      const { root, qa } = await fixture()
+      const run = await qa.run(1, 'all')
+      const image = '.artifacts/capture/phone.png'
+      const snapshot = '.artifacts/capture/source-snapshot.json'
+      await FS.writeText(FS.resolvePath(image, root), 'phone image bytes')
+      await FS.writeJson(FS.resolvePath(snapshot, root), {
+        owner: 'qa-capture',
+        status: 'complete',
+        app: 'ReadingList',
+        originalProject: FS.resolvePath('.artifacts/qa/tutorial-review', await FS.realPath(root)),
+        cells: [],
+      })
+      Expect(await FS.exists(FS.resolvePath('.artifacts/qa/tutorial-review', root))).toBe(false)
+      await Expect(
+        qa.recordFile(
+          await input(root, 'tutorial-visual', {
+            runId: run.runId,
+            surfaceId: 'visual:reading-list',
+            dimension: 'visual',
+            channel: 'phone-light',
+            reviewer: 'agent',
+            outcome: 'pass',
+            notes: 'Inspected the phone capture.',
+            evidence: [image, snapshot],
+          }),
+        ),
+      ).rejects.toThrow('visual:reading-list requires a capture of .artifacts/qa/tutorial-review.')
     },
   )
 

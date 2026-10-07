@@ -18,10 +18,6 @@
     "architecture": "arm64",
     "runtime": "bun:1.4.2"
   },
-  "inputs": {
-    "source": "Apps/HNReader",
-    "dependencySnapshot": "Docs/QA/inputs/92c4876e2405722bf46cb97a1a79aa61d1bb85cd1771356188c16d405d9009d7.json"
-  },
   "surfaceId": "visual:hnreader",
   "dimension": "visual",
   "outcome": "not-run",

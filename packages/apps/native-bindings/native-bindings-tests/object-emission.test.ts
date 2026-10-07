@@ -1,5 +1,6 @@
 import { Type } from '@ast-utils'
 import { Workspace } from '@compiler/workspace'
+import Formatter from '@formatter'
 import { NativeBindings } from '@native-bindings'
 import { AST } from '@parser'
 import { runAction } from '@runtime/TR-action-transactions'
@@ -271,6 +272,14 @@ Describe('catalog object emission', () => {
     Expect(source).toContain('action CatalogAppend(Text text) returns File from ./Bindings.ts')
     Expect(source).toContain('action ReleaseReference() from ./Bindings.ts')
     Expect(source).toContain('action CatalogAppend(Receiver File, Text text)')
+  })
+
+  Test('emits associated action blocks in the canonical formatter layout', async () => {
+    const { generated } = await executable()
+    const source = generated.files['Bindings.tao']!
+    Expect(source).toContain('type File is item with {\n   static action NewFile(Text text) returns File')
+    Expect(source).toContain('\n   action ReleaseReference() from ./Bindings.ts\n}\n')
+    Expect(await Formatter.createSession().formatCode(source)).toBe(source)
   })
 
   Test('preserves union elements through generated result, record and callback types consumed by Tao', async () => {

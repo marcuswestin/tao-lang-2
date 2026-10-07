@@ -15,6 +15,14 @@
   mode. It was not ported: it would be the longest node of any partition. Its three Metro-unique
   claims moved to the hosted `studio-metro-refresh` gate (PR 64), so trimming this file is now a
   product decision (DEVENV-EXPENSIVE-TEST-TRIMS-NEEDING-A-DECISION, item A).
+- **2026-10-07 evidence, at low load:** PR #77's complement
+  `2026-10-07T18-16-22-425Z-32002-639f7264` at `652c0b3b` failed the Feed test the same way: two
+  browser exceptions, both `UnableToResolveError ./modules/@/studio/View1.tao` from the runtime's
+  `_gen_tao-app/TaoApp.tsx`, caught by `studio-hnreader-feed-journey.ts:211`; the other three tests
+  passed. The lane ran alone with peak load 7.1 on 18 CPUs, so load alone does not explain the
+  symptom. The same gate passed on that branch's previous complements. Most likely Metro resolved
+  `TaoApp.tsx`'s import before the generated view file it names was visible to it, but this is
+  inferred: the run did not record when the file was written relative to the request.
 - **Workaround:** Re-run the lane alone on a quiet machine; it passes more often than not.
 - **Proposed change:** Prove browser startup under the stricter concurrent full-`verify` condition. Investigate any recurrence with the captured page resource timings and browser events.
 - **Dependencies:** None.

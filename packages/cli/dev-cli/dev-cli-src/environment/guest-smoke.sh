@@ -124,4 +124,7 @@ result=0
 step check ./agent check --verbose || result=1
 step test ./agent test-all --verbose || result=1
 step verify ./agent verify --verbose || result=1
+# The journey edits the compiler, so it runs after the lanes that judge the committed tree.
+. "$PWD/packages/cli/dev-cli/dev-cli-src/environment/contributor-journey.sh"
+contributor_journey || result=1
 exit "$result"

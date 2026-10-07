@@ -168,6 +168,51 @@ scenarios Beta "devices" {
     Expect(result.failures).toEqual([])
   })
 
+  Test('reports symbolic links that do not lead to another authored source instead of dropping them', async () => {
+    const root = await fixture({
+      'Apps/One/.tao/project.jsonc': '{}\n',
+      'Apps/One/Main.tao': mainSource,
+      'Apps/One/Views.tao': 'public view Main() { render inject ```ts return null ``` }\n',
+      'Docs/Plain.tao': mainSource,
+      'Elsewhere/Main.tao': mainSource,
+    })
+    await FS.symlink('Main.tao', FS.resolvePath('Apps/One/Alias.tao', root))
+    await FS.symlink('../../Docs/Plain.tao', FS.resolvePath('Apps/One/Unauthored.tao', root))
+    await FS.symlink('Missing.tao', FS.resolvePath('Apps/One/Dangling.tao', root))
+    await FS.symlink('../../Elsewhere/Main.tao', FS.resolvePath('Apps/One/Outside.tao', root))
+    await CLI.mustRun('git', {
+      args: ['add', 'Apps/One/Alias.tao', 'Apps/One/Unauthored.tao', 'Apps/One/Dangling.tao', 'Apps/One/Outside.tao'],
+      cwd: root,
+    })
+
+    const result = await new QaScenarioApps(root).discover()
+
+    // Dangling links also stop the project's own parse, so only the link reports are asserted here.
+    const links = result.failures.filter(failure => failure.error.includes('symbolic link'))
+    Expect(links.map(failure => failure.source)).toEqual([
+      'Apps/One/Dangling.tao',
+      'Apps/One/Outside.tao',
+      'Apps/One/Unauthored.tao',
+    ])
+  })
+
+  Test(
+    'lists an app that its scenario-bearing project gives no cells as uncovered instead of dropping it',
+    async () => {
+      const root = await fixture({
+        'Apps/Two/.tao/project.jsonc': '{}\n',
+        'Apps/Two/Main.tao': 'app Alpha { id "alpha" }\nscenarios Alpha "devices" { device phone scenario "phone" {} }',
+        'Apps/Two/Other.tao': 'app Beta { id "beta" }',
+      })
+
+      const result = await new QaScenarioApps(root).discover()
+
+      Expect(result.apps.map(app => app.id)).toEqual(['visual:Apps/Two/Alpha'])
+      Expect(result.failures).toEqual([])
+      Expect(result.uncovered).toEqual([{ source: 'Apps/Two/Other.tao', app: 'Beta' }])
+    },
+  )
+
   Test('reports malformed scenario syntax and missing tracked Tao sources', async () => {
     const root = await fixture({
       'Apps/One/.tao/project.jsonc': '{}\n',

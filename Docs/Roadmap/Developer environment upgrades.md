@@ -58,7 +58,6 @@ change that addressed it.
 - [DEVENV-073 — Gate-runner tests assume an idle machine, so contention handling fails its own suite](<Developer environment upgrades/DEVENV-073-gate-runner-tests-assume-an-idle-machine-so-contention-handl.md>) — Incoming
 - [DEVENV-074 — `./agent fix` cannot format the skills it is told to format](<Developer environment upgrades/DEVENV-074-agent-fix-cannot-format-the-skills-it-is-told-to-format.md>) — Candidate
 - [DEVENV-076 — A documentation-only change selects no test suites](<Developer environment upgrades/DEVENV-076-a-documentation-only-change-selects-no-test-suites.md>) — Candidate
-- [DEVENV-077 — A busy machine could admit no lane at all](<Developer environment upgrades/DEVENV-077-a-busy-machine-could-admit-no-lane-at-all.md>) — Incoming
 - [DEVENV-078 — A peer's exclusive confirmation blocks every other lane without bound](<Developer environment upgrades/DEVENV-078-a-peer-s-exclusive-confirmation-blocks-every-other-lane-with.md>) — Candidate
 - [DEVENV-082 — No pseudo-terminal inside the agent sandbox](<Developer environment upgrades/DEVENV-082-no-pseudo-terminal-inside-the-agent-sandbox.md>) — Candidate
 - [DEVENV-086 — The compiled-app fingerprint hashes all of `packages/`, so any concurrent edit invalidates every memo](<Developer environment upgrades/DEVENV-086-the-compiled-app-fingerprint-hashes-all-of-packages.md>) — Candidate
@@ -73,13 +72,13 @@ change that addressed it.
 - [DEVENV-109 — The dev-data cross-process test times out under a full lane](<Developer environment upgrades/DEVENV-109-dev-data-cross-process-test-times-out-under-a-full-lane.md>) — Candidate
 - [DEVENV-110 — Concurrent writers in one worktree fail the pre-test app compile](<Developer environment upgrades/DEVENV-110-concurrent-writers-in-one-worktree-fail-the-pre-test-app-compile.md>) — Candidate
 - [DEVENV-113 — Uncached complete verification has no repeated stable tail](<Developer environment upgrades/DEVENV-113-uncached-complete-verification-has-no-repeated-stable-tail.md>) — Candidate
-- [DEVENV-114 — The guidance invites agents to force-release a lock the design reserves for a person](<Developer environment upgrades/DEVENV-114-guidance-invites-agents-to-force-release-the-landing-lock.md>) — Candidate
 - [DEVENV-A-FIXED-LOCK-DEADLINE-FAILS-A-LANE-ON-A-LOADED-MACHINE — A fixed lock deadline fails a lane on a loaded machine](<Developer environment upgrades/DEVENV-A-FIXED-LOCK-DEADLINE-FAILS-A-LANE-ON-A-LOADED-MACHINE.md>) — Incoming
 - [DEVENV-A-GATE-RECOMPILES-THE-GENERATED-APP-UNDER-A-RUNNING-DEV-LOOP — A check or test lane replaces the app a running `tao run` is serving](<Developer environment upgrades/DEVENV-A-GATE-RECOMPILES-THE-GENERATED-APP-UNDER-A-RUNNING-DEV-LOOP.md>) — Candidate
 - [DEVENV-A-HIDDEN-COMMAND-REAPPEARED-IN-ONE-BATCHED-WORDFLOWER-RUN — A hidden command reappeared in one batched WordFlower run](<Developer environment upgrades/DEVENV-A-HIDDEN-COMMAND-REAPPEARED-IN-ONE-BATCHED-WORDFLOWER-RUN.md>) — Incoming
 - [DEVENV-A-KILL-DEADLINE-NO-LONGER-CATCHES-A-SLOW-REGRESSION — A kill deadline no longer catches a slow regression](<Developer environment upgrades/DEVENV-A-KILL-DEADLINE-NO-LONGER-CATCHES-A-SLOW-REGRESSION.md>) — Candidate
 - [DEVENV-A-MERGE-OF-MAIN-LEAVES-THE-CODEX-CONFIG-MISSING-UNTIL-SETUP-RUNS — A merge of main leaves the Codex config missing until setup runs](<Developer environment upgrades/DEVENV-A-MERGE-OF-MAIN-LEAVES-THE-CODEX-CONFIG-MISSING-UNTIL-SETUP-RUNS.md>) — In progress
 - [DEVENV-A-WORKTREE-INSIDE-THE-PRIMARY-CHECKOUT-FAILS-DOCTOR-AND-CANNOT-MOVE — A worktree inside the primary checkout fails doctor and cannot be moved](<Developer environment upgrades/DEVENV-A-WORKTREE-INSIDE-THE-PRIMARY-CHECKOUT-FAILS-DOCTOR-AND-CANNOT-MOVE.md>) — Candidate
+- [DEVENV-ACTIONS-CACHE-TOTAL-EXCEEDS-THE-TEN-GIGABYTE-LIMIT — Actions cache total exceeds the ten-gigabyte limit](<Developer environment upgrades/DEVENV-ACTIONS-CACHE-TOTAL-EXCEEDS-THE-TEN-GIGABYTE-LIMIT.md>) — Candidate
 - [DEVENV-ACTIVE-NETWORK-POLICY-KEEPS-OLD-DOMAINS — Active network policy keeps old domains](<Developer environment upgrades/DEVENV-ACTIVE-NETWORK-POLICY-KEEPS-OLD-DOMAINS.md>) — Blocked
 - [DEVENV-ADMITTED-SEAT-HELD-BY-REGISTRATION-NOT-DEMAND — An admitted seat is held by registration, not by demand](<Developer environment upgrades/DEVENV-ADMITTED-SEAT-HELD-BY-REGISTRATION-NOT-DEMAND.md>) — Candidate
 - [DEVENV-AGENT-WORKTREE-SHELLS-DENY-WRITES-AND-COMPOUND-COMMANDS — Agent worktree shells deny writes and compound commands](<Developer environment upgrades/DEVENV-AGENT-WORKTREE-SHELLS-DENY-WRITES-AND-COMPOUND-COMMANDS.md>) — Candidate
@@ -109,7 +108,7 @@ change that addressed it.
 - [DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS — Host effect lint has baseline findings](<Developer environment upgrades/DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS.md>) — Candidate
 - [DEVENV-HOSTED-CHROME-STARTUP-TIMES-OUT-BEFORE-DEVTOOLS — Hosted Chrome startup times out before DevTools](<Developer environment upgrades/DEVENV-HOSTED-CHROME-STARTUP-TIMES-OUT-BEFORE-DEVTOOLS.md>) — Candidate
 - [DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS — iOS builds lack CocoaPods metadata access](<Developer environment upgrades/DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS.md>) — In progress
-- [DEVENV-LAND-FIX-PUSHES-UNGATED-PRE-SQUASH-COMMITS — `land-fix` pushes ungated pre-squash commits](<Developer environment upgrades/DEVENV-LAND-FIX-PUSHES-UNGATED-PRE-SQUASH-COMMITS.md>) — Candidate
+- [DEVENV-LAND-FIX-PUSHES-UNGATED-PRE-SQUASH-COMMITS — `land-fix` pushes ungated pre-squash commits](<Developer environment upgrades/DEVENV-LAND-FIX-PUSHES-UNGATED-PRE-SQUASH-COMMITS.md>) — In progress
 - [DEVENV-LANDING-ADMISSION-RACES-ACROSS-PROCESSES — Landing admission races across processes](<Developer environment upgrades/DEVENV-LANDING-ADMISSION-RACES-ACROSS-PROCESSES.md>) — Candidate
 - [DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED — A landing tests a Codex config it never regenerated](<Developer environment upgrades/DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED.md>) — Candidate
 - [DEVENV-LAZY-TEST-REGISTRATION-FAILS-CI-IMPORT — Lazy test registration fails CI import](<Developer environment upgrades/DEVENV-LAZY-TEST-REGISTRATION-FAILS-CI-IMPORT.md>) — In progress
@@ -123,6 +122,7 @@ change that addressed it.
 - [DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG — Model routing trails the installed catalog](<Developer environment upgrades/DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG.md>) — Candidate
 - [DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES — Native kit omits provider transitives](<Developer environment upgrades/DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES.md>) — In progress
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
+- [DEVENV-OPEN-PR-GIVES-UP-ON-TRANSIENT-GITHUB-SERVER-ERRORS — open-pr gives up on transient GitHub server errors](<Developer environment upgrades/DEVENV-OPEN-PR-GIVES-UP-ON-TRANSIENT-GITHUB-SERVER-ERRORS.md>) — Candidate
 - [DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT — Following checks spends GitHub's anonymous API limit](<Developer environment upgrades/DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT.md>) — Candidate
 - [DEVENV-PROCESS-GROUP-PROBE-REJECTS-PS-SNAPSHOT — Process group probe rejects the system process snapshot](<Developer environment upgrades/DEVENV-PROCESS-GROUP-PROBE-REJECTS-PS-SNAPSHOT.md>) — Candidate
 - [DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES — Profile lacks direnv while doctor passes](<Developer environment upgrades/DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES.md>) — Candidate
@@ -132,12 +132,12 @@ change that addressed it.
 - [DEVENV-QUEUED-NODE-FIRST-WAIT-CHARGED-TO-LANE-NOT-MACHINE — A queued node's first wait is charged to the lane, not the machine](<Developer environment upgrades/DEVENV-QUEUED-NODE-FIRST-WAIT-CHARGED-TO-LANE-NOT-MACHINE.md>) — Candidate
 - [DEVENV-QUIET-UI-HOST-ACCEPTANCE — Quiet UI host acceptance](<Developer environment upgrades/DEVENV-QUIET-UI-HOST-ACCEPTANCE.md>) — Candidate
 - [DEVENV-RELEASE-ACCEPTANCE-DIRECTORY-OPERATIONS-FAIL-IN-MANAGED-SHELL — Release acceptance directory operations fail in the managed shell](<Developer environment upgrades/DEVENV-RELEASE-ACCEPTANCE-DIRECTORY-OPERATIONS-FAIL-IN-MANAGED-SHELL.md>) — Candidate
+- [DEVENV-REMOTE-HOST-OPS-FORWARD-UNCHECKED-GIT-ARGUMENTS — `remote` host operations forward unchecked Git arguments](<Developer environment upgrades/DEVENV-REMOTE-HOST-OPS-FORWARD-UNCHECKED-GIT-ARGUMENTS.md>) — Candidate
 - [DEVENV-RESOURCES-REGISTER-DIRECTORY-PRINTS-THE-WHOLE-INVENTORY — Registering a directory prints the whole resource inventory](<Developer environment upgrades/DEVENV-RESOURCES-REGISTER-DIRECTORY-PRINTS-THE-WHOLE-INVENTORY.md>) — Candidate
 - [DEVENV-RUNTIME-JOURNEY-OBSERVATION-TEST-TIMES-OUT — Runtime journey observation test can time out in a broad lane](<Developer environment upgrades/DEVENV-RUNTIME-JOURNEY-OBSERVATION-TEST-TIMES-OUT.md>) — Candidate
 - [DEVENV-SANDBOXED-GIT-XCRUN-CACHE-WARNING-FAILS-STDERR-ASSERTIONS — Sandboxed git's xcrun cache warning fails stderr assertions](<Developer environment upgrades/DEVENV-SANDBOXED-GIT-XCRUN-CACHE-WARNING-FAILS-STDERR-ASSERTIONS.md>) — Candidate
 - [DEVENV-SANDBOXED-LANES-CANNOT-REMOVE-ENV-FIXTURES — Sandboxed lanes cannot remove `.env` fixtures](<Developer environment upgrades/DEVENV-SANDBOXED-LANES-CANNOT-REMOVE-ENV-FIXTURES.md>) — Candidate
 - [DEVENV-SANDBOXED-TEST-CACHE-REGISTRATION-DENIED — Sandboxed test cache registration denied](<Developer environment upgrades/DEVENV-SANDBOXED-TEST-CACHE-REGISTRATION-DENIED.md>) — Candidate
-- [DEVENV-SANDBOXED-VERIFY-CHANGED-CANNOT-REMOVE-ENV-FIXTURES — Sandboxed verify-changed cannot remove `.env` fixtures](<Developer environment upgrades/DEVENV-SANDBOXED-VERIFY-CHANGED-CANNOT-REMOVE-ENV-FIXTURES.md>) — Candidate
 - [DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS — Sandboxed verification fails the dev-cli shell tests](<Developer environment upgrades/DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS.md>) — Candidate
 - [DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS — Secret materialization is missing from agent commands](<Developer environment upgrades/DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS.md>) — Candidate
 - [DEVENV-SETUP-SUCCEEDS-WHEN-RULESYNC-REJECTS-HOOKS — Setup succeeds when rulesync rejects the hooks file](<Developer environment upgrades/DEVENV-SETUP-SUCCEEDS-WHEN-RULESYNC-REJECTS-HOOKS.md>) — Candidate

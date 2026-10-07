@@ -41,7 +41,7 @@ Describe('release capability catalog', () => {
     const phase5 = ReleaseCapabilities.profile(5)
     for (
       const capability of [
-        ReleaseCapabilities.commandCapability('bridge'),
+        ReleaseCapabilities.optionCapability('bindings generate', '--source'),
         ReleaseCapabilities.commandCapability('secrets'),
         ReleaseCapabilities.commandCapability('instantdb'),
         ReleaseCapabilities.targetCapability('visionos'),

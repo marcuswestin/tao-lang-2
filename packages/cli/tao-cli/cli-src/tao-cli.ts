@@ -67,29 +67,6 @@ export function createCommands(): Command {
       await runBugReport()
     })
 
-  commands
-    .command('bridge')
-    .argument('<package>', 'Installed package whose public API should be imported.')
-    .requiredOption('--source <source>', 'Source adapter: expo or react-native.')
-    .option('--export <name>', 'Import one public object, such as React Native Vibration.')
-    .option('--exclude <names...>', 'Explicitly omit named public exports and record them in the generated catalog.')
-    .option('--from <directory>', 'Resolve installed declarations from this directory.', '.')
-    .requiredOption(
-      '--out <directory>',
-      'Regenerate bindings in a dedicated generated directory; its contents are disposable.',
-    )
-    .description('Generate experimental Tao bindings for supported native API actions.')
-    .action(async (packageName, options) => {
-      try {
-        const { generateNativeBindingFiles } = await import('@native-bindings')
-        const files = await generateNativeBindingFiles(packageName, options)
-        HCI.writeSuccess(`Generated native bindings in ${FS.displayPath(FS.dirname(files[0]!))}\n`)
-      } catch (error) {
-        HCI.writeErrorLine(Errors.formatForUser(error))
-        Platform.runtimeProcess.setExitCode(1)
-      }
-    })
-
   commands.command('bindings')
     .description('Maintain generated native API bindings.')
     .command('generate')

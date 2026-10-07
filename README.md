@@ -44,69 +44,99 @@ desktop app builds are deferred beyond the five planned releases.
 
 ## Install
 
-The signed, notarized standalone CLI for macOS on Apple Silicon has not been published. A public
-install command cannot be given yet. Release 1 also requires the editor extension to be published
-in both marketplaces; a source checkout or local VSIX does not establish that publication.
+The signed, notarized standalone CLI for macOS on Apple Silicon and the editor extension's
+marketplace listings are not published yet, so there is no public install command.
 
-For repository development, clone this repository on macOS with [Nix](https://nixos.org) and
-[devenv](https://devenv.sh) installed, enter the checkout, then run:
+## Developing Tao
+
+Clone on an Apple Silicon Mac with [Nix](https://nixos.org) and [devenv](https://devenv.sh), then
+run from the checkout root:
 
 ```sh
-./enter-tao-dev-env
-./agent tao create "A reading list" --provider local --ai none
+./enter-tao-dev-env   # pinned toolchain, dependency setup, then a shell; `exit` leaves
+just doctor           # diagnose the checkout; each FAIL line names its fix
 ```
 
-The entry script enters the pinned environment once, runs `./agent setup`, and opens your interactive
-shell in that same environment. A failed setup stops entry. Running it again inside this checkout's
-active environment returns immediately without repeating setup or nesting another shell. A different
-checkout still enters its own environment. `./enter-tao-dev-env --setup-only` explicitly refreshes
-the pinned environment and runs setup without an interactive shell. Type `exit` to leave.
+Setup offers direnv so later terminals load the environment automatically (zsh; it writes
+`~/.tao-dev` and one line in your zsh startup file). `./enter-tao-dev-env --setup-only` reruns setup
+without a shell, and `./dev shell-setup --configure` changes the direnv choice.
+[CONTRIBUTING.md](CONTRIBUTING.md) walks a fresh macOS or Linux machine from installing Nix to a
+running dev loop; on Linux, `./.config/bootstrap-tao-dev-env` takes the place of `./enter-tao-dev-env`.
 
-At the end of successful setup, a developer terminal offers
-to install the pinned direnv and enable automatic environments for this repository and all its
-registered Git worktrees. After opting in, open a new terminal and enter a checkout to load its
-tools automatically. Without activation, run the entry script when you return to the checkout.
+Three entry points cover everything: `./tao` is the Tao CLI (an installed release will be plain
+`tao`), `just` is the task menu (`just help`), and `./dev` runs repository workflows
+(`./dev help`). Coding agents use an entry point of their own.
 
-The optional integration keeps developer settings and its installed shell helper under
-`~/.tao-dev`, adds one source line to your zsh startup file, and keeps direnv available through a
-Nix garbage-collection root. The opt-in trusts environment configuration in current and future
-registered worktrees of this repository, including changes to their root `.envrc`; unrelated
-repositories and nested `.envrc` files are not automatically trusted. Dependency setup remains
-explicit: entering a directory loads its environment without running `./agent setup`.
-Setup prepares checkout-local completions; worktrees that have not run setup use the copy installed
-under `~/.tao-dev`. Directory entry never invokes the dependency installer to obtain completions.
-For an already enabled repository, setup also warms this checkout's own devenv cache, so its first
-directory entry can use the cached evaluation. This moves cold Nix work into setup rather than
-eliminating it; a checkout entered before setup still evaluates normally. Branch-specific toolchain
-changes remain subject to devenv's normal invalidation. Preparation is bounded and optional: a
-missing or inaccessible Nix installation leaves setup usable and directory entry retries normally.
+**Build and run apps**
 
-For an older worktree with no root `.envrc`, the hook creates the standard loader as an untracked
-file. It never replaces an existing file or symlink, or restores a tracked file you deleted.
+| Command                                                    | Does                                                          |
+| ---------------------------------------------------------- | ------------------------------------------------------------- |
+| `./tao create "A reading list" --provider local --ai none` | Create a project with a starter app and its tests             |
+| `./tao run Apps/Starters/Notebook --app Notebook --web`    | Run an app in the browser; `--ios` opens the iOS Simulator    |
+| `./tao check Apps/HNReader`                                | Report errors; always pass a path, or it scans the repository |
+| `./tao fix Apps/HNReader`                                  | Format and apply source fixes                                 |
+| `./tao test Apps/HNReader --name "reading history"`        | Run Tao behavior tests; `--watch` reruns on save              |
+| `just dev`                                                 | Pick any app in the repository and run it                     |
+| `just studio Apps/HNReader`                                | Open Tao Studio on a project                                  |
+| `just install-ide-extension`                               | Install the editor extension locally                          |
 
-Noninteractive setup never prompts or changes personal shell settings. Run `./agent shell-setup`
-to change your choice or refresh the installed integration, or `./agent setup --environment` to rebuild the pinned toolchain after its
-dependencies change. Automatic activation currently supports zsh; the manual entry script remains
-available for other shells. Turning off automatic trust preserves existing direnv authorizations;
-those remain under direnv's own control.
+Example apps: `Apps/Starters/Notebook`, `Apps/Starters/Pantry`, `Apps/HNReader` (`--app HNReaderStub`
+for offline data), and `"Apps/WordFlower/1 - Current"` (`--app WordFlower`).
+[Your First Tao App](<Docs/Tutorials/Your First Tao App.md>) builds a single-file reading list by hand.
 
-The checkout runs Tao CLI commands through `./agent tao`; an installed standalone CLI will use
-`tao` directly. `create` generates a multi-file starter. [Your First Tao App](<Docs/Tutorials/Your First Tao App.md>)
-instead builds a separate, single-file reading list by hand.
+**Test and verify**, cheapest first. Local lanes are iteration evidence; hosted `Verify` plus the
+local host-only gates are the merge proof, and landing runs both.
 
-| Command or surface                                               | Availability and purpose                                                                                                                                                                                                                        |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `./agent tao create "A reading list" --provider local --ai none` | Checkout analogue of release-1 creation; `--provider local` keeps data on the device and `--ai none` forces the plain starter in the development checkout. The public release-1 command will be `tao create "A reading list" --provider local`. |
-| `./agent tao run Apps/Starters/Notebook --app Notebook --web`    | Development checkout: run the checked-in starter in a browser. Release-1 creation projects its later design features into supported styles.                                                                                                     |
-| `./agent tao check Apps/Starters/Notebook`                       | Development checkout: check the named starter. Public `check` starts in release 1 for source supported by that release.                                                                                                                         |
-| `./agent tao fix Apps/Starters/Notebook`                         | Development checkout: apply source fixes to the named starter. Public `fix` starts in release 1.                                                                                                                                                |
-| `./agent tao test Apps/Starters/Notebook`                        | Development checkout: run the starter's behavior tests. Public `test` starts in release 1.                                                                                                                                                      |
-| `./agent tao run Apps/Starters/Notebook --app Notebook --ios`    | Development checkout: run the checked-in starter in iOS Simulator. Public Simulator support starts in release 2 for supported source.                                                                                                           |
-| Native Studio                                                    | Release 3: native workbench and interactive scenario review, after distribution.                                                                                                                                                                |
-| `tao ship --beta`                                                | Release 5: TestFlight, after distribution and acceptance.                                                                                                                                                                                       |
+| Command                                                           | Does                                                 |
+| ----------------------------------------------------------------- | ---------------------------------------------------- |
+| `just test-file packages/cli/tao-cli/cli-tests/tutorials.test.ts` | One test file or directory                           |
+| `just test`                                                       | The suites your changes affect                       |
+| `just fix` / `just check`                                         | Apply all formatters and fixes / lint, types, source |
+| `just verify-changed`                                             | The per-commit gate                                  |
+| `just verify`                                                     | Everything except browser and native lanes           |
+| `just verify-full`                                                | Adds browser, native, and bundle lanes               |
+| `just verify-repo`                                                | Nothing cached, plus checks that need a person       |
 
-Android, desktop app builds, over-the-air updates, and `tao review` in the standalone CLI are
-deferred. The development checkout may expose commands that a release-1 build hides.
+**Branches and landing**
+
+| Command                                 | Does                                                                 |
+| --------------------------------------- | -------------------------------------------------------------------- |
+| `just my-branch`                        | Switch to your own `dev/<name>` branch, created from `main` once     |
+| `just my-status` / `just my-sync`       | Show branch, changes, and next step / merge current `main` in        |
+| `just my-land`                          | Squash-merge your `dev/<name>` branch into `main` locally            |
+| `./dev start-branch feat/<name>`        | Start a feature branch from `origin/main`; `take-branch` adopts one  |
+| `./dev merge-main`                      | Merge current `main` into a feature branch                           |
+| `just finalize`                         | Merge `main`, verify, and draft the merge message to review          |
+| `just open-pr --auto-merge`             | Push, open the PR, run the host-only gates; GitHub merges when green |
+| `just pr-checks --wait` / `just landed` | Follow the PR's checks / confirm the branch landed                   |
+| `just land-fix`                         | Land a fix committed after GitHub already merged the branch          |
+| `just board`                            | Every worktree, running lane, and the landing lock                   |
+
+**Clean up**
+
+| Command                                     | Does                                                                   |
+| ------------------------------------------- | ---------------------------------------------------------------------- |
+| `./dev resources`                           | List retained sessions, caches, and output; deletes nothing            |
+| `just reclaim`                              | Classify worktrees; `./dev reclaim --execute` removes reclaimable ones |
+| `just clean` / `just clean-all`             | Remove dependencies and build output / every artifact too              |
+| `./dev studio-stop` / `./dev dev-loop stop` | Stop a leftover Studio or background app loop                          |
+| `./dev watchman stop` then `start`          | Only when `just doctor` reports a stale Watchman launch agent          |
+
+**Installed-CLI acceptance**
+
+| Command                                          | Does                                                          |
+| ------------------------------------------------ | ------------------------------------------------------------- |
+| `just standalone-cli-acceptance`                 | Install a built release into a throwaway HOME and exercise it |
+| `just standalone-cli-vm-setup`                   | Install Tart, once                                            |
+| `just standalone-cli-clean-machine`              | The same acceptance in a disposable vanilla macOS VM          |
+| `just standalone-cli-clean-machine --base xcode` | Reuse the Xcode image; create it once with `--prepare-base`   |
+
+## Release scope
+
+Release 1 covers `create`, `run --web`, `check`, `fix`, and `test`. The iOS Simulator arrives in
+release 2, native Studio in release 3, and `tao ship --beta` to TestFlight in release 5. Android,
+desktop builds, over-the-air updates, and `tao review` in the standalone CLI are deferred. A
+checkout exposes commands a release build hides.
 
 ## Where things are
 

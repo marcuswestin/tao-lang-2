@@ -608,9 +608,12 @@ async function refuseMergedBranch(github: GitHub, branch: string): Promise<void>
  *
  * A Verify run for the head counts as the checks appearing even while it is queued with no check
  * run yet: GitHub creates the run as the push arrives but its jobs only once runners free up, which
- * took minutes on 2026-10-06. When the window ends with no run, the commit's check suites tell the
- * two remaining causes apart: none at all means the push event never reached Actions, which only
- * another push fixes; some means Actions saw the push and started nothing yet.
+ * took minutes on 2026-10-06. A cancelled run does not count: it will never produce the checks the
+ * caller then follows, so it is waited past like no run at all, and when only cancelled runs are
+ * left at the end of the window the report names the cancelled run instead of claiming none
+ * appeared. When the window ends with no run, the commit's check suites tell the two remaining
+ * causes apart: none at all means the push event never reached Actions, which only another push
+ * fixes; some means Actions saw the push and started nothing yet.
  */
 async function awaitChecksOnHead(
   dependencies: OpenPrDependencies,
@@ -620,13 +623,16 @@ async function awaitChecksOnHead(
   report: (line: string) => void,
 ): Promise<boolean> {
   const attempts = Math.ceil(CHECKS_APPEAR_WITHIN_MS / CHECKS_APPEAR_POLL_MS)
+  let cancelled: WorkflowRun | undefined
   for (let attempt = 1;; attempt += 1) {
     const pr = await github.view(prNumber)
     if (pr.head.sha === headSha) {
       if (await github.checkRunCount(headSha) > 0) {
         return true
       }
-      const run = (await github.verifyRuns(headSha))[0]
+      const runs = await github.verifyRuns(headSha)
+      cancelled = runs.find(candidate => candidate.conclusion === 'cancelled')
+      const run = runs.find(candidate => candidate.conclusion !== 'cancelled')
       if (run !== undefined) {
         report(
           `PASS  Verify run ${run.id} exists for ${headSha.slice(0, 8)} (${run.status}); `
@@ -640,7 +646,11 @@ async function awaitChecksOnHead(
         CHECKS_APPEAR_WITHIN_MS / 1000
       }s of the push`
       report(
-        pr.mergeable_state === 'dirty'
+        cancelled !== undefined && pr.mergeable_state !== 'dirty'
+          ? `FAIL  Verify run ${cancelled.id} on ${headSha.slice(0, 8)} was cancelled (${cancelled.html_url}) and no`
+            + ` other run started within ${CHECKS_APPEAR_WITHIN_MS / 1000}s of the push. Find out why it was`
+            + ` cancelled, push a new head with \`git commit --allow-empty -m 'Run Verify again'\`, and run open-pr again.`
+          : pr.mergeable_state === 'dirty'
           ? `${noChecks}: the pull request conflicts with ${MAIN_BRANCH}, and GitHub runs no pull_request`
             + ` workflow until it merges cleanly. Merge ${MAIN_BRANCH} into this branch and push it with open-pr;`
             + ` that push starts the checks.`

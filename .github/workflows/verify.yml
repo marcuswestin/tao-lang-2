@@ -2,9 +2,11 @@ name: Verify
 
 # Runs verify-full's portable membership (`./agent verify-full-sandbox`) split across Linux
 # runners, so an agent on a small machine can open a pull request and read one verdict instead of
-# running the full lane itself. Each partition runs the whole prepare phase and its own share of the
-# readers; the final `Verify` job is the one verdict, and it refuses a set of partitions that did not
-# compute the same plan, because a disagreement there means some node ran nowhere.
+# running the full lane itself. Each partition runs the prepare phase's generators and its own share
+# of the readers; the final `Verify` job is the one verdict, and it refuses a set of partitions that
+# did not compute the same plan, because a disagreement there means some node ran nowhere. The
+# prepare phase's fixers do not run here (`--hosted-linux` skips them): a rewrite fails the partition
+# below, and the check gates (`_dprint-check`, `_tao-check`, `_repo-lint`) fail on the same defect.
 #
 # Host gates: the ones the catalog marks `runsOnHostedLinux` run here (studio-smoke,
 # studio-smoke-simulated-user, keyboard-navigation-smoke, studio-dialog-browser, studio-metro-refresh,
@@ -20,9 +22,11 @@ name: Verify
 # only its explanatory comment is lost (`CONTRIBUTING.md` says the same thing).
 #
 # The partition count is two numbers, `PARTITIONS` and `PARTITIONS_SHARED` below, between which
-# the `plan` job chooses; nothing else in this file states them. Never cache `.artifacts`: the plan reads recorded timings, and partitions
-# that restored different ones would place nodes differently. Each partition instead seeds them
-# from `.github/verify/durations.json` and `ledger.json`.
+# the `plan` job chooses; nothing else in this file states them. Never cache `.artifacts/timings` or
+# `.artifacts/testing`: the plan reads recorded timings, and partitions that restored different ones
+# would place nodes differently. Each partition instead seeds them from `.github/verify/durations.json`
+# and `ledger.json`. The two generator stamps under `.artifacts` are cached beside their output: a
+# generator reads nothing from its stamp but a verdict about its own output, which it re-derives.
 
 on:
   pull_request:
@@ -76,8 +80,9 @@ env:
   # Every directory Bun's isolated linker writes: the root store and each workspace's own links,
   # which point into it by relative paths, so the tree restores intact at the same checkout path.
   # Left out: the Android, iOS, and other-platform binaries of Jazz's native packages, about 1 GB of
-  # the 3.7 GB tree that only Gradle, Xcode, or another OS ever loads. The excluded paths are part of
-  # the cache's version, so a tree saved with them is never restored as one without them.
+  # the 3.7 GB tree that only Gradle, Xcode, or another OS ever loads, and the Darwin build of its
+  # `@garden-co` NAPI package (81 MB). The excluded paths are part of the cache's version, so a tree
+  # saved with them is never restored as one without them.
   NODE_MODULES_PATHS: |
     node_modules
     packages/*/node_modules
@@ -89,6 +94,22 @@ env:
     !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.darwin-*.node
     !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.win32-*.node
     !node_modules/.bun/jazz-napi@*/node_modules/jazz-napi/jazz-napi.linux-arm64-*.node
+    !node_modules/.bun/@garden-co+jazz-napi-darwin-arm64@*/node_modules/@garden-co/jazz-napi-darwin-arm64/*.node
+  # The generated parser and TextMate grammar, with the stamp that vouches for them; restored before
+  # the bootstrap, which runs the generator. The compiled WordFlower app and its stamp likewise.
+  # Neither generator trusts a stamp alone: each re-hashes its inputs and its own output first, so a
+  # restore from another key, or a stale one, costs a regeneration and never a stale tree. The keys
+  # are those inputs, approximately; the stamp decides, the key only sets the hit rate. The app's
+  # module-link manifest travels with it: it is how a recompile recognises the tree's `node_modules`
+  # link as its own and removes it before publishing, and without it that recompile refuses the link.
+  PARSER_GEN_PATHS: |
+    packages/language/parser/parser-src/_gen_tao-parser
+    packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes
+    .artifacts/parser-generate-stamp.json
+  WORD_FLOWER_PATHS: |
+    Apps/WordFlower/1 - Current/.tao/cache/_gen_tao-app
+    Apps/WordFlower/1 - Current/.tao/cache/_gen_tao-app.tao-module-links.json
+    .artifacts/compile-app-stamp.json
 
 jobs:
   # Holds a pull request until its author has accepted CLA.md by posting the agreement sentence on a
@@ -319,11 +340,41 @@ jobs:
           restore-keys: |
             tao-native-bindings-${{ runner.os }}-
 
+      # The generator's inputs are the grammar, its configuration, and the Langium release in the lock.
+      - name: Restore the generated parser
+        id: parser-gen
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.PARSER_GEN_PATHS }}
+          key: tao-parser-gen-${{ runner.os }}-${{ hashFiles('bun.lock', 'packages/language/parser/langium-config.json', 'packages/language/parser/parser-grammar/**') }}
+          restore-keys: |
+            tao-parser-gen-${{ runner.os }}-
+
+      # The compile's inputs are `CompileApp.ts`'s source roots and input files, and the app itself.
+      - name: Restore the compiled WordFlower app
+        id: word-flower
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.WORD_FLOWER_PATHS }}
+          key: tao-word-flower-${{ runner.os }}-${{ hashFiles('bun.lock', 'Apps/WordFlower/1 - Current/**', '!Apps/WordFlower/1 - Current/.tao/cache/**', 'packages/language/ast-utils/ast-utils-src/**', 'packages/compiler/compiler-src/**', 'packages/ai/generation/generation-src/**', 'packages/apps/providers/icloud/icloud-src/**', 'packages/language/parser/parser-src/**', 'packages/language/parser/parser-grammar/**', 'packages/apps/expo-host/expo-host-src/**', 'packages/shared/shared-src/**', 'packages/apps/stdlib/**', '!packages/apps/stdlib/**/node_modules/**', '!packages/apps/stdlib/.tao-ts/**', 'packages/cli/tao-cli/cli-src/**', 'packages/language/validator/validator-src/**', 'packages/language/project-tooling/project-tooling-src/**') }}
+          restore-keys: |
+            tao-word-flower-${{ runner.os }}-
+
       # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then prepares
       # only what the lane reads (`--verify-setup`): the full `./agent setup` also writes agent
       # configuration, Git hooks, and shell completion, which no gate reads.
       - name: Bootstrap Nix, the pinned toolchain, and Tao setup
         run: ./.config/bootstrap-tao-dev-env --install-nix --verify-setup
+
+      # One partition saves each generated tree, under the key its restore computed; the rest would
+      # only be refused as duplicates. Saved from partition 1 because every count has one.
+      - name: Save the generated parser
+        if: steps.parser-gen.outputs.cache-hit != 'true' && matrix.partition == 1
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.PARSER_GEN_PATHS }}
+          key: ${{ steps.parser-gen.outputs.cache-primary-key }}
 
       - name: Save the generated native bindings
         if: steps.native-bindings.outputs.cache-hit != 'true'
@@ -396,8 +447,17 @@ jobs:
       - name: Verify partition ${{ env.PARTITION }}
         run: ./agent verify-full-sandbox --partition "$PARTITION" --hosted-linux
 
-      # Locally the prepare phase fixes formatting and regenerates indexes in place; here a rewrite
-      # means the pull request carries unformatted or stale files, which is a failure.
+      - name: Save the compiled WordFlower app
+        if: steps.word-flower.outputs.cache-hit != 'true' && matrix.partition == 1
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.WORD_FLOWER_PATHS }}
+          key: ${{ steps.word-flower.outputs.cache-primary-key }}
+
+      # Locally the prepare phase fixes formatting and regenerates indexes in place; here the fixers
+      # do not run, the check gates fail on what they would have rewritten, and a generator that
+      # rewrites a tracked file means the pull request carries stale files, which is a failure.
       - name: Require the prepare phase to leave the tree unchanged
         run: |
           if [ -n "$(git status --porcelain)" ]; then

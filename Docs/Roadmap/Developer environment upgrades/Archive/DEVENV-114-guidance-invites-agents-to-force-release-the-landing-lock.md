@@ -1,6 +1,6 @@
 # DEVENV-114 — The guidance invites agents to force-release a lock the design reserves for a person
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Landing and merge workflow
 - **Impact:** `LandingLock.ts` is explicit that the lock is never reclaimed automatically, that a
@@ -34,3 +34,7 @@
   nothing in either text presents force-releasing as the agent's own next step.
 - **Source:** Observed while landing `feat/publication-audit-report-d93f40` on 2026-09-19, and
   corrected on 2026-09-20 after reading `packages/dev/dev-src/repository-tests/LandingLock.ts`.
+- **Resolution:** Rechecked 2026-10-07: root `AGENTS.md` no longer offers `land-unlock --force`, and
+  both the waiter's warning and a refused release (`LandingLock.ts:463`, `:563`) say forcing is the
+  Developer's call and to bring `./agent board` to them.
+- **Archived:** 2026-10-07

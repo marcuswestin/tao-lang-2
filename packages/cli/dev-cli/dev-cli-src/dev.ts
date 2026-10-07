@@ -516,7 +516,7 @@ await runWithCommands(commands => {
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
     .option(
       '--hosted-linux',
-      'With --skip-unsandboxed on a hosted Verify Linux runner: keep the unsandboxed gates proved there.',
+      'With --skip-unsandboxed on a hosted Verify Linux runner: keep the unsandboxed gates proved there and skip the fixers.',
     )
     .option(
       '--ci-host-gates <names>',
@@ -1012,7 +1012,7 @@ await runWithCommands(commands => {
   commands
     .command('land-fix')
     .description(
-      'Land a fix committed after GitHub merged this branch: merge the branch into fetched origin/main, push, and write a receipt; no verification runs.',
+      'Land a fix committed after GitHub merged this branch: commit the fix onto fetched origin/main as one commit, push, and write a receipt; no verification runs.',
     )
     .action(async () => {
       await runExitCommand(async () => (await LandFixCommand.run()).exitCode)
@@ -1558,62 +1558,37 @@ await runWithCommands(commands => {
     })
 
   commands
-    .command('release-studio-prepare')
-    .description('Build and locally validate a signed Studio release for a GitHub Releases host.')
-    .requiredOption(
-      '--repo <owner/name>',
-      'Existing public GitHub repository: use owner/name from https://github.com/owner/name.'
-        + ' Requires GitHub CLI and gh auth login with repository write access.',
-    )
-    .option('--version <version>', 'Three-part Studio version.', '0.0.1')
-    .option('--phase <number>', 'Public release phase 3, 4, or 5.', '3')
-    .action(async (options: { repo: string; version: string; phase: string }) => {
-      const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
-      await runReleaseAction(async () =>
-        await ReleaseWorkflow.prepareStudio(
-          options.repo,
-          options.version,
-          parseQaReleasePhase(options.phase, 3) as 3 | 4 | 5,
-        )
-      )
-    })
-
-  commands
-    .command('release-studio-publish')
-    .description('Upload prepared Studio artifacts to GitHub and verify public downloads.')
-    .requiredOption(
-      '--repo <owner/name>',
-      'Existing public GitHub repository: use owner/name from https://github.com/owner/name.'
-        + ' Requires GitHub CLI and gh auth login with repository write access.',
-    )
-    .action(async (options: { repo: string }) => {
-      const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
-      await runReleaseAction(async () => await ReleaseWorkflow.publishStudio(options.repo))
-    })
-
-  commands
-    .command('release-ide-prepare')
-    .description('Package the VSIX and prove it installs into an isolated VS Code profile.')
-    .option('--phase <number>', 'Public release phase 1 through 5.', '1')
-    .action(async (options: { phase: string }) => {
-      const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
-      await runReleaseAction(async () => await ReleaseWorkflow.prepareIde(parseQaReleasePhase(options.phase, 1)))
-    })
-
-  commands
-    .command('release-ide-publish')
+    .command('publish-release')
     .description(
-      'Publish the prepared VSIX to Marketplace, Open VSX, or both.'
-        + ' Requires publisher/namespace access and local VSCE_PAT/OVSX_PAT for the selected registries.',
+      'Publish a prepared Studio or IDE extension release. Studio uploads to GitHub and verifies public downloads;'
+        + ' the extension needs publisher/namespace access and local VSCE_PAT/OVSX_PAT for the selected registries.',
     )
-    .option('--target <target>', 'all, marketplace, or open-vsx.', 'all')
-    .action(async (options: { target: string }) => {
-      const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+    .argument('<target>', 'studio or ide-extension.')
+    .option('--repo <owner/name>', 'Studio only: the public GitHub repository, as in prepare-release.')
+    .option(
+      '--registry <registry>',
+      'IDE extension only: all, marketplace, or open-vsx; retry one after a partial failure.',
+      'all',
+    )
+    .action(async (target: string, options: { repo?: string; registry: string }) => {
       await runReleaseAction(async () => {
-        if (options.target !== 'all' && options.target !== 'marketplace' && options.target !== 'open-vsx') {
-          Errors.throwUserInput('Expected --target all, marketplace, or open-vsx.')
+        const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+        if (target === 'studio') {
+          if (options.repo === undefined) {
+            Errors.throwUserInput('Studio publishing needs --repo owner/name.')
+          }
+          await ReleaseWorkflow.publishStudio(options.repo)
+        } else if (target === 'ide-extension') {
+          if (options.repo !== undefined) {
+            Errors.throwUserInput('IDE extension publishing takes no --repo.')
+          }
+          if (options.registry !== 'all' && options.registry !== 'marketplace' && options.registry !== 'open-vsx') {
+            Errors.throwUserInput('Expected --registry all, marketplace, or open-vsx.')
+          }
+          await ReleaseWorkflow.publishIde(options.registry)
+        } else {
+          Errors.throwUserInput('Expected release target studio or ide-extension.')
         }
-        await ReleaseWorkflow.publishIde(options.target)
       })
     })
 

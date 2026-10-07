@@ -1,6 +1,6 @@
 # DEVENV-077 — A busy machine could admit no lane at all
 
-- **Status:** Incoming
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Parallel verification
 - **Impact:** Every lane on the machine could sit at zero running nodes while the CPUs were mostly
@@ -30,3 +30,8 @@
 - **Acceptance:** A lane that registers against a registry whose slots are all reserved admits its
   first node immediately, and a declined admission says what it is waiting for.
 - **Source:** 2026-09-18 repository-deduplication branch.
+- **Resolution:** Rechecked 2026-10-07: the fix landed from `feat/lane-admission-share`, and
+  arrival-order admission has since replaced fair shares. `MachineLanes.laneQueue` admits whole
+  lanes in order and gives every queued lane its position (`machine-lanes.test.ts:45`), so lanes can
+  no longer all hold slots while running nothing.
+- **Archived:** 2026-10-07

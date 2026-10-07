@@ -6,7 +6,7 @@ export const PREFERRED_EXPO_PORT = 8081
 
 /**
  * The Expo SDK generation `packages/apps/expo-host` pins. Every runtime this loop opens is measured
- * against it: the Expo Go it sideloads onto Android, and the one a simulator must already carry. A
+ * against it: the Expo Go it installs on Android and iOS simulators. A
  * repository test keeps this equal to the host package's own `expo` dependency, so an SDK upgrade
  * cannot leave the dev loop installing last year's client.
  */

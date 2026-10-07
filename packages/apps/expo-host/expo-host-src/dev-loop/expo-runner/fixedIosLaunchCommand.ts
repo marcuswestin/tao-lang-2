@@ -77,6 +77,7 @@ function inspectionDiagnostic(error: unknown): Errors.ErrorDetails | undefined {
             'returnedBytes',
             'expectedBytes',
             'probeErrno',
+            'nativeErrno',
             'helperStatus',
           ]
         ) {

@@ -19,10 +19,6 @@
     "architecture": "arm64",
     "runtime": "bun:1.4.2"
   },
-  "inputs": {
-    "source": "packages/cli/tao-cli",
-    "dependencySnapshot": "Docs/QA/inputs/b3a1a90e52cba30cc63684426661ef9a611697d6c3c7da7aed5d91912c213e58.json"
-  },
   "surfaceId": "visual:notebook",
   "dimension": "visual",
   "outcome": "pass",
