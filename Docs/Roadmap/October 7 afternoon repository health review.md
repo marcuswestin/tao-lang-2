@@ -37,7 +37,7 @@ The closing decision round settled six items; the Developer took every recommend
 - **A. Docker memory.** The Developer raises it to 16 GB. Docker was stopped when the pass ended, so the Ubuntu check did not run.
 - **B. Expo Go download.** `app-dev --ios` keeps downloading and installing the SDK-matched client (U1).
 - **C. Offline fallback.** Done in this pass (E1).
-- **D. Remote heads.** The six heads already in `main` are to be deleted. No repository command deletes remote branches, so the Developer runs the deletion.
+- **D. Remote heads.** The Developer deleted the six heads already in `main`. No repository command deletes remote branches.
 - **E. `land-fix` gates.** `land-fix` now runs `_parser-gen`, `_compile-word-flower-app`, `_repo-lint`, `_typecheck` and `_test-changed` after the conflict check and before it builds the commit. A failure stops it before anything is pushed. `DEVENV-LAND-FIX-PUSHES-UNGATED-PRE-SQUASH-COMMITS` is resolved and archived.
 - **F. Tart provisioning.** The approved route was to copy the harness in after boot through the guest agent. It cannot work for the vanilla image, which has no guest agent: the agent itself has to be written to the stopped disk before boot, and the transport deliberately uses no SSH and no shared folders. `DEVENV-TART-PROVISIONING-REQUIRES-HOST-UID-501` lists the three routes that remain, and choosing one is the Developer's.
 

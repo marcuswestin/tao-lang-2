@@ -15,7 +15,7 @@ notes after each completed pass; Git history is the longer record.
   - `app-dev --ios` opens the installed Expo Go when Expo's version check cannot be reached (E1).
   - `land-fix` runs typecheck, lint and the changed suites before it pushes `main`.
 - **Health:** The machine had just been cleaned, so worktree and cache totals fell from about 250 GiB to under 10 GiB, and process records from 920 to 2. Tracked blobs are 42.6 MB. The routing audit found no mismatch. Haiku 5.5's price fell to a tenth.
-- **Developer decisions:** Keep `app-dev --ios`'s Expo Go download. Delete the six remote heads already in `main`. Raise Docker to 16 GB. Provision Tart guests without host-side ownership, though the approved route turned out not to work for the vanilla image (below).
+- **Developer decisions:** Keep `app-dev --ios`'s Expo Go download. The six remote heads already in `main` are deleted. Raise Docker to 16 GB. Provision Tart guests without host-side ownership, though the approved route turned out not to work for the vanilla image (below).
 - **Acceptance:** Not established. Every macOS Tart check fails at provisioning from this host account, which is uid 503 where provisioning needs 501. The Ubuntu check did not run: Docker was stopped when the pass ended. `performance-check` was inconclusive: language check timings ran slightly over budget while Spotlight indexed the machine.
 
 ## Consider next time
