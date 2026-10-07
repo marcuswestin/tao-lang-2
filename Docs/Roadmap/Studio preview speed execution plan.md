@@ -3,12 +3,50 @@
 Prepared 2026-10-06; updated 2026-10-07. Status: implementation, integrated source review and
 complete local changed-scope verification passed. Performance qualification remains pending.
 The Developer authorized landing on 2026-10-07; the current merge gates still have to pass.
+Quiet qualification now reaches a whole-app budget failure also reproduced on main; see below.
 The [continuation roadmap](<Studio preview speed continuation.md>) remains
 the project owner. The [tracked POC handover](<Studio preview speed POC handover.md>) records the
 experimental mechanisms and historical evidence. This plan supersedes the supplementary archive's
 main-only preparation plan as the proposed execution sequence, without superseding its raw evidence.
 
 ## Integrated starting state
+
+### Quiet qualification blocker, 2026-10-07
+
+Candidate `ae0dbf4c6` and control `5a2ba4b6c` include the same current main; both frozen
+setups pass and authored HNReader, package.json and bun.lock are identical. Candidate standalone
+run `performance-8c6a878c-d57c-4236-9772-bb0ecdf5329c` reached quiet exclusive admission
+but failed whole-app session checking at 1.4 seconds against the unchanged 1.3-second ceiling.
+There were no peer lanes and load stayed 4.0166–4.6284 on 18 CPUs. The runner stopped before
+Studio stages. Current-main control also fails the focused language benchmark, so this failure
+is not established as a branch regression.
+
+The preceding full control attempt `performance-b2c8f8db-449c-447e-8084-3c948a52459f` took
+853 seconds and ran all six canonical Studio cases, but was inconclusive after load crossed the
+quiet threshold; language checking failed and two publication-on cases timed out. Four Studio
+cases completed correctness, including computed padding, but this is not a qualified paired
+member. No qualified comparison or new numerical gain exists.
+
+Focused profiling attributes about 620 milliseconds per thirteen-entry validation batch to
+constructing effect analyses. Exact ordered effect inputs repeated zero times across sixty
+entry invocations. Two narrow reuse trials showed no demonstrated gain and were removed;
+production source is unchanged by this investigation. The proposed next slice is a separate
+compiler-owned effect-analysis design, following the boundary on broader compilation work:
+
+1. Trace semantic dependency closure and define an immutable reuse contract for distinct entry
+   graphs, keeping entry diagnostics, filesystem checks and native freshness authoritative.
+2. Prove unchanged ordered diagnostics and sealed effect evidence against cold construction,
+   covering changed and missing dependencies, differing entry order, recovery and fresh batches.
+3. Implement only reuse whose exact consumed inputs can be proved; retain cold fallback and
+   deterministic work-count witnesses. Broader worker or workspace sharing remains separate.
+4. Repeat unchanged standalone ceilings, then matched control/candidate/candidate/control real
+   editor measurements. The authorized hosted landing route follows after qualification.
+
+The scope decision is pending. Landing authorization remains valid, but hosted merge proof has
+not started. The workflow blocker is also recorded in
+[DEVENV-WORDFLOWER-CHECK-EXCEEDS-QUIET-PERFORMANCE-BUDGET](<Developer environment upgrades/DEVENV-WORDFLOWER-CHECK-EXCEEDS-QUIET-PERFORMANCE-BUDGET.md>).
+
+### Historical starting state
 
 1. New managed worktree: `/Users/ro/.codex/worktrees/studio-preview-speed-execution/tao-lang-2`;
    branch `feat/studio-preview-speed-execution`, created from exact checkpoint

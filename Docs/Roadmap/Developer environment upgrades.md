@@ -160,3 +160,4 @@ change that addressed it.
 - [DEVENV-TEST-RUNS-CANNOT-BE-CPU-PROFILED — Test runs cannot be CPU-profiled](<Developer environment upgrades/DEVENV-TEST-RUNS-CANNOT-BE-CPU-PROFILED.md>) — Candidate
 - [DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS — Visual review scenario readiness timeouts](<Developer environment upgrades/DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS.md>) — Candidate
 - [DEVENV-WATCHOS-SWIFT-PROBE-FAILS-UNDER-BROAD-LANES — watchOS Swift probe fails under broad lanes](<Developer environment upgrades/DEVENV-WATCHOS-SWIFT-PROBE-FAILS-UNDER-BROAD-LANES.md>) — Candidate
+- [DEVENV-WORDFLOWER-CHECK-EXCEEDS-QUIET-PERFORMANCE-BUDGET — WordFlower check exceeds its quiet performance budget](<Developer environment upgrades/DEVENV-WORDFLOWER-CHECK-EXCEEDS-QUIET-PERFORMANCE-BUDGET.md>) — Candidate

@@ -9,6 +9,25 @@ timings.
 
 ## Current state
 
+### Quiet qualification failure, 2026-10-07
+
+The current speed candidate integrates main `5a2ba4b6c`. Source review and local changed-scope
+proof remain complete, but quiet standalone qualification now reaches a whole-app session-check
+failure: 1.4 seconds against the unchanged 1.3-second ceiling, no peers and load 4.0166–4.6284
+on 18 CPUs. Current-main control also fails that stage; a branch regression is not established.
+Studio timing stages and all qualified pairs remain pending. A loaded full control attempt ran
+all six cases but was inconclusive, with two publication-on timeouts.
+
+Diagnostic profiling identifies effect-analysis construction as about 620 milliseconds of one
+thirteen-entry validation batch. Exact ordered input reuse had no hits, and two narrower reuse
+trials showed no demonstrated gain; all investigation source changes were removed. The
+[execution plan](<Studio preview speed execution plan.md#quiet-qualification-blocker-2026-10-07>)
+proposes a separate compiler effect-analysis design and parity proof before implementation.
+This is an outstanding scope decision; ceilings, admission and authoritative checks remain intact.
+Landing remains authorized, with no own hosted run, PR or merge yet.
+
+### Landed predecessor
+
 The successor branch `feat/studio-preview-speed`, created from exactly `8ecf581e7`, landed on
 2026-10-04 and is preserved at `origin/merged/studio-preview-speed`. Its activation and decided folder layout are implemented: every scenario and the whole-app preview now
 default to no iframe, with per-cell lightning toggles and server-persisted app activation in
