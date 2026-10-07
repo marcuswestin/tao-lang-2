@@ -146,4 +146,58 @@
   absent. This does not establish why the first observation was unreadable. Its log remains at
   `.artifacts/logs/verify-complement/2026-10-06T21-36-44-146Z-52210-94cdcad6/studio-smoke.log`.
   Complete host proof must be renewed after integrating main.
+- **Personal-branch landing observation (2026-10-07):** At `9eaf7923393f`, the authorized local
+  landing passed its cheap checks but `verify-full` stopped after the receipt-inputs test passed
+  its assertions. Descendant inspection returned zero bytes from `proc_pidinfo` for PID 35334,
+  while the signal probe reported it live; root PID 33894 was the requested owner. Log:
+  `.artifacts/logs/verify-full/2026-10-07T16-51-51-588Z-19444-1faa93f1/language_project-tooling_receipt-inputs.log`.
+  The unchanged exact test then passed in isolation, including wrapper cleanup, in 9.2 seconds:
+  `.artifacts/logs/dev-test/2026-10-07T16-54-52-379Z-35576-fd26f194/language_project-tooling_receipt-inputs.log`.
+  This does not establish the cause of the native unreadability or replace complete landing proof.
+  The next full landing attempt at `d4107b6c9` failed the same inspection in a different suite:
+  `ProjectConcurrentWriters.integration.test.ts` passed all assertions before PID 61075 returned
+  zero bytes while still signalable (requested root PID 60660). Log:
+  `.artifacts/logs/verify-full/2026-10-07T16-56-27-873Z-37159-6ed6d689/language_project-tooling_1.log`.
+  That unchanged exact test passed in isolation in 5.8 seconds:
+  `.artifacts/logs/dev-test/2026-10-07T17-01-05-320Z-62074-a2d5bddb/language_project-tooling.log`.
+  Later exact-PID probes found both reported PIDs absent and root 60660's group empty. Those
+  observations do not retroactively prove that the failed inspection observed safe ownership.
+  With the Developer's approval to diagnose and fix this blocker, failed `proc_pidinfo` reads now
+  retain the immediate native errno in the bounded diagnostic envelope; successful liveness alone
+  still cannot establish identity or safe cleanup. The 54 inspector fixtures pass, including native
+  errno propagation through the shared failure envelope. Two bounded live child-exit probes did not
+  reproduce the failure (62 Bun-parent reads and 523 Node-parent reads, zero failures); this does not
+  establish its cause. The next complete landing run collects the missing native error if it recurs.
+- **Denied identity follow-up (2026-10-07):** The next full landing run captured native `EPERM`
+  after all 1,193 CLI assertions passed: PID 96340 returned zero full BSD record bytes while its
+  signal probe succeeded (root 83565). Log:
+  `.artifacts/logs/verify-full/2026-10-07T17-10-16-339Z-66710-6851a228/cli_dev-cli.log`.
+  The unchanged CLI suite and wrapper passed separately in 125.6 seconds. The denial's precise
+  policy and the target's status at that observation remain unproved. Apple exempts the shorter
+  BSD record from the full record's same-user check. After an `EPERM`, a complete short record
+  matching the requested PID and `SZOMB` now permits omitting that finished process without
+  granting identity or signal authority. Live, partial, mismatched and denied short records still
+  fail; process-group joins retain their full exact-identity and two-snapshot proof. Deterministic
+  fixtures cover those boundaries, and removing the zombie-status guard makes the live-record
+  refusal regression fail. Complete landing verification remains the final acceptance gate.
+- **Privileged-helper correction (2026-10-07):** Two later full verification runs passed, but
+  fresh-main integration required another run. That run captured a live descendant with effective
+  UID 0: PID 15652, short BSD status 2, full BSD `EPERM`, requested root 14586. Log:
+  `.artifacts/logs/verify-full/2026-10-07T17-54-50-947Z-13374-2b4b6f37/studio-canary.log`.
+  This establishes that zombie handling alone cannot resolve the blocker. Apple's full BSD
+  record and resource-usage API enforce the same-effective-UID policy; `KERN_PROC_PID` instead
+  emits a complete process-table record across UIDs. An `EPERM` now tries that record before
+  the existing short-zombie check. PID, parent, group, status and start time come from that one
+  record, preserving the existing seconds:microseconds identity and all ownership guards.
+  The installed SDK's arm64 and x64 layouts both report 648 bytes; incomplete or changed layouts
+  fail closed. This SDK-declared system-tool interface is SPI, so its layout is deliberately
+  guarded rather than assumed stable across future macOS changes. Deterministic fixtures cover
+  exact identity parity, PID mismatch, parent/group changes, partial records and two-snapshot
+  zombie proof. A read-only production-inspector probe of root-owned PID 1 returned `launchd`
+  with an exact start identity. This is inspection evidence, not signal or cleanup authority.
+  All 74 inspector fixtures passed. Relaxing the exact-size guard caused the changed-ABI
+  regression to fail; restoring the guard passed again. The previously failing quiet canary
+  also passed with no owned survivors, invocation `c908be29-6975-4dee-b803-c3ca76ec1b11`.
+  Primary references: [full-record security policy](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/proc_info.c)
+  and [process-table handler and start-time fields](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_sysctl.c).
 - **Source:** 2026-09-17 process-teardown implementation.

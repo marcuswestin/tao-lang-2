@@ -30,6 +30,13 @@ function fixture(options: {
   returnedParentPid?: number
   unreadableReads?: number
   unreadableUntilYield?: boolean
+  nativeErrno?: number
+  shortReturnedBytes?: number
+  shortPid?: number
+  shortStatus?: number
+  tableRecord?: boolean
+  tableReturnedBytes?: number
+  tablePid?: number
   group?: number
   probe?: 'live' | 'EPERM' | 'EIO' | 'ESRCH' | 'uncoded' | 'undefined'
   probeErrno?: number
@@ -52,6 +59,34 @@ function fixture(options: {
   let waitedMs = 0
   let groupReads = 0
   const symbols = {
+    __error: () => 1,
+    sysctl: (
+      mib: Int32Array,
+      length: number,
+      bytes: Uint8Array,
+      size: BigUint64Array,
+      newValue: unknown,
+      newSize: number,
+    ) => {
+      Expect([...mib]).toEqual([1, 14, 1, 701])
+      Expect(length).toBe(4)
+      Expect(bytes.byteLength).toBe(648)
+      Expect(newValue).toBe(null)
+      Expect(newSize).toBe(0)
+      size[0] = BigInt(options.tableReturnedBytes ?? (options.tableRecord ? 648 : 0))
+      if (!options.tableRecord) {
+        return -1
+      }
+      const view = new DataView(bytes.buffer)
+      view.setBigUint64(0, options.laterZombieIdentity && groupReads > 1 ? 999n : 123n, true)
+      view.setUint32(8, 456, true)
+      view.setUint32(12, 0xdeadbeef, true) // timeval padding is not part of microseconds.
+      view.setUint8(36, options.zombie ? 5 : 2)
+      view.setUint32(40, options.tablePid ?? 701, true)
+      view.setUint32(560, options.returnedParentPid ?? 700, true)
+      view.setUint32(564, options.group ?? 700, true)
+      return 0
+    },
     proc_listpids: (_kind: number, group: number, pids: Int32Array) => {
       groupReads++
       Expect(group).toBe(700)
@@ -79,8 +114,16 @@ function fixture(options: {
       return 1
     },
     proc_pidinfo: (pid: number, kind: number, arg: number, bytes: Uint8Array) => {
-      identityReads++
       Expect([701, 702].includes(pid)).toBe(true)
+      if (kind === 13) {
+        Expect(arg).toBe(1)
+        Expect(bytes.byteLength).toBe(64)
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+        view.setUint32(0, options.shortPid ?? pid, true)
+        view.setUint32(12, options.shortStatus ?? 2, true)
+        return options.shortReturnedBytes ?? bytes.byteLength
+      }
+      identityReads++
       Expect(kind).toBe(3)
       Expect(arg).toBe(expectedArg === 0 && identityReads > 1 ? 1 : expectedArg)
       if (
@@ -111,6 +154,7 @@ function fixture(options: {
             dlopen: () => ({ symbols, close: () => closes++ }),
             FFIType: { i32: 'i32', ptr: 'ptr', u32: 'u32', u64: 'u64' },
             ptr: (bytes: Uint8Array | Int32Array) => bytes,
+            read: { i32: () => options.nativeErrno ?? 0 },
           }
         },
         { kind, pids: [kind === 'identities' ? 701 : 700] },
@@ -154,6 +198,44 @@ Test('Darwin group joins omit only fully identified zombies even when kill(0) su
     Expect(host.groupReads()).toBe(zombie ? 2 : 1)
     Expect(host.closes()).toBe(1)
   }
+})
+
+for (const kind of ['identities', 'descendants', 'group', 'live-group'] as const) {
+  Test(`Darwin ${kind} retains the same exact identity when a privileged helper denies full BSD info`, () => {
+    const ordinary = fixture({ probe: 'live' }).inspect(kind)
+    const privileged = fixture({ unreadable: true, nativeErrno: 1, tableRecord: true, probe: 'live' })
+    Expect(privileged.inspect(kind)).toEqual(ordinary)
+    Expect(privileged.closes()).toBe(1)
+  })
+}
+
+Test('Darwin privileged helper inspection rejects a reused PID instead of claiming its identity', () => {
+  const host = fixture({ unreadable: true, nativeErrno: 1, tableRecord: true, tablePid: 702, probe: 'live' })
+  Expect(() => host.inspect('descendants')).toThrow(Errors.HostEnvironmentError)
+  Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
+})
+
+for (const tableReturnedBytes of [0, 644, 652]) {
+  Test(
+    `Darwin privileged helper inspection rejects an incomplete or changed process-table ABI: ${tableReturnedBytes}`,
+    () => {
+      const host = fixture({ unreadable: true, nativeErrno: 1, tableRecord: true, tableReturnedBytes, probe: 'live' })
+      Expect(() => host.inspect('descendants')).toThrow(Errors.HostEnvironmentError)
+    },
+  )
+}
+
+Test('Darwin privileged helper inspection preserves parent and process-group ownership checks', () => {
+  const denied = { unreadable: true, nativeErrno: 1, tableRecord: true, probe: 'live' } as const
+  Expect(() => fixture({ ...denied, returnedParentPid: 1 }).inspect('descendants')).toThrow('changed parent')
+  Expect(() => fixture({ ...denied, group: 800 }).inspect('group')).toThrow('changed process group')
+})
+
+Test('Darwin privileged zombie group joins require matching exact identities across both snapshots', () => {
+  const denied = { unreadable: true, nativeErrno: 1, tableRecord: true, zombie: true, probe: 'live' } as const
+  Expect(fixture(denied).inspect('live-group')).toEqual([])
+  Expect(() => fixture({ ...denied, laterZombieIdentity: true }).inspect('live-group')).toThrow('remained signalable')
+  Expect(fixture(denied).inspect('identities')).toEqual([])
 })
 
 Test('Darwin group joins discover a child forked after its listed parent exited', () => {
@@ -313,6 +395,40 @@ for (const kind of ['group', 'descendants'] as const) {
   })
 }
 
+for (const kind of ['identities', 'descendants', 'group'] as const) {
+  Test(`Darwin ${kind} omits a denied full record only when a matching short record proves zombie status`, () => {
+    const host = fixture({ unreadable: true, nativeErrno: 1, shortStatus: 5, probe: 'live' })
+    Expect(host.inspect(kind)).toEqual([])
+    // The short record proves execution ended; it never becomes an owned signal target.
+    Expect(host.probes).toEqual(kind === 'identities' ? [{ pid: 701, signal: 0 }] : [])
+    Expect(host.closes()).toBe(1)
+  })
+}
+
+for (
+  const observation of [
+    { shortStatus: 2 },
+    { shortStatus: 5, shortPid: 702 },
+    { shortStatus: 5, shortReturnedBytes: 60 },
+    { shortStatus: 5, shortReturnedBytes: 0 },
+    { shortStatus: 5, nativeErrno: 13 },
+  ] as const
+) {
+  Test(`Darwin refuses a denied identity with inconclusive short observation ${JSON.stringify(observation)}`, () => {
+    const host = fixture({ unreadable: true, nativeErrno: 1, probe: 'live', ...observation })
+    Expect(() => host.inspect('descendants')).toThrow(Errors.HostEnvironmentError)
+    Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
+    Expect(host.closes()).toBe(1)
+  })
+}
+
+Test('Darwin group joins reject a short zombie record without exact identity proof', () => {
+  const host = fixture({ unreadable: true, nativeErrno: 1, shortStatus: 5, probe: 'live' })
+  Expect(() => host.inspect('live-group')).toThrow(Errors.HostEnvironmentError)
+  Expect(host.probes).toEqual([{ pid: 701, signal: 0 }])
+  Expect(host.closes()).toBe(1)
+})
+
 Test('Darwin group inspection refuses a member that moved to another group during inspection', () => {
   const host = fixture({ group: 800 })
   Expect(() => host.inspect('group')).toThrow('changed process group during inspection')
@@ -428,7 +544,7 @@ for (
     {
       name: 'live unreadable descendant',
       kind: 'descendants',
-      options: { unreadable: true, probe: 'live' },
+      options: { unreadable: true, probe: 'live', nativeErrno: 13 },
       expected: {
         failureKind: 'identity-unreadable',
         routine: 'proc_pidinfo',
@@ -436,6 +552,28 @@ for (
         returnedBytes: 0,
         expectedBytes: 136,
         probeStatus: 'live',
+        nativeErrno: 13,
+      },
+    },
+    {
+      name: 'denied full identity with live short record',
+      kind: 'descendants',
+      options: { unreadable: true, probe: 'live', nativeErrno: 1, shortStatus: 2 },
+      expected: {
+        failureKind: 'identity-unreadable',
+        routine: 'proc_pidinfo',
+        pid: 701,
+        returnedBytes: 0,
+        expectedBytes: 136,
+        probeStatus: 'live',
+        nativeErrno: 1,
+        shortReturnedBytes: 64,
+        shortPid: 701,
+        shortStatus: 2,
+        shortUid: 0,
+        tableResult: -1,
+        tableReturnedBytes: 0,
+        tableErrno: 1,
       },
     },
     {
