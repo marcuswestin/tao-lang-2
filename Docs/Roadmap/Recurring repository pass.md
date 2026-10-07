@@ -6,18 +6,34 @@ notes after each completed pass; Git history is the longer record.
 
 ## Current status
 
-- **Reviewed through:** `a198e71b6` (2026-10-06), the 26 first-parent landings after `5d9330f85`, with all eleven standing health checks run for the first time. The [October 7 repository health review](<October 7 repository health review.md>) records findings, dispositions and evidence boundaries. Repairs landed from `feat/repository-pass-2026-10-07`.
-- **Repairs:** `land-fix` lands one commit; `sync-main` and `open-pr` tell git errors and cancelled runs apart; QA dependency snapshots and their writer removed; QA capture stages the tutorial project and discovery reports what it skips; the tutorial's printed commands are tested as written; platform-dependent tests report skips; the formatter re-indents item-type actions; duplicate release, format, test and bridge commands removed. `CONTRIBUTING.md` gives one getting-started path; `contributor-macos-test` runs it in a fresh vanilla Tart clone, and both contributor guests end with a dev loop that must pick up a compiler edit; `contributor-linux-test` refuses a Docker VM too small for its guest.
-- **Health:** Tracked blobs fell from 47.6 to 42.4 MB. Process records tripled to 920 behind R2's open prune rule. Worktrees: `~/.codex/worktrees` 124.5 GiB (down from 176), `tao-lang-2.worktrees` about 116 GiB. Routing audit found no mismatch.
-- **Acceptance:** Not established. The macOS contributor run stalled 100 minutes in the Nix install until its VM crashed; Ubuntu passed cold but its cached `verify` ran Docker out of memory; Tart vanilla, Xcode and `performance-check` did not run.
+- **Reviewed through:** `fe7a4da74` (2026-10-07): the five first-parent landings after `a198e71b6`, apart from the morning pass `c4b48ea1b`. The [October 7 afternoon repository health review](<October 7 afternoon repository health review.md>) records the findings, their dispositions, and the limits of the evidence. The fixes are on `feat/repository-pass-2026-10-07-b`.
+- **Repairs:**
+  - Hosted Verify again runs `_dprint-check` and `_tao-check`. It had run neither since `9c128d74d` skipped the fixers.
+  - repo-lint rejects duplicate MVP roadmap item IDs. The three existing duplicates are renumbered A31–A33.
+  - The native-binding manifest error prints its regeneration hint once.
+  - `tao test` cleans up its Jest resource directory when a run fails.
+- **Health:** The machine had just been cleaned, so worktree and cache totals fell from about 250 GiB to under 10 GiB, and process records from 920 to 2. Tracked blobs are 42.6 MB. The routing audit found no mismatch. Haiku 5.5's price fell to a tenth.
+- **Acceptance:** Not established. Every macOS Tart check fails at provisioning from this host account, which is uid 503 where provisioning needs 501. The Ubuntu check needs Docker raised to 16 GB. `performance-check` was inconclusive: language check timings ran slightly over budget while Spotlight indexed the machine.
 
 ## Consider next time
 
-- Start after `a198e71b6` or a newer explicitly reviewed first-parent boundary.
-- Developer decisions recorded in the health review: `land-fix` pre-push gates or requiring `Verify (host)` (L1, and C2 of October 6); an `argsPolicy` for the `remote` operations and the other unpolicied host operations (U1, U2); a prune rule for process records (R2 of October 6); worktree retention and the 8 reclaimable worktrees; the dead-feature candidates (K2, K3) and the language migration shims; the formatter's configuration-list layout (F2); the audience of package READMEs (D3); trimming `packages/AGENTS.md` (D4); removing three unused dependencies and the lagging majors; whether QA's renderer hash should cover all of `packages/` (Q7); a Sonnet row in the routing table.
-- Run the isolation checks first, on a quiet machine whose Docker has at least 16 GB. Read the Nix install log on the retained clone `tao-contributor-1791348473-74633` before rerunning `contributor-macos-test`; a stall with no CPU suggests a permission or keychain dialog a headless VM cannot show.
-- The six tutorial QA observations need a recheck on a current commit.
-- Keep ARM64 Linux, native amd64, hosted cloud, installed CLI, native builds, devices, signing and distribution as distinct evidence boundaries. Explicit prerelease installation and WordFlower outline export remain deferred until after MVP.
+- Start after `fe7a4da74`, or after a newer first-parent boundary that has been explicitly reviewed.
+- Decisions left to the Developer in the two October 7 reviews:
+  - `app-dev --ios` changed what it downloads and installs without telling the Developer. Its offline fallback (E1) and an ownership check for `processes stop` are open too (U1).
+  - `argsPolicy` for the operations that lack one (October 7 U1/U2).
+  - `land-fix`: gates before push, or requiring `Verify (host)` (L1).
+  - Test-process survivors and the idle bound (T2, T4).
+  - Docker memory.
+  - The six remote heads already contained in `main`, and the six stale branches.
+  - The QA renderer-hash scope (Q7, Q8).
+  - Dead features and duplicate tooling (K2–K4).
+  - Unused dependencies and lagging majors.
+  - Package README audience (D3), `packages/AGENTS.md` over budget (D4), and configuration-list layout (F2).
+  - A Sonnet row in the routing table.
+- Before the macOS isolation checks, settle `DEVENV-TART-PROVISIONING-REQUIRES-HOST-UID-501`, or run them from a uid-501 account. The vanilla base is cached.
+- Recheck the six tutorial QA observations and regenerate the QA dashboard once Q7 is decided.
+- Watch hosted Chrome startup. The next `DevToolsActivePort` timeout carries `fe7a4da74`'s stall snapshot; read it before changing the timeout.
+- Keep each evidence boundary distinct: ARM64 Linux, native amd64, hosted cloud, the installed CLI, native builds, devices, signing and distribution. Explicit prerelease installation and WordFlower outline export stay deferred until after MVP.
 
 ## Periodic isolation checks
 
