@@ -38,10 +38,13 @@ phase, including about 36 s bootstrapping, and 35–51 s of prepare-phase critic
 freshness check proves them current. The `node_modules` cache leaves out Jazz's other-platform
 binaries. The prepare phase stays in each partition: running it once in `plan` adds more serial
 time than it saves, and each partition must still fail on unformatted or stale generated files. The
-editor build skips when its recorded inputs and outputs both match, which helps repeat local builds.
-Verify does not cache it: the WordFlower compile beside it is as long, so a restore saved no critical
-path. Measured after, on an 11-partition run: about 46 s before the prepare phase. Read a run's
-per-step times before trusting these figures.
+fixers do not run there: `--hosted-linux` skips every `canonicalises` node, because the workflow
+fails a rewritten tree and the check gates (`_dprint-check`, `_tao-check`, `_repo-lint`) fail on
+the same defect. The generated parser and the compiled WordFlower app are restored from the Actions
+cache with their stamps, and each generator re-hashes its inputs and output before trusting a stamp.
+The editor build is not cached: it has no stamp, and its ~29 s runs beside the compile. Measured
+after, on an 11-partition run: about 46 s before the prepare phase. Read a run's per-step times
+before trusting these figures.
 
 ## Coverage
 

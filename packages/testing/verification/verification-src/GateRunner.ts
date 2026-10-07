@@ -135,7 +135,9 @@ export type RunGatesOptions = {
   skipUnsandboxed?: boolean
   /**
    * The lane is a hosted `Verify` Linux partition: `skipUnsandboxed` keeps the gates the catalog
-   * marks `runsOnHostedLinux`, since that runner has no agent sandbox to deny them.
+   * marks `runsOnHostedLinux`, since that runner has no agent sandbox to deny them, and the fixers
+   * are skipped (`GateCatalog.skippedOnHostedLinux`), since the workflow fails a rewritten tree and
+   * their check gates report the same defect.
    */
   hostedLinux?: boolean
   /** Gates deliberately not run in this lane, as `name=reason`. */
@@ -181,7 +183,9 @@ const GUI_WAIT_MS = 10 * 60 * 1_000
 export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const skipsUnsandboxed = (name: string) =>
     options.skipUnsandboxed === true && GateCatalog.skippedUnsandboxed(name, { hostedLinux: options.hostedLinux })
-  const selectedGates = options.gates.filter(name => !skipsUnsandboxed(name))
+  const skipsOnHostedLinux = (name: string) =>
+    GateCatalog.skippedOnHostedLinux(name, { hostedLinux: options.hostedLinux })
+  const selectedGates = options.gates.filter(name => !skipsUnsandboxed(name) && !skipsOnHostedLinux(name))
   const visibilityWarnings = UiVisibility.preflightGates(selectedGates, options.showStudio)
   UiVisibility.warn(visibilityWarnings)
   const location = RunArtifacts.locate({
@@ -230,12 +234,16 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const { hostPlatform } = options
   const skipsMacOS = (name: string) =>
     hostPlatform !== undefined && hostPlatform !== 'darwin' && GateCatalog.metadata(name).requiresMacOS === true
-  const runnableGates = options.gates.filter(name => !skipsUnsandboxed(name) && !skipsMacOS(name))
+  const runnableGates = options.gates.filter(name =>
+    !skipsUnsandboxed(name) && !skipsMacOS(name) && !skipsOnHostedLinux(name)
+  )
   const hostSkips = options.gates.flatMap(name =>
     skipsUnsandboxed(name)
       ? [`${name}=requires unsandboxed host capabilities; run ./agent unsandboxed verify-full`]
       : skipsMacOS(name)
       ? [`${name}=requires macOS; not run on ${hostPlatform}`]
+      : skipsOnHostedLinux(name)
+      ? [`${name}=rewrites the tree; hosted Verify runs its check gate and fails a rewrite instead`]
       : []
   )
 

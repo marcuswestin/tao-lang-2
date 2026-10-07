@@ -562,7 +562,8 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     }],
     // The prepare phase, in the order its declared classes imply: the Justfile first because every
     // recipe parses it, then the parser generator and dprint in parallel, then `./tao fix`, then the
-    // WordFlower compile, which reads the `.tao` sources `./tao fix` has just canonicalized.
+    // WordFlower compile, which reads the `.tao` sources `./tao fix` has just canonicalized. A hosted
+    // Verify partition skips the fixers (`skippedOnHostedLinux`) and runs only the generators.
     ['_fix-just-fmt', { canonicalises: true, priority: PREPARE_PRIORITY, serial: true, writes: ['just'] }],
     ['_fix-dprint', { canonicalises: true, priority: PREPARE_PRIORITY, reads: ['ts'], serial: true, writes: ['ts'] }],
     // Generated from the entry files, so it must land before the lint that now fails a stale index.
@@ -738,6 +739,18 @@ function isPrepare(name: string): boolean {
 function skippedUnsandboxed(name: string, options: { hostedLinux?: boolean } = {}): boolean {
   const gate = metadata(name)
   return gate.requiresUnsandboxed === true && !(options.hostedLinux === true && gate.runsOnHostedLinux === true)
+}
+
+/**
+ * skippedOnHostedLinux reports whether a hosted Verify Linux partition leaves this node out: the
+ * fixers, the nodes that declare `canonicalises`. A hosted run cannot keep what a fixer writes; the
+ * workflow fails any partition whose prepare phase changed a tracked file, so there a fixer is a
+ * slower way to report what its check-only reader already fails on: `_dprint-check` for
+ * `_fix-dprint` and `_fix-just-fmt`, `_tao-check` for `_fix-tao`, `_repo-lint` for
+ * `_fix-ledger-index`. The generators stay, because readers consume what they write.
+ */
+function skippedOnHostedLinux(name: string, options: { hostedLinux?: boolean } = {}): boolean {
+  return options.hostedLinux === true && metadata(name).canonicalises === true
 }
 
 /**
@@ -929,6 +942,7 @@ export const GateCatalog = {
   metadata,
   node,
   reportsAttributableDurations,
+  skippedOnHostedLinux,
   skippedUnsandboxed,
   suiteReads,
   suiteTuning,
