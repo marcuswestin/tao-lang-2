@@ -162,4 +162,10 @@
   `.artifacts/logs/dev-test/2026-10-07T17-01-05-320Z-62074-a2d5bddb/language_project-tooling.log`.
   Later exact-PID probes found both reported PIDs absent and root 60660's group empty. Those
   observations do not retroactively prove that the failed inspection observed safe ownership.
+  With the Developer's approval to diagnose and fix this blocker, failed `proc_pidinfo` reads now
+  retain the immediate native errno in the bounded diagnostic envelope; successful liveness alone
+  still cannot establish identity or safe cleanup. The 54 inspector fixtures pass, including native
+  errno propagation through the shared failure envelope. Two bounded live child-exit probes did not
+  reproduce the failure (62 Bun-parent reads and 523 Node-parent reads, zero failures); this does not
+  establish its cause. The next complete landing run collects the missing native error if it recurs.
 - **Source:** 2026-09-17 process-teardown implementation.

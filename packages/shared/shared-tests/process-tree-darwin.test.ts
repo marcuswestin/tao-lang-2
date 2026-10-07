@@ -30,6 +30,7 @@ function fixture(options: {
   returnedParentPid?: number
   unreadableReads?: number
   unreadableUntilYield?: boolean
+  nativeErrno?: number
   group?: number
   probe?: 'live' | 'EPERM' | 'EIO' | 'ESRCH' | 'uncoded' | 'undefined'
   probeErrno?: number
@@ -52,6 +53,7 @@ function fixture(options: {
   let waitedMs = 0
   let groupReads = 0
   const symbols = {
+    __error: () => 1,
     proc_listpids: (_kind: number, group: number, pids: Int32Array) => {
       groupReads++
       Expect(group).toBe(700)
@@ -111,6 +113,7 @@ function fixture(options: {
             dlopen: () => ({ symbols, close: () => closes++ }),
             FFIType: { i32: 'i32', ptr: 'ptr', u32: 'u32', u64: 'u64' },
             ptr: (bytes: Uint8Array | Int32Array) => bytes,
+            read: { i32: () => options.nativeErrno ?? 0 },
           }
         },
         { kind, pids: [kind === 'identities' ? 701 : 700] },
@@ -428,7 +431,7 @@ for (
     {
       name: 'live unreadable descendant',
       kind: 'descendants',
-      options: { unreadable: true, probe: 'live' },
+      options: { unreadable: true, probe: 'live', nativeErrno: 13 },
       expected: {
         failureKind: 'identity-unreadable',
         routine: 'proc_pidinfo',
@@ -436,6 +439,7 @@ for (
         returnedBytes: 0,
         expectedBytes: 136,
         probeStatus: 'live',
+        nativeErrno: 13,
       },
     },
     {

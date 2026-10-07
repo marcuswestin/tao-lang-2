@@ -17,8 +17,9 @@ const failInspection = (message, options = {}) => fail(message, {
   details: { ...options.details, inspection: request.kind,
     requestedPids: request.pids.slice(0, 64), requestedPidCount: request.pids.length },
 });
-const { dlopen, FFIType, ptr } = require('bun:ffi');
+const { dlopen, FFIType, ptr, read } = require('bun:ffi');
 const library = dlopen('/usr/lib/libproc.dylib', {
+  __error: { args: [], returns: FFIType.ptr },
   proc_listchildpids: {
     args: [FFIType.i32, FFIType.ptr, FFIType.i32], returns: FFIType.i32,
   },
@@ -57,11 +58,15 @@ try {
     // Enumeration and identity queries are separate observations. Recheck an incomplete record
     // before declaring a live PID unreadable; persistent uncertainty still fails inspection.
     let returnedBytes;
+    let nativeErrno;
     for (let attempt = 0; attempt < (direct ? 4 : 3); attempt++) {
       // Give an exit transition time to settle; immediate calls can repeat the same observation.
       // Only incomplete reads wait, at most 10 ms for enumeration or 15 ms for a direct query.
       if (attempt > 0) Atomics.wait(retryWait, 0, 0, 5);
       returnedBytes = library.symbols.proc_pidinfo(pid, 3, direct && attempt === 0 ? 0 : 1, ptr(bytes), bytes.byteLength);
+      // libproc translates a failed syscall into zero bytes. Capture its thread-local errno
+      // immediately, before another native call or the liveness probe can replace it.
+      nativeErrno = returnedBytes === 0 ? read.i32(library.symbols.__error()) : undefined;
       if (returnedBytes >= bytes.byteLength && view.getUint32(12, true) === pid) break;
       // Retained exited PIDs are queried on every ownership poll. Do not synchronously wait
       // for their records to recover once ESRCH already proves absence. Every other observation
@@ -72,7 +77,8 @@ try {
         }
       }
     }
-    const details = { routine: 'proc_pidinfo', pid, returnedBytes, expectedBytes: bytes.byteLength };
+    const details = { routine: 'proc_pidinfo', pid, returnedBytes, expectedBytes: bytes.byteLength,
+      ...(nativeErrno ? { nativeErrno } : {}) };
     if (returnedBytes < bytes.byteLength) {
       return unreadableIdentity(pid, { ...details, failureKind: 'identity-unreadable' });
     }
@@ -235,6 +241,7 @@ function inspectionFailureFields(value: unknown): Errors.ErrorDetails {
       'returnedBytes',
       'expectedBytes',
       'probeErrno',
+      'nativeErrno',
       'helperStatus',
       'expectedParentPid',
       'actualParentPid',
