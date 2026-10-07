@@ -28,6 +28,14 @@ async function run(): Promise<number> {
   }
   await ResourceInventory.notifyStartup({ checkout: Platform.runtimeProcess.cwd() })
   const args = argv.slice(prefix.length)
+  if (
+    target.argsPolicy === 'process-stop' && (args.length !== 2
+      || !/^[1-9]\d{0,9}$/u.test(args[0]!) || Number(args[0]) <= 1 || Number(args[0]) > 2_147_483_647
+      || !/^\d+(?::\d+)?$/u.test(args[1]!) || args[1]!.length > 40)
+  ) {
+    HCI.writeErrorLine('Usage: ./agent unsandboxed processes stop <reviewed-pid> <kernel-start-identity>')
+    return 2
+  }
   if (target.argsPolicy === 'inventory' && !(args.length === 0 || (args.length === 1 && args[0] === '--json'))) {
     HCI.writeErrorLine('Usage: ./agent unsandboxed resources [--json]')
     return 2

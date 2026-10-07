@@ -131,6 +131,8 @@ export async function runAgentCommand(options: RunAgentCommandOptions): Promise<
   }
 
   const runStdio = resolveRunStdio(options.command, flags, isInteractive)
+  // Development launchers intentionally return with a managed server still running.
+  const supervisesTests = /^(?:test(?:-|$)|verify(?:-|$)|check$|finalize$)/u.test(options.command)
   // Subscribe before spawning: a signal between the two would otherwise kill this process by default
   // and orphan the child it was meant to stop. Listeners run on the event loop, after `child` is set.
   let cancelledBy: Platform.ProcessSignal | undefined
@@ -141,6 +143,10 @@ export async function runAgentCommand(options: RunAgentCommandOptions): Promise<
     })
   )
   const child = start(options.spawnCommand, {
+    // Retain descendant identities while suites run, so a failed wrapper cannot orphan them.
+    processPolicy: supervisesTests ? 'test' : 'tool',
+    // Captured test commands own an isolated group; prompting commands retain terminal job control.
+    detached: supervisesTests && runStdio.stdio !== 'inherit',
     args: [...options.spawnArgs, ...flags.rest],
     cwd: repositoryRoot,
     // Every command gets a real stdin: a prompting command otherwise reads from a stream that was

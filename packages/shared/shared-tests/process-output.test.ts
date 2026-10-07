@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Platform } from '@shared'
+import { CLI, Errors, FS, Platform, ProcessTree, type TrackedProcess } from '@shared'
 import { Describe, Expect, Test, until } from '@shared/test'
 
 Describe('process output ownership', () => {
@@ -119,22 +119,25 @@ Describe('process output ownership', () => {
     Expect(result.stdout).toBe(`output environment\n${import.meta.dir}`)
   })
 
-  Test('an unreferenced child with ignored pipes does not hold its parent open', async () => {
+  Test('reports and stops an unreferenced test descendant even when its pipes are ignored', async () => {
     const result = await CLI.run(Platform.runtimeProcess.execPath, {
       args: [FS.resolvePath('fixtures/unreferenced-child.ts', import.meta.dir)],
+      detached: true,
       processPolicy: 'test',
       timeoutMs: 30_000,
     })
-    const pid = Number(result.stdout.trim())
+    const owned = JSON.parse(result.stdout.trim()) as TrackedProcess
+    const pid = owned.pid
     try {
-      Expect(result.exitCode).toBe(0)
+      Expect(result.exitCode).toBe(1)
       Expect(result.signal).toBe(null)
       Expect(Number.isInteger(pid) && pid > 0).toBe(true)
-      Expect(Platform.processIsAlive(pid)).toBe(true)
+      Expect(result.stderr).toContain('Child exited 0 with owned processes still running')
+      Expect(result.stderr).toContain('stopping them before returning')
+      Expect(ProcessTree.sameProcess(ProcessTree.identities([pid]).get(pid), owned)).toBe(false)
     } finally {
-      if (Number.isInteger(pid) && pid > 0) {
-        Platform.spawnSync('/bin/kill', { args: ['-KILL', String(pid)], stdio: 'ignore' })
-      }
+      ProcessTree.signalTracked([owned], 'SIGKILL')
+      await ProcessTree.waitForTrackedExit([owned])
     }
   })
 

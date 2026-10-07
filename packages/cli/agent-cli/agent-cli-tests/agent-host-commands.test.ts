@@ -101,6 +101,7 @@ const expected = [
   'processes list',
   'processes started',
   'processes group',
+  'processes stop',
   'start-branch',
   'take-branch',
   'storage sync',

@@ -55,9 +55,11 @@ function start() {
     disposed = true
     return Promise.resolve()
   }
-  return CLI.run('lifetime-fixture').then(result => {
-    completed = result
-  })
+  return CLI.run('lifetime-fixture', mode === 'supervised' ? { processPolicy: 'test', detached: true } : {}).then(
+    result => {
+      completed = result
+    },
+  )
 }
 // Root the returned promise as the caller does. The promise has no reverse ownership edge to
 // the event source responsible for settling it; only a WeakRef models that source's final delivery.

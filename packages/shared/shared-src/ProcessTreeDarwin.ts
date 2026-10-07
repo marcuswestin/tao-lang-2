@@ -4,7 +4,7 @@ import * as Platform from './Platform'
 import type { TrackedProcess } from './ProcessTree'
 
 type DarwinProcess = TrackedProcess & { group: number }
-type Inspection = 'descendants' | 'identities' | 'group'
+type Inspection = 'descendants' | 'identities' | 'group' | 'live-group'
 
 /**
  * One fixed libproc implementation serves both runtimes. Keep it as script text: serializing a
@@ -31,6 +31,8 @@ const library = dlopen('/usr/lib/libproc.dylib', {
   },
 });
 try {
+  const retryWait = new Int32Array(new SharedArrayBuffer(4));
+  const identifiedZombies = new Map();
   const unreadableIdentity = (pid, details) => {
     try {
       process.kill(pid, 0);
@@ -48,17 +50,54 @@ try {
       details: { ...details, probeStatus: 'live' },
     });
   };
-  const identity = (pid, unreadable) => {
+  const identity = (pid, parentPid, direct = false) => {
     const bytes = new Uint8Array(136);
-    // Enumerations include zombies; direct queries retain their process-exit semantics.
-    const returnedBytes = library.symbols.proc_pidinfo(pid, 3, unreadable ? 1 : 0, ptr(bytes), bytes.byteLength);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    // A direct query first excludes zombies, then checks their records before claiming absence.
+    // Enumeration and identity queries are separate observations. Recheck an incomplete record
+    // before declaring a live PID unreadable; persistent uncertainty still fails inspection.
+    let returnedBytes;
+    for (let attempt = 0; attempt < (direct ? 4 : 3); attempt++) {
+      // Give an exit transition time to settle; immediate calls can repeat the same observation.
+      // Only incomplete reads wait, at most 10 ms for enumeration or 15 ms for a direct query.
+      if (attempt > 0) Atomics.wait(retryWait, 0, 0, 5);
+      returnedBytes = library.symbols.proc_pidinfo(pid, 3, direct && attempt === 0 ? 0 : 1, ptr(bytes), bytes.byteLength);
+      if (returnedBytes >= bytes.byteLength && view.getUint32(12, true) === pid) break;
+      // Retained exited PIDs are queried on every ownership poll. Do not synchronously wait
+      // for their records to recover once ESRCH already proves absence. Every other observation
+      // keeps the bounded retries, including zombies whose kill(0) still succeeds.
+      if (direct && attempt === 0) {
+        try { process.kill(pid, 0); } catch (cause) {
+          if (cause && cause.code === 'ESRCH') return undefined;
+        }
+      }
+    }
     const details = { routine: 'proc_pidinfo', pid, returnedBytes, expectedBytes: bytes.byteLength };
     if (returnedBytes < bytes.byteLength) {
-      return unreadable && unreadable(pid, { ...details, failureKind: 'identity-unreadable' });
+      return unreadableIdentity(pid, { ...details, failureKind: 'identity-unreadable' });
     }
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     if (view.getUint32(12, true) !== pid) {
-      return unreadable && unreadable(pid, { ...details, failureKind: 'identity-pid-mismatch' });
+      return unreadableIdentity(pid, { ...details, failureKind: 'identity-pid-mismatch' });
+    }
+    // proc_bsdinfo.pbi_status uses BSD SZOMB (5): execution ended, even if not yet reaped.
+    const zombie = view.getUint32(4, true) === 5;
+    if (direct && zombie) return undefined;
+    if (request.kind === 'live-group' && zombie) {
+      if (view.getUint32(100, true) !== request.pids[0]) {
+        failInspection('macOS process ' + pid + ' changed process group during inspection.', {
+          details: { failureKind: 'group-changed', routine: 'proc_pidinfo', pid },
+        });
+      }
+      identifiedZombies.set(pid, String(view.getBigUint64(120, true)) + ':' + String(view.getBigUint64(128, true)));
+      return undefined;
+    }
+    // A reparented zombie has finished execution. Retain its exact identity for enumeration,
+    // without treating the kernel's reaping transition as a live ownership change.
+    if (!zombie && parentPid !== undefined && view.getUint32(16, true) !== parentPid) {
+      failInspection('macOS process ' + pid + ' changed parent during inspection.', {
+        details: { ...details, failureKind: 'parent-changed', expectedParentPid: parentPid,
+          actualParentPid: view.getUint32(16, true) },
+      });
     }
     const decode = (offset, length) => new TextDecoder()
       .decode(bytes.subarray(offset, offset + length)).replace(/\0.*$/, '');
@@ -69,23 +108,44 @@ try {
       startedAt: String(view.getBigUint64(120, true)) + ':' + String(view.getBigUint64(128, true)),
     };
   };
-  const enumeratedIdentity = pid => identity(pid, unreadableIdentity);
+  const enumeratedIdentity = (pid, parentPid) => identity(pid, parentPid);
   if (request.kind === 'identities') {
-    return request.pids.map(pid => identity(pid)).filter(value => value !== undefined);
+    return request.pids.map(pid => identity(pid, undefined, true)).filter(value => value !== undefined);
   }
-  if (request.kind === 'group') {
-    let pids = new Int32Array(4096);
-    let bytes;
-    for (;;) {
-      bytes = library.symbols.proc_listpids(2, request.pids[0], ptr(pids), pids.byteLength);
-      if (bytes < 0) failInspection('libproc could not inspect process group ' + request.pids[0], {
-        details: { failureKind: 'group-enumeration', routine: 'proc_listpids',
-          pid: request.pids[0], returnedBytes: bytes },
+  if (request.kind === 'group' || request.kind === 'live-group') {
+    const listGroup = () => {
+      let pids = new Int32Array(4096);
+      let bytes;
+      for (;;) {
+        bytes = library.symbols.proc_listpids(2, request.pids[0], ptr(pids), pids.byteLength);
+        if (bytes < 0) failInspection('libproc could not inspect process group ' + request.pids[0], {
+          details: { failureKind: 'group-enumeration', routine: 'proc_listpids',
+            pid: request.pids[0], returnedBytes: bytes },
+        });
+        if (bytes < pids.byteLength) break;
+        pids = new Int32Array(pids.length * 2);
+      }
+      const listed = [...pids.subarray(0, bytes / 4)].filter(pid => pid > 0);
+      return { listed, bytes };
+    };
+    const requireGroupAbsence = (bytes) => {
+      const details = { failureKind: 'group-enumeration', routine: 'proc_listpids',
+        pid: request.pids[0], returnedBytes: bytes };
+      try { process.kill(-request.pids[0], 0); } catch (cause) {
+        if (cause && cause.code === 'ESRCH') return [];
+        failInspection('Could not determine whether macOS process group ' + request.pids[0] + ' exited after inconclusive native enumeration.', {
+          cause, details: { ...details, probeStatus: 'uncertain',
+            probeCode: cause && typeof cause.code === 'string' && /^[A-Z][A-Z0-9_]{0,31}$/.test(cause.code)
+              ? cause.code : undefined,
+            probeErrno: cause && Number.isSafeInteger(cause.errno) && Math.abs(cause.errno) <= 2147483647
+              ? cause.errno : undefined },
+        });
+      }
+      failInspection('macOS process group ' + request.pids[0] + ' remained signalable after inconclusive native enumeration.', {
+        details: { ...details, probeStatus: 'live' },
       });
-      if (bytes < pids.byteLength) break;
-      pids = new Int32Array(pids.length * 2);
-    }
-    return [...pids.subarray(0, bytes / 4)].filter(pid => pid > 0).map(pid => {
+    };
+    const readMembers = listed => listed.map(pid => {
       const value = enumeratedIdentity(pid);
       if (value !== undefined && value.group !== request.pids[0]) {
         failInspection('macOS process ' + pid + ' changed process group during inspection.', {
@@ -94,6 +154,21 @@ try {
       }
       return value;
     }).filter(value => value !== undefined);
+    const first = listGroup();
+    if (request.kind === 'live-group' && first.listed.length === 0) return requireGroupAbsence(first.bytes);
+    const members = readMembers(first.listed);
+    if (request.kind !== 'live-group' || members.length > 0) return members;
+    // A listed parent can fork and exit before its identity read. Refresh the list after every
+    // first member has finished execution, then require matching full zombie identities.
+    // Any newly live member keeps the group alive; empty or changed observations need ESRCH.
+    const firstZombies = new Map(identifiedZombies);
+    const second = listGroup();
+    identifiedZombies.clear();
+    const laterMembers = readMembers(second.listed);
+    if (laterMembers.length > 0) return laterMembers;
+    if (second.listed.length > 0 && second.listed.every(pid =>
+      firstZombies.has(pid) && firstZombies.get(pid) === identifiedZombies.get(pid))) return [];
+    return requireGroupAbsence(second.bytes);
   }
   const descendants = [];
   const visited = new Set([...request.pids, process.pid]);
@@ -111,7 +186,7 @@ try {
     for (const childPid of children.subarray(0, count)) {
       if (!Number.isSafeInteger(childPid) || childPid <= 1 || visited.has(childPid)) continue;
       visited.add(childPid);
-      const child = enumeratedIdentity(childPid);
+      const child = enumeratedIdentity(childPid, pid);
       if (child === undefined) continue;
       visit(childPid, depth + 1);
       descendants.push({ process: child, depth });
@@ -143,6 +218,7 @@ function inspectionFailureFields(value: unknown): Errors.ErrorDetails {
       'group-enumeration',
       'child-enumeration',
       'group-changed',
+      'parent-changed',
       'helper-exit',
       'helper-spawn',
     ].includes(String(fields['failureKind']))
@@ -152,7 +228,18 @@ function inspectionFailureFields(value: unknown): Errors.ErrorDetails {
   if (['proc_pidinfo', 'proc_listpids', 'proc_listchildpids'].includes(String(fields['routine']))) {
     result['routine'] = fields['routine']
   }
-  for (const key of ['pid', 'returnedCount', 'returnedBytes', 'expectedBytes', 'probeErrno', 'helperStatus']) {
+  for (
+    const key of [
+      'pid',
+      'returnedCount',
+      'returnedBytes',
+      'expectedBytes',
+      'probeErrno',
+      'helperStatus',
+      'expectedParentPid',
+      'actualParentPid',
+    ]
+  ) {
     const entry = fields[key]
     if (typeof entry === 'number' && Number.isSafeInteger(entry) && Math.abs(entry) <= 2_147_483_647) {
       result[key] = entry

@@ -53,3 +53,17 @@
   checking the panel's animation list. A failure now records approval state, input busy state,
   chat text, scripted model calls and browser failures. The refusal and unchanged-source
   assertions remain intact; the shared click-helper acceptance is still open.
+- **Ownership-poll follow-up (2026-10-06):** Isolated first-approval waits reproduced with two
+  scripted model calls, an unchanged URL, a busy input and no browser failures. Proposal staging
+  took about 33 seconds while Chrome was supervised. Ignoring Chrome output did not change it;
+  temporarily disabling ownership polling reduced staging to 105 milliseconds. Polls now avoid
+  duplicate attached-subtree walks and synchronous retries once `ESRCH` proves a retained PID
+  absent. With supervision retained, staging measured 112 milliseconds. The normal journey then
+  passed all 22 assertions and cleanup in 39.7 seconds
+  (`.artifacts/logs/agent/studio-smoke/2026-10-06T21-17-05-637Z-2215.log`); direct kernel inspection
+  found its Chrome PID and group absent. Temporary pipeline profiling produced separate 180-second
+  cleanup timeouts and was removed; those are not proof of a normal cleanup defect. Approval waits
+  retain their last healthy DOM state and original cause, without an extra CDP request after failure.
+  A disconnected response no longer changes a server-owned turn's verdict through a closed
+  controller error, and run logs retain bounded failure messages. This is focused source and host
+  evidence; the shared click-helper acceptance and complete complement proof remain separate.

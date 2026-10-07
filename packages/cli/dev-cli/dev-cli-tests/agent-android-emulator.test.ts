@@ -1010,7 +1010,10 @@ Test('failed serial ownership publication refuses cleanup and reports unproved p
 })
 
 Test('retention disposes real CLI pipes before the owning worker exits and leaves its child recoverable', async () => {
-  const result = await CLI.run(Platform.runtimeProcess.execPath, {
+  const stdout: Buffer[] = []
+  const stderr: Buffer[] = []
+  // This fixture transfers the retained server to this test, which owns its exact-identity cleanup.
+  const worker = CLI.start(Platform.runtimeProcess.execPath, {
     args: [
       `--tsconfig=${Repo.resolvePath('packages/cli/dev-cli/tsconfig.json')}`,
       '-e',
@@ -1075,12 +1078,29 @@ await reservation.release();
 Platform.runtimeConsole.info(JSON.stringify({disposed, shutdownRetention, ownedNames: published.retention.resourceNames}));
 `,
     ],
-    processPolicy: 'test',
-    timeoutMs: 30_000,
+    processPolicy: 'server',
+    stdio: 'pipe',
+    onOutput: (stream, chunk) => (stream === 'stdout' ? stdout : stderr).push(chunk),
   })
-  const lines = result.stdout.trim().split(/\r?\n/u)
-  const child = JSON.parse(lines[0] ?? '{}').child as TrackedProcess | undefined
+  let deadline: ReturnType<typeof setTimeout> | undefined
+  let child: TrackedProcess | undefined
   try {
+    // budget-ok: The 30-second safety deadline bounds this retained-server fixture; success waits for pipe closure.
+    const closed = await Promise.race([
+      worker.waitForClose(),
+      new Promise<undefined>(resolve => deadline = setTimeout(() => resolve(undefined), 30_000)),
+    ])
+    const result = {
+      ...closed,
+      stdout: Buffer.concat(stdout).toString('utf8'),
+      stderr: Buffer.concat(stderr).toString('utf8'),
+      error: worker.error,
+    }
+    const lines = result.stdout.trim().split(/\r?\n/u)
+    child = JSON.parse(lines[0] ?? '{}').child as TrackedProcess | undefined
+    if (closed === undefined) {
+      Errors.throwUnexpected(`Android worker did not close its pipes within 30 seconds: ${result.stderr}`)
+    }
     if (result.exitCode !== 0) {
       Errors.throwUnexpected(`Android worker failed: ${result.stderr}; output: ${result.stdout}`)
     }
@@ -1095,9 +1115,12 @@ Platform.runtimeConsole.info(JSON.stringify({disposed, shutdownRetention, ownedN
     Expect(child).toBeDefined()
     Expect(ProcessTree.identities([child!.pid]).get(child!.pid)?.startedAt).toBe(child!.startedAt)
   } finally {
+    clearTimeout(deadline)
+    worker.kill('SIGKILL')
+    worker.dispose()
     if (child !== undefined) {
       ProcessTree.signalTracked([child], 'SIGKILL')
-      await until(() => ProcessTree.identities([child.pid]).get(child.pid)?.startedAt !== child.startedAt)
+      await ProcessTree.waitForTrackedExit([child])
     }
   }
 })

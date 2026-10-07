@@ -477,7 +477,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
       contention: machineLane.report(),
       location,
       machineLane,
-      onProgress: mode === 'quiet' ? undefined : message => Shared.HCI.writeLine(message),
+      onProgress: message => Shared.HCI.writeLine(message),
       states: graphStates,
     })
   }

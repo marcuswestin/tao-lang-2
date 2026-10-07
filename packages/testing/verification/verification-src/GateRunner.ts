@@ -471,9 +471,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
         contention: machineLane.report(),
         location,
         machineLane,
-        onProgress: options.outputMode === undefined || options.outputMode === 'quiet'
-          ? undefined
-          : message => HCI.writeLine(message),
+        onProgress: message => HCI.writeLine(message),
         runNode,
         states,
       })
