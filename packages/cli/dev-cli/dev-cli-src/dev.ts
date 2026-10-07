@@ -516,7 +516,7 @@ await runWithCommands(commands => {
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
     .option(
       '--hosted-linux',
-      'With --skip-unsandboxed on a hosted Verify Linux runner: keep the unsandboxed gates proved there.',
+      'With --skip-unsandboxed on a hosted Verify Linux runner: keep the unsandboxed gates proved there and skip the fixers.',
     )
     .option(
       '--ci-host-gates <names>',
