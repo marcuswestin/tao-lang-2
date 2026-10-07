@@ -9,6 +9,20 @@ timings.
 
 ## Current state
 
+### Browser shutdown qualification, 2026-10-07
+
+Normal owned headless browser close now requests CDP `Browser.close` before
+disconnecting. The shared supervisor gives Chrome and its children a bounded
+natural-shutdown grace and uses SIGKILL only for remaining owned processes,
+retaining the independent process/output join and failure verdicts. This removes
+SIGTERM from the normal close window implicated by the confirmed inherited-PID
+guard crash. Eighty real Chrome cycles exited naturally without new crash reports;
+the four real HNReader journeys passed. The
+[shutdown ledger entry](<Developer environment upgrades/Archive/DEVENV-CHROME-FORKED-CHILD-CRASHES-DURING-SHUTDOWN.md>)
+records exact evidence, repeatable acceptance and the separate crash signatures
+still requiring observation. These lifecycle checks do not change the measured
+preview performance qualification below.
+
 ### Current qualification, 2026-10-07
 
 The integrated compiler, browser custody and final-audit changes pass the complete local

@@ -5,6 +5,7 @@ import {
   FS,
   Json,
   Platform,
+  ProcessTree,
   Repo,
   Time,
   VerificationTimeouts,
@@ -191,15 +192,28 @@ export class StudioCdp {
       captureChromeOutputOwners(startedCommand)
       client = await CdpClient.connect(requireWebSocketUrl(target), command, diagnostic)
       const connectedClient = client
+      const process = startedCommand.pid === undefined
+        ? undefined
+        : ProcessTree.identities([startedCommand.pid]).get(startedCommand.pid)
+      const shutdownEvents: { phase: string; timestamp: string }[] = []
+      const recordShutdown = (phase: string) => shutdownEvents.push({ phase, timestamp: new Date().toISOString() })
+      const artifactRoot = options.artifactRoot ?? Repo.tryResolvePath('.artifacts/tests/studio-browser')
+      const shutdownReport = artifactRoot === undefined
+        ? undefined
+        : FS.resolvePath(`chrome-shutdown/${Platform.randomUUID()}.json`, artifactRoot)
       const studio = new StudioCdp(client, async () => {
         await closeChrome([
-          () => {
-            if (startedCommand.exitCode === null && startedCommand.signalCode === null) {
-              captureChromeOutputOwners(startedCommand)
-            }
-          },
-          () => connectedClient.close(),
-          async () => await stopChrome(startedCommand, userDataRoot, 'SIGTERM'),
+          () => closeOwnedChrome(startedCommand, connectedClient, userDataRoot, recordShutdown),
+          () =>
+            shutdownReport === undefined ? undefined : FS.writeJson(shutdownReport, {
+              executable: chromePath,
+              process,
+              profile: userDataRoot,
+              events: shutdownEvents,
+              exitCode: startedCommand.exitCode,
+              signal: startedCommand.signalCode,
+              output: startupOutput,
+            }),
         ])
       }, options)
       await configure(client, { viewport: { width: 1440, height: 900 } })
@@ -260,6 +274,7 @@ export class StudioCdp {
 
   static readonly testing = {
     closeChrome,
+    closeOwnedChrome,
     stopChrome,
     waitForActivePort,
     attach(
@@ -1430,17 +1445,69 @@ async function closeChrome(steps: readonly (() => void | Promise<void>)[]): Prom
   }
 }
 
+/** Keep CDP connected while Chrome closes itself; force only survivors after the bounded grace. */
+async function closeOwnedChrome(
+  command: CLI.StartedCommand,
+  client: Pick<CdpClient, 'send' | 'close'>,
+  profile: string,
+  record: (phase: string) => void = () => {},
+): Promise<void> {
+  let retainProfile = false
+  await closeChrome([
+    () => {
+      record('capture-output-owners')
+      if (command.exitCode === null && command.signalCode === null) {
+        try {
+          captureChromeOutputOwners(command)
+        } catch (error) {
+          retainProfile = true
+          throw error
+        }
+      }
+    },
+    async () => {
+      record('join-started')
+      await stopChrome(command, profile, 'SIGKILL', {
+        retainProfile,
+        requestClose: () => {
+          Assert.defined(command.beginGracefulStop, 'Expected supervised Chrome graceful shutdown.')
+          command.beginGracefulStop(1_000)
+          record('browser-close-requested')
+          // Chrome may close the socket before answering. Join its supervised exit rather than
+          // treating a missing protocol response as proof that the browser failed to stop.
+          void client.send('Browser.close').catch(error => record(`browser-close-response: ${Errors.messageOf(error)}`))
+        },
+      })
+      record('joined')
+    },
+    () => {
+      record('disconnect')
+      client.close()
+    },
+  ])
+}
+
 /** Join supervised Chrome ownership before releasing observers, even after the direct child exited. */
 async function stopChrome(
   command: Pick<CLI.StartedCommand, 'exitCode' | 'signalCode' | 'kill' | 'waitForClose' | 'closeOutput' | 'dispose'>,
   profile: string,
   signal: Platform.ProcessSignal,
+  options: { requestClose?: () => void; retainProfile?: boolean } = {},
 ): Promise<void> {
   const failures: unknown[] = []
   let joined = false
   try {
     if (command.exitCode === null && command.signalCode === null) {
-      command.kill(signal)
+      if (options.requestClose === undefined) {
+        command.kill(signal)
+      } else {
+        try {
+          options.requestClose()
+        } catch (error) {
+          failures.push(error)
+          command.kill('SIGKILL')
+        }
+      }
     }
     const result = await command.waitForClose()
     joined = true
@@ -1462,7 +1529,7 @@ async function stopChrome(
     } catch (error) {
       failures.push(error)
     }
-    if (joined && failures.length === 0) {
+    if (joined && failures.length === 0 && options.retainProfile !== true) {
       try {
         await FS.remove(profile)
       } catch (error) {

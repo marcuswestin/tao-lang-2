@@ -163,6 +163,8 @@ export type StartedCommand = {
   readonly signalCode: Platform.ProcessSignal | null
   /** Explicit cold capture of escaped output writers for a live supervised child. */
   captureOutputOwners?: () => void
+  /** Request a bounded, signal-free natural shutdown before supervised cleanup force-kills survivors. */
+  beginGracefulStop?: (graceMs: number) => void
   closeOutput: () => Promise<void>
   dispose: () => void
   endStdin: () => void
@@ -249,9 +251,11 @@ function startCommand(
   let idleTimer: ReturnType<typeof setTimeout> | undefined
   let wallClockTimer: ReturnType<typeof setTimeout> | undefined
   let completionTimer: ReturnType<typeof setTimeout> | undefined
+  let gracefulStopTimer: ReturnType<typeof setTimeout> | undefined
   let completedVerdict: number | undefined
   let teardownFailed = false
   let ownerRequestedStop = false
+  let gracefulStop = false
   let groupNeedsCleanup = false
   let lastGroupMembers: TrackedProcess[] = []
   let trackedDescendants: TrackedProcess[] | undefined
@@ -324,9 +328,31 @@ function startCommand(
    * catches a descendant that re-parented away and so left the tracked snapshot, and it fails
    * harmlessly when the pid leads no group, which is the ordinary case.
    */
-  const stopProcessTree = (signal: Platform.ProcessSignal): boolean => {
+  const forceKillOwnedTree = () => {
     const pid = child.pid
-    if (policy === 'server' || pid === undefined || closed) {
+    if (policy === 'server' || pid === undefined) {
+      child.kill('SIGKILL')
+      return
+    }
+    inspectOwnership(() => {
+      trackedDescendants = ProcessTree.refreshDescendants(
+        child.exitCode === null && child.signalCode === null ? pid : undefined,
+        trackedDescendants ?? [],
+      )
+    })
+    inspectOwnership(() => ProcessTree.signalTracked(trackedDescendants ?? [], 'SIGKILL'))
+    if (spec.detached) {
+      inspectOwnership(() => ProcessTree.signalGroup(pid, 'SIGKILL'))
+    }
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL')
+    }
+  }
+
+  const stopProcessTree = (requestedSignal: Platform.ProcessSignal): boolean => {
+    const signal = gracefulStop ? 'SIGKILL' : requestedSignal
+    const pid = child.pid
+    if (policy === 'server' || pid === undefined || (closed && !gracefulStop)) {
       return child.kill(signal)
     }
     // Retain earlier identities: after signalling, a new walk alone would miss reparented children.
@@ -371,6 +397,10 @@ function startCommand(
     : []
 
   const releaseOwnership = () => {
+    if (gracefulStopTimer !== undefined) {
+      clearTimeout(gracefulStopTimer)
+      gracefulStopTimer = undefined
+    }
     if (ownershipTimer !== undefined) {
       clearInterval(ownershipTimer)
     }
@@ -492,7 +522,9 @@ function startCommand(
           } else {
             HCI.writeError(line)
           }
-          stopProcessTree('SIGTERM')
+          if (!gracefulStop) {
+            stopProcessTree('SIGTERM')
+          }
         }
       })
       if (!inspected) {
@@ -593,6 +625,35 @@ function startCommand(
         owned.set(`${entry.pid}:${entry.startedAt}`, entry)
       }
       trackedDescendants = [...owned.values()]
+    },
+    beginGracefulStop: graceMs => {
+      if (policy !== 'test' || !Number.isFinite(graceMs) || graceMs <= 0) {
+        throwUnexpected('Expected a positive finite graceMs on a live supervised test process.')
+      }
+      if (gracefulStop) {
+        return
+      }
+      if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null || closed) {
+        throwUnexpected('Expected a live supervised test process before beginning graceful stop.')
+      }
+      if (!rememberDescendants()) {
+        throwUnexpected(`Could not refresh process ownership before graceful stop: ${formatForLog(inspectionError)}`)
+      }
+      ownerRequestedStop = true
+      gracefulStop = true
+      gracefulStopTimer = setTimeout(() => {
+        gracefulStopTimer = undefined
+        const line = Buffer.from(
+          `Graceful process stop exceeded ${formatBoundDuration(graceMs)}; force-killing owned processes.\n`,
+          'utf8',
+        )
+        if (outputHasWrapperSink) {
+          deliverOutput('stderr', line)
+        } else {
+          HCI.writeError(line)
+        }
+        forceKillOwnedTree()
+      }, graceMs)
     },
     dispose: () => {
       releaseCompletion()
