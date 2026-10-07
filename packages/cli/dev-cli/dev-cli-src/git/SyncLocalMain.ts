@@ -33,10 +33,10 @@ const defaultDependencies: SyncLocalMainDependencies = { run: CLI.run, writeLine
 
 /**
  * SyncLocalMainOutcome is what happened to local `main`: already `current`, `moved` forward, left behind
- * because its checkout is `dirty` or the move `failed`, refused as `diverged`, or `unknown` when
- * there is no `main` or `origin/main` to compare.
+ * because its checkout is `dirty`, its status is `unreadable`, or the comparison or move `failed`,
+ * refused as `diverged`, or `unknown` when there is no `main` or `origin/main` to compare.
  */
-export type SyncLocalMainOutcome = 'current' | 'diverged' | 'dirty' | 'failed' | 'moved' | 'unknown'
+export type SyncLocalMainOutcome = 'current' | 'diverged' | 'dirty' | 'failed' | 'moved' | 'unknown' | 'unreadable'
 
 /** SyncLocalMainCommand is the CLI wiring surface consumed by `dev.ts` and the landing commands. */
 export const SyncLocalMainCommand = {
@@ -61,12 +61,21 @@ export const SyncLocalMainCommand = {
     if (local === remote) {
       return 'current'
     }
-    if ((await git(['merge-base', '--is-ancestor', local, remote])).exitCode !== 0) {
+    // Exit 1 is git's answer "not an ancestor"; any other failure (128 for an unknown object, say) is an error.
+    const ancestry = await git(['merge-base', '--is-ancestor', local, remote])
+    if (ancestry.exitCode === 1) {
       warn(
         `Local ${MAIN} at ${short(local)} is not an ancestor of ${REMOTE}/${MAIN} at ${short(remote)};`
           + ` refusing to move it. Reconcile it by hand.`,
       )
       return 'diverged'
+    }
+    if (ancestry.exitCode !== 0) {
+      warn(
+        `Could not compare local ${MAIN} at ${short(local)} with ${REMOTE}/${MAIN} at ${short(remote)}`
+          + ` (${said(ancestry)}); left ${MAIN} alone.`,
+      )
+      return 'failed'
     }
 
     const worktrees = parseWorktrees((await git(['worktree', 'list', '--porcelain'])).stdout)
@@ -80,7 +89,11 @@ export const SyncLocalMainCommand = {
     dependencies.writeLine(`PASS  Moved local ${MAIN} from ${short(local)} to ${short(remote)}.`)
     // Mirrors are the detached, clean checkouts at main's old tip that exist to show what main holds.
     for (const mirror of worktrees.filter(worktree => worktree.branch === undefined && worktree.head === local)) {
-      if (await status(git, mirror.path) !== '') {
+      const mirrorStatus = await status(git, mirror.path)
+      if (mirrorStatus.unreadable !== undefined) {
+        warn(`Could not read the status of the ${MAIN} mirror at ${mirror.path} (${mirrorStatus.unreadable}); left it.`)
+      }
+      if (mirrorStatus.unreadable !== undefined || mirrorStatus.changes !== '') {
         continue
       }
       const moved = await git(['checkout', '--quiet', '--detach', remote], mirror.path)
@@ -140,7 +153,15 @@ async function fastForwardCheckout(
   remote: string,
   warn: (line: string) => void,
 ): Promise<SyncLocalMainOutcome> {
-  if (await status(git, path) !== '') {
+  const checkoutStatus = await status(git, path)
+  if (checkoutStatus.unreadable !== undefined) {
+    warn(
+      `Could not read the status of ${MAIN} at ${path} (${checkoutStatus.unreadable}); left it behind`
+        + ` ${REMOTE}/${MAIN}. Once git can read it: git -C ${path} merge --ff-only ${REMOTE}/${MAIN}`,
+    )
+    return 'unreadable'
+  }
+  if (checkoutStatus.changes !== '') {
     warn(
       `${MAIN} is checked out at ${path} with uncommitted changes; left it behind ${REMOTE}/${MAIN}.`
         + ` Once it is clean: git -C ${path} merge --ff-only ${REMOTE}/${MAIN}`,
@@ -161,10 +182,13 @@ async function resolve(git: Git, ref: string): Promise<string | undefined> {
   return result.exitCode === 0 && sha !== '' ? sha : undefined
 }
 
-async function status(git: Git, path: string): Promise<string> {
+/**
+ * status reads a checkout's changes, or why git could not. A checkout git cannot read is never
+ * treated as clean, and is not reported as dirty either: the caller names the reason.
+ */
+async function status(git: Git, path: string): Promise<{ changes: string; unreadable?: string }> {
   const result = await git(['status', '--porcelain=v1', '--untracked-files=all'], path)
-  // A checkout git cannot read is treated as busy, never as clean.
-  return result.exitCode === 0 ? result.stdout : 'unreadable'
+  return result.exitCode === 0 ? { changes: result.stdout } : { changes: '', unreadable: said(result) }
 }
 
 function said(result: CLI.CommandResult): string {
