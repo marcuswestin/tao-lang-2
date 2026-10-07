@@ -1,6 +1,6 @@
 # DEVENV-TART-PROVISIONING-REQUIRES-HOST-UID-501 — Tart provisioning requires host uid 501
 
-- **Status:** Candidate
+- **Status:** In progress
 - **Section:** External
 - **Area:** `packages/cli/tao-cli/cli-src/standalone-vm.ts` `provision`, used by `standalone-cli-clean-machine` (vanilla and Xcode) and `contributor-macos-test`.
 - **Impact:** Every macOS isolation check fails before boot on a host account whose uid is not 501. Offline provisioning attaches the stopped clone's disk with `-owners on` and writes the harness into `Users/admin` as the host user. It refuses unless the guest admin's owner matches the host's, and the upstream Cirrus Labs images give `admin` uid 501. Matching worked only because the first account on a Mac is 501.
@@ -10,6 +10,11 @@
   - Write the agent's bootstrap as root and `chown` it to uid 501, then copy everything else in through `exec` after boot. This runs `sudo` inside an unsandboxed operation.
   - Attach the disk with `-owners off`, so new files take the unknown owner, uid 99, which the guest reads as `admin`. The filesystem audit checks for uid 501 (`standalone-filesystem-audit.ts:534-574`), and it reads ownership from this mount. It would have to snapshot through a second `-owners on` attachment.
   - Keep uid 501 as a documented host requirement.
-- **Dependencies:** The Developer's choice among those routes.
+- **Decision (2026-10-07):** The Developer chose a local base image: vanilla plus only the pinned agent, built once.
+  - **Building it** writes only the agent and its LaunchAgent, on a disk attached with ownership ignored. Then it boots once to prove `tart exec` answers.
+  - **Each run** clones that base and sends its inputs in through `tart exec`.
+  - **The audit snapshots** attach the stopped disk read-only. They honour ownership when the host account's uid matches the guest admin's. Otherwise they ignore it, and the audit records ownership as unobserved.
+  - **The prepared Xcode base** already ships the agent, so it needs no build.
+- **Dependencies:** None.
 - **Acceptance:** Vanilla acceptance and `contributor-macos-test` pass their provisioning step from a host account whose uid is not 501.
 - **Source:** Isolation checks of the October 7 afternoon repository pass.

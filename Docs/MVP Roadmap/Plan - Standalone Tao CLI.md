@@ -1043,6 +1043,16 @@ above, except where the 2026-09-26 staged-release decision explicitly supersedes
     inside the ordinary test suite, a local `tart` virtual machine as the gate before publication,
     and the `macos-26` GitHub runner as a regression gate once the public repository exists.
 
+    _Decided 2026-10-07._
+    - **Local `tart` tier.** Each run clones a local base: the pinned vanilla image plus only the pinned Tart guest agent, built once. Its inputs go in after boot through `tart exec`, so no run writes to a stopped guest disk as the host user, and the check works from any host account. The filesystem audit's snapshots still read the stopped disk, read-only. Cirrus Labs' `base` image is not used: its Homebrew and command-line tools would hide a missing dependency.
+    - **`macos-26` tier.** It becomes an automated first-run test on every change. It does not wait for the public repository. On the commit's own build, it:
+      - runs the install script against a local copy of that release, with a throwaway `$HOME` and a `PATH` of `/usr/bin:/bin`;
+      - creates an app, then checks, compiles and tests it;
+      - starts the dev loop, clicks the counter in the browser, and sees a source edit take effect;
+      - upgrades from the previous version, then uninstalls.
+    - **Nightly download test.** Once releases are published, a nightly run installs the real latest release through the published download, which also covers checksums, Gatekeeper quarantine and notarization.
+    - **Not a substitute.** The runner is not a clean machine: it ships Xcode, Homebrew, Node and Git. It complements the local `tart` tier and does not replace it.
+
     _Current transport 2026-09-26._ `./agent unsandboxed standalone-cli-clean-machine`
     provisions a fresh stopped vanilla clone with the SHA-256-pinned Tart guest agent 0.10.0,
     compiled test drivers, release files, and browser fixture. It mounts only that clone's raw
