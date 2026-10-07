@@ -42,8 +42,17 @@ compiler-owned effect-analysis design, following the boundary on broader compila
 4. Repeat unchanged standalone ceilings, then matched control/candidate/candidate/control real
    editor measurements. The authorized hosted landing route follows after qualification.
 
-The scope decision is pending. Landing authorization remains valid, but hosted merge proof has
-not started. The workflow blocker is also recorded in
+The Developer approved the separate compiler scope and continuing until merged on 2026-10-07.
+The first grounded change is narrower than cross-entry reuse: commit `29004402d` projects the
+immutable effect inventory once per exact canonical snapshot, while preserving independent
+owner roots, discovery and analysis. Different snapshots and fresh builds stay cold. Its owning
+359-test suite passes, and mutations that disable retention or leak inputs across snapshots
+fail the new tests. An isolated ten-iteration diagnostic passes every median budget, including
+session checking at 983 milliseconds. Quiet standalone qualification remains required.
+The comparison control includes the same compiler-only change (`de7be17c0`) on main
+`fe7a4da74`; this common compiler baseline isolates the Studio delivery changes and must not
+be described as unchanged main. No paired numerical gain or hosted merge proof exists yet.
+Landing authorization remains valid. The original workflow blocker is recorded in
 [DEVENV-WORDFLOWER-CHECK-EXCEEDS-QUIET-PERFORMANCE-BUDGET](<Developer environment upgrades/DEVENV-WORDFLOWER-CHECK-EXCEEDS-QUIET-PERFORMANCE-BUDGET.md>).
 
 Main `c4b48ea1b` subsequently integrated without conflicts, preserving native inspection caching

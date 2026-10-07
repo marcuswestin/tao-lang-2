@@ -23,8 +23,15 @@ thirteen-entry validation batch. Exact ordered input reuse had no hits, and two 
 trials showed no demonstrated gain; all investigation source changes were removed. The
 [execution plan](<Studio preview speed execution plan.md#quiet-qualification-blocker-2026-10-07>)
 proposes a separate compiler effect-analysis design and parity proof before implementation.
-This is an outstanding scope decision; ceilings, admission and authoritative checks remain intact.
-Landing remains authorized, with no own hosted run, PR or merge yet.
+The Developer approved this separate scope and continuing until merged. Commit `29004402d`
+now shares only immutable projected inventories within each exact canonical effect snapshot;
+owner roots, fact discovery and analysis remain independent. New snapshots and builds stay cold.
+The owning 359-test suite and mutation checks pass. An isolated ten-iteration diagnostic brings
+session checking to 983 milliseconds within the unchanged 1.3-second ceiling, but standalone
+qualification and paired editor paint results remain pending. The control carries the same
+compiler-only change on main `fe7a4da74`, so future comparisons isolate Studio delivery.
+Ceilings, admission and authoritative checks remain intact. Landing remains authorized, with no
+own hosted run, PR or merge yet.
 
 ### Landed predecessor
 

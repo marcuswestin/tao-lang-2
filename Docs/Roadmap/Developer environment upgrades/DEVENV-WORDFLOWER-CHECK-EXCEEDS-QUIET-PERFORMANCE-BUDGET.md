@@ -21,11 +21,13 @@
   investigation patch remain in the Studio speed worktree checkpoint artifacts.
 - **Workaround:** None that preserves the complete performance verdict and unchanged ceilings.
   Loaded correctness smoke results cannot replace numerical qualification.
-- **Proposed change:** First design a compiler-owned effect-analysis optimization for shared
-  dependencies across distinct entry graphs. Define the consumed semantic inputs and immutable
-  lifetime before reuse; unknown or changed inputs remain cold. Prove ordered diagnostic and
-  sealed-effect parity, then measure the whole-app check and real Studio saves. Keep this a
-  separate design slice from the approved preview delivery implementation.
+- **Proposed change:** The separately approved compiler slice now has a narrower implementation
+  in `29004402d`: share completed immutable projected inventories only within one exact canonical
+  snapshot. Each owner keeps independent source-root context, fact discovery and analysis;
+  changed evidence and new linked builds stay cold. The owning 359 tests and disabled-retention /
+  cross-snapshot mutation checks pass. An isolated ten-iteration diagnostic reports session check
+  983 milliseconds, within the unchanged ceiling. Complete standalone qualification remains
+  pending, so this entry stays open. Cross-entry dependency reuse remains separate future work.
 - **Dependencies:** The Studio preview speed continuation roadmap owns the affected production
   slice and the separate follow-up scope decision.
 - **Acceptance:** Complete quiet standalone qualification passes all unchanged language and
