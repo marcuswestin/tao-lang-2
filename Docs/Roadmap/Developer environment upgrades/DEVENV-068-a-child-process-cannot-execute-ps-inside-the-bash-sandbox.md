@@ -146,4 +146,20 @@
   absent. This does not establish why the first observation was unreadable. Its log remains at
   `.artifacts/logs/verify-complement/2026-10-06T21-36-44-146Z-52210-94cdcad6/studio-smoke.log`.
   Complete host proof must be renewed after integrating main.
+- **Cause of the unreadable live identity (2026-10-07):** It recurred on `feat/repository-pass-2026-10-07`
+  at `47be7fec9`, where `studio-proof-real-app` passed 4 of 4 tests and then failed cleanup with
+  `identity-unreadable`, `returnedBytes: 0` and `probeStatus: live` for PID 51753, under two concurrent
+  lanes at load 17.6 on 18 CPUs:
+  `.artifacts/logs/verify-complement/2026-10-07T17-24-09-940Z-42461-3395525a/studio-proof-real-app.log`.
+  A probe reproduced the signature deterministically. `PROC_PIDTBSDINFO` returned 0 bytes for a live
+  child running the setuid-root `/usr/bin/top`, while `kill(pid, 0)` succeeded and
+  `PROC_PIDT_SHORTBSDINFO` returned its full 64 bytes. A plain `/bin/sleep` child returned all 136
+  bytes. `/bin/ps` is also setuid root on macOS, and tested code runs it as a descendant:
+  `StudioLaunchManifest.ts:434`, `ProcessTree.ts:137`, `FS.ts:1182` and `ProjectDevSession.ts:260`.
+  The kernel restricts the full BSD record to the caller's effective user, so any ownership poll that
+  enumerates a short-lived `ps` child fails, and load widens that window. That PID 51753 was a `ps` is
+  inferred: the failure did not record its command. Proposed fix: on an unreadable live record, read
+  `PROC_PIDT_SHORTBSDINFO` (and `PROC_PIDUNIQIDENTIFIERINFO` for a per-boot unique identity). Treat
+  an effective-user mismatch as a foreign setuid child with its own identity rule instead of a
+  failure, or replace the descendant `ps` calls with the in-process libproc reader.
 - **Source:** 2026-09-17 process-teardown implementation.
