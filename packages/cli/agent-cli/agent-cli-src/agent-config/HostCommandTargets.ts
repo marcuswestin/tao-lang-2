@@ -80,6 +80,12 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
     command: '/bin/sh',
     fixedArgs: ['packages/cli/dev-cli/dev-cli-src/environment/contributor-linux-test.sh'],
   },
+  // Clones the pinned vanilla macOS image under Tart's account-wide lease and runs the contributor
+  // journey in the clone with the committed source; the script accepts only `--base vanilla|xcode`.
+  'contributor-macos-test': {
+    command: '/bin/bash',
+    fixedArgs: ['packages/cli/dev-cli/dev-cli-src/environment/contributor-macos-test.sh'],
+  },
   'simulators list': { command: 'xcrun', fixedArgs: ['simctl', 'list', 'devices'] },
   'simulators boot': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
   'simulators run': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },

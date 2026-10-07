@@ -1,13 +1,17 @@
 import { CLI, Errors, FS, HCI, Platform } from '@shared'
 
-/** Host-side operations for the disposable VM gate; binary output must stay on inherited stdout. */
+/**
+ * Host-side operations for the disposable VM gates; binary output must stay on inherited stdout.
+ * A contributor run (`tao-contributor-*`) shares provisioning and exec with a standalone acceptance
+ * run (`tao-acceptance-*`) but carries no browser bundle and records no filesystem audit.
+ */
 type Entity = { 'dev-entry'?: string; 'mount-point'?: string }
 type Attachment = { 'image-path': string; 'system-entities': Entity[] }
 
 try {
   const [operation, name, argument, ...args] = Platform.runtimeProcess.argv.slice(2)
-  if (name === undefined || !/^tao-acceptance-[0-9]+-[0-9]+$/.test(name)) {
-    Errors.throwUserInput('Expected an owned standalone acceptance VM name.')
+  if (name === undefined || !/^tao-(acceptance|contributor)-[0-9]+-[0-9]+$/.test(name)) {
+    Errors.throwUserInput('Expected an owned standalone acceptance or contributor VM name.')
   }
   if (operation === 'exec' && argument !== undefined && args.length > 0) {
     const timeoutMs = Number(argument)
@@ -127,16 +131,24 @@ async function recoverLease(name: string, root: string): Promise<void> {
   HCI.writeLine(`Recovered the inactive lease for ${name}; retained its logs and any stopped VM.`)
 }
 
-async function command(executable: string, args: string[]): Promise<string> {
-  const result = await CLI.run(executable, { args, processPolicy: 'test', timeoutMs: 120_000 })
+/**
+ * `hdiutil attach` leaves the process that serves the mounted image running after it exits 0, and the
+ * 'test' policy treats a surviving descendant as a leak and stops it, which detaches the disk mid-run.
+ * That one call uses the 'tool' policy, which has no timeout; every other call keeps both bounds.
+ */
+async function command(executable: string, args: string[], servesAttachedImage = false): Promise<string> {
+  const result = await CLI.run(
+    executable,
+    servesAttachedImage ? { args, processPolicy: 'tool' } : { args, processPolicy: 'test', timeoutMs: 120_000 },
+  )
   if (result.exitCode !== 0) {
     Errors.throwHostEnvironment(`${executable} failed: ${result.stderr || result.stdout || result.error?.message}`)
   }
   return result.stdout
 }
 
-async function plist<T>(executable: string, args: string[]): Promise<T> {
-  const output = await command(executable, args)
+async function plist<T>(executable: string, args: string[], servesAttachedImage = false): Promise<T> {
+  const output = await command(executable, args, servesAttachedImage)
   const converted = await CLI.run('/usr/bin/plutil', {
     args: ['-convert', 'json', '-o', '-', '-'],
     stdin: output,
@@ -170,6 +182,7 @@ async function withDisk(name: string, root: string, operation: 'provision' | 'co
   await FS.mkdir(mountRoot)
   // The shell must retain the clone if interruption or a failed detach leaves this marker behind.
   await FS.writeText(marker, disk)
+  let primaryFailure: unknown
   try {
     const attached = await plist<{ 'system-entities': Entity[] }>('/usr/bin/hdiutil', [
       'attach',
@@ -183,7 +196,7 @@ async function withDisk(name: string, root: string, operation: 'provision' | 'co
       '-mountroot',
       mountRoot,
       disk,
-    ])
+    ], true)
     await FS.writeJson(FS.resolvePath('logs/disk-attach.json', root), attached)
     const apfs = await plist<{ Containers: Array<{ Volumes: Array<{ DeviceIdentifier: string; Roles: string[] }> }> }>(
       '/usr/sbin/diskutil',
@@ -223,7 +236,7 @@ async function withDisk(name: string, root: string, operation: 'provision' | 'co
     }
     const harness = FS.resolvePath('tao-harness', home)
     if (operation === 'provision') {
-      await provision(root, home, harness)
+      await provision(root, home, harness, name.startsWith('tao-acceptance-'))
     } else {
       await FS.copyDirectory(FS.resolvePath('logs', harness), FS.resolvePath('logs/guest', root))
       for (const service of ['tart-guest-agent', 'tart-guest-daemon']) {
@@ -233,54 +246,71 @@ async function withDisk(name: string, root: string, operation: 'provision' | 'co
         }
       }
     }
-    HCI.writeLine(
-      `Clean-machine: recording the ${operation === 'provision' ? 'before' : 'after'} snapshot on the stopped disk...`,
-    )
-    const snapshot = await command(Platform.runtimeProcess.execPath, [
-      'run',
-      'packages/cli/tao-cli/cli-src/standalone-filesystem-audit.ts',
-      'snapshot',
-      candidates[0]!,
-      FS.resolvePath(`logs/filesystem-${operation === 'provision' ? 'before' : 'after'}.json`, root),
-      '/System/Volumes/Data',
-    ])
-    HCI.writeLine(snapshot.trimEnd())
+    if (name.startsWith('tao-acceptance-')) {
+      HCI.writeLine(
+        `Clean-machine: recording the ${
+          operation === 'provision' ? 'before' : 'after'
+        } snapshot on the stopped disk...`,
+      )
+      const snapshot = await command(Platform.runtimeProcess.execPath, [
+        'run',
+        'packages/cli/tao-cli/cli-src/standalone-filesystem-audit.ts',
+        'snapshot',
+        candidates[0]!,
+        FS.resolvePath(`logs/filesystem-${operation === 'provision' ? 'before' : 'after'}.json`, root),
+        '/System/Volumes/Data',
+      ])
+      HCI.writeLine(snapshot.trimEnd())
+    }
+  } catch (error) {
+    primaryFailure = error
+    throw error
   } finally {
-    // Query even after attach fails: hdiutil can attach the device before reporting a mount error.
-    const info = await plist<{ images: Attachment[] }>('/usr/bin/hdiutil', ['info', '-plist'])
-    for (const attachment of info.images) {
-      let imagePath: string
-      try {
-        imagePath = await FS.realPath(attachment['image-path'])
-      } catch {
-        // Unrelated mounted images can outlive their renamed or deleted backing files.
-        if (FS.resolvePath(attachment['image-path']) !== disk) {
+    try {
+      // Query even after attach fails: hdiutil can attach the device before reporting a mount error.
+      const info = await plist<{ images: Attachment[] }>('/usr/bin/hdiutil', ['info', '-plist'])
+      for (const attachment of info.images) {
+        let imagePath: string
+        try {
+          imagePath = await FS.realPath(attachment['image-path'])
+        } catch {
+          // Unrelated mounted images can outlive their renamed or deleted backing files.
+          if (FS.resolvePath(attachment['image-path']) !== disk) {
+            continue
+          }
+          imagePath = disk
+        }
+        if (imagePath !== disk) {
           continue
         }
-        imagePath = disk
+        const device = attachment['system-entities'].map(entity => entity['dev-entry'])
+          .find(value => value !== undefined && /^\/dev\/disk[0-9]+$/.test(value))
+        if (!device) {
+          Errors.throwHostEnvironment(`Cannot identify the attached device for ${disk}; retain the VM.`)
+        }
+        await command('/usr/bin/hdiutil', ['detach', device])
       }
-      if (imagePath !== disk) {
-        continue
+      await FS.remove(marker)
+    } catch (cleanupFailure) {
+      // The marker stays, so the shell retains the VM. A failed cleanup must not hide why the run failed.
+      if (primaryFailure === undefined) {
+        throw cleanupFailure
       }
-      const device = attachment['system-entities'].map(entity => entity['dev-entry'])
-        .find(value => value !== undefined && /^\/dev\/disk[0-9]+$/.test(value))
-      if (!device) {
-        Errors.throwHostEnvironment(`Cannot identify the attached device for ${disk}; retain the VM.`)
-      }
-      await command('/usr/bin/hdiutil', ['detach', device])
+      HCI.writeLine(`Detaching ${disk} also failed: ${Errors.formatForUser(cleanupFailure)}`)
     }
-    await FS.remove(marker)
   }
 }
 
-async function provision(root: string, home: string, harness: string): Promise<void> {
+async function provision(root: string, home: string, harness: string, withBrowser: boolean): Promise<void> {
   await FS.copyDirectory(FS.resolvePath('input', root), FS.resolvePath('input', harness))
   await FS.mkdir(FS.resolvePath('logs/steps', harness))
   const agent = FS.resolvePath('input/tart-guest-agent', harness)
   await FS.chmod(agent, 0o755)
-  const browser = FS.resolvePath('Applications/Google Chrome.app', home)
-  await FS.mkdir(browser)
-  await command('/usr/bin/tar', ['-xf', FS.resolvePath('input/browser.tar', root), '-C', browser])
+  if (withBrowser) {
+    const browser = FS.resolvePath('Applications/Google Chrome.app', home)
+    await FS.mkdir(browser)
+    await command('/usr/bin/tar', ['-xf', FS.resolvePath('input/browser.tar', root), '-C', browser])
+  }
   const vendorAgent = FS.resolvePath('../../Library/LaunchAgents/org.cirruslabs.tart-guest-agent.plist', home)
   if (await FS.exists(vendorAgent)) {
     const existing = await plist<{ ProgramArguments: string[] }>('/usr/bin/plutil', [

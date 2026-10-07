@@ -68,6 +68,7 @@ const expected = [
   'standalone-cli-vm-setup',
   'standalone-cli-clean-machine',
   'contributor-linux-test',
+  'contributor-macos-test',
   'simulators list',
   'simulators boot',
   'simulators run',

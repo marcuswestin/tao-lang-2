@@ -321,6 +321,12 @@ standalone-cli-clean-machine-audit: _parser-gen
 contributor-linux-test *ARGS:
     /bin/sh packages/cli/dev-cli/dev-cli-src/environment/contributor-linux-test.sh "$@"
 
+# Prove the documented contributor path in a fresh vanilla macOS VM; agents use ./agent unsandboxed contributor-macos-test
+[group('Host proofs')]
+[positional-arguments]
+contributor-macos-test *ARGS:
+    /bin/bash packages/cli/dev-cli/dev-cli-src/environment/contributor-macos-test.sh "$@"
+
 # Trust Tart's required tap formula and install Tart for the clean-machine gate
 [group('Ship')]
 standalone-cli-vm-setup:

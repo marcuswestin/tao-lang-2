@@ -126,7 +126,7 @@
     "companion-host-build",
     "setup-ios", "setup-visionos", "setup-watchos",
     "studio-companion-install", "clerk-review",
-    "standalone-cli-vm-setup", "standalone-cli-clean-machine", "contributor-linux-test",
+    "standalone-cli-vm-setup", "standalone-cli-clean-machine", "contributor-linux-test", "contributor-macos-test",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators launch", "simulators open-url", "simulators uninstall", "simulators open",
     "devices list", "devices apps", "devices launch",
