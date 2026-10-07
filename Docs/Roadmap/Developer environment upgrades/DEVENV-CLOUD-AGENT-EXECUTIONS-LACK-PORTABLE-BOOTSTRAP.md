@@ -701,3 +701,16 @@ The final `verify-changed` passed 48, failed 0 and skipped 1.
 
 Hosted Claude proof is therefore partial: the per-commit gate passes, and full verification reaches
 every Linux lane but does not yet finish green. Codex cloud proof was not attempted and remains open.
+
+## October 7 repository pass
+
+- Run `20261007T025054Z-50007` at `a198e71b6` (amd64, emulated) passed every cold step: setup, check
+  85.7s, all tests 1,452.3s and verify 1,229.4s. The cached stage passed setup, check and all tests,
+  then verify failed after 432s when `language/project-tooling:native-bodies` was killed by SIGKILL.
+- The kill was the Docker VM running out of memory, not the guest limit. `verify.memory.txt` shows
+  `oom_kill 1` with `memory.peak` 7,869,169,664 bytes against a 16 GiB `memory.max`; Docker reported
+  `Total Memory: 7.746GiB`. Cold verify had peaked at 7.77 GB without a kill. The September 26
+  note above saw the same ceiling with no OOM; verify has since grown past it.
+- This also explains the October 6 pass's unexplained cached-verify kill (P2 there).
+- Verification capacity counts CPUs only (`Platform.ts` uses `availableParallelism()`), so four slots
+  need about 8 GB. A contributor machine with 8 GB of memory would hit the same kill.

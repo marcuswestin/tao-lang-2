@@ -52,6 +52,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-064 — Generated-artifact cleanup is denied after files gain macOS provenance](<Developer environment upgrades/Archive/DEVENV-064-generated-artifact-cleanup-is-denied-after-files-gain-macos.md>) — Resolved
 - [DEVENV-070 — This ledger no longer fits one agent read](<Developer environment upgrades/Archive/DEVENV-070-this-ledger-no-longer-fits-one-agent-read.md>) — Resolved
 - [DEVENV-075 — A tracked process was re-identified by a name that changes at `exec`](<Developer environment upgrades/Archive/DEVENV-075-process-supervision-survival-assertions-flake-under-load.md>) — Resolved
+- [DEVENV-077 — A busy machine could admit no lane at all](<Developer environment upgrades/Archive/DEVENV-077-a-busy-machine-could-admit-no-lane-at-all.md>) — Resolved
 - [DEVENV-079 — A per-test timeout measured in wall time judges the machine, not the test](<Developer environment upgrades/Archive/DEVENV-079-a-per-test-timeout-measured-in-wall-time-judges-the-machine.md>) — Resolved
 - [DEVENV-080 — The prepare chain was re-paid on every lane at an unchanged tree](<Developer environment upgrades/Archive/DEVENV-080-the-prepare-chain-was-re-paid-on-every-lane-at-an-unchanged.md>) — Resolved
 - [DEVENV-081 — `tao test` discarded its compiled output on every passing run](<Developer environment upgrades/Archive/DEVENV-081-tao-test-discarded-its-compiled-output-on-every-passing-run.md>) — Resolved
@@ -72,6 +73,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-108 — `finalize` overwrites a hand-written merge message with its own draft](<Developer environment upgrades/Archive/DEVENV-108-finalize-overwrites-a-hand-written-merge-message.md>) — Closed
 - [DEVENV-111 — `finalize`'s integration merge half-applies `main` in the sandbox and names no conflicting path](<Developer environment upgrades/Archive/DEVENV-111-finalize-s-integration-merge-half-applies-main-in-the-sandbox.md>) — Resolved
 - [DEVENV-112 — The human landing recipe rejected the landing dry-run flag](<Developer environment upgrades/Archive/DEVENV-112-human-landing-recipe-rejected-dry-run.md>) — Resolved
+- [DEVENV-114 — The guidance invites agents to force-release a lock the design reserves for a person](<Developer environment upgrades/Archive/DEVENV-114-guidance-invites-agents-to-force-release-the-landing-lock.md>) — Resolved
 - [DEVENV-ACCOUNT-SERVICE-READINESS-JSON-RACE — Account service readiness JSON race](<Developer environment upgrades/Archive/DEVENV-ACCOUNT-SERVICE-READINESS-JSON-RACE.md>) — Resolved
 - [DEVENV-ACCOUNT-TEST-READS-PARTIAL-READINESS-JSON — Account test reads partial readiness JSON](<Developer environment upgrades/Archive/DEVENV-ACCOUNT-TEST-READS-PARTIAL-READINESS-JSON.md>) — Resolved
 - [DEVENV-AGENT-BUNDLE-MISSES-VERIFICATION-SOURCE-CHANGES — Agent bundle misses verification source changes](<Developer environment upgrades/Archive/DEVENV-AGENT-BUNDLE-MISSES-VERIFICATION-SOURCE-CHANGES.md>) — Resolved
