@@ -19,10 +19,6 @@
     "architecture": "arm64",
     "runtime": "bun:1.4.2"
   },
-  "inputs": {
-    "source": "Docs/Tutorials/Your First Tao App.md",
-    "dependencySnapshot": "Docs/QA/inputs/e5e4a61c696f6e87e58902bdd79f2241ebe7012f38af7e664d5d25e377fb717a.json"
-  },
   "surfaceId": "source:tutorial-replay",
   "dimension": "functional",
   "outcome": "pass",

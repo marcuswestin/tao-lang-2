@@ -223,6 +223,8 @@ Describe('QA evidence register', () => {
         }),
       )
       Expect(result.sourceHash.startsWith('historical:')).toBe(true)
+      Expect('inputs' in result).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('Docs/QA/inputs', root))).toBe(false)
       await qa.report(1)
       Expect(await FS.readText(FS.resolvePath('Docs/QA/release-1.md', root))).toContain(
         'doc:README.md / text / source / agent: needs-recheck',

@@ -19,10 +19,6 @@
     "architecture": "arm64",
     "runtime": "bun:1.4.2"
   },
-  "inputs": {
-    "source": "Docs/Tutorials/Your First Tao App.md",
-    "dependencySnapshot": "Docs/QA/inputs/1b8ea0038e4a1018886700293ba031b97d41de1e474b00f5bb81e7db38f253b5.json"
-  },
   "surfaceId": "visual:reading-list",
   "dimension": "visual",
   "outcome": "friction",

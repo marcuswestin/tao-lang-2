@@ -137,9 +137,10 @@ Different visual scenarios are distinct channels. Never mark a failed dark captu
 another phone image looked good, or mark unchanged screenshots passed without inspecting them.
 
 Immutable observations live in `results/`, with source commit, observed and recorded times,
-requested phase, execution profile, host/runtime descriptor, source hashes, and a durable dependency
-snapshot under `inputs/`. Historical records explicitly label those snapshot fields as import-time,
-mark original dependencies unknown, and link original capture/run metadata through evidence. Release story passes outside documentation require `executionProfile`
+requested phase, execution profile, host/runtime descriptor, and source hashes; git holds the
+inputs themselves at that commit, so no separate dependency list is stored. Historical records
+explicitly label their snapshot fields as import-time, mark original dependencies unknown, and link
+original capture/run metadata through evidence. Release story passes outside documentation require `executionProfile`
 to match the requested phase and an `artifact` containing `version`, `digest`, and `sourceCommit`;
 `public-site` stories (the published front door and repository) are exempt, since nothing is built
 for them, while WEB2's download half stays on `installed-cli`. Instead, a `public-site` pass must

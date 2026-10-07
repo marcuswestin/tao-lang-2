@@ -408,7 +408,7 @@ export class QaInventory {
       return 'Generated, vendor, or task artifact; not an authored repository document.'
     }
     if (
-      /^Docs\/QA\/(?:inventory\.json|dashboard\.md|capabilities\.md|release-\d\.md|results\/|runs\/|findings\/|evidence\/|inputs\/)/u
+      /^Docs\/QA\/(?:inventory\.json|dashboard\.md|capabilities\.md|release-\d\.md|results\/|runs\/|findings\/|evidence\/)/u
         .test(path)
     ) {
       return 'QA evidence or generated register output; excluded from its own freshness inputs.'

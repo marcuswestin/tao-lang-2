@@ -14,7 +14,6 @@ type Observation = Snapshot & {
   phase: number
   executionProfile: 'development' | number
   environment: { platform: string; architecture: string; runtime: string }
-  inputs: { source: string; dependencySnapshot: string }
   artifact?: { version: string; digest: string; sourceCommit: string }
   reviewedUrl?: string
   provenance: {
@@ -314,10 +313,6 @@ export class QaRegister {
         'Release acceptance needs an artifact identity built for the selected release phase; development-source evidence is supplementary.',
       )
     }
-    const dependencySnapshot = `Docs/QA/inputs/${Platform.sha256Hex(JSON.stringify(run.inventory.dependencies))}.json`
-    if (!await FS.exists(this.path(dependencySnapshot))) {
-      await this.atomic(dependencySnapshot, run.inventory.dependencies)
-    }
     const observation: Observation = {
       id: this.newId(),
       runId,
@@ -336,7 +331,6 @@ export class QaRegister {
         architecture: Platform.hostArch,
         runtime: `bun:${Platform.runtimeBunVersion ?? 'unknown'}`,
       },
-      inputs: { source: surface.source, dependencySnapshot },
       ...(artifact ? { artifact } : {}),
       ...(typeof reviewedUrl === 'string' ? { reviewedUrl } : {}),
       surfaceId,
