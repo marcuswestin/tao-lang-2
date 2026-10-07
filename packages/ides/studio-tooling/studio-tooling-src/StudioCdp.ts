@@ -12,6 +12,7 @@ import {
 } from '@shared'
 import { Buffer } from 'node:buffer'
 import { chromeSandboxArgs, findChromeExecutable } from './ChromeDiscovery'
+import { describeChromeStall } from './ChromeStartupStall'
 
 type CdpResponse = {
   error?: { message: string }
@@ -179,7 +180,13 @@ export class StudioCdp {
           startedCommand.pid ?? 'unavailable'
         }\nProfile: ${userDataRoot}\n${startupOutput}`
       await options.onProfileCreated?.(userDataRoot)
-      const port = await waitForActivePort(userDataRoot, command, diagnostic, options.startupTimeoutMs)
+      const port = await waitForActivePort(
+        userDataRoot,
+        command,
+        diagnostic,
+        options.startupTimeoutMs,
+        Platform.hostPlatform === 'linux' ? () => describeChromeStall(startedCommand.pid, userDataRoot) : undefined,
+      )
       const target = await waitForTarget(`http://127.0.0.1:${port}`, undefined, command, diagnostic)
       client = await CdpClient.connect(requireWebSocketUrl(target), command, diagnostic)
       const connectedClient = client
@@ -1435,26 +1442,40 @@ async function waitForActivePort(
   command: Pick<CLI.StartedCommand, 'error' | 'exitCode' | 'signalCode'>,
   startupOutput: () => string = () => '',
   timeoutMs = 20_000,
+  stallReport?: () => string,
 ): Promise<number> {
   const path = FS.resolvePath('DevToolsActivePort', userDataRoot)
   let port: number | undefined
-  await waitForProcessReadiness(
-    command,
-    async () => {
-      if (await FS.isFile(path)) {
-        const candidate = Number((await FS.readText(path)).split(/\r?\n/)[0])
-        if (Number.isInteger(candidate) && candidate > 0 && candidate <= 65_535) {
-          port = candidate
-          return true
+  try {
+    await waitForProcessReadiness(
+      command,
+      async () => {
+        if (await FS.isFile(path)) {
+          const candidate = Number((await FS.readText(path)).split(/\r?\n/)[0])
+          if (Number.isInteger(candidate) && candidate > 0 && candidate <= 65_535) {
+            port = candidate
+            return true
+          }
         }
-      }
-      return false
-    },
-    startupOutput,
-    'Chrome DevToolsActivePort',
-    VerificationTimeouts.resolve(timeoutMs) ?? Infinity,
-    { intervalMs: 100 },
-  )
+        return false
+      },
+      startupOutput,
+      'Chrome DevToolsActivePort',
+      VerificationTimeouts.resolve(timeoutMs) ?? Infinity,
+      { intervalMs: 100 },
+    )
+  } catch (error) {
+    // A child that failed already says why; only a live Chrome that never exposed its port needs
+    // the machine's state at the deadline to explain the stall.
+    if (
+      stallReport === undefined || command.error !== undefined || command.exitCode !== null
+      || command.signalCode !== null
+    ) {
+      throw error
+    }
+    const message = Errors.messageOf(error)
+    Errors.throwHostEnvironment(`${message}${message.endsWith('\n') ? '' : '\n'}${stallReport()}`, { cause: error })
+  }
   Assert.defined(port, 'Expected: a DevTools port after Chrome reported readiness.')
   return port
 }
