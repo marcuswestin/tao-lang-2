@@ -119,11 +119,6 @@ clerk-review *ARGS: _parser-gen
 hosted-crud:
     ./tao connect run 'Apps/Hosted CRUD'
 
-# Typecheck the Expo Go hosted CRUD comparison app
-[group('Dev')]
-hosted-crud-check:
-    "{{ BUN }}" run --cwd "{{ justfile_directory() }}/Apps/Hosted CRUD" typecheck
-
 # Run focused storage and account-scope tests for the hosted CRUD comparison
 [group('Dev')]
 hosted-crud-test:
@@ -272,22 +267,22 @@ studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stab
 # Build signed Studio artifacts and check the app, DMG, update metadata, and isolated payload before upload
 [group('Ship')]
 studio-release-prepare repo version="0.0.1":
-    ./dev release-studio-prepare --repo "{{ repo }}" --version "{{ version }}"
+    ./dev prepare-release studio --repo "{{ repo }}" --version "{{ version }}"
 
 # Upload the prepared Studio artifacts to a public GitHub Release and verify public download bytes
 [group('Ship')]
 studio-release-publish repo:
-    ./dev release-studio-publish --repo "{{ repo }}"
+    ./dev publish-release studio --repo "{{ repo }}"
 
 # Package the IDE extension and prove the VSIX installs in a clean VS Code profile
 [group('Ship')]
 ide-extension-release-prepare:
-    ./dev release-ide-prepare
+    ./dev prepare-release ide-extension
 
 # Publish the prepared VSIX to both registries; pass open-vsx or marketplace to retry one after a partial failure
 [group('Ship')]
 ide-extension-release-publish target="all":
-    ./dev release-ide-publish --target "{{ target }}"
+    ./dev publish-release ide-extension --registry "{{ target }}"
 
 # Build a standalone Tao binary for this host, with its runtime resources embedded, after generating its parser
 [group('Ship')]
@@ -399,11 +394,6 @@ retry: test-retry
 # a filter, walks the whole repository to resolve it, and leaves a file descriptor open per visited
 # entry, so children spawned by a test inherit an exhausted descriptor table and their piped output
 # never arrives. The runner resolves the path and routes it to its owning suite instead.
-# Run the focused Tao Studio package suite
-[group('Dev')]
-test-studio:
-    ./dev test-file packages/ides/studio/studio-tests
-
 # Both ledger reports read the same recorded outcomes and answer the same question — which tests to
 # distrust — so they are one command rather than two names to remember. One `limit` bounds both
 # lists: a developer asking for a longer report wants a longer report, not one of each length.
@@ -492,7 +482,7 @@ land-barrier: check dead-exports
 merge-with-main skip_verify='false' skip_verify_full='false' skip_all='false' dry_run='false' message_file='' abort='' show_studio='false':
     ./dev merge-with-main {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
 
-# Format code, optionally only named files, without applying the other Tao source fixes
+# Format code, optionally only named files or dprint globs, without applying the other Tao source fixes
 [group('Dev')]
 [positional-arguments]
 fmt *PATHS: _parser-gen
@@ -500,7 +490,12 @@ fmt *PATHS: _parser-gen
     set -e
     if (( $# > 0 )); then
         for task_format_file in "$@"; do
-            [[ -f "$task_format_file" ]] || { print -u2 -r -- "Formatting requires a file: $task_format_file"; exit 2; }
+            if [[ ! -f "$task_format_file" ]]; then
+                case "$task_format_file" in
+                    *[\*\?\[\{]*) dprint fmt --incremental=false "$task_format_file"; continue ;;
+                    *) print -u2 -r -- "Formatting requires a file or glob: $task_format_file"; exit 2 ;;
+                esac
+            fi
             [[ "$task_format_file" == /* ]] || task_format_file="./$task_format_file"
             case "$task_format_file" in
                 *.tao) ./tao fmt "$task_format_file" ;;
@@ -514,11 +509,6 @@ fmt *PATHS: _parser-gen
         ./tao fmt
         just --fmt
     fi
-
-# Format one file or dprint glob without changing unrelated concurrent work
-[group('Dev')]
-fmt-file path:
-    dprint fmt --incremental=false {{ quote(path) }}
 
 # Each harness write-protects its own agent configuration — skills, hooks, settings — against shell
 # commands, while allowing the harness's own edit tools, so that a change to an agent's instructions

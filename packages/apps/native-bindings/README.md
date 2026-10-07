@@ -55,9 +55,9 @@ with the CLI, and compiled Tao/native-boundary tests remain with the Expo host.
 From the repository root, with dependencies already installed:
 
 ```sh
-./tao bridge expo-haptics --source expo --from packages/apps/expo-host --out .artifacts/haptics
-./tao bridge react-native --source react-native --export Vibration --from packages/apps/expo-host --out .artifacts/vibration
-./tao bridge expo-clipboard --source expo --from packages/apps/expo-host --out .artifacts/clipboard/Generated --exclude ClipboardPasteButton isPasteButtonAvailable
+./tao bindings generate expo-haptics --source expo --from packages/apps/expo-host --out .artifacts/haptics
+./tao bindings generate react-native --source react-native --export Vibration --from packages/apps/expo-host --out .artifacts/vibration
+./tao bindings generate expo-clipboard --source expo --from packages/apps/expo-host --out .artifacts/clipboard/Generated --exclude ClipboardPasteButton isPasteButtonAvailable
 ```
 
 For an app, set `--from` to the project resolving the upstream package and `--out` to a dedicated

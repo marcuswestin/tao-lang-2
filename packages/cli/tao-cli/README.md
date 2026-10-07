@@ -71,14 +71,14 @@ existing Studio/dev session for that project first: project ownership remains ex
 
 ## Generated native bindings (proof of concept)
 
-`tao bridge` imports the public declarations of an already installed package. Expo and React Native
+`tao bindings generate <package>` imports the public declarations of an already installed package. Expo and React Native
 have separate source adapters feeding the same catalog and Tao/TypeScript emitter in
 [`@native-bindings`](../../apps/native-bindings/README.md). The CLI only handles arguments and reporting.
 From this repository:
 
 ```sh
-./tao bridge expo-haptics --source expo --from packages/apps/expo-host --out .artifacts/haptics
-./tao bridge react-native --source react-native --export Vibration --from packages/apps/expo-host --out .artifacts/vibration
+./tao bindings generate expo-haptics --source expo --from packages/apps/expo-host --out .artifacts/haptics
+./tao bindings generate react-native --source react-native --export Vibration --from packages/apps/expo-host --out .artifacts/vibration
 ```
 
 Choose a dedicated generated output directory. The command writes `Bindings.tao`, its generated `Bindings.ts`

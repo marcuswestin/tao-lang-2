@@ -2,7 +2,7 @@
 
 ## Implemented boundary
 
-The experimental `tao bridge` command imports **both Expo and React Native** through separate source
+The experimental `tao bindings generate <package>` command imports **both Expo and React Native** through separate source
 adapters. Both currently read installed public TypeScript declarations using Tao's existing TypeScript
 compiler API. They feed a common catalog and one Tao/TypeScript emitter. The generator, catalog,
 adapters, and output writer now live in the private [`@native-bindings` package](../../../packages/apps/native-bindings/README.md).
@@ -14,7 +14,7 @@ The first surfaces are `expo-haptics` 57.0.3 (all four functions and all 27 enum
 default table or call into the curated `TR.Haptic` implementation. Tests supply an independent native
 boundary oracle; application bindings are regenerated directly from installed declarations.
 
-The output directory is entirely generator-owned. Repeating `tao bridge` replaces changed files,
+The output directory is entirely generator-owned. Repeating `tao bindings generate` replaces changed files,
 removes stale files and leaves identical files untouched. No generated code needs manual edits;
 optional wrappers or extensions live in separate files outside that directory. Its `bindings.json`
 catalog identifies an existing output as disposable; unrelated nonempty directories are refused.
@@ -153,7 +153,7 @@ Failed transactions and savepoints dispose subscriptions created by their rolled
 Use explicit exclusions for the unsupported component and constant:
 
 ```sh
-./tao bridge expo-clipboard --source expo --from packages/apps/expo-host --out .artifacts/clipboard/Generated --exclude ClipboardPasteButton isPasteButtonAvailable
+./tao bindings generate expo-clipboard --source expo --from packages/apps/expo-host --out .artifacts/clipboard/Generated --exclude ClipboardPasteButton isPasteButtonAvailable
 ```
 
 The catalog records those excluded names. This does not claim full Clipboard package coverage;

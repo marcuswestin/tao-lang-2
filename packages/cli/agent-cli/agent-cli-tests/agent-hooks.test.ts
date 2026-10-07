@@ -262,8 +262,7 @@ Describe('agent hooks', () => {
     const entry = await FS.readText(FS.resolvePath('commit-msg', hooksDir))
     Expect(entry).toContain('git rev-parse --show-toplevel')
     Expect(entry).toContain('packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh')
-    // Tried second, so a worktree that has not yet merged the package split keeps working.
-    Expect(entry).toContain('packages/dev/dev-src/cli/agent-git-hooks.zsh')
+    Expect(entry).not.toContain('packages/dev/dev-src')
     Expect(entry.trimEnd().endsWith('exit 0')).toBe(true)
 
     await FS.writeText(FS.resolvePath('pre-commit', hooksDir), '#!/bin/sh\nexit 0\n')
