@@ -9,7 +9,23 @@ timings.
 
 ## Current state
 
-### Quiet qualification failure, 2026-10-07
+### Current qualification, 2026-10-07
+
+Candidate `661bef5a8` passes the complete local changed-scope gate. The approved common compiler
+repair brings control's standalone language stage within all budgets (995ms session checking).
+Its first full control run still fails: two publication-on journeys write all paint rows and then
+time out while a daemonized browser helper holds output open. Neither the failed control nor the
+focused diagnostic timings qualify a paired gain.
+
+The browser harness now captures escaped writers by the exact output socket plus fresh kernel
+identities, then retains them in existing supervision. Ordinary polling, independent final joins,
+escalation and all deadlines stay intact. Failed cleanup retains its profile; the latency test
+attempts every owned cleanup operation and preserves a primary failure. Ownership and supervision
+regressions pass, including a failing disabled-custody mutation, and the formerly failing real
+HNReader journey completes correctly in 35.2 seconds. The integrated repair gate, common-baseline
+qualification, paired trials and hosted landing still remain. Landing authorization persists.
+
+### Earlier language qualification failure and repair, 2026-10-07
 
 The current speed candidate integrates main `5a2ba4b6c`. Source review and local changed-scope
 proof remain complete, but quiet standalone qualification now reaches a whole-app session-check
@@ -21,7 +37,7 @@ all six cases but was inconclusive, with two publication-on timeouts.
 Diagnostic profiling identifies effect-analysis construction as about 620 milliseconds of one
 thirteen-entry validation batch. Exact ordered input reuse had no hits, and two narrower reuse
 trials showed no demonstrated gain; all investigation source changes were removed. The
-[execution plan](<Studio preview speed execution plan.md#quiet-qualification-blocker-2026-10-07>)
+[execution plan](<Studio preview speed execution plan.md#earlier-language-blocker-and-repair-2026-10-07>)
 proposes a separate compiler effect-analysis design and parity proof before implementation.
 The Developer approved this separate scope and continuing until merged. Commit `29004402d`
 now shares only immutable projected inventories within each exact canonical effect snapshot;
@@ -1208,4 +1224,5 @@ was inconclusive twice: other verification lanes were active and load was 65.45 
 18 CPUs. Retain both reports and repeat stable source when the host is quiet; paired control
 measurements remain unrun. Equal persisted-state captures were empty in the whole-app trial, so
 that trial does not establish retention of a populated persisted value.
-No push, CI or landing is authorized.
+That initial handoff had no landing authorization. The Developer authorized this slice and its
+retries on 2026-10-07; current proof remains as recorded above.

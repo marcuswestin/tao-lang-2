@@ -10,7 +10,7 @@ import {
   Time,
   VerificationTimeouts,
 } from '@shared'
-import { Expect, mkTestDir, Test } from '@shared/test'
+import { Expect, mkTestDir, runCleanups, Test } from '@shared/test'
 import SourceActions from '@source-actions'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
@@ -287,6 +287,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
   let diagnosticOutput = ''
   let diagnosticTimer: ReturnType<typeof setInterval> | undefined
   let diagnosticWrite: Promise<void> | undefined
+  let primaryFailure: unknown
   try {
     if (traceDiagnostics) {
       // A test-process timeout bypasses catch/finally. Keep trace-only progress independently
@@ -908,6 +909,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     Expect(evidence.activatedCells).toBeGreaterThan(project.name === 'HNReader' ? 1 : 0)
     Expect(JSON.stringify(evidence)).not.toContain('RevisionNotFoundError')
   } catch (error) {
+    primaryFailure = error
     diagnosticPhase = 'failed'
     if (studio !== undefined) {
       const failureRoot = FS.resolvePath('.artifacts/tests/studio-smoke/preview-latency', Repo.getRoot())
@@ -930,10 +932,12 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     if (diagnosticTimer !== undefined) {
       clearInterval(diagnosticTimer)
     }
-    await diagnosticWrite
-    await browser?.close()
-    await studio?.stop()
-    await FS.remove(projectRoot)
+    await runCleanups(primaryFailure, [
+      { label: 'diagnostic write', run: async () => await diagnosticWrite },
+      { label: 'browser', run: async () => await browser?.close() },
+      { label: 'Studio', run: async () => await studio?.stop() },
+      { label: 'project', run: async () => await FS.remove(projectRoot) },
+    ], { channel: 'studio-latency-cleanup', subject: 'Studio latency' })
   }
 }
 

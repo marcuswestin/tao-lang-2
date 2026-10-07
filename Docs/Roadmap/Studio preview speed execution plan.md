@@ -1,9 +1,10 @@
 # Studio preview speed execution plan
 
-Prepared 2026-10-06; updated 2026-10-07. Status: implementation, integrated source review and
-complete local changed-scope verification passed. Performance qualification remains pending.
+Prepared 2026-10-06; updated 2026-10-07. Status: production source review and the complete local
+changed-scope gate passed at `661bef5a8`. A subsequent browser-cleanup repair needs its integrated
+gate. Performance qualification remains pending.
 The Developer authorized landing on 2026-10-07; the current merge gates still have to pass.
-Quiet qualification now reaches a whole-app budget failure also reproduced on main; see below.
+The common compiler repair passes language budgets; browser cleanup blocked the first new control.
 The [continuation roadmap](<Studio preview speed continuation.md>) remains
 the project owner. The [tracked POC handover](<Studio preview speed POC handover.md>) records the
 experimental mechanisms and historical evidence. This plan supersedes the supplementary archive's
@@ -11,7 +12,30 @@ main-only preparation plan as the proposed execution sequence, without supersedi
 
 ## Integrated starting state
 
-### Quiet qualification blocker, 2026-10-07
+### Current qualification state, 2026-10-07
+
+Control `de7be17c0` completed its language stage within every budget (session checking 995ms),
+with no peers and peak load 6.6983 on 18 CPUs. Its full run `performance-4642ea68-7f8f-4d6e-af2c-406da1aaea06`
+failed after 783.5 seconds: two publication-on cases collected all eight paint rows, then timed out
+in browser cleanup. This is not a completed paired member. Four other cases passed correctness;
+their baseline ceiling breaches remain failures, not candidate qualification.
+
+Two focused attempts reproduced the cleanup wait, including documented graceful browser close.
+The main browser exited while a daemonized crash-reporting helper retained its output socket.
+The repair captures exact shared output endpoints while Chrome is alive, confirms kernel start
+identities before and after a fresh descriptor read, and retains those identities in the existing
+supervisor. Discovery is explicit at browser readiness and before teardown; ordinary polling stays
+tree-local. Independent output/process joins, escalation and failure handling remain in place.
+Failed cleanup retains the browser profile, and the latency journey attempts all owned disposers
+without replacing a primary failure. No helper is adopted by name, age or parentlessness.
+
+Ten ownership regressions and 22 supervision cases pass. Removing retained output custody makes
+the escaped-process regression fail and still cleans its fixtures. The previously failing real
+HNReader publication-on journey passes in 35.2 seconds with correct paints and cleanup. This is
+focused correctness evidence; the common control/candidate protocol and unchanged ceilings still
+require a complete repeat. No hosted merge proof or new numerical gain exists.
+
+### Earlier language blocker and repair, 2026-10-07
 
 Candidate `ae0dbf4c6` and control `5a2ba4b6c` include the same current main; both frozen
 setups pass and authored HNReader, package.json and bun.lock are identical. Candidate standalone
