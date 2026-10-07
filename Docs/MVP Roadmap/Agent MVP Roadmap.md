@@ -170,7 +170,7 @@ statement that "Login is not required for development builds" is the argument fo
   test keeps it equal to the host package's `expo` dependency. The beta-distribution plan and lane
   research carry a dated correction of the SDK-54 claim.
 
-### A20 — Re-enable the Studio HNReader Feed proof (complete)
+### A31 — Re-enable the Studio HNReader Feed proof (complete)
 
 The `verify-full` proof that drags generated HNReader Stories into a drawn view, keeps, discards and
 undoes them (`studio-real-app.test.ts`, driven by `studio-hnreader-feed-journey.ts`) is enabled.
@@ -755,7 +755,7 @@ conversation but must inform a pre-MVP decision; they do not authorize implement
   provider/host contracts, and recommended MVP scope specified in the brief. Investigation only;
   implementation waits for remaining R21 decisions.
 
-### A21 — Keep a developer's hosted project IDs out of shared source
+### A32 — Keep a developer's hosted project IDs out of shared source
 
 - Decision, 2026-10-04: the Developer approved ignored project-local `.tao/local/connections.json`
   for the first ordinary Firebase Tao flow. Existing all-provider installation stays for this
@@ -776,7 +776,7 @@ conversation but must inform a pre-MVP decision; they do not authorize implement
 - Context: `Docs/Roadmap/Hosted provider continuation.md`, `Apps/Hosted CRUD/README.md`, and `A19`
   for the CLI secret store.
 
-### A22 — Make the automated CLI setup flows consistent and pleasant
+### A33 — Make the automated CLI setup flows consistent and pleasant
 
 `tao connect firebase`, `tao connect appwrite`, and `tao connect run` each grew their own prompts
 during the 2026-09-29 pilot, and running them showed rough edges. Examples: a prompt printed twice;
@@ -824,7 +824,7 @@ Metro's own UI took over the terminal.
   - `CI=1` is unusable: it turns off watching and reloads, and prints only a localhost URL.
   - The reporter hook uses Expo internals, so pin Expo exactly.
 - Context: `packages/cli/tao-cli/cli-src/connect-command.ts`, `firebase-provision.ts`,
-  `appwrite-provision.ts`, `hosted-crud-run.ts`, and `A21`.
+  `appwrite-provision.ts`, `hosted-crud-run.ts`, and `A32`.
 
 ## Project tracking
 

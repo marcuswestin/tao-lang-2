@@ -15,8 +15,8 @@
   that base and had to push again; `b20493e59` and `f578fafc3` repaired `main`. The project's
   review found the cause of the extra commits at `LandFixCommand.ts:98` and `:179`: after a merge
   of `main` into the branch, the range the command lands includes `main`'s own commits.
-- **Workaround:** Before `land-fix`, run `./agent typecheck` and `./agent lint` by hand, and squash
-  the fix onto `origin/main` so the branch holds one commit beyond it.
+- **Workaround:** Before `land-fix`, run `./agent typecheck` and `./agent lint` by hand. Squashing by
+  hand is no longer needed; see Progress.
 - **Proposed change:** `land-fix` squashes the branch's commits beyond the merge base onto fetched
   `origin/main` (one commit, the reviewed message plus the fix), and runs the cheap sandbox gates
   (`typecheck`, `lint`, the changed files' tests) before pushing, refusing on a failure. The

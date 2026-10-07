@@ -645,6 +645,7 @@ async function runCompiledTaoTests(
   // Shared compiled runs may serve several shards concurrently. Each child owns its snapshots.
   const resourceDirectory = FS.resolvePath(`jest-resources-${Platform.randomUUID()}`, compiled.runRoot)
   await FS.mkdir(resourceDirectory)
+  // Removed even when the run throws, so a spawn or bound failure does not leave it behind.
   const result = await RuntimeTesting.JestTransformCache.run(
     runtimeRoot,
     async cacheDirectory =>
@@ -683,9 +684,10 @@ async function runCompiledTaoTests(
         },
         stdio: 'pipe',
       }),
-  )
-  writer?.flush()
-  await FS.remove(resourceDirectory)
+  ).finally(async () => {
+    writer?.flush()
+    await FS.remove(resourceDirectory)
+  })
   return { output: Buffer.concat(chunks).toString('utf8'), result }
 }
 

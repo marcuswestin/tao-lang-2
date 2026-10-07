@@ -498,6 +498,23 @@ Describe('gate catalog metadata', () => {
     }
   })
 
+  Test('a hosted Linux lane runs the check gate of every fixer it skips', () => {
+    const lane = ['_fix-just-fmt', '_fix-dprint', '_fix-ledger-index', '_parser-gen', '_fix-tao', '_typecheck']
+    const hosted = GateCatalog.hostedLinuxGates(lane, { hostedLinux: true })
+    for (const name of lane.filter(gate => GateCatalog.skippedOnHostedLinux(gate, { hostedLinux: true }))) {
+      const check = GateCatalog.metadata(name).checkedBy
+      Expect({ name, hasCheck: check !== undefined }).toEqual({ name, hasCheck: true })
+      Expect(hosted).toContain(check)
+      Expect(GateCatalog.skippedOnHostedLinux(check!, { hostedLinux: true })).toBe(false)
+    }
+    // `_dprint-check` covers two fixers and is added once; a lane that names it is not doubled.
+    Expect(hosted).toEqual([...lane, '_dprint-check', '_repo-lint', '_tao-check'])
+    Expect(GateCatalog.hostedLinuxGates([...lane, '_tao-check'], { hostedLinux: true }))
+      .toEqual([...lane, '_tao-check', '_dprint-check', '_repo-lint'])
+    // Locally the fixers run, so nothing is added.
+    Expect(GateCatalog.hostedLinuxGates(lane)).toEqual(lane)
+  })
+
   Test('refuses --hosted-linux anywhere but a Linux lane that skips unsandboxed gates', () => {
     const refusal = GateCatalog.hostedLinuxRefusal({ hostedLinux: true }, 'linux')
     Expect(refusal).toContain('goes with --skip-unsandboxed')
