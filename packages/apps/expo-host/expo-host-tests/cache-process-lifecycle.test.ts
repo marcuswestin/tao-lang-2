@@ -19,7 +19,7 @@ function startWorker(home: string, source: string) {
     args: [
       `--tsconfig=${FS.resolvePath('tsconfig.json', packageRoot)}`,
       '-e',
-      `import { FS, Time } from ${JSON.stringify(sharedModule)};
+      `import { FS, Platform, Time } from ${JSON.stringify(sharedModule)};
        import { JestTransformCache } from ${
         JSON.stringify(FS.resolvePath('expo-host-src/testing/jest-transform-cache.ts', packageRoot))
       };
@@ -100,27 +100,35 @@ Describe('cache process lifecycle', () => {
       home,
       `
       const root = ${JSON.stringify(root)};
-      const firstLease = await direct.start(root);
+      const cacheSource = ${JSON.stringify(FS.resolvePath('jest-direct-cache.cjs', packageRoot))};
+      const load = Platform.createModuleRequire(cacheSource);
+      const loadedModule = { exports: {} };
+      let published = false;
+      let ready = false;
+      // Evaluate the Node-loaded coordinator with a private filesystem boundary. No global
+      // filesystem module is mutated, and the rename uses the shared wrapper.
+      new Function('require', 'module', FS.readTextSync(cacheSource))(name => {
+        const dependency = load(name);
+        if (name !== 'node:fs') return dependency;
+        return { ...dependency, readdirSync(directory, options) {
+          const entries = dependency.readdirSync(directory, options);
+          if (ready && directory === FS.resolvePath('data', root) && !published) {
+            published = true;
+            FS.renameSync(${JSON.stringify(temporary)}, ${JSON.stringify(published)});
+          }
+          return entries;
+        } };
+      }, loadedModule);
+      const coordinator = loadedModule.exports;
+      const firstLease = await coordinator.start(root);
       await FS.writeText(${JSON.stringify(temporary)}, 'published');
       await FS.writeText(FS.resolvePath('data/keeper', root), 'keep');
-      const fs = require('node:fs');
-      const readdir = fs.readdirSync;
-      let published = false;
-      // Inject the publication at the enumeration boundary in this isolated worker only.
-      fs.readdirSync = function(directory, options) {
-        const entries = readdir.call(this, directory, options);
-        if (directory === FS.resolvePath('data', root) && !published) {
-          published = true;
-          fs.renameSync(${JSON.stringify(temporary)}, ${JSON.stringify(published)});
-        }
-        return entries;
-      };
+      ready = true;
       try {
-        const secondLease = await direct.start(root);
-        await direct.finish(root, secondLease);
+        const secondLease = await coordinator.start(root);
+        await coordinator.finish(root, secondLease);
       } finally {
-        fs.readdirSync = readdir;
-        await direct.finish(root, firstLease);
+        await coordinator.finish(root, firstLease);
       }
       await FS.writeJson(FS.resolvePath('publication.json', root), { published });
     `,
