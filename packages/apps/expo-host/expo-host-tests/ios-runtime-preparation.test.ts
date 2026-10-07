@@ -13,7 +13,7 @@ const capabilitiesSlot = testOverrideSlot({
   write: value => Object.assign(ReleaseCapabilities, { allows: value }),
 })
 
-function fixture(options: { installed?: string; cached?: boolean; installFails?: boolean } = {}) {
+function fixture(options: { installed?: string; cached?: boolean; installFails?: boolean; offline?: boolean } = {}) {
   const events: string[] = []
   let stopped = false
   let cached = options.cached === true
@@ -52,6 +52,9 @@ function fixture(options: { installed?: string; cached?: boolean; installFails?:
     loadDownloader: async () => ({
       getExpoGoVersionEntryAsync: async sdk => {
         events.push(`metadata:${sdk}`)
+        if (options.offline === true) {
+          Errors.throwHostEnvironment('fetch failed')
+        }
         return { iosClientUrl: 'https://example.test/Expo-Go-2.35.1.tar.gz', iosClientVersion: '2.35.1' }
       },
       downloadAppAsync: async request => {
@@ -179,6 +182,26 @@ Describe('automatic iOS simulator runtime preparation', () => {
       'endpoint',
       `simctl openurl ${udid} exp://192.0.0.2:49152`,
     ])
+  })
+
+  Test('offline, an installed runtime opens without the version check', async () => {
+    const f = fixture({ installed: '56.0.4', offline: true })
+    const captured = await f.withOverrides(f.open)
+    Expect(captured.result[0]?.dispatched).toBe(true)
+    Expect(f.events).toEqual([
+      `inspect:${udid}`,
+      'metadata:57.0.0',
+      'endpoint',
+      `simctl openurl ${udid} exp://192.0.0.2:49152`,
+    ])
+    Expect(captured.stdout + captured.stderr).toContain('using the installed Expo Go 56.0.4')
+  })
+
+  Test('offline, a missing runtime reports the failed version check', async () => {
+    const f = fixture({ offline: true })
+    const captured = await f.withOverrides(f.open)
+    Expect(captured.result).toEqual([{ target: 'ios', dispatched: false }])
+    Expect(f.events).toEqual([`inspect:${udid}`, 'metadata:57.0.0'])
   })
 
   Test('an incompatible installed runtime is replaced using its cached SDK-matched app', async () => {

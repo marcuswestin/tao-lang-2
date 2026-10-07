@@ -259,7 +259,7 @@ function entries(value: unknown): value is Entry[] {
 async function readManifest(path: string, captured?: Uint8Array | null): Promise<Manifest> {
   Assert.input(
     captured !== null && (captured !== undefined || !await FS.isSymbolicLink(path) && await FS.isFile(path)),
-    `Maintained native binding manifest is missing at '${path}'. Generate maintained native bindings with tao bindings generate --maintained.`,
+    `Maintained native binding manifest is missing at '${path}'.`,
   )
   const value = Json.tryParse(
     captured === undefined ? await FS.readText(path) : new TextDecoder('utf-8', { fatal: true }).decode(captured),

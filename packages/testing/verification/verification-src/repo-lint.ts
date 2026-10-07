@@ -92,6 +92,29 @@ export function missingTestAppReadmeEntries(appNames: readonly string[], readme:
   return [...appNames].sort().filter(name => !headings.has(name))
 }
 
+/** The MVP roadmaps whose `### A20 — Title` item IDs other documents cite by ID alone. */
+const MVP_ROADMAPS = ['Docs/MVP Roadmap/Agent MVP Roadmap.md', 'Docs/MVP Roadmap/Developer MVP Roadmap.md']
+
+/**
+ * duplicateRoadmapItemIdIssues names each item ID a roadmap gives to more than one heading. Two
+ * branches that each add an item read the same highest ID and choose the same successor, and the
+ * merge keeps both, leaving every citation of that ID ambiguous.
+ */
+export function duplicateRoadmapItemIdIssues(path: string, source: string): string[] {
+  const lines = new Map<string, number[]>()
+  source.split('\n').forEach((line, index) => {
+    const id = /^### ([A-Z]\d+) — /.exec(line)?.[1]
+    if (id !== undefined) {
+      lines.set(id, [...lines.get(id) ?? [], index + 1])
+    }
+  })
+  return [...lines].filter(([, at]) => at.length > 1).map(([id, at]) =>
+    `${path} uses item ID ${id} for more than one heading (lines ${
+      at.join(', ')
+    }); give the newer item the next unused ID.`
+  )
+}
+
 /** LedgerEntry is one backlog file as this rule sees it: its file name and the fields it records. */
 export type LedgerEntry = {
   name: string
@@ -1137,6 +1160,12 @@ export async function repoLintIssues(
   }
   issues.push(...instructionBudgetIssues(await readInstructionFiles(repoRoot)))
   issues.push(...await readDeveloperEnvironmentLedgerIssues(repoRoot))
+  for (const path of MVP_ROADMAPS) {
+    const roadmapPath = FS.resolvePath(path, repoRoot)
+    if (await FS.isFile(roadmapPath)) {
+      issues.push(...duplicateRoadmapItemIdIssues(path, await FS.readText(roadmapPath)))
+    }
+  }
 
   // Inventory authored Tao sources, since removed apps can leave ignored generated directories.
   for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {

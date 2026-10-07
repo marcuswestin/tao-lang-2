@@ -136,8 +136,8 @@ export type RunGatesOptions = {
   /**
    * The lane is a hosted `Verify` Linux partition: `skipUnsandboxed` keeps the gates the catalog
    * marks `runsOnHostedLinux`, since that runner has no agent sandbox to deny them, and the fixers
-   * are skipped (`GateCatalog.skippedOnHostedLinux`), since the workflow fails a rewritten tree and
-   * their check gates report the same defect.
+   * are skipped (`GateCatalog.skippedOnHostedLinux`), since the workflow fails a rewritten tree, and
+   * replaced by the check gates that report the same defect (`GateCatalog.hostedLinuxGates`).
    */
   hostedLinux?: boolean
   /** Gates deliberately not run in this lane, as `name=reason`. */
@@ -181,11 +181,13 @@ const GUI_WAIT_MS = 10 * 60 * 1_000
 
 /** runGates executes every node of a lane through the one work graph and returns the rollup. */
 export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
+  // A hosted partition swaps each skipped fixer for its check gate; every other lane runs as given.
+  const gates = GateCatalog.hostedLinuxGates(options.gates, { hostedLinux: options.hostedLinux })
   const skipsUnsandboxed = (name: string) =>
     options.skipUnsandboxed === true && GateCatalog.skippedUnsandboxed(name, { hostedLinux: options.hostedLinux })
   const skipsOnHostedLinux = (name: string) =>
     GateCatalog.skippedOnHostedLinux(name, { hostedLinux: options.hostedLinux })
-  const selectedGates = options.gates.filter(name => !skipsUnsandboxed(name) && !skipsOnHostedLinux(name))
+  const selectedGates = gates.filter(name => !skipsUnsandboxed(name) && !skipsOnHostedLinux(name))
   const visibilityWarnings = UiVisibility.preflightGates(selectedGates, options.showStudio)
   UiVisibility.warn(visibilityWarnings)
   const location = RunArtifacts.locate({
@@ -206,7 +208,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     ? undefined
     : { toolchain, treeHash: startingTree.hash }
   const readsGreenTree = options.greenTree !== undefined && options.greenTree.noCache !== true
-  const generatedOutputs = GeneratedEvidence.outputsForGates(options.gates)
+  const generatedOutputs = GeneratedEvidence.outputsForGates(gates)
   // A whole-lane record may stand in for the lane only when every node in it is one the key
   // describes — exactly the nodes `isRecordable` admits, and no others. A lane holding a
   // host-dependent node cannot be recorded or skipped wholesale, however green its record: it would be
@@ -215,10 +217,8 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   // by this runner either: the generator's cheap stamp check must first restore any missing output.
   // It can still write whole-lane evidence for finalize, provided the ignored generated inputs and
   // outputs are captured after prepare and remain unchanged through every reader below.
-  const wholeLaneSkippable = options.gates.every(name => GateCatalog.isRecordable(name))
-  const wholeLaneRecordable = options.gates.every(name =>
-    GateCatalog.isRecordable(name) || GeneratedEvidence.isWriter(name)
-  )
+  const wholeLaneSkippable = gates.every(name => GateCatalog.isRecordable(name))
+  const wholeLaneRecordable = gates.every(name => GateCatalog.isRecordable(name) || GeneratedEvidence.isWriter(name))
   if (readsGreenTree && wholeLaneSkippable && startingKey !== undefined) {
     const match = await GreenTree.find(location.repositoryRoot, startingKey, options.greenTree!.lanes, {
       captureGenerated: options.greenTree?.captureGenerated,
@@ -234,10 +234,8 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const { hostPlatform } = options
   const skipsMacOS = (name: string) =>
     hostPlatform !== undefined && hostPlatform !== 'darwin' && GateCatalog.metadata(name).requiresMacOS === true
-  const runnableGates = options.gates.filter(name =>
-    !skipsUnsandboxed(name) && !skipsMacOS(name) && !skipsOnHostedLinux(name)
-  )
-  const hostSkips = options.gates.flatMap(name =>
+  const runnableGates = gates.filter(name => !skipsUnsandboxed(name) && !skipsMacOS(name) && !skipsOnHostedLinux(name))
+  const hostSkips = gates.flatMap(name =>
     skipsUnsandboxed(name)
       ? [`${name}=requires unsandboxed host capabilities; run ./agent unsandboxed verify-full`]
       : skipsMacOS(name)
@@ -285,7 +283,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   // beside it. Those trees are Git-ignored and so outside the key; a lane that reads one without
   // running its generator would be skipping work on a hash that cannot speak for the input.
   const suites = [...new Set(suiteOfNode.values())]
-  const canStandOnRecord = (name: string) => GateCatalog.unrunGeneratedReads(name, options.gates).length === 0
+  const canStandOnRecord = (name: string) => GateCatalog.unrunGeneratedReads(name, gates).length === 0
   const recordable = [
     ...recipeGates.filter(name => GateCatalog.isRecordable(name) && canStandOnRecord(name)),
     ...suites.filter(canStandOnRecord),

@@ -52,7 +52,7 @@ What you ask for turns on whether the gates prove the change, not on its size.
 ### When the complement fails
 
 - **Before the merge:** `open-pr` cancels `Verify` and turns auto-merge off (`./agent unsandboxed cancel-verify` does the same for a failure found by hand). Read the named log, fix, commit, and relaunch.
-- **After GitHub merged:** fix it on the branch, commit, and run `./agent unsandboxed land-fix`. It commits the fix commits made after the merge onto fetched `origin/main` as one commit, pushes `main`, moves the archive, and writes a receipt under `.artifacts/logs/land-fix/`, without a full verification. Report the push with the fix.
+- **After GitHub merged:** fix it on the branch, commit, and run `./agent unsandboxed land-fix`. It commits the fix commits made after the merge onto fetched `origin/main` as one commit, pushes `main`, moves the archive, and writes a receipt under `.artifacts/logs/land-fix/`. Before pushing it runs typecheck, lint and the changed suites on the branch and refuses on a failure; it runs no full verification. Report the push with the fix.
 
 ### When the pull request conflicts with `main`
 

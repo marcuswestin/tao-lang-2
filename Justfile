@@ -618,7 +618,7 @@ merge-pr *ARGS:
 cancel-verify *ARGS:
     ./dev cancel-verify {{ ARGS }}
 
-# Land a fix committed after GitHub merged this branch: commit it onto fetched origin/main as one commit and push, with a receipt and no verification
+# Land a fix committed after GitHub merged this branch: commit it onto fetched origin/main as one commit and push once typecheck, lint and the changed suites pass
 [group('Dev')]
 land-fix *ARGS:
     ./dev land-fix {{ ARGS }}

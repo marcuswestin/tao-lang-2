@@ -41,7 +41,21 @@ export async function prepareSimulatorExpoGo(
   DevLoopOutput.logDevLoop('dev', `Checking iOS runtime for Expo SDK ${expoSdkMajor()} on ${simulatorName}.`)
   const downloader = await (dependencies.loadDownloader ?? loadExpoGoDownloader)()
   checkStop()
-  const metadata = await downloader.getExpoGoVersionEntryAsync(EXPO_SDK_VERSION)
+  let metadata: Awaited<ReturnType<ExpoGoDownloader['getExpoGoVersionEntryAsync']>>
+  try {
+    metadata = await downloader.getExpoGoVersionEntryAsync(EXPO_SDK_VERSION)
+  } catch (error) {
+    // Offline, an installed client is the best runtime available; without one there is nothing to open.
+    if (installed === undefined) {
+      throw error
+    }
+    checkStop()
+    DevLoopOutput.logDevLoop(
+      'dev',
+      `Could not reach Expo to check the iOS runtime; using the installed Expo Go ${installed}.`,
+    )
+    return
+  }
   checkStop()
   const url = new URL(metadata.iosClientUrl)
   if (

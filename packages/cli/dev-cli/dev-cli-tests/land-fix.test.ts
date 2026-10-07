@@ -1,7 +1,7 @@
 import { CLI, Errors, FS } from '@shared'
 import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 import { CancelVerifyCommand } from '../dev-cli-src/pr/CancelVerify'
-import { LandFixCommand, type LandFixDependencies } from '../dev-cli-src/pr/LandFixCommand'
+import { LAND_FIX_GATES, LandFixCommand, type LandFixDependencies } from '../dev-cli-src/pr/LandFixCommand'
 
 /**
  * Every seam is a fake, as in `merge-pr.test.ts`: a real run would push `main`. The scripted `run`
@@ -26,6 +26,7 @@ type Script = {
   mainHoldsSquash?: boolean
   merged?: boolean
   syncFails?: boolean
+  gatesFail?: boolean
 }
 
 function fakeDependencies(script: Script = {}) {
@@ -87,6 +88,9 @@ function fakeDependencies(script: Script = {}) {
           ? result(spec, `${TREE}\nCONFLICT (content): Merge conflict in a.ts\n`, 1)
           : result(spec, `${TREE}\n`)
       }
+      if (command === './dev' && script.gatesFail === true) {
+        return result(spec, '', 1)
+      }
       if (args.startsWith('commit-tree')) {
         return result(spec, `${COMMIT}\n`)
       }
@@ -122,6 +126,10 @@ Describe('land-fix', () => {
     Expect(mergeTree).toBeGreaterThan(fetch)
     // The fix is the change from the merged head to the branch head, applied onto main.
     Expect(fake.calls[mergeTree]).toContain(`--merge-base=${MERGED} ${MAIN} ${FIX}`)
+    // The fix passes the cheap gates on the branch before anything is written to main.
+    const gates = fake.calls.indexOf(`./dev gates ${LAND_FIX_GATES.join(' ')} --lane land-fix`)
+    Expect(LAND_FIX_GATES).toContain('_typecheck')
+    Expect(gates).toBeGreaterThan(mergeTree)
     Expect(commitTree).toBeGreaterThan(mergeTree)
     // One parent: the branch's pre-squash history never becomes main's.
     Expect(fake.calls[commitTree]).toContain(
@@ -151,6 +159,14 @@ Describe('land-fix', () => {
     Expect(outcome.exitCode).toBe(0)
     Expect(fake.lines).toContain('WARN  Could not bring local main up to date (fetch refused); run sync-main.')
     Expect(fake.written).toHaveLength(1)
+  })
+
+  Test('refuses a fix that fails its gates before pushing anything', async () => {
+    const fake = fakeDependencies({ gatesFail: true })
+    await Expect(LandFixCommand.run({ repositoryRoot: ROOT }, fake.dependencies)).rejects.toThrow(/run land-fix again/u)
+    Expect(fake.lines).toContain('FAIL  The fix failed its gates; nothing was pushed.')
+    Expect(fake.calls.some(call => call.startsWith('git commit-tree') || call.startsWith('git push'))).toBe(false)
+    Expect(fake.written).toEqual([])
   })
 
   Test('refuses a conflict before writing anything, naming the resolution', async () => {
@@ -231,8 +247,18 @@ Describe('land-fix against real repositories', () => {
     const lines: string[] = []
     const outcome = await LandFixCommand.run({ repositoryRoot: checkout }, {
       now: () => new Date('2026-10-06T01:02:03.456Z'),
+      // The temporary repository has no `./dev`; the gates are scripted to pass like `gh` is.
       run: (command, spec) =>
-        command === 'gh'
+        command === './dev'
+          ? Promise.resolve({
+            args: [...(spec?.args ?? [])],
+            command,
+            exitCode: 0,
+            signal: null,
+            stderr: '',
+            stdout: '',
+          })
+          : command === 'gh'
           ? Promise.resolve({
             args: [...(spec?.args ?? [])],
             command,

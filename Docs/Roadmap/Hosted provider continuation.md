@@ -3,7 +3,7 @@
 This handoff is for a new feature branch created from the committed tip of
 `feat/hosted-provider-free-tier-acceptance`, which itself grew from `feat/hosted-provider-candidates`.
 Read the [candidate roadmap](<Hosted data provider candidates.md>), the
-[Hosted CRUD guide](../../Apps/Hosted%20CRUD/README.md), and `A21`/`A22` in the
+[Hosted CRUD guide](../../Apps/Hosted%20CRUD/README.md), and `A32`/`A33` in the
 [Agent MVP Roadmap](<../MVP Roadmap/Agent MVP Roadmap.md>) before changing code.
 
 Current acceptance state is in [Simulator storage and live synchronization](#simulator-storage-and-live-synchronization--2026-10-05-1721-utc).
@@ -136,7 +136,7 @@ Earlier failure and recovery entries below are historical evidence, not the curr
   - On 2026-10-04 the Developer confirmed that the larger repaired QR scans on an iPhone.
     The smaller paired-row rendering needs a fresh scan; launch, reload, logs, and clean stop
     on devices and simulators remain separate acceptance gates.
-- **Spike findings** behind the screen are recorded under A22. Expo's `/events` socket is broken,
+- **Spike findings** behind the screen are recorded under A33. Expo's `/events` socket is broken,
   and `CI=1` disables watching. The reporter hook depends on Expo internals.
 
 ### Not done
@@ -166,7 +166,7 @@ Earlier failure and recovery entries below are historical evidence, not the curr
 
 1. Landing this source slice was authorized on 2026-10-04. New-app device and server acceptance
    remain separate gates.
-2. Whether the dev loop should get the same run screen. It is an unchecked A22 item, together with
+2. Whether the dev loop should get the same run screen. It is an unchecked A33 item, together with
    a test that starts real Metro and checks the event and URL shapes so that an Expo upgrade fails
    loudly.
 3. The existing all-provider repository installation policy was approved for this slice;
@@ -190,7 +190,7 @@ Earlier failure and recovery entries below are historical evidence, not the curr
   `port`. Fetch the Expo Go manifest's bundle URL to trigger a build, then write `r` and `q`.
 - **Busy ports.** Other worktrees' dev loops often hold 8081. One for `Apps/HNReader` in the
   primary checkout was running on 2026-10-03. Do not stop another checkout's process.
-- **Cosmetic issue.** A prompt printed twice during connect is noted in A22 and not fixed.
+- **Cosmetic issue.** A prompt printed twice during connect is noted in A33 and not fixed.
 
 ## Developer verification steps
 
@@ -223,7 +223,7 @@ solid pairs use background-colored spaces and mixed pairs use half-block glyphs.
 width and height while keeping solid areas continuous. Source tests cover the matrix and geometry;
 a fresh physical scan of the compact version remains pending. The QR is hidden until `d` Device
 is chosen; startup and Simulator/emulator actions show no QR. Android emulator launch now uses
-Expo's POST endpoint; its real-emulator acceptance remains pre-MVP work in A22. The run screen uses one compact `Actions:` line: `r` reload,
+Expo's POST endpoint; its real-emulator acceptance remains pre-MVP work in A33. The run screen uses one compact `Actions:` line: `r` reload,
 `i` iOS Simulator, `a` Android emulator, `c` Show connection, `d` Device (Android/iPhone), `q` quit.
 The generic shared numbered-menu convention applies to other choice prompts.
 

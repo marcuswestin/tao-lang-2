@@ -119,6 +119,13 @@ Describe('verify-complement', () => {
     }
   })
 
+  Test('hosted Verify checks formatting, Tao sources and the ledger index although it skips their fixers', async () => {
+    const hosted = GateCatalog.hostedLinuxGates(await justVariable('VERIFY_FULL_GATES'), { hostedLinux: true })
+    for (const check of ['_dprint-check', '_tao-check', '_repo-lint']) {
+      Expect(hosted).toContain(check)
+    }
+  })
+
   Test('the real Verify workflow runs the gates the complement leaves to its Linux partitions', async () => {
     // isHostGate drops a runsOnHostedLinux gate on the catalog flag alone; only the workflow's
     // --hosted-linux makes the partitions run it. Without the flag they report it skipped and Verify
