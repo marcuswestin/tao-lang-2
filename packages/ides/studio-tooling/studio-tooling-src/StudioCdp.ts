@@ -188,14 +188,19 @@ export class StudioCdp {
         Platform.hostPlatform === 'linux' ? () => describeChromeStall(startedCommand.pid, userDataRoot) : undefined,
       )
       const target = await waitForTarget(`http://127.0.0.1:${port}`, undefined, command, diagnostic)
+      captureChromeOutputOwners(startedCommand)
       client = await CdpClient.connect(requireWebSocketUrl(target), command, diagnostic)
       const connectedClient = client
       const studio = new StudioCdp(client, async () => {
-        try {
-          connectedClient.close()
-        } finally {
-          await stopChrome(startedCommand, userDataRoot, 'SIGTERM')
-        }
+        await closeChrome([
+          () => {
+            if (startedCommand.exitCode === null && startedCommand.signalCode === null) {
+              captureChromeOutputOwners(startedCommand)
+            }
+          },
+          () => connectedClient.close(),
+          async () => await stopChrome(startedCommand, userDataRoot, 'SIGTERM'),
+        ])
       }, options)
       await configure(client, { viewport: { width: 1440, height: 900 } })
       return studio
@@ -254,6 +259,7 @@ export class StudioCdp {
   }
 
   static readonly testing = {
+    closeChrome,
     stopChrome,
     waitForActivePort,
     attach(
@@ -1398,6 +1404,32 @@ async function findChromePath(): Promise<string> {
     ?? Errors.throwUserInput('Studio smoke requires Chrome or Chromium; set TAO_STUDIO_CHROME_PATH.')
 }
 
+/** Retain daemonized output writers before Chrome exits and releases its endpoint identity. */
+function captureChromeOutputOwners(command: CLI.StartedCommand): void {
+  if (Platform.hostPlatform === 'darwin') {
+    Assert.defined(command.captureOutputOwners, 'Expected supervised Chrome output ownership capture.')
+    command.captureOutputOwners()
+  }
+}
+
+/** Attempt each owned cleanup step and keep the first failure as the diagnostic cause. */
+async function closeChrome(steps: readonly (() => void | Promise<void>)[]): Promise<void> {
+  const failures: unknown[] = []
+  for (const step of steps) {
+    try {
+      await step()
+    } catch (error) {
+      failures.push(error)
+    }
+  }
+  if (failures.length > 0) {
+    Errors.throwHostEnvironment('Chrome cleanup could not be verified.', {
+      cause: failures[0],
+      details: { failures: failures.map(error => Errors.formatForLog(error).slice(0, 4_000)) },
+    })
+  }
+}
+
 /** Join supervised Chrome ownership before releasing observers, even after the direct child exited. */
 async function stopChrome(
   command: Pick<CLI.StartedCommand, 'exitCode' | 'signalCode' | 'kill' | 'waitForClose' | 'closeOutput' | 'dispose'>,
@@ -1405,11 +1437,18 @@ async function stopChrome(
   signal: Platform.ProcessSignal,
 ): Promise<void> {
   const failures: unknown[] = []
+  let joined = false
   try {
     if (command.exitCode === null && command.signalCode === null) {
       command.kill(signal)
     }
-    await command.waitForClose()
+    const result = await command.waitForClose()
+    joined = true
+    if (result.exitCode !== null && result.exitCode !== 0) {
+      Errors.throwHostEnvironment('Chrome reported an unsuccessful exit during cleanup.', {
+        details: { exitCode: result.exitCode, signal: result.signal },
+      })
+    }
   } catch (error) {
     failures.push(error)
   } finally {
@@ -1423,16 +1462,18 @@ async function stopChrome(
     } catch (error) {
       failures.push(error)
     }
-    try {
-      await FS.remove(profile)
-    } catch (error) {
-      failures.push(error)
+    if (joined) {
+      try {
+        await FS.remove(profile)
+      } catch (error) {
+        failures.push(error)
+      }
     }
   }
   if (failures.length > 0) {
     Errors.throwHostEnvironment('Chrome cleanup could not be verified.', {
       cause: failures[0],
-      details: { failures: failures.map(error => Errors.formatForLog(error).slice(0, 4_000)) },
+      details: { profile, failures: failures.map(error => Errors.formatForLog(error).slice(0, 4_000)) },
     })
   }
 }

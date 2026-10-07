@@ -24,10 +24,17 @@ const clearTimeoutSlot = testOverrideSlot<ClearTimeoutCall>({
   },
 })
 const mutableProcessTree = ProcessTree as unknown as {
+  captureInheritedOutputOwners: typeof ProcessTree.captureInheritedOutputOwners
   groupMembers: typeof ProcessTree.groupMembers
   signalGroup: typeof ProcessTree.signalGroup
   refreshDescendants: typeof ProcessTree.refreshDescendants
 }
+const outputOwnersSlot = testOverrideSlot<typeof ProcessTree.captureInheritedOutputOwners>({
+  read: () => ProcessTree.captureInheritedOutputOwners,
+  write: value => {
+    mutableProcessTree.captureInheritedOutputOwners = value
+  },
+})
 const refreshDescendantsSlot = testOverrideSlot<typeof ProcessTree.refreshDescendants>({
   read: () => ProcessTree.refreshDescendants,
   write: value => {
@@ -167,6 +174,46 @@ async function waitForGone(tracked: TrackedProcess, description: string): Promis
 }
 
 Describe('CLI process policy', () => {
+  Test('explicit output capture retains escaped identities without adding discovery to ordinary polls', async () => {
+    const owner = await startTree({ processPolicy: 'test', detached: true })
+    const escaped = await startTree({ processPolicy: 'test', detached: true })
+    const calls: number[] = []
+    let polled = false
+    const refresh = ProcessTree.refreshDescendants
+    const restoreRefresh = refreshDescendantsSlot.install((rootPid, retained, seams) => {
+      if (rootPid === owner.child.pid) {
+        polled = true
+      }
+      return refresh(rootPid, retained, seams)
+    })
+    const restore = outputOwnersSlot.install(pid => {
+      calls.push(pid)
+      return [escaped.grandchild, escaped.child]
+    })
+    try {
+      Expect(ProcessTree.processGroupOf(owner.child.pid)).not.toBe(ProcessTree.processGroupOf(escaped.child.pid))
+      await until(() => polled, { description: 'an ordinary ownership poll before explicit output capture' })
+      Expect(calls).toEqual([])
+      Expect(owner.command.captureOutputOwners).toBeDefined()
+      owner.command.captureOutputOwners!()
+      Expect(calls).toEqual([owner.child.pid])
+      owner.command.kill('SIGTERM')
+      await owner.command.waitForClose()
+      Expect(isAlive(escaped.child)).toBe(false)
+      Expect(isAlive(escaped.grandchild)).toBe(false)
+      await escaped.command.waitForClose()
+      Expect(calls).toEqual([owner.child.pid])
+    } finally {
+      restoreRefresh()
+      restore()
+      for (const started of [owner, escaped]) {
+        started.command.kill('SIGKILL')
+        await started.command.waitForClose()
+        started.command.dispose()
+      }
+    }
+  })
+
   Test('cancellation rewalks retained owners while the direct child is still live', async () => {
     const started = await startTree({ processPolicy: 'test' })
     const refresh = ProcessTree.refreshDescendants

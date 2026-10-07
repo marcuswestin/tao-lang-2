@@ -161,6 +161,8 @@ export type StartedCommand = {
    */
   readonly pid?: number
   readonly signalCode: Platform.ProcessSignal | null
+  /** Explicit cold capture of escaped output writers for a live supervised child. */
+  captureOutputOwners?: () => void
   closeOutput: () => Promise<void>
   dispose: () => void
   endStdin: () => void
@@ -576,6 +578,17 @@ function startCommand(
     args,
     command,
     cwd: spec.cwd,
+    captureOutputOwners: () => {
+      if (policy !== 'test' || child.pid === undefined || child.exitCode !== null || child.signalCode !== null) {
+        throwUnexpected('Expected a live supervised child before capturing output ownership.')
+      }
+      const captured = ProcessTree.captureInheritedOutputOwners(child.pid)
+      const owned = new Map((trackedDescendants ?? []).map(entry => [`${entry.pid}:${entry.startedAt}`, entry]))
+      for (const entry of captured) {
+        owned.set(`${entry.pid}:${entry.startedAt}`, entry)
+      }
+      trackedDescendants = [...owned.values()]
+    },
     dispose: () => {
       releaseCompletion()
       releaseOwnership()
