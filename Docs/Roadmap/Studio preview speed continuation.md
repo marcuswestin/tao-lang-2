@@ -11,21 +11,35 @@ timings.
 
 ### Current qualification, 2026-10-07
 
-The integrated browser custody repair passes the complete local changed-scope gate at
-`120ef1ee7`. Control `45ee218b9` and that candidate each completed all six canonical cases
+The integrated compiler, browser custody and final-audit changes pass the complete local
+changed-scope gate at `c716bf157` (360.2 seconds). Control `a51537cbc` and that candidate
+each completed all six canonical cases
 quietly with correct computed paint and cleanup, and both passed language budgets. Both still
 failed numerical Studio ceilings; the direct-delivery qualification stage did not run.
 Their exact runs and phase results are recorded in the
 [execution plan](<Studio preview speed execution plan.md#current-qualification-state-2026-10-07>).
 No qualified gain or hosted merge proof exists.
 
-Further narrow work prepares immutable effect indexes once per snapshot, carries validation's
+The implemented narrow work prepares immutable effect indexes once per snapshot, carries validation's
 native inspection only into the immediate implicit-root compile, and avoids the metadata-phase
 tooling audit while retaining source/epoch checks and the independent final publication audit.
-Focused tests and compiler mutations pass; current integrated gates and fresh paired measurements
-remain required. Synchronous authoritative processing still blocks saves under actual overlap;
+Focused tests, compiler mutations and the integrated gate pass. Both candidate one-file cases
+fit their source and total ceilings; full HNReader fallback and padding tails still fail in both
+trees. Fresh paired repeats and hosted proof remain pending. Synchronous authoritative processing
+still blocks saves under actual overlap;
 worker/admission, shared-snapshot and dependency-directed changes remain a separate scope.
 Landing authorization remains valid, and all ceilings and scheduling limits are preserved.
+The bounded production slice will land with the failed numerical verdicts recorded; the larger
+worker/admission, dependency-directed and immutable-transfer proposals stay separate in the
+execution plan. Two mutable workspace owners still exist: tooling and preview. No unsafe shared
+mutable workspace or snapshot is introduced.
+
+Rapid-save/revert stress found and repaired a save bug: a revert matching old acknowledged text
+was skipped while an earlier write could still change disk. Commit `80ca2b4b4` admits that save
+while writes are pending, with the same repair in the control and 111 passing client tests on
+each tree. Whole-app and fresh-activation/multiple-preview trials pass with actual save-response,
+computed padding, subsequent paint and final authoritative source parity witnesses. Exact reports,
+retained failures and the populated-state limitation are in the execution plan.
 
 ### Earlier browser cleanup qualification
 

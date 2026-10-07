@@ -3,8 +3,8 @@
 - **Status:** Candidate
 - **Section:** External
 - **Area:** Compiler validation, periodic performance qualification
-- **Impact:** The unchanged whole-app session-check ceiling prevents the Studio speed slice from
-  reaching its real editor measurement stages, even after quiet exclusive admission succeeds.
+- **Impact:** The earlier whole-app session-check failure is repaired in the candidate/common
+  compiler baseline. Complete Studio qualification still fails unchanged full-processing ceilings.
 - **Evidence:** On 2026-10-07, candidate `ae0dbf4c6` integrating main `5a2ba4b6c` failed the
   standalone run `performance-8c6a878c-d57c-4236-9772-bb0ecdf5329c`: session-check median
   1.4 seconds against 1.3 seconds, no active peers, load 4.0166–4.6284 on 18 CPUs. Current-main
@@ -26,8 +26,14 @@
   snapshot. Each owner keeps independent source-root context, fact discovery and analysis;
   changed evidence and new linked builds stay cold. The owning 359 tests and disabled-retention /
   cross-snapshot mutation checks pass. An isolated ten-iteration diagnostic reports session check
-  983 milliseconds, within the unchanged ceiling. Complete standalone qualification remains
-  pending, so this entry stays open. Cross-entry dependency reuse remains separate future work.
+  983 milliseconds, within the unchanged ceiling. Prepared indexes and immediate native-attempt
+  carry retain owner-specific analysis and an independent final audit. Complete quiet candidate
+  run `performance-ef25343b-6854-4629-a41a-784efd3dcf02` passes language budgets (session check
+  922ms), all six computed-paint journeys and cleanup; the matching control run
+  `performance-080112d6-6e7d-4243-a200-fc0f90255600` also passes language/correctness/cleanup.
+  Both fail remaining Studio ceilings under full processing. This entry stays open against its
+  original complete acceptance bar; no failed verdict is converted to a pass. Cross-entry
+  dependency reuse and worker/admission isolation remain separate future work.
 - **Dependencies:** The Studio preview speed continuation roadmap owns the affected production
   slice and the separate follow-up scope decision.
 - **Acceptance:** Complete quiet standalone qualification passes all unchanged language and

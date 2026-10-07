@@ -1,9 +1,9 @@
 # Studio preview speed execution plan
 
-Prepared 2026-10-06; updated 2026-10-07. Status: the integrated browser-cleanup repair passes
-the complete local changed-scope gate at `120ef1ee7`. Subsequent narrow compiler and audit
-reductions have focused proof and still need integrated verification. Performance qualification
-remains pending.
+Prepared 2026-10-06; updated 2026-10-07. Status: the integrated compiler, browser-cleanup and
+final-audit changes pass the complete local changed-scope gate at `c716bf157` (360.2 seconds).
+The subsequent rapid-revert save repair passes focused tests and real whole-app/fresh-preview
+stress. Quiet measurements retain failed Studio budget verdicts; hosted landing proof is pending.
 The Developer authorized landing on 2026-10-07; the current merge gates still have to pass.
 The common compiler repair passes language budgets; complete quiet Studio runs still breach ceilings.
 The [continuation roadmap](<Studio preview speed continuation.md>) remains
@@ -15,21 +15,46 @@ main-only preparation plan as the proposed execution sequence, without supersedi
 
 ### Current qualification state, 2026-10-07
 
-Control `45ee218b9` run `performance-fa5f324c-048d-49f6-9a61-13a4ed0fe842` completed in
-225.2s and candidate `120ef1ee7` run `performance-50b47486-3620-4bd6-bb0c-2cb0302496a5`
-completed in 220.5s. Both had no peers, stayed below quiet admission limits, passed language
-budgets (982ms and 972ms session checking), and passed all six computed-paint and cleanup cases.
+Control `a51537cbc` run `performance-080112d6-6e7d-4243-a200-fc0f90255600` completed in
+219.0s and candidate `c716bf157` run `performance-ef25343b-6854-4629-a41a-784efd3dcf02`
+completed in 206.8s. Both had no peers, stayed below quiet admission limits, passed language
+budgets, and passed all six computed-paint and cleanup cases. Candidate session checking was 922ms.
 Both failed numerical Studio ceilings; the candidate's direct-delivery stage was not admitted.
-These are completed first paired members with failed budget verdicts, not a qualified speed claim.
+These are completed matching-baseline measurements with failed budget verdicts, not a qualified
+speed claim or a completed alternating-order comparison.
 
 | Case                     | Control source p50 / p95 ms | Candidate source p50 / p95 ms |
 | ------------------------ | --------------------------- | ----------------------------- |
-| One-file publication on  | 447 / 1031                  | 220 / 255                     |
-| One-file publication off | 462 / 924                   | 228 / 242                     |
-| HNReader publication on  | 1052 / 1363                 | 1060 / 1083                   |
-| HNReader publication off | 1002 / 1048                 | 1041 / 1112                   |
-| Padding publication on   | 1560 / 2025                 | 1171 / 1511                   |
-| Padding publication off  | 1560 / 1570                 | 1298 / 1466                   |
+| One-file publication on  | 449 / 830                   | 163 / 182                     |
+| One-file publication off | 420 / 681                   | 164 / 170                     |
+| HNReader publication on  | 1015 / 1057                 | 1032 / 1428                   |
+| HNReader publication off | 1011 / 1022                 | 1037 / 1093                   |
+| Padding publication on   | 1421 / 1501                 | 265 / 1377                    |
+| Padding publication off  | 1437 / 1485                 | 250 / 1393                    |
+
+Candidate save-to-paint results are 285/301, 290/296, 1134/1524, 1173/1224, 370/1461 and
+328/1467ms in the same order. Both one-file cases fit their source and total ceilings. Full
+HNReader fallback and padding tails during actual full processing remain over budget in both
+trees. The bounded production slice will retain those failures and use the authorized hosted
+landing route; completing the larger worker/admission design is separate work, not an implicit
+expansion of this slice. No ceiling, timeout, admission rule or scheduling limit is changed.
+
+The combined rapid-save/revert probe exposed a real editor bug: reverting to acknowledged text
+while an earlier write was pending cleared the dirty flag and skipped the requested revert.
+`80ca2b4b4` tracks pending writes through settlement and admits that explicit save. The control
+includes the same editor fix (`bf64ca6ae`), alongside the common compiler and browser baseline.
+The 111-test client suite passes on both trees; disabling pending-write tracking fails its new
+deterministic witness. The smoke additionally checks all four actual rapid-save responses before
+final source/manifest parity, avoiding an old matching paint as a false completion witness.
+
+Fresh-activation/multiple-preview stress passes in 33.1s
+(`hnreader-editor-padding-publication-off-1791409321935.json`), and whole-app stress passes in
+34.9s (`hnreader-editor-padding-publication-off-1791409258857.json`). Both include width changes,
+revert, invalid-to-valid recovery, four rapid saves, a two-file burst, final authoritative parity
+and a save during traced running full work. The fresh case activates another preview during an
+overlay with no existing iframe reload. These are tracing-enabled correctness diagnostics;
+their 240/1584ms and 317/1884ms total median/tail are not quiet numerical qualification. Populated
+data/navigation state retention remains unproved by these two fixtures.
 
 Diagnostic traces retain the synchronous full-work overlap: queued padding saves still wait
 about 1.6s. A one-file fast save separately repeats native inspection at validation/compilation
