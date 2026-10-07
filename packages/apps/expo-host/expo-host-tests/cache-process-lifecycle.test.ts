@@ -19,7 +19,7 @@ function startWorker(home: string, source: string) {
     args: [
       `--tsconfig=${FS.resolvePath('tsconfig.json', packageRoot)}`,
       '-e',
-      `import { FS, Time } from ${JSON.stringify(sharedModule)};
+      `import { FS, Platform, Time } from ${JSON.stringify(sharedModule)};
        import { JestTransformCache } from ${
         JSON.stringify(FS.resolvePath('expo-host-src/testing/jest-transform-cache.ts', packageRoot))
       };
@@ -91,6 +91,61 @@ function heldReader(kind: CacheKind, root: string, ready: string, waiting?: stri
 }
 
 Describe('cache process lifecycle', () => {
+  Test('direct cache startup tolerates a worker publishing a transform during enumeration', async () => {
+    const home = await mkTestDir('cache-process-publication-')
+    const root = FS.resolvePath('cache/jest-standalone-v2/aaaaaaaaaaaaaaaa', home)
+    const temporary = FS.resolvePath('data/transform.tmp', root)
+    const published = FS.resolvePath('data/transform', root)
+    const worker = startWorker(
+      home,
+      `
+      const root = ${JSON.stringify(root)};
+      const cacheSource = ${JSON.stringify(FS.resolvePath('jest-direct-cache.cjs', packageRoot))};
+      const load = Platform.createModuleRequire(cacheSource);
+      const loadedModule = { exports: {} };
+      let published = false;
+      let ready = false;
+      // Evaluate the Node-loaded coordinator with a private filesystem boundary. No global
+      // filesystem module is mutated, and the rename uses the shared wrapper.
+      new Function('require', 'module', FS.readTextSync(cacheSource))(name => {
+        const dependency = load(name);
+        if (name !== 'node:fs') return dependency;
+        return { ...dependency, readdirSync(directory, options) {
+          const entries = dependency.readdirSync(directory, options);
+          if (ready && directory === FS.resolvePath('data', root) && !published) {
+            published = true;
+            FS.renameSync(${JSON.stringify(temporary)}, ${JSON.stringify(published)});
+          }
+          return entries;
+        } };
+      }, loadedModule);
+      const coordinator = loadedModule.exports;
+      const firstLease = await coordinator.start(root);
+      await FS.writeText(${JSON.stringify(temporary)}, 'published');
+      await FS.writeText(FS.resolvePath('data/keeper', root), 'keep');
+      ready = true;
+      try {
+        const secondLease = await coordinator.start(root);
+        await coordinator.finish(root, secondLease);
+      } finally {
+        await coordinator.finish(root, firstLease);
+      }
+      await FS.writeJson(FS.resolvePath('publication.json', root), { published });
+    `,
+    )
+    try {
+      await worker.finished()
+      Expect(await FS.readJson(FS.resolvePath('publication.json', root))).toEqual({ published: true })
+      Expect(await FS.readText(published)).toBe('published')
+      Expect(await FS.readText(FS.resolvePath('data/keeper', root))).toBe('keep')
+      Expect(await FS.readJson(FS.resolvePath('size.json', root))).toEqual({ files: 2, bytes: 13 })
+      Expect(await FS.listDir(FS.resolvePath('leases', root))).toEqual([])
+    } finally {
+      await worker.stop()
+      await FS.remove(home)
+    }
+  })
+
   for (const kind of ['managed', 'direct'] as const) {
     Test(`${kind} cache plateaus across fresh processes without writing to the login-home cache`, async () => {
       const home = await mkTestDir(`cache-process-plateau-${kind}-`)

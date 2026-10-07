@@ -17,8 +17,9 @@ const failInspection = (message, options = {}) => fail(message, {
   details: { ...options.details, inspection: request.kind,
     requestedPids: request.pids.slice(0, 64), requestedPidCount: request.pids.length },
 });
-const { dlopen, FFIType, ptr } = require('bun:ffi');
+const { dlopen, FFIType, ptr, read } = require('bun:ffi');
 const library = dlopen('/usr/lib/libproc.dylib', {
+  __error: { args: [], returns: FFIType.ptr },
   proc_listchildpids: {
     args: [FFIType.i32, FFIType.ptr, FFIType.i32], returns: FFIType.i32,
   },
@@ -27,6 +28,10 @@ const library = dlopen('/usr/lib/libproc.dylib', {
   },
   proc_pidinfo: {
     args: [FFIType.i32, FFIType.i32, FFIType.u64, FFIType.ptr, FFIType.i32],
+    returns: FFIType.i32,
+  },
+  sysctl: {
+    args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.u64],
     returns: FFIType.i32,
   },
 });
@@ -51,17 +56,23 @@ try {
     });
   };
   const identity = (pid, parentPid, direct = false) => {
-    const bytes = new Uint8Array(136);
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let bytes = new Uint8Array(136);
+    let view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let fields = { status: 4, pid: 12, parent: 16, group: 100, seconds: 120, micros: 128,
+      command: 64, commandLength: 32, name: 48, nameLength: 16 };
     // A direct query first excludes zombies, then checks their records before claiming absence.
     // Enumeration and identity queries are separate observations. Recheck an incomplete record
     // before declaring a live PID unreadable; persistent uncertainty still fails inspection.
     let returnedBytes;
+    let nativeErrno;
     for (let attempt = 0; attempt < (direct ? 4 : 3); attempt++) {
       // Give an exit transition time to settle; immediate calls can repeat the same observation.
       // Only incomplete reads wait, at most 10 ms for enumeration or 15 ms for a direct query.
       if (attempt > 0) Atomics.wait(retryWait, 0, 0, 5);
       returnedBytes = library.symbols.proc_pidinfo(pid, 3, direct && attempt === 0 ? 0 : 1, ptr(bytes), bytes.byteLength);
+      // libproc translates a failed syscall into zero bytes. Capture its thread-local errno
+      // immediately, before another native call or the liveness probe can replace it.
+      nativeErrno = returnedBytes === 0 ? read.i32(library.symbols.__error()) : undefined;
       if (returnedBytes >= bytes.byteLength && view.getUint32(12, true) === pid) break;
       // Retained exited PIDs are queried on every ownership poll. Do not synchronously wait
       // for their records to recover once ESRCH already proves absence. Every other observation
@@ -72,40 +83,81 @@ try {
         }
       }
     }
-    const details = { routine: 'proc_pidinfo', pid, returnedBytes, expectedBytes: bytes.byteLength };
+    const details = { routine: 'proc_pidinfo', pid, returnedBytes, expectedBytes: bytes.byteLength,
+      ...(nativeErrno ? { nativeErrno } : {}) };
+    if (returnedBytes < bytes.byteLength && nativeErrno === 1) {
+      // The SDK-declared KERN_PROC_PID process table has no same-effective-UID check.
+      // Apple treats this system-tool interface as SPI; reject unexpected layouts.
+      // Read one complete LP64 kinfo_proc (arm64 and x64 SDK ABI), including
+      // its PID, parent, group, status and the same kernel seconds:microseconds identity.
+      // Never combine metadata from a short record with a separately observed start time.
+      const tableBytes = new Uint8Array(648);
+      const tableSize = new BigUint64Array([BigInt(tableBytes.byteLength)]);
+      const mib = new Int32Array([1, 14, 1, pid]); // CTL_KERN, KERN_PROC, KERN_PROC_PID
+      const tableResult = library.symbols.sysctl(ptr(mib), mib.length, ptr(tableBytes), ptr(tableSize), null, 0);
+      const tableErrno = tableResult === -1 ? read.i32(library.symbols.__error()) : undefined;
+      details.tableResult = tableResult;
+      details.tableReturnedBytes = Number(tableSize[0]);
+      if (tableErrno) details.tableErrno = tableErrno;
+      if (tableResult === 0 && tableSize[0] === BigInt(tableBytes.byteLength)) {
+        bytes = tableBytes;
+        view = new DataView(bytes.buffer);
+        fields = { status: 36, pid: 40, parent: 560, group: 564, seconds: 0, micros: 8,
+          command: 243, commandLength: 17, name: 243, nameLength: 17 };
+        returnedBytes = bytes.byteLength;
+      }
+    }
     if (returnedBytes < bytes.byteLength) {
+      if (nativeErrno === 1) {
+        const shortBytes = new Uint8Array(64);
+        const shortView = new DataView(shortBytes.buffer);
+        details.shortReturnedBytes = library.symbols.proc_pidinfo(pid, 13, 1, ptr(shortBytes), shortBytes.byteLength);
+        if (details.shortReturnedBytes === shortBytes.byteLength) {
+          details.shortPid = shortView.getUint32(0, true);
+          details.shortStatus = shortView.getUint32(12, true);
+          details.shortUid = shortView.getUint32(36, true);
+          // SHORTBSDINFO is exempt from the full record's same-user policy. A complete
+          // matching SZOMB record proves execution ended, but grants no signal authority.
+          // Group joins still require the full exact identities across both snapshots.
+          if (details.shortPid === pid && details.shortStatus === 5 && request.kind !== 'live-group') {
+            return undefined;
+          }
+        }
+      }
       return unreadableIdentity(pid, { ...details, failureKind: 'identity-unreadable' });
     }
-    if (view.getUint32(12, true) !== pid) {
+    if (view.getUint32(fields.pid, true) !== pid) {
       return unreadableIdentity(pid, { ...details, failureKind: 'identity-pid-mismatch' });
     }
     // proc_bsdinfo.pbi_status uses BSD SZOMB (5): execution ended, even if not yet reaped.
-    const zombie = view.getUint32(4, true) === 5;
+    const zombie = (fields.status === 36 ? view.getUint8(fields.status) : view.getUint32(fields.status, true)) === 5;
+    const startedAt = String(view.getBigUint64(fields.seconds, true)) + ':'
+      + String(fields.micros === 8 ? view.getUint32(fields.micros, true) : view.getBigUint64(fields.micros, true));
     if (direct && zombie) return undefined;
     if (request.kind === 'live-group' && zombie) {
-      if (view.getUint32(100, true) !== request.pids[0]) {
+      if (view.getUint32(fields.group, true) !== request.pids[0]) {
         failInspection('macOS process ' + pid + ' changed process group during inspection.', {
           details: { failureKind: 'group-changed', routine: 'proc_pidinfo', pid },
         });
       }
-      identifiedZombies.set(pid, String(view.getBigUint64(120, true)) + ':' + String(view.getBigUint64(128, true)));
+      identifiedZombies.set(pid, startedAt);
       return undefined;
     }
     // A reparented zombie has finished execution. Retain its exact identity for enumeration,
     // without treating the kernel's reaping transition as a live ownership change.
-    if (!zombie && parentPid !== undefined && view.getUint32(16, true) !== parentPid) {
+    if (!zombie && parentPid !== undefined && view.getUint32(fields.parent, true) !== parentPid) {
       failInspection('macOS process ' + pid + ' changed parent during inspection.', {
         details: { ...details, failureKind: 'parent-changed', expectedParentPid: parentPid,
-          actualParentPid: view.getUint32(16, true) },
+          actualParentPid: view.getUint32(fields.parent, true) },
       });
     }
     const decode = (offset, length) => new TextDecoder()
       .decode(bytes.subarray(offset, offset + length)).replace(/\0.*$/, '');
     return {
-      command: decode(64, 32) || decode(48, 16),
+      command: decode(fields.command, fields.commandLength) || decode(fields.name, fields.nameLength),
       pid,
-      group: view.getUint32(100, true),
-      startedAt: String(view.getBigUint64(120, true)) + ':' + String(view.getBigUint64(128, true)),
+      group: view.getUint32(fields.group, true),
+      startedAt,
     };
   };
   const enumeratedIdentity = (pid, parentPid) => identity(pid, parentPid);
@@ -235,6 +287,14 @@ function inspectionFailureFields(value: unknown): Errors.ErrorDetails {
       'returnedBytes',
       'expectedBytes',
       'probeErrno',
+      'nativeErrno',
+      'shortReturnedBytes',
+      'shortPid',
+      'shortStatus',
+      'shortUid',
+      'tableResult',
+      'tableReturnedBytes',
+      'tableErrno',
       'helperStatus',
       'expectedParentPid',
       'actualParentPid',

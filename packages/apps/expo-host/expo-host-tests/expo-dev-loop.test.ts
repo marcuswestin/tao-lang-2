@@ -48,7 +48,7 @@ Describe('Expo dev-loop output severity', () => {
     Expect(devLoopOutputKind('stdout', 'Error: this one already went to stdout')).toBe('info')
   })
 
-  Test('turns a LaunchServices refusal into the one sentence that names a remedy', () => {
+  Test('keeps a LaunchServices refusal readable after automatic runtime preparation', () => {
     const stderr = [
       'An error was encountered processing the command (domain=LSApplicationWorkspaceErrorDomain, code=115):',
       'Simulator device failed to open exp://192.168.50.107:8081.',
@@ -58,9 +58,8 @@ Describe('Expo dev-loop output severity', () => {
     const message = simulatorOpenFailure('iPhone 17 Pro', 'exp://192.168.50.107:8081', { stderr })
 
     Expect(message).toBe(
-      'iPhone 17 Pro did not open exp://192.168.50.107:8081: no app installed on it handles that URL'
-        + ' — that simulator has no runtime for Expo SDK 57;'
-        + ' `bunx expo start --ios` in packages/apps/expo-host installs one',
+      'iPhone 17 Pro did not open exp://192.168.50.107:8081:'
+        + ' no installed iOS runtime handles that URL after runtime preparation for Expo SDK 57',
     )
   })
 

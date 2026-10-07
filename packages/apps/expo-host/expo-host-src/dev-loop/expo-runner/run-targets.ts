@@ -13,6 +13,7 @@ import { type AgentChromeSession, startAgentChrome } from './AgentChrome'
 import type { AndroidSession } from './android'
 import { expoSdkMajor, type ExpoSessionConfig } from './expo-config'
 import { type FixedIosLaunchOperations, runFixedIosLaunchCommand } from './fixedIosLaunchCommand'
+import { prepareSimulatorExpoGo, type SimulatorExpoGoDependencies } from './IosExpoGo'
 import type { ExpoMetroSession } from './metro'
 import { openPhysicalDevice } from './physical-device'
 
@@ -33,6 +34,8 @@ type ExpoTargetContext = {
   metro: ExpoMetroSession
   mobileDispatch: Map<string, NonNullable<DevLoopTargetReceipt['mobileDispatch']>>
   iosLaunch?: FixedIosLaunchOperations
+  iosExpoGo?: SimulatorExpoGoDependencies
+  iosSimulator?: typeof ensureIosSimulator
 }
 export type DevStartupTarget = 'android' | 'ios' | 'web' | 'desktop'
 
@@ -41,7 +44,12 @@ export function createExpoTargets(
   config: ExpoSessionConfig,
   metro: ExpoMetroSession,
   android: AndroidSession,
-  operations: { startChrome?: typeof startAgentChrome; iosLaunch?: FixedIosLaunchOperations } = {},
+  operations: {
+    startChrome?: typeof startAgentChrome
+    iosLaunch?: FixedIosLaunchOperations
+    iosExpoGo?: SimulatorExpoGoDependencies
+    iosSimulator?: typeof ensureIosSimulator
+  } = {},
 ) {
   const context: ExpoTargetContext = {
     android,
@@ -49,6 +57,8 @@ export function createExpoTargets(
     metro,
     mobileDispatch: new Map(),
     iosLaunch: operations.iosLaunch,
+    iosExpoGo: operations.iosExpoGo,
+    iosSimulator: operations.iosSimulator,
   }
   let chromeLaunch: Promise<AgentChromeSession> | undefined
   const openSessionWeb = async (shouldStop: () => boolean = () => false): Promise<boolean> => {
@@ -129,14 +139,18 @@ async function openAndroid(context: ExpoTargetContext): Promise<boolean> {
 /**
  * openIosSimulator opens the current app on an iOS Simulator, booting one when needed: in a
  * compatible prebuilt Companion when one is at hand, installed first if the simulator lacks that
- * build, and otherwise through Expo's own link, which Expo Go answers.
+ * build, and otherwise in an SDK-matched Expo Go installed automatically when needed.
  */
 async function openIosSimulator(
   context: ExpoTargetContext,
   shouldStop: () => boolean = () => false,
 ): Promise<boolean> {
   ReleaseCapabilities.require('ios-simulator')
-  const simulator = await ensureIosSimulator(context.config, shouldStop, context.iosLaunch)
+  const simulator = await (context.iosSimulator ?? ensureIosSimulator)(
+    context.config,
+    shouldStop,
+    context.iosLaunch,
+  )
   if (!simulator) {
     return false
   }
@@ -150,6 +164,17 @@ async function openIosSimulator(
   }
   let link = companionDevClientUrl({ host: '127.0.0.1', port: context.config.EXPO_PORT })
   if (!inCompanion) {
+    await prepareSimulatorExpoGo(
+      simulator.udid,
+      simulator.name,
+      context.config,
+      shouldStop,
+      context.iosLaunch,
+      context.iosExpoGo,
+    )
+    if (shouldStop()) {
+      return false
+    }
     const endpoint = await context.metro.expoOpenEndpoint('ios')
     if (shouldStop()) {
       return false
@@ -237,9 +262,8 @@ async function prepareCompanionOnSimulator(
  * sentence is the one naming the URL, and the dev loop printed all four in the colour it uses for
  * real breakage. The common cause has a remedy worth naming instead: LaunchServices error 115 is
  * "no installed application handles this URL", which on a simulator means no runtime for this SDK is
- * installed on it. Expo Go still serves a simulator — Expo publishes a build per SDK generation and
- * the account requirement its iPhone build carries does not apply there — but Tao never installs
- * one, so the remedy names the command that does.
+ * installed on it. Runtime preparation now installs the matching Expo Go before opening the link;
+ * this message describes a remaining refusal without sending the developer to a second dev server.
  */
 export function simulatorOpenFailure(
   simulatorName: string,
@@ -248,9 +272,7 @@ export function simulatorOpenFailure(
 ): string {
   const detail = result.stderr.trim() || result.error?.message || 'unknown error'
   const reason = /LSApplicationWorkspaceErrorDomain, code=115/.test(detail)
-    ? `no app installed on it handles that URL — that simulator has no runtime for Expo SDK ${
-      expoSdkMajor() ?? ''
-    }; \`bunx expo start --ios\` in packages/apps/expo-host installs one`
+    ? `no installed iOS runtime handles that URL after runtime preparation for Expo SDK ${expoSdkMajor() ?? ''}`
     : detail.split('\n').map(line => line.trim()).filter(line => line.length > 0).at(-1) ?? 'unknown error'
   return `${simulatorName} did not open ${link}: ${reason}`
 }
