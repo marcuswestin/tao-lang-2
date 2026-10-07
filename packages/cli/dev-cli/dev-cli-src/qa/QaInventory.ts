@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, Platform, ReleaseCapabilities } from '@shared'
 import { QaScenarioApps } from './QaScenarioApps'
+import { QaTutorialProject } from './QaTutorialProject'
 
 const storyPlan = 'Docs/MVP Roadmap/Plan - Initial release QA.md'
 const internalDocument = /^(?:Docs\/(?:QA|Roadmap|MVP Roadmap)\/|agents\/|\.rulesync\/)|(?:^|\/)(?:AGENTS|CLAUDE)\.md$/u
@@ -271,11 +272,11 @@ export class QaInventory {
           desktop: 'QA views/desktop',
         },
         captureApp: 'ReadingList',
-        captureProject: '.artifacts/qa/tutorial-review',
+        captureProject: QaTutorialProject.path,
         captureSources: {
-          'phone-light': 'ReadingList.tao',
-          'phone-dark': 'ReadingList.tao',
-          desktop: 'ReadingList.tao',
+          'phone-light': QaTutorialProject.file,
+          'phone-dark': QaTutorialProject.file,
+          desktop: QaTutorialProject.file,
         },
       },
     ]

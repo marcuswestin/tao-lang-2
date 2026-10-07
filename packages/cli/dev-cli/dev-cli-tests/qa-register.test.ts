@@ -377,6 +377,39 @@ Describe('QA evidence register', () => {
     },
   )
 
+  Test(
+    'a tutorial visual pass without a capture of the tutorial project says so instead of failing on a path',
+    async () => {
+      const { root, qa } = await fixture()
+      const run = await qa.run(1, 'all')
+      const image = '.artifacts/capture/phone.png'
+      const snapshot = '.artifacts/capture/source-snapshot.json'
+      await FS.writeText(FS.resolvePath(image, root), 'phone image bytes')
+      await FS.writeJson(FS.resolvePath(snapshot, root), {
+        owner: 'qa-capture',
+        status: 'complete',
+        app: 'ReadingList',
+        originalProject: FS.resolvePath('.artifacts/qa/tutorial-review', await FS.realPath(root)),
+        cells: [],
+      })
+      Expect(await FS.exists(FS.resolvePath('.artifacts/qa/tutorial-review', root))).toBe(false)
+      await Expect(
+        qa.recordFile(
+          await input(root, 'tutorial-visual', {
+            runId: run.runId,
+            surfaceId: 'visual:reading-list',
+            dimension: 'visual',
+            channel: 'phone-light',
+            reviewer: 'agent',
+            outcome: 'pass',
+            notes: 'Inspected the phone capture.',
+            evidence: [image, snapshot],
+          }),
+        ),
+      ).rejects.toThrow('visual:reading-list requires a capture of .artifacts/qa/tutorial-review.')
+    },
+  )
+
   Test('reports and selects each phase from its own observations', async () => {
     const { root, qa } = await fixture()
     const cell = {

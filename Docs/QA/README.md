@@ -62,8 +62,12 @@ looks right; the message stays out of the artifacts, so reproduce it in a dev se
 Adding authored `.tao` app and scenario declarations under `Apps/` automatically adds screenshot
 coverage on the next inventory, run, or report. Discovery uses the project's parser and compiler
 manifest, including view scenarios reachable from each app. Tests, ignored files, generated trees,
-platform output and credential namespaces are excluded. Invalid or missing scenario sources appear
-as discovery failures in the inventory and report; they never silently count as covered.
+platform output and credential namespaces are excluded. Invalid or missing scenario sources, and
+symbolic links that do not lead to another authored source, appear as discovery failures in the
+inventory and report; they never silently count as covered. An app whose project declares scenarios
+but gives it none has no coverage; it is listed as `uncoveredApps` in a batch's `coverage.json`
+without failing the batch, since some apps are deliberately uncaptured. Apps in projects with no
+scenarios at all are not listed.
 
 Capture all discovered apps from the repository root:
 
@@ -130,6 +134,9 @@ claims. The pilot's former `visual:reading-list`, `visual:notebook` and `visual:
 remain historical; current screenshot sets are discovered from authored apps, and old observations
 are not transferred to new identities. The tutorial's generated scratch app is outside this
 repository-app discovery; its source journey and release story still need their own evidence.
+`./dev qa-capture` stages its project at `.artifacts/qa/tutorial-review` from the committed
+`evidence/tutorial-first-hour/capture-source.tao.txt` when asked to capture that path, so a clean
+checkout needs no hand-made directory; a visual pass cites a capture of exactly that project.
 Story IDs use `story:DOC1`, etc.; document
 IDs use `doc:README.md`, etc. Source tests and browser previews may supplement stories, but cannot
 fill their installed CLI, marketplace, native, device, public download or TestFlight cells.

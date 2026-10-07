@@ -765,11 +765,12 @@ export class QaRegister {
           `${surface.id} is shown by captures of ${surface.captureApp}; ${item.path} captured ${String(record.app)}.`,
         )
       }
-      if (
-        surface.captureProject
-        && record.originalProject !== await FS.realPath(this.path(surface.captureProject))
-      ) {
-        Errors.throwUserInput(`${surface.id} requires a capture of ${surface.captureProject}.`)
+      if (surface.captureProject) {
+        // A project nothing has captured yet cannot match any snapshot; say so rather than failing to resolve it.
+        const project = this.path(surface.captureProject)
+        if (!await FS.exists(project) || record.originalProject !== await FS.realPath(project)) {
+          Errors.throwUserInput(`${surface.id} requires a capture of ${surface.captureProject}.`)
+        }
       }
       if (record.status !== 'complete') {
         Errors.throwUserInput(

@@ -46,6 +46,7 @@ export class QaScenarioCaptures {
     status: 'complete' | 'partial'
     apps: AppCapture[]
     discoveryFailures: { source: string; error: string }[]
+    uncoveredApps: { source: string; app: string }[]
     counts: Record<CapturedCell['status'], number>
   }> {
     if (
@@ -66,6 +67,7 @@ export class QaScenarioCaptures {
       status: 'partial' as 'complete' | 'partial',
       apps: [] as AppCapture[],
       discoveryFailures: discovery.failures,
+      uncoveredApps: discovery.uncovered,
       counts: { captured: 0, failed: 0, missing: 0 },
     }
     // Persist expected coverage first: interruption must not erase apps that never launched.
