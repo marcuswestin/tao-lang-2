@@ -38,6 +38,10 @@ and [contributor verification workflow](<Developer environment upgrades/DEVENV-C
   environment and installed CLI behavior, not native app builds or simulator launches.
 - Run both cold and cached Ubuntu contributor verification against the intended committed HEAD.
   Record bootstrap and repository verification separately from actual hosted-cloud compatibility.
+- Prove the contributor path from a clean machine on both macOS (a fresh vanilla Tart clone) and
+  Ubuntu: following only the documented getting-started instructions, set up the repository, run
+  its tests, start a development loop, make a language or toolchain change, and see it take effect.
+  Record each step's time and friction, not just whether it passed.
 - Inspect failures and fix repository-owned defects within the approved pass scope, then rerun
   the affected checks. Record external blockers and every unrun check explicitly.
 - Inspect retained clones, containers, image caches, and cleanup behavior. Distinguish reusable
@@ -47,7 +51,7 @@ and [contributor verification workflow](<Developer environment upgrades/DEVENV-C
   outcomes, and each retained resource's owner, purpose, and cleanup condition.
 
 For now, designate exactly one isolation-test agent in the approved pass plan, with ownership
-across all worktrees on the account. That agent runs vanilla, prepared Xcode, and Linux checks
+across all worktrees on the account. That agent runs vanilla, prepared Xcode, macOS contributor, and Linux checks
 sequentially, completing evidence collection and resource accounting before starting the next.
 Other worktrees must defer isolation runs until the owner explicitly hands off or finishes.
 This is manual coordination, not a scheduler or a parallel-execution facility: Tart's existing
@@ -102,6 +106,9 @@ force-release a lease. The procedure depends on all participants observing the s
      remote branches.
    - **Developer-environment ledger:** entry age, duplicates, and entries already fixed but not
      archived.
+   - **Dead and duplicate features:** commands, flags, recipes, modules, and workflows that are
+     unused, superseded, or near-duplicates of another way to do the same thing. Tao keeps as few
+     ways to do something as stay ergonomic and discoverable; propose removals with their callers.
    - **Deferred findings:** close or re-defer each item from the previous **Consider next time**
      with evidence, rather than carrying it forward unexamined.
 7. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
