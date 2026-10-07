@@ -1011,7 +1011,7 @@ await runWithCommands(commands => {
   commands
     .command('land-fix')
     .description(
-      'Land a fix committed after GitHub merged this branch: merge the branch into fetched origin/main, push, and write a receipt; no verification runs.',
+      'Land a fix committed after GitHub merged this branch: commit the fix onto fetched origin/main as one commit, push, and write a receipt; no verification runs.',
     )
     .action(async () => {
       await runExitCommand(async () => (await LandFixCommand.run()).exitCode)
