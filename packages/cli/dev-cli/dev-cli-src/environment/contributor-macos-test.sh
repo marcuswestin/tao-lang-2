@@ -147,7 +147,7 @@ rm -f "$root/harness.tar"
 guest_status=0
 step "run the contributor journey in the $profile guest" \
   "$bun_bin" run "$vm_helper" exec "$name" 7200000 /bin/sh /Users/admin/tao-harness/input/run.sh "$profile" \
-  2>&1 | tee "$logs/console.log" || guest_status=$?
+  2>&1 | tee "$logs/journey.log" || guest_status=$?
 
 # Guest evidence travels as a tar stream through the same transport, then the clone is stopped.
 collect_guest() {

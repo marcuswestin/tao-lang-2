@@ -98,7 +98,7 @@ Describe('contributor Linux VM runner', () => {
         'bootstrap\t0\t30',
       )
       Expect(await FS.readText(`${evidence}/cold/guest/logs/check.log`)).toContain('workflow log')
-      Expect(await FS.readText(`${evidence}/cold/logs/console.log`)).toContain('guest console')
+      Expect(await FS.readText(`${evidence}/cold/logs/journey.log`)).toContain('guest console')
       Expect(await FS.readText(`${evidence}/result.txt`)).toContain('exit_code=0')
       Expect(await FS.readText(`${evidence}/source-commit.txt`)).toMatch(/^[0-9a-f]{40}\n$/)
       Expect(await FS.readText(`${evidence}/host-dirty-state.txt`)).toContain('tracked.txt')

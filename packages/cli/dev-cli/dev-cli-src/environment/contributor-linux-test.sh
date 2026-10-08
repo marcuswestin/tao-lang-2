@@ -182,7 +182,7 @@ run_phase() {
   guest_status=0
   step "run the contributor journey in the $phase guest" \
     "$bun_bin" run "$vm_helper" exec "$name" 7200000 /bin/sh /home/admin/tao-harness/input/run.sh "$phase" \
-    2>&1 | tee "$logs/console.log" || guest_status=$?
+    2>&1 | tee "$logs/journey.log" || guest_status=$?
 
   step 'collect guest evidence' collect_guest
   collected=1
