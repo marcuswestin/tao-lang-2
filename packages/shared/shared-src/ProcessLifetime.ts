@@ -28,7 +28,7 @@ export type LinkedChild = ReturnType<typeof Platform.spawn>
  * stop path a live parent runs has its own, shorter escalation; this one only fires after the
  * parent is already dead, where nothing else will.
  */
-export const ORPHAN_KILL_GRACE_SECONDS = 3
+const ORPHAN_KILL_GRACE_SECONDS = 3
 
 /**
  * The launcher runs under `/bin/sh` with descriptor 3 as the only private channel and `"$1"` as
@@ -51,7 +51,7 @@ export const ORPHAN_KILL_GRACE_SECONDS = 3
  * descriptors, with descriptor 3 closed so the tool and everything it starts inherit no end of the
  * link. A leaked end is the one way the link fails open, and this is the line that prevents it.
  */
-export const launcherScript = `IFS= read -r admission <&3 || exit ${EXIT_CODES.admissionRefused}
+const launcherScript = `IFS= read -r admission <&3 || exit ${EXIT_CODES.admissionRefused}
 [ "$admission" = "$1" ] || exit ${EXIT_CODES.admissionMismatch}
 shift
 (
@@ -67,13 +67,13 @@ shift
 exec "$@" 3<&-`
 
 /** The argv name the launcher shell reports, so a process listing says what the shell is doing. */
-export const LAUNCHER_NAME = 'tao-process-lifetime'
+const LAUNCHER_NAME = 'tao-process-lifetime'
 
 type StandardStdio = NonNullable<Platform.SpawnOptions['stdio']>
 type StdioSlot = Exclude<StandardStdio, string>[number]
 
 /** requireLinkablePlatform refuses a link where no `/bin/sh` process group exists to hold it. */
-export function requireLinkablePlatform(platform = Platform.hostPlatform): void {
+function requireLinkablePlatform(platform = Platform.hostPlatform): void {
   if (platform !== 'darwin' && platform !== 'linux') {
     Errors.throwHostEnvironment(`A parent-linked process lifetime is not implemented on ${platform}.`)
   }
@@ -133,7 +133,7 @@ export function spawnLinked(
 }
 
 /** linkChannel is the parent's end of the private channel, or `undefined` when the spawn failed. */
-export function linkChannel(child: LinkedChild): NodeJS.WritableStream | undefined {
+function linkChannel(child: LinkedChild): NodeJS.WritableStream | undefined {
   const channel = child.stdio[3]
   return channel !== undefined && channel !== null && 'write' in channel
     ? channel as unknown as NodeJS.WritableStream
