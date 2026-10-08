@@ -695,6 +695,22 @@ const PROCESS_ACCESS_DETAIL = 'reads the process environment, arguments, streams
 const BUN_CONVENIENCE_DETAIL = 'calls a Bun convenience API directly; use `Time.sleep`, `Platform.randomUUID`,'
   + ' `Platform.semverSatisfies`, or `Platform.parseToml`, which keep the Bun dependency inside the wrappers.'
 
+const DIRECT_SPAWN_ALLOWLIST = [
+  // The verification work graph tracks its own children; it moves to `CLI.start` with them.
+  'packages/testing/verification/verification-src/WorkGraph.ts',
+  // Tests that exercise the spawn wrappers themselves, or deliberately start an unowned decoy.
+  'packages/apps/expo-host/expo-host-tests/dev-loop-stop-signals.test.ts',
+  'packages/apps/expo-host/expo-host-tests/fixtures/stubborn-worker.ts',
+  'packages/cli/tao-cli/cli-tests/firebase-hostile-probe.test.ts',
+  'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts',
+  'packages/shared/shared-tests/process-group-members.test.ts',
+  'packages/shared/shared-tests/process-output.test.ts',
+  'packages/testing/verification/verification-tests/work-graph.test.ts',
+]
+
+const DIRECT_SPAWN_DETAIL = 'starts a child process directly; start it through `CLI.start` or `CLI.run` from'
+  + ' `@shared`, with `lifetime` saying whether it dies with this process.'
+
 const NATIVE_SWITCH_PATTERN = /^[ \t]*switch[ \t]*\(/gm
 const CONSTRUCTED_THROW_PATTERN =
   /\bthrow\s+new\s+(?:Errors\.)?(?:UserInput|UnexpectedBehavior|HostEnvironment)Error\s*\(/g
@@ -711,6 +727,7 @@ const NODE_IMPORT_PATTERN =
 const CONSOLE_CALL_PATTERN = /(?<![\w$.\-])console\.(?:debug|error|info|log|warn)\b/g
 const PROCESS_ACCESS_PATTERN = /(?<![\w$.])process\.(?:argv|cwd|env|exitCode|exit|stderr|stdin|stdout)\b/g
 const BUN_CONVENIENCE_PATTERN = /\bBun\.(?:randomUUIDv7|semver|sleep|TOML)\b/g
+const DIRECT_SPAWN_PATTERN = /\b(?:Bun|Platform)\.spawn\s*\(/g
 const LANGIUM_IMPORT_PATTERN = /\bfrom\s*['"]langium(?:\/[^'"]*)?['"]/g
 const RELATIVE_IMPORT_PATTERN = /\bfrom\s*['"](\.{1,2}\/[^'"]*)['"]/g
 const PACKAGE_SOURCE_DIRECTORY_PATTERN = /(?:^|\/)[^/]*-src\//
@@ -799,6 +816,13 @@ export const CONVENTION_RULES = {
     excludePathPrefixes: PLATFORM_WRAPPER_HOMES,
     pattern: BUN_CONVENIENCE_PATTERN,
     staleDetail: 'no longer calls a Bun convenience API; drop its repo lint allowlist entry.',
+  },
+  directSpawn: {
+    allowlist: DIRECT_SPAWN_ALLOWLIST,
+    detail: DIRECT_SPAWN_DETAIL,
+    excludePathPrefixes: PLATFORM_WRAPPER_HOMES,
+    pattern: DIRECT_SPAWN_PATTERN,
+    staleDetail: 'no longer starts a child process directly; drop its repo lint allowlist entry.',
   },
 } as const satisfies Record<string, ConventionRule>
 

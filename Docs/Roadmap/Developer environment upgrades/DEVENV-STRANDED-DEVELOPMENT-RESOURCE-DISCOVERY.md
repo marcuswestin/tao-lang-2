@@ -142,3 +142,44 @@ HNReader journey completes its eight correct paint observations and cleanup in 3
 Failed browser joins retain profiles, and latency cleanup attempts every disposer while keeping
 the original journey failure. Full common-baseline timing and integrated verification remain
 pending; this does not close the broader crash/mobile/native acceptance above.
+
+## Parent-linked lifetimes and the startup sweep — October 7, 2026
+
+The review of how Studio's children should end when Studio itself ends, by any exit including
+SIGKILL, settled on two mechanisms built on the exact identities above, now implemented.
+
+1. **A per-child death link.** `packages/shared/shared-src/ProcessLifetime.ts` grows the admission
+   wrapper `StudioProcessTree` already used: the `/bin/sh` launcher reads the admission token on
+   descriptor 3, then backgrounds a watcher that closes its standard descriptors and blocks reading
+   the same channel, and `exec`s the requested command with descriptor 3 closed. The parent keeps
+   its end open for the child's life and writes `release` when the child exits on its own. Any other
+   end of the channel, which is the kernel closing it because the parent died, makes the watcher
+   send SIGTERM and, three seconds later, SIGKILL to its own process group (`kill 0`), so no
+   remembered PID is ever signalled and a reused PID cannot be hit. The link is the opt-in
+   `lifetime: 'dies-with-parent'` on `CLI.start` and `CLI.run`; it implies `detached` and needs the
+   three standard descriptors. `StudioProcessTree` now delegates to it, so Metro, Expo and the Studio
+   test runner die with Studio. A `unref: true` child must carry
+   `lifetime: { outlivesParent: '<reason>' }`, which records the survivor as a decision; the
+   dev-loop controller launch moved from a bare `Platform.spawn` to `CLI.start` with that reason, and
+   the agents server, the Android emulator, and the managed-loop fault fixtures carry theirs. A new
+   repo-lint convention, `directSpawn`, refuses `Bun.spawn` and `Platform.spawn` outside the
+   wrappers, with `WorkGraph.ts` and the spawn-wrapper tests on its allowlist.
+   `packages/shared/shared-tests/process-lifetime.test.ts` proves the SIGKILL case (the linked
+   sleeper is gone, the plain sibling is not), that the child inherits no end of the link, exit-code
+   and argv preservation, release on natural exit, and the `unref` contract. Windows is left out: the
+   link needs a `/bin/sh` process group, and the Job Object design that replaces it needs a Windows
+   host to prove.
+2. **A startup sweep.** `ResourceInventory.sweepStrandedProcesses` runs ahead of the startup
+   advisory. For a process record with complete provenance whose owner's exact identity is gone and
+   whose children still match their recorded identities, it sends SIGTERM and then SIGKILL through
+   `ProcessTree.signalTracked`, which re-reads every identity from the kernel before signalling, and
+   retires the record when every child is gone. Uncertain records, unreadable identities and children
+   that survive both signals are left for the advisory, which is unchanged. The one new line is
+   `Tao resources: stopped N stale process(es) left by an earlier session.` Tests cover the stop and
+   retire path against a real sleeper, a live PID at a mismatched recorded identity that is never
+   signalled, uncertain provenance and a live owner left alone, and a child that outlives both signals.
+
+What the link does not cover is unchanged from the review: a whole group killed from outside with
+the watcher in it, a tool that re-daemonizes with `setsid`, and power loss all fall through to the
+sweep; externally owned resources (Watchman, simulators, the Android emulator) stay reported, never
+killed.

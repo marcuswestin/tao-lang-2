@@ -215,4 +215,13 @@
   inferred: the failure did not record its command. The privileged-helper correction above reads
   such a child's identity through `KERN_PROC_PID`; the descendant `ps` calls listed here remain, and
   replacing them with the in-process libproc reader would remove the setuid children altogether.
+- **Signalling without a kill child (2026-10-07):** `ProcessTree.signalTracked` and
+  `ProcessTree.signalGroup` no longer spawn `/bin/kill` on macOS; both call `Platform.signalProcess`
+  (`process.kill`, with a negative PID for a group) on both platforms, as `processGroupIsAlive` already
+  did for its `kill(-pgid, 0)` probe. That removes one of the setuid descendants an ownership poll could
+  enumerate mid-exec. The `ps` readers remain: `ProcessTree.processTable` needs full argv for
+  `ResourceInventory.legacyProcesses` (`commandUsesDirectory`), which `pbi_comm` cannot give, and the
+  `ps -o lstart=` fallbacks in `StudioLaunchManifest`, `FS` and `ProjectDevSession` write second-precision
+  start times into version-1 records, so replacing them means a record format change that needs a macOS
+  host to prove. Both stay for a dedicated pass.
 - **Source:** 2026-09-17 process-teardown implementation.

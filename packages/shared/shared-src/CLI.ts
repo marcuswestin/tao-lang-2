@@ -2,6 +2,7 @@ import { asError, CommandExecutionError, formatForLog, throwUnexpected } from '.
 import type { FileHandle } from './FS'
 import * as HCI from './HCI'
 import * as Platform from './Platform'
+import * as ProcessLifetime from './ProcessLifetime'
 import { ProcessTree, type TrackedProcess } from './ProcessTree'
 import * as VerificationTimeouts from './VerificationTimeouts'
 
@@ -66,6 +67,14 @@ export type CommandSpec = {
    * must both show and read.
    */
   inheritStdin?: boolean
+  /**
+   * The child's lifetime relative to this process. `'dies-with-parent'` links the child so it is
+   * stopped when this process exits for any reason, SIGKILL included; it implies `detached` and
+   * needs the three standard descriptors without IPC. `{ outlivesParent }` records why a child is
+   * meant to survive, and is required alongside `unref`. Leaving it out keeps the plain spawn, whose
+   * child survives only an owner that exits without running teardown.
+   */
+  lifetime?: ProcessLifetime.Lifetime
   onOutput?: (stream: CommandOutputStream, chunk: Buffer) => void
   prefixedOutput?: PrefixedOutputOptions
   /** How this child is supervised. `tool` is the default; `server` opts out of every bound. */
@@ -84,6 +93,7 @@ export type CommandSyncSpec = Omit<
   CommandSpec,
   | 'detached'
   | 'idleOutputMs'
+  | 'lifetime'
   | 'prefixedOutput'
   | 'processPolicy'
   | 'timeoutMs'
@@ -223,15 +233,27 @@ function startCommand(
   })
   const policy = spec.processPolicy ?? 'tool'
   const bounds = resolveProcessBounds(command, policy, spec)
-  const child = Platform.spawn(command, {
-    args,
-    cwd: spec.cwd,
-    // Detachment is the caller's call, never the policy's: a child in the caller's process group is
-    // one the terminal's Ctrl-C reaches, and the teardown below does not need a group leader.
-    detached: spec.detached,
-    env: spec.env,
-    stdio: stdio.stdio,
-  })
+  ProcessLifetime.requireConsistentLifetime(command, spec.lifetime, spec.unref === true)
+  const linked = spec.lifetime === 'dies-with-parent'
+  // A linked child leads its own group so the link can stop the whole group by membership alone.
+  const detached = spec.detached === true || linked
+  const admission = linked ? Platform.randomUUID() : undefined
+  const child = admission !== undefined
+    ? ProcessLifetime.spawnLinked(command, admission, {
+      args,
+      cwd: spec.cwd,
+      env: spec.env,
+      stdio: stdio.stdio,
+    })
+    : Platform.spawn(command, {
+      args,
+      cwd: spec.cwd,
+      // Detachment is the caller's call, never the policy's: a child in the caller's process group
+      // is one the terminal's Ctrl-C reaches, and the teardown below does not need a group leader.
+      detached,
+      env: spec.env,
+      stdio: stdio.stdio,
+    })
   let spawnError: Error | undefined
   child.on('error', error => {
     spawnError ??= error
@@ -239,6 +261,13 @@ function startCommand(
   child.stdin?.on('error', error => {
     spawnError ??= error
   })
+  const linkChannel = admission !== undefined ? child.stdio[3] ?? undefined : undefined
+  if (admission !== undefined) {
+    void ProcessLifetime.admit(child, admission).catch(error => {
+      spawnError ??= asError(error)
+    })
+    child.once('exit', () => ProcessLifetime.release(child))
+  }
 
   if (spec.unref) {
     child.unref()
@@ -280,7 +309,7 @@ function startCommand(
         trackedDescendants ?? [],
       )
       // Live children can change groups while starting. Inspect groups only after their owner exits.
-      if (spec.detached && (child.exitCode !== null || child.signalCode !== null)) {
+      if (detached && (child.exitCode !== null || child.signalCode !== null)) {
         lastGroupMembers = ProcessTree.groupMembers(pid)
         current.push(...lastGroupMembers)
       }
@@ -390,7 +419,7 @@ function startCommand(
   }
 
   // An explicitly isolated test cannot receive terminal signals through its caller's group.
-  const unsubscribeSignals = policy === 'test' && spec.detached
+  const unsubscribeSignals = policy === 'test' && detached
     ? (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map(signal =>
       Platform.onProcessSignal(signal, () => stopProcessTree(signal))
     )
@@ -529,13 +558,13 @@ function startCommand(
       })
       if (!inspected) {
         teardownFailed = true
-        groupNeedsCleanup = spec.detached === true
+        groupNeedsCleanup = detached
         stopProcessTree('SIGTERM')
       }
     }
     if (!observed) {
       teardownFailed = true
-      groupNeedsCleanup = spec.detached === true
+      groupNeedsCleanup = detached
       stopProcessTree('SIGTERM')
     }
   })
@@ -582,7 +611,7 @@ function startCommand(
         // Inspection uncertainty is a teardown failure, never evidence that the tree is empty.
         inspectionError = asError(error)
         teardownFailed = true
-        if (spec.detached && child.pid !== undefined) {
+        if (detached && child.pid !== undefined) {
           inspectOwnership(() => ProcessTree.signalGroup(child.pid, 'SIGKILL'))
         }
         inspectOwnership(() => ProcessTree.signalTracked(trackedDescendants ?? [], 'SIGKILL'))
@@ -608,7 +637,7 @@ function startCommand(
         releaseOwnership()
         reject(error)
       })
-    })
+    }, linkChannel === undefined ? [] : [linkChannel])
   })
 
   return {

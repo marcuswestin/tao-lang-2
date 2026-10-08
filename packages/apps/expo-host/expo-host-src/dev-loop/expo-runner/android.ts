@@ -474,6 +474,7 @@ async function startEmulator(avdName: string, log: EmulatorLog): Promise<() => b
     const emulator = CLI.start('emulator', {
       args: ['-avd', avdName, '-memory', String(ANDROID_EMULATOR_MEMORY_MB), '-netdelay', 'none', '-netspeed', 'full'],
       detached: true,
+      lifetime: { outlivesParent: 'The Android emulator is a machine resource that outlives the dev loop booting it.' },
       stdio: ['ignore', logFile.fd, logFile.fd],
       unref: true,
     })

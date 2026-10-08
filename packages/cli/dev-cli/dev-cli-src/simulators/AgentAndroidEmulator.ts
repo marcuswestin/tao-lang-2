@@ -383,6 +383,9 @@ export async function reserveAndroidEmulator(
             ...(visible ? [] : ['-no-window', '-no-audio']),
           ],
           detached: true,
+          lifetime: {
+            outlivesParent: 'The Android emulator is a machine resource that outlives the command booting it.',
+          },
           processPolicy: 'server',
           onOutput: (_stream, chunk) => {
             outputTail = (outputTail + chunk.toString('utf8')).slice(-16_000)

@@ -206,16 +206,11 @@ const systemProcessSignalSeams: ProcessSignalSeams = {
   identities: currentProcessIdentities,
   signal: (pids, signal) => {
     requireProcessInspectionPlatform()
-    if (Platform.hostPlatform === 'linux') {
-      for (const pid of pids) {
-        Platform.signalProcess(pid, signal)
-      }
-      return
+    // One kernel call per PID on both platforms: a `kill` child would be a setuid executable the
+    // sandbox refuses to inspect, and a PID that is already gone is not an error here.
+    for (const pid of pids) {
+      Platform.signalProcess(pid, signal)
     }
-    Platform.spawnSync('/bin/kill', {
-      args: [`-${signal.replace(/^SIG/, '')}`, '--', ...pids.map(String)],
-      stdio: 'ignore',
-    })
   },
 }
 
@@ -272,14 +267,7 @@ function signalProcessGroup(pid: number | undefined, signal: Platform.ProcessSig
     return false
   }
   requireProcessInspectionPlatform()
-  if (Platform.hostPlatform === 'linux') {
-    return Platform.signalProcess(-pid, signal)
-  }
-  const result = Platform.spawnSync('/bin/kill', {
-    args: [`-${signal.replace(/^SIG/, '')}`, '--', `-${pid}`],
-    stdio: 'ignore',
-  })
-  return result.status === 0
+  return Platform.signalProcess(-pid, signal)
 }
 
 /** waitForProcessGroupExit keeps a teardown pending until no descendant remains signalable. */

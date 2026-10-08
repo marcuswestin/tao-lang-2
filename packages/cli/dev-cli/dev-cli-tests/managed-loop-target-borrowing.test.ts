@@ -653,7 +653,8 @@ Test('File-backed retained sentinel output stays writable after its launching pa
     const stdout = await FS.openAppend(${JSON.stringify(stdoutPath)});
     const stderr = await FS.openAppend(${JSON.stringify(stderrPath)});
     const child = CLI.start(Platform.runtimeProcess.execPath, { args: ['-e', ${JSON.stringify(writer)}],
-      detached: true, unref: true, processPolicy: 'server', stdio: ['ignore', stdout.fd, stderr.fd] });
+      detached: true, unref: true, lifetime: { outlivesParent: 'retained target fixture' },
+      processPolicy: 'server', stdio: ['ignore', stdout.fd, stderr.fd] });
     await stdout.close(); await stderr.close();
     const identity = await Time.pollUntil(() => ProcessTree.identities([child.pid]).get(child.pid),
       { intervalMs: 25, timeoutMs: 30000 });

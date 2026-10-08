@@ -104,6 +104,7 @@ export async function runAppAgentCommand(
         cwd: bundle,
         env: { TAO_AGENT_MODE: '1', ...(stateRootOverride ? { TAO_AGENT_STATE_ROOT: stateRootOverride } : {}) },
         detached: true,
+        lifetime: { outlivesParent: 'The agents server keeps serving after the command that started it returns.' },
         unref: true,
         processPolicy: 'server',
         stdio: ['ignore', log.fd, log.fd],

@@ -1,5 +1,5 @@
-import { FS, Platform } from '@shared'
-import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
+import { CLI, Errors, FS, Platform, ProcessTree } from '@shared'
+import { Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
 import type { TrackedProcess } from '../shared-src/ProcessTree'
 import {
   beginLaunch,
@@ -10,6 +10,7 @@ import {
   registerDirectory,
   registerProcess,
   retireProcess,
+  sweepStrandedProcesses,
   updateProcess,
 } from '../shared-src/ResourceInventory'
 
@@ -190,13 +191,20 @@ Describe('resource inventory process ownership', () => {
     delete env['TAO_RESOURCE_INVENTORY_NOTIFIED']
     try {
       const output = await withCapturedOutput(async () => {
-        const stranded = { ...options, inspectIdentities: () => new Map([[child.pid, child]]) }
+        // The recorded child answers no signal here, so the sweep leaves it to the advisory.
+        const stranded = {
+          ...options,
+          inspectIdentities: () => new Map([[child.pid, child]]),
+          signalTracked: () => {},
+          sleep: async () => {},
+        }
         await notifyStartup(stranded)
         await notifyStartup(stranded)
       })
       Expect(output.stderr).toBe(
         'Tao resources: 1 resource(s) need inspection. Run tao resources for ownership and cleanup guidance.\n',
       )
+      Expect(await FS.exists(FS.resolvePath(`${ID}.json`, options.indexRoot))).toBe(true)
       Expect(output.stdout).toBe('')
     } finally {
       if (previous === undefined) {
@@ -204,6 +212,130 @@ Describe('resource inventory process ownership', () => {
       } else {
         env['TAO_RESOURCE_INVENTORY_NOTIFIED'] = previous
       }
+    }
+  })
+})
+
+Describe('resource inventory startup sweep', () => {
+  // A live PID whose recorded start time disagrees with the kernel is an owner that is gone.
+  const deadOwner: TrackedProcess = { pid: Platform.runtimeProcess.pid, startedAt: '1:1', command: '' }
+
+  function startSleeper() {
+    const handle = CLI.start('/bin/sleep', { args: ['300'], detached: true, processPolicy: 'server', stdio: 'ignore' })
+    const identity = ProcessTree.identities([handle.pid!]).get(handle.pid!)
+    if (identity === undefined) {
+      Errors.throwUnexpected('Expected an exact identity for the sweep fixture sleeper.')
+    }
+    return { handle, identity: { ...identity, command: '' } }
+  }
+
+  function isAlive(identity: TrackedProcess): boolean {
+    return ProcessTree.sameProcess(ProcessTree.identities([identity.pid]).get(identity.pid), identity)
+  }
+
+  async function finish(handle: ReturnType<typeof CLI.start>, identity: TrackedProcess) {
+    ProcessTree.signalTracked([identity], 'SIGKILL')
+    await handle.waitForClose().catch(() => undefined)
+  }
+
+  function record(options: Awaited<ReturnType<typeof fixture>>, process: TrackedProcess, extra = {}) {
+    return registerProcess({
+      owner: deadOwner,
+      process,
+      checkout: options.checkout,
+      command: 'sleep',
+      indexRoot: options.indexRoot,
+      ...extra,
+    })
+  }
+
+  Test('stops a proven-own child whose owner is gone and retires its record', async () => {
+    const options = await fixture()
+    const sleeper = startSleeper()
+    try {
+      const id = record(options, sleeper.identity)
+      const report = await sweepStrandedProcesses({ indexRoot: options.indexRoot })
+      Expect(report).toEqual({ stopped: [id], left: 0 })
+      Expect(isAlive(sleeper.identity)).toBe(false)
+      Expect(await FS.exists(FS.resolvePath(`${id}.json`, options.indexRoot))).toBe(false)
+    } finally {
+      await finish(sleeper.handle, sleeper.identity)
+    }
+  })
+
+  Test('never signals a live PID whose recorded identity does not match', async () => {
+    const options = await fixture()
+    const sleeper = startSleeper()
+    try {
+      const decoy = { ...sleeper.identity, startedAt: '1:1' }
+      const id = record(options, decoy, { processGroup: decoy.pid })
+      const report = await sweepStrandedProcesses({ indexRoot: options.indexRoot })
+      Expect(report).toEqual({ stopped: [], left: 0 })
+      Expect(isAlive(sleeper.identity)).toBe(true)
+      Expect(await FS.exists(FS.resolvePath(`${id}.json`, options.indexRoot))).toBe(true)
+    } finally {
+      await finish(sleeper.handle, sleeper.identity)
+    }
+  })
+
+  Test('leaves uncertain provenance and a live owner alone', async () => {
+    const options = await fixture()
+    const sleeper = startSleeper()
+    try {
+      const uncertain = record(options, sleeper.identity, { provenance: 'uncertain' })
+      Expect(await sweepStrandedProcesses({ indexRoot: options.indexRoot })).toEqual({ stopped: [], left: 0 })
+      Expect(isAlive(sleeper.identity)).toBe(true)
+      await FS.remove(FS.resolvePath(`${uncertain}.json`, options.indexRoot))
+      const liveOwner = ProcessTree.identities([Platform.runtimeProcess.pid]).get(Platform.runtimeProcess.pid)!
+      record(options, sleeper.identity, { owner: { ...liveOwner, command: '' } })
+      Expect(await sweepStrandedProcesses({ indexRoot: options.indexRoot })).toEqual({ stopped: [], left: 0 })
+      Expect(isAlive(sleeper.identity)).toBe(true)
+    } finally {
+      await finish(sleeper.handle, sleeper.identity)
+    }
+  })
+
+  Test('a child that outlives both signals keeps its record and its advisory', async () => {
+    const options = await fixture()
+    await processRecord(options.indexRoot)
+    const signals: string[] = []
+    const report = await sweepStrandedProcesses({
+      indexRoot: options.indexRoot,
+      graceMs: 100,
+      inspectIdentities: () => new Map([[child.pid, child]]),
+      inspectProcessAlive: () => false,
+      signalTracked: (processes, signal) => signals.push(`${signal}:${processes.map(p => p.pid).join(',')}`),
+      sleep: async () => {},
+    })
+    Expect(report).toEqual({ stopped: [], left: 1 })
+    Expect(signals).toEqual(['SIGTERM:43', 'SIGKILL:43'])
+    Expect(await FS.exists(FS.resolvePath(`${ID}.json`, options.indexRoot))).toBe(true)
+  })
+
+  Test('startup reports what the sweep stopped before advising on the rest', async () => {
+    const options = await fixture()
+    const sleeper = startSleeper()
+    const env = Platform.runtimeProcess.env
+    const previous = env['TAO_RESOURCE_INVENTORY_NOTIFIED']
+    delete env['TAO_RESOURCE_INVENTORY_NOTIFIED']
+    try {
+      record(options, sleeper.identity)
+      const output = await withCapturedOutput(() =>
+        notifyStartup({
+          ...options,
+          inspectIdentities: ProcessTree.identities,
+          inspectProcessAlive: Platform.processIsAlive,
+        })
+      )
+      Expect(output.stderr).toBe('Tao resources: stopped 1 stale process(es) left by an earlier session.\n')
+      await until(() => isAlive(sleeper.identity) ? undefined : true, { description: 'swept sleeper exit' })
+    } finally {
+      if (previous === undefined) {
+        delete env['TAO_RESOURCE_INVENTORY_NOTIFIED']
+      } else {
+        env['TAO_RESOURCE_INVENTORY_NOTIFIED'] = previous
+      }
+      await finish(sleeper.handle, sleeper.identity)
     }
   })
 })
