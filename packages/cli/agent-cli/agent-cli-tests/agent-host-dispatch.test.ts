@@ -531,7 +531,7 @@ Describe('named host command dispatch', () => {
           ['--diagnose', 'vanilla'],
           ['--prepare-base'],
           ['--base', 'unknown'],
-          ['--prepare-base', 'tao-acceptance-1-2'],
+          ['--prepare-base', 'vanilla'],
           ['--base', 'xcode', 'fix'],
           ['--base', 'vanilla fix'],
           ['--base=vanilla'],
@@ -543,7 +543,7 @@ Describe('named host command dispatch', () => {
           env,
         })
         Expect(denied.exitCode).toBe(2)
-        Expect(denied.stderr).toContain('--prepare-base|--base <vanilla|xcode>')
+        Expect(denied.stderr).toContain('[--base <vanilla|xcode>')
         Expect(await FS.exists(log)).toBe(false)
       }
       for (
@@ -554,9 +554,8 @@ Describe('named host command dispatch', () => {
           ['--collect', 'tao-acceptance-1-2'],
           ['--recover-lease', 'tao-acceptance-1-2'],
           ['--audit-results', 'tao-acceptance-1-2'],
-          ['--prepare-base', 'vanilla'],
-          ['--prepare-base', 'xcode'],
           ['--base', 'vanilla'],
+          ['--base', 'xcode'],
         ]
       ) {
         const accepted = await CLI.run(Platform.runtimeProcess.execPath, {

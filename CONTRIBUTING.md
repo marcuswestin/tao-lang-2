@@ -159,4 +159,12 @@ just contributor-linux-test
 just contributor-macos-test
 ```
 
-The macOS proof clones a vanilla Tart image and needs Tart installed; the Linux proof needs Docker.
+Both proofs clone a pinned Tart image (vanilla macOS, Ubuntu 24.04 for Linux) and need Tart installed
+(`just standalone-cli-vm-setup`). Download the images once, and again whenever a pin changes; a proof
+whose image is missing stops and prints this command:
+
+```sh
+just vm-images
+```
+
+They are periodic acceptance checks and a debugging aid; hosted CI is the integration proof.

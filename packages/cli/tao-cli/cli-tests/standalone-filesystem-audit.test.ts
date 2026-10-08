@@ -115,6 +115,50 @@ Describe('standalone filesystem audit', () => {
     }
   })
 
+  Test('records unobserved ownership, refuses mixed modes, and still checks every other field', async () => {
+    const fixture = await mkTestDir('tao-filesystem-ownership-')
+    const disk = FS.resolvePath('mounted-disk', fixture)
+    const before = FS.resolvePath('before.json', fixture)
+    const after = FS.resolvePath('after.json', fixture)
+    const diff = FS.resolvePath('diff.json', fixture)
+    const report = FS.resolvePath('diff.txt', fixture)
+    const scope = FS.resolvePath('scope.json', fixture)
+    const compare = () =>
+      CLI.run(Platform.runtimeProcess.execPath, { args: ['run', AUDIT, 'compare', before, after, diff, report, scope] })
+    try {
+      await FS.mkdir(disk)
+      await run('snapshot', disk, before, '/guest', 'ownership-ignored')
+      Expect(await FS.readJson(before)).toMatchObject({ ownership: 'ignored', root: '/guest' })
+      await run('snapshot', disk, after, '/guest')
+      await FS.writeJson(scope, { guestHome: '/admin', guestTemp: '/tmp', root: '/acceptance' })
+      const mixed = await compare()
+      Expect(mixed.exitCode).not.toBe(0)
+      Expect(mixed.stderr).toContain('disagree on whether ownership was observed')
+
+      // A reader that is not uid 501 sees itself as every owner; the observed shape still must match.
+      const entry = { kind: 'directory', size: 64, modifiedMs: 2, device: 1, mode: 0o40755, uid: 503, gid: 20 }
+      const snapshot = (entries: Record<string, unknown>) => ({
+        entries,
+        issues: [],
+        ownership: 'ignored',
+        root: '/guest',
+        skippedMounts: [],
+      })
+      const home = '/guest/acceptance/home/.tao'
+      const cache = '/guest/admin/Library/PrivateCloudCompute'
+      await FS.writeJson(before, snapshot({ [home]: { ...entry, modifiedMs: 1 } }))
+      await FS.writeJson(after, snapshot({ [home]: entry, [cache]: entry }))
+      Expect((await compare()).exitCode).toBe(0)
+      Expect(await FS.readJson(diff)).toMatchObject({ ownership: 'ignored', violations: [] })
+      Expect(await FS.readText(report)).toContain('Ownership was not observed')
+      await FS.writeJson(after, snapshot({ [home]: entry, [cache]: { ...entry, mode: 0o40777 } }))
+      Expect((await compare()).exitCode).not.toBe(0)
+      Expect((await FS.readJson<{ violations: string[] }>(diff)).violations).toEqual([cache])
+    } finally {
+      await FS.remove(fixture)
+    }
+  })
+
   Test('records added, changed, and removed entries without following a symlink', async () => {
     const fixture = await mkTestDir('tao-filesystem-audit-')
     const root = FS.resolvePath('guest', fixture)
@@ -823,8 +867,13 @@ Describe('standalone filesystem audit', () => {
         await FS.writeJson(scopePath, { ...scope, vmProfile })
         Expect((await compare()).exitCode).not.toBe(0)
         const { violations } = await FS.readJson<{ violations: string[] }>(diffPath)
+        // Both profiles boot the guest agent that carries every command, so its log is never a violation.
         for (const path of [...added, ...removed, ...timestamps]) {
-          Expect(violations).toContain(`/guest${path}`)
+          if (path === '/private/tmp/tart-guest-agent.log') {
+            Expect(violations).not.toContain(`/guest${path}`)
+          } else {
+            Expect(violations).toContain(`/guest${path}`)
+          }
         }
         Expect(violations).toContain(`unobservable: /guest${unreadable[0]}`)
       }

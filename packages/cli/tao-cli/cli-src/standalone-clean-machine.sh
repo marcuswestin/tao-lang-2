@@ -5,7 +5,6 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/vm-guest-lib.sh"
 vm_label='Clean-machine'
 profile=vanilla
-prepare_base=0
 lease_owned=0
 lease_root="$HOME/.tao/standalone-vm-lease"
 overall_started=$(date +%s)
@@ -19,13 +18,12 @@ bun_bin="${TAO_STANDALONE_BUN:-$(pwd)/.devenv/profile/bin/bun}"
 portable_bun_script='packages/cli/tao-cli/cli-src/standalone-bun.sh'
 browser_app="${TAO_STANDALONE_BROWSER_APP:-/Applications/Google Chrome.app}"
 if [ "$#" -eq 2 ] && [ -z "$1$2" ]; then set --; fi
-if [ "$#" -eq 2 ] && { [ "$1" = --base ] || [ "$1" = --prepare-base ]; }; then
+if [ "$#" -eq 2 ] && [ "$1" = --base ]; then
   if [ "$2" != vanilla ] && [ "$2" != xcode ]; then
     printf 'Expected the vanilla or xcode VM profile.\n' >&2
     exit 2
   fi
   profile="$2"
-  if [ "$1" = --prepare-base ]; then prepare_base=1; fi
   set --
 fi
 vm_image_for_profile "$profile"
@@ -78,7 +76,7 @@ if [ "$#" -eq 2 ] && { [ "$1" = --diagnose ] || [ "$1" = --stop ] || [ "$1" = --
   exit
 fi
 if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != --audit ]; }; then
-  printf 'Usage: %s [--prepare-base|--base vanilla|xcode | --diagnose|--stop|--collect|--recover-lease|--audit-results <owned-vm>]\n' "$0" >&2
+  printf 'Usage: %s [--base vanilla|xcode | --diagnose|--stop|--collect|--recover-lease|--audit-results <owned-vm>]\n' "$0" >&2
   exit 2
 fi
 created=0
@@ -94,9 +92,10 @@ cleanup() {
   status=$?
   trap - EXIT
   if [ "$started" -eq 1 ]; then
-    tart stop "$name" >> "$logs/cleanup.log" 2>&1 || true
+    tart stop "$running_vm" >> "$logs/cleanup.log" 2>&1 || true
     wait "$vm_pid" >> "$logs/cleanup.log" 2>&1 || true
   fi
+  vm_cleanup_base_build
   if [ -f "$root/disk-attached" ]; then
     printf 'Clean-machine: retaining VM %s because its disk may still be mounted; see %s\n' "$name" "$root/disk-attached" >&2
     status=1
@@ -110,7 +109,7 @@ cleanup() {
       status=1
     fi
   fi
-  rm -f "$input/browser.tar"
+  rm -f "$root/browser.tar" "$root/harness.tar"
   rmdir "$root/run-active"
   vm_release_lease
   printf 'Clean-machine: total %ss\n' "$(($(date +%s) - overall_started))"
@@ -124,6 +123,7 @@ trap 'exit 143' TERM
 vm_acquire_lease
 printf 'Clean-machine: profile %s, pinned image %s\n' "$profile" "$image"
 vm_require_tart_version
+vm_prepare_base
 if ! command -v "$bun_bin" >/dev/null; then
   printf 'The checkout Bun is unavailable: %s. Run ./agent setup first.\n' "$bun_bin" >&2
   exit 1
@@ -166,10 +166,8 @@ if ! step 'compile the browser click driver for the guest' "$portable_bun" build
 fi
 cat "$logs/browser-compile.log"
 
-# Archive on the host: traversing Chrome's framework symlinks through VirtioFS can fail with ELOOP.
-step 'archive the browser bundle for the guest' /usr/bin/tar --no-xattrs -cf "$input/browser.tar" -C "$browser_app" .
-
-vm_install_guest_agent
+# Archive on the host and stream it through the agent: no shared folder ever exposes this checkout.
+step 'archive the browser bundle for the guest' /usr/bin/tar --no-xattrs -cf "$root/browser.tar" -C "$browser_app" .
 
 cat > "$input/run.sh" <<'GUEST'
 #!/bin/sh
@@ -217,29 +215,42 @@ fi
 exit "$acceptance_status"
 GUEST
 
-if [ "$prepare_base" -eq 1 ]; then
-  step "cache the pinned $profile base" tart pull "$image" 2>&1 | tee "$logs/pull.log"
-fi
+mkdir -p "$root/stage/tao-harness/logs/steps"
+cp -R "$input" "$root/stage/tao-harness/input"
+/usr/bin/tar --no-xattrs -cf "$root/harness.tar" -C "$root/stage" tao-harness
+rm -rf "$root/stage"
 created=1
-if ! step "clone the $profile base" tart clone "$image" "$name" 2>&1 | tee "$logs/clone.log"; then
+if ! step "clone the $profile base" tart clone "$base_vm" "$name" 2>&1 | tee "$logs/clone.log"; then
   exit 1
 fi
 printf '%s\n' "$image" > "$logs/source-image.txt"
 printf '%s\n' "$profile" > "$logs/profile.txt"
 tart get "$name" --format json > "$logs/vm-config.json"
-step 'provision the stopped clone' "$bun_bin" run "$vm_helper" provision "$name" "$root" \
-  2>&1 | tee "$logs/provision.log"
-vm_boot_and_wait
 
+# The first boot only receives inputs, so the before snapshot already holds them.
+vm_boot_and_wait
+step 'push the acceptance inputs through the guest agent' vm_push "$root/harness.tar" /Users/admin
+step 'create the guest browser folder' \
+  "$bun_bin" run "$vm_helper" exec "$name" 30000 /bin/mkdir -p '/Users/admin/Applications/Google Chrome.app'
+step 'push the browser bundle through the guest agent' vm_push "$root/browser.tar" '/Users/admin/Applications/Google Chrome.app'
+"$bun_bin" run "$vm_helper" exec "$name" 10000 /usr/bin/plutil -convert json -o - \
+  /Library/LaunchAgents/org.cirruslabs.tart-guest-agent.plist > "$logs/transport-agent.json"
+if [ "$profile" = vanilla ]; then
+  printf '{"kind":"fixture","version":"%s","sha256":"%s","base":"%s","launchAgent":%s}\n' \
+    "$agent_version" "$agent_sha" "$vanilla_base" "$(cat "$logs/transport-agent.json")" > "$logs/transport-owner.json"
+else
+  printf '{"kind":"vendor","launchAgent":%s}\n' "$(cat "$logs/transport-agent.json")" > "$logs/transport-owner.json"
+fi
+vm_stop_running
+step 'record the before snapshot on the stopped disk' "$bun_bin" run "$vm_helper" snapshot "$name" "$root" \
+  2>&1 | tee "$logs/snapshot.log"
+
+vm_boot_and_wait
 acceptance_status=0
 step "run standalone acceptance in the $profile guest" \
   "$bun_bin" run "$vm_helper" exec "$name" 1800000 /bin/sh /Users/admin/tao-harness/input/run.sh "$profile" \
   2>&1 | tee "$logs/acceptance.log" || acceptance_status=$?
-step 'flush guest evidence before stopping the VM' \
-  "$bun_bin" run "$vm_helper" exec "$name" 30000 /bin/sync
-step 'stop the VM before its final audit' tart stop "$name"
-wait "$vm_pid" || true
-started=0
+vm_stop_running
 step 'collect guest logs and audit the stopped disk' "$bun_bin" run "$vm_helper" collect "$name" "$root" \
   2>&1 | tee "$logs/collect.log"
 collected=1

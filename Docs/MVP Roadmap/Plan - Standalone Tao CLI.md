@@ -67,10 +67,11 @@ browser errors retained. Compiler/runtime unit suites remain outside this instal
 Prepared bases use digest-pinned upstream Tart images and fresh disposable clones:
 
 - `./agent unsandboxed standalone-cli-clean-machine` tests the vanilla first-install environment.
-- `./agent unsandboxed standalone-cli-clean-machine --prepare-base xcode` caches the pinned Xcode
-  image and runs the same acceptance and audit, recording Xcode and available iOS runtime inventory.
-- `./agent unsandboxed standalone-cli-clean-machine --base xcode` reuses that cached image for a
-  fresh clone. Both forms qualify only after acceptance and the filesystem audit pass; provenance
+- `./agent unsandboxed standalone-cli-clean-machine --base xcode` runs the same acceptance and audit
+  in a fresh clone of the pinned Xcode image, recording Xcode and available iOS runtime inventory.
+- Runs never download or build images. The Developer runs `just vm-images [ubuntu|vanilla|xcode]`
+  once per pinned digest; a run whose image or local base is missing stops and prints that command.
+  Both forms qualify only after acceptance and the filesystem audit pass; provenance
   is recorded in `.artifacts/standalone-vm/bases/xcode.json` with a link to that run's evidence.
 
 An account-wide lease serializes these workflows across checkouts. Each boot also checks for other
@@ -1043,24 +1044,35 @@ above, except where the 2026-09-26 staged-release decision explicitly supersedes
     inside the ordinary test suite, a local `tart` virtual machine as the gate before publication,
     and the `macos-26` GitHub runner as a regression gate once the public repository exists.
 
-    _Current transport 2026-09-26._ `./agent unsandboxed standalone-cli-clean-machine`
-    provisions a fresh stopped vanilla clone with the SHA-256-pinned Tart guest agent 0.10.0,
-    compiled test drivers, release files, and browser fixture. It mounts only that clone's raw
-    disk while stopped, selects its APFS Data volume, checks guest ownership, and detaches before
-    booting. A user LaunchAgent runs the guest agent. Tart 2.32.1 or newer then runs readiness
-    probes and acceptance through `tart exec`; no SSH, password, guest IP discovery, or shared
-    folders are used. The host scans the stopped disk before boot and after acceptance, using its
-    ordinary filesystem permissions. An in-guest scan through the new LaunchAgent instead blocked
-    on a Desktop privacy prompt; the offline scan requires no guest privacy changes. Guest logs
-    are copied from the stopped disk into `logs/guest` before deletion, including after an acceptance
-    failure. The snapshots include boot and shutdown activity and normalize remounted device numbers.
-    Host timeouts bound RPC commands; stopping the disposable VM terminates any remaining guest work.
-    An interrupted mount, failed detach, or failed evidence collection retains the clone
-    with a `disk-attached` marker instead of booting or deleting a potentially mounted disk.
-    The audit permits the explicit `/Users/admin/tao-harness/logs` fixture directory while still
-    rejecting writes to its input directory. The guest agent and browser are testing fixtures;
-    the Tao product still receives no preinstalled Node, Bun, Homebrew, or Xcode tools.
-    The fresh gate passed in 148 seconds on 2026-09-26, including installed CLI workflows,
+    _Decided 2026-10-07._
+    - **Local `tart` tier.** Each run clones a local base: the pinned vanilla image plus only the pinned Tart guest agent, built once. Its inputs go in after boot through `tart exec`, so no run writes to a stopped guest disk as the host user, and the check works from any host account. The filesystem audit's snapshots still read the stopped disk, read-only. Cirrus Labs' `base` image is not used: its Homebrew and command-line tools would hide a missing dependency.
+    - **`macos-26` tier.** It becomes an automated first-run test on every change. It does not wait for the public repository. On the commit's own build, it:
+      - runs the install script against a local copy of that release, with a throwaway `$HOME` and a `PATH` of `/usr/bin:/bin`;
+      - creates an app, then checks, compiles and tests it;
+      - starts the dev loop, clicks the counter in the browser, and sees a source edit take effect;
+      - upgrades from the previous version, then uninstalls.
+    - **Nightly download test.** Once releases are published, a nightly run installs the real latest release through the published download, which also covers checksums, Gatekeeper quarantine and notarization.
+    - **Not a substitute.** The runner is not a clean machine: it ships Xcode, Homebrew, Node and Git. It complements the local `tart` tier and does not replace it.
+
+    _Current transport 2026-10-07._ The Developer runs `just vm-images` once per pinned digest; no
+    run or agent downloads or builds an image. For vanilla it builds the local base
+    `tao-base-vanilla`: it writes only the SHA-256-pinned Tart guest agent 0.10.0 and its global
+    LaunchAgent to a stopped clone's disk, attached with ownership ignored, then boots once to prove
+    `tart exec` answers. `~/.tao/vm-bases/tao-base-vanilla.txt` records the source digest and agent.
+    launchd loads that LaunchAgent only when root owns it, and the build does not yet make it so;
+    `DEVENV-TART-PROVISIONING-REQUIRES-HOST-UID-501` tracks the one-time root step. Each run clones
+    the base, boots it headless, and pushes its compiled test drivers, release files, and browser
+    fixture through `tart exec` (Tart 2.32.1 or newer); no SSH, password, guest IP discovery, or
+    shared folders are used. A run whose image or base is missing stops and prints the
+    `just vm-images` command. The audit snapshots attach the stopped disk read-only, honouring
+    ownership only when the host account's uid matches the guest admin's. Guest logs are copied
+    from the stopped disk into `logs/guest` before deletion, including after an acceptance failure.
+    Host timeouts bound RPC commands; stopping the disposable VM terminates any remaining guest
+    work. An interrupted mount, failed detach, or failed evidence collection retains the clone with
+    a `disk-attached` marker instead of booting or deleting a potentially mounted disk. The guest
+    agent and browser are testing fixtures; the Tao product still receives no preinstalled Node,
+    Bun, Homebrew, or Xcode tools. Under the earlier offline provisioning from a uid-501 account,
+    the fresh gate passed in 148 seconds on 2026-09-26, including installed CLI workflows,
     the counter browser click, and zero disallowed metadata changes. Evidence is retained at
     `.artifacts/standalone-vm/tao-acceptance-1790404661-65809/logs/`; guest step logs are under
     `logs/guest/steps`. The snapshots report 165/164 unreadable OS paths and no other mounts;

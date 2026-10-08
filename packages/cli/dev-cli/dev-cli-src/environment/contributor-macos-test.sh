@@ -1,6 +1,6 @@
 #!/bin/bash
 # Fixed host operation. Proves the documented contributor path in a fresh vanilla macOS VM, as
-# contributor-linux-test.sh does in Ubuntu containers. It never accepts paths, VM names, or guest
+# contributor-linux-test.sh does in an Ubuntu one. It never accepts paths, VM names, or guest
 # commands, and only the committed source (never the working tree or its credentials) enters the guest.
 set -euo pipefail
 
@@ -25,7 +25,7 @@ vm_label='Contributor macOS'
 vm_image_for_profile "$profile"
 
 # The run directory doubles as the VM helper's run root: it holds the lease record, the mounted-disk
-# marker, and the provisioned input. The VM name carries the pid so the lease names its owner.
+# marker of a base build, and the input pushed into the guest. The VM name carries the pid so the lease names its owner.
 overall_started=$(date +%s)
 run="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 name="tao-contributor-$(date +%s)-$$"
@@ -53,9 +53,11 @@ cleanup() {
   status=$?
   trap - EXIT
   if [ "$started" -eq 1 ]; then
-    tart stop "$name" >> "$logs/cleanup.log" 2>&1 || true
+    tart stop "$running_vm" >> "$logs/cleanup.log" 2>&1 || true
     wait "$vm_pid" >> "$logs/cleanup.log" 2>&1 || true
   fi
+  vm_cleanup_base_build
+  rm -f "$root/harness.tar"
   if [ -f "$root/disk-attached" ]; then
     printf 'Contributor macOS: retaining VM %s because its disk may still be mounted; see %s\n' "$name" "$root/disk-attached" >&2
     status=1
@@ -81,6 +83,7 @@ trap 'exit 143' TERM
 vm_acquire_lease
 printf 'Contributor macOS: profile %s, pinned image %s\n' "$profile" "$image"
 vm_require_tart_version
+vm_prepare_base
 if ! command -v "$bun_bin" >/dev/null; then
   printf 'The checkout Bun is unavailable: %s. Run ./enter-tao-dev-env first.\n' "$bun_bin" >&2
   exit 1
@@ -122,22 +125,29 @@ cd /Users/admin/tao
 exec /bin/sh packages/cli/dev-cli/dev-cli-src/environment/contributor-macos-guest.sh "$1"
 GUEST
 
-vm_install_guest_agent
+# The guest receives one archive through the agent: the committed source and this script.
+make_harness() {
+  mkdir -p "$root/stage/tao-harness" \
+    && cp -R "$input" "$root/stage/tao-harness/input" \
+    && /usr/bin/tar --no-xattrs -cf "$root/harness.tar" -C "$root/stage" tao-harness \
+    && rm -rf "$root/stage"
+}
+step 'archive the guest inputs' make_harness
 
 created=1
-if ! step "clone the $profile base" tart clone "$image" "$name" 2>&1 | tee "$logs/clone.log"; then
+if ! step "clone the $profile base" tart clone "$base_vm" "$name" 2>&1 | tee "$logs/clone.log"; then
   exit 1
 fi
 tart set "$name" --cpu 4 --memory 16384
 tart get "$name" --format json > "$logs/vm-config.json"
-step 'provision the stopped clone' "$bun_bin" run "$vm_helper" provision "$name" "$root" \
-  2>&1 | tee "$logs/provision.log"
 vm_boot_and_wait
+step 'push the committed source through the guest agent' vm_push "$root/harness.tar" /Users/admin
+rm -f "$root/harness.tar"
 
 guest_status=0
 step "run the contributor journey in the $profile guest" \
   "$bun_bin" run "$vm_helper" exec "$name" 7200000 /bin/sh /Users/admin/tao-harness/input/run.sh "$profile" \
-  2>&1 | tee "$logs/console.log" || guest_status=$?
+  2>&1 | tee "$logs/journey.log" || guest_status=$?
 
 # Guest evidence travels as a tar stream through the same transport, then the clone is stopped.
 collect_guest() {
@@ -148,10 +158,7 @@ collect_guest() {
 }
 step 'collect guest evidence' collect_guest
 collected=1
-step 'flush guest evidence before stopping the VM' "$bun_bin" run "$vm_helper" exec "$name" 30000 /bin/sync
-step 'stop the VM' tart stop "$name"
-wait "$vm_pid" || true
-started=0
+vm_stop_running
 
 printf 'Contributor macOS: guest steps (label, exit, seconds)\n'
 cat "$root/guest/contributor-macos/steps.tsv"

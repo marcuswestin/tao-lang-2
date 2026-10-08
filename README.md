@@ -124,12 +124,13 @@ local host-only gates are the merge proof, and landing runs both.
 
 **Installed-CLI acceptance**
 
-| Command                                          | Does                                                          |
-| ------------------------------------------------ | ------------------------------------------------------------- |
-| `just standalone-cli-acceptance`                 | Install a built release into a throwaway HOME and exercise it |
-| `just standalone-cli-vm-setup`                   | Install Tart, once                                            |
-| `just standalone-cli-clean-machine`              | The same acceptance in a disposable vanilla macOS VM          |
-| `just standalone-cli-clean-machine --base xcode` | Reuse the Xcode image; create it once with `--prepare-base`   |
+| Command                                          | Does                                                            |
+| ------------------------------------------------ | --------------------------------------------------------------- |
+| `just standalone-cli-acceptance`                 | Install a built release into a throwaway HOME and exercise it   |
+| `just standalone-cli-vm-setup`                   | Install Tart, once                                              |
+| `just vm-images`                                 | Download the pinned VM images and build the macOS base, once    |
+| `just standalone-cli-clean-machine`              | The same acceptance in a disposable vanilla macOS VM            |
+| `just standalone-cli-clean-machine --base xcode` | The same in the Xcode image; download it with `vm-images xcode` |
 
 ## Release scope
 

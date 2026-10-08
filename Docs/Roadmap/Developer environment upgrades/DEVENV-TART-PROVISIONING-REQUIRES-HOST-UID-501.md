@@ -1,15 +1,27 @@
 # DEVENV-TART-PROVISIONING-REQUIRES-HOST-UID-501 — Tart provisioning requires host uid 501
 
-- **Status:** Candidate
+- **Status:** In progress
 - **Section:** External
 - **Area:** `packages/cli/tao-cli/cli-src/standalone-vm.ts` `provision`, used by `standalone-cli-clean-machine` (vanilla and Xcode) and `contributor-macos-test`.
 - **Impact:** Every macOS isolation check fails before boot on a host account whose uid is not 501. Offline provisioning attaches the stopped clone's disk with `-owners on` and writes the harness into `Users/admin` as the host user. It refuses unless the guest admin's owner matches the host's, and the upstream Cirrus Labs images give `admin` uid 501. Matching worked only because the first account on a Mac is 501.
 - **Evidence:** 2026-10-07, the afternoon repository pass, on host account uid 503. `./agent unsandboxed standalone-cli-clean-machine` at `63e027607` pulled `ghcr.io/cirruslabs/macos-tahoe-vanilla@sha256:eeec54bf…` (865 s), then failed provisioning after 15 s: `Guest admin ownership 501:20 differs from host 503:20.` (`standalone-vm.ts:232-236`). The run logs are in `.artifacts/standalone-vm/tao-acceptance-1791402497-64188/logs` and the clone was cleaned up. `contributor-macos-test.sh:133` calls the same `provision`, so the contributor check and the prepared Xcode base share the failure.
-- **Workaround:** Run the checks from a uid-501 account.
+- **Workaround:** None. Offline provisioning, which worked from a uid-501 account, is gone; until the base is built with its root step, the macOS checks stop before cloning and print `just vm-images vanilla`.
 - **Proposed change:** The Developer approved copying the harness in after boot through the guest agent. The vanilla image has no guest agent, so the agent's binary and its LaunchAgent must be written to the stopped disk before boot (`vm-guest-lib.sh:71`). `exec` cannot carry the agent in, and the transport deliberately uses no SSH and no shared folders. Three routes remain:
   - Write the agent's bootstrap as root and `chown` it to uid 501, then copy everything else in through `exec` after boot. This runs `sudo` inside an unsandboxed operation.
   - Attach the disk with `-owners off`, so new files take the unknown owner, uid 99, which the guest reads as `admin`. The filesystem audit checks for uid 501 (`standalone-filesystem-audit.ts:534-574`), and it reads ownership from this mount. It would have to snapshot through a second `-owners on` attachment.
   - Keep uid 501 as a documented host requirement.
-- **Dependencies:** The Developer's choice among those routes.
+- **Decision (2026-10-07):** The Developer chose a local base image: vanilla plus only the pinned agent, built once.
+  - **Building it** writes only the agent and its LaunchAgent, on a disk attached with ownership ignored. Then it boots once to prove `tart exec` answers.
+  - **Each run** clones that base and sends its inputs in through `tart exec`.
+  - **The audit snapshots** attach the stopped disk read-only. They honour ownership when the host account's uid matches the guest admin's. Otherwise they ignore it, and the audit records ownership as unobserved.
+  - **The prepared Xcode base** already ships the agent, so it needs no build.
+- **Finding (2026-10-07, evening):** Without root, the local base cannot be built offline. Three base builds from host uid 503 never answered `tart exec`. Each collected its evidence from the stopped disk into `logs/guest`.
+  - **Global LaunchAgent.** The guest's `/private/var/log/com.apple.xpc.launchd/launchd.log` reads `Caller specified a plist with bad ownership/permissions: path = /Library/LaunchAgents/org.cirruslabs.tart-guest-agent.plist`. The plist was mode 0644, but root did not own it.
+  - **admin's `~/Library/LaunchAgents`.** The agent never started, and launchd logged nothing about it.
+  - **`chown 501:20` on the ownership-ignored mount.** It fails with `Operation not permitted`.
+  - **What is fine.** The vanilla image logs admin in (`autoLoginUser` is `admin`), and the agent binary landed with mode 0755.
+  - **Consequence.** Cirrus's own template runs `sudo chown root:wheel` on the plist, and something must do the same here.
+- **Decision (2026-10-07, night):** The Developer builds the base. `just vm-images vanilla` runs from their terminal, once per pinned digest, and uses `sudo` once to make the LaunchAgent root-owned. Runs and agents never download or build an image: a missing image or stale base stops the run with the exact `just vm-images` command. The command and that check landed with the Ubuntu-on-Tart change; the root step follows on its own branch.
+- **Dependencies:** None.
 - **Acceptance:** Vanilla acceptance and `contributor-macos-test` pass their provisioning step from a host account whose uid is not 501.
 - **Source:** Isolation checks of the October 7 afternoon repository pass.

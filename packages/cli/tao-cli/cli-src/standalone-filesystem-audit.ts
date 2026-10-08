@@ -3,9 +3,15 @@ import { Errors, FS, HCI, Platform } from '@shared'
 /** A metadata inventory of one writable guest volume; mounted filesystems are recorded but not entered. */
 type Entry = Awaited<ReturnType<typeof FS.entryMetadata>>
 type Issue = { error: string; path: string }
+/**
+ * `ignored` means the disk was attached with ownership off because the host account's uid is not the
+ * guest admin's: every entry then reports the reader as its owner, so uid and gid carry no evidence.
+ */
+type Ownership = 'observed' | 'ignored'
 type Snapshot = {
   entries: Record<string, Entry>
   issues: Issue[]
+  ownership?: Ownership
   root: string
   skippedMounts: string[]
 }
@@ -16,6 +22,7 @@ type Diff = {
   beforeSkippedMounts: string[]
   changed: Change[]
   incomplete: boolean
+  ownership: Ownership
   removed: string[]
   root: string
   afterIssues: Issue[]
@@ -33,8 +40,14 @@ type AuditScope = {
 const REPORT_LIMIT = 200
 
 async function main(args: string[]): Promise<void> {
-  if (args[0] === 'snapshot' && (args.length === 3 || args.length === 4)) {
+  if (
+    args[0] === 'snapshot'
+    && (args.length === 3 || args.length === 4 || (args.length === 5 && args[4] === 'ownership-ignored'))
+  ) {
     const snapshot = await capture(FS.resolvePath(args[1]!))
+    if (args[4] === 'ownership-ignored') {
+      snapshot.ownership = 'ignored'
+    }
     if (args[3] !== undefined) {
       const logicalRoot = FS.resolvePath(args[3])
       const logical = (path: string) => FS.resolvePath(FS.relativePath(snapshot.root, path), logicalRoot)
@@ -77,7 +90,7 @@ async function main(args: string[]): Promise<void> {
     return
   }
   Errors.throwUserInput(
-    'Usage: filesystem-audit snapshot <root> <output.json> [logical-root] | compare <before.json> <after.json> <diff.json> <report.txt> [scope.json]',
+    'Usage: filesystem-audit snapshot <root> <output.json> [logical-root [ownership-ignored]] | compare <before.json> <after.json> <diff.json> <report.txt> [scope.json]',
   )
 }
 
@@ -127,6 +140,10 @@ function compare(before: Snapshot, after: Snapshot): Diff {
   if (before.root !== after.root) {
     Errors.throwUserInput(`Filesystem audit roots differ: ${before.root} and ${after.root}`)
   }
+  const ownership = before.ownership ?? 'observed'
+  if (ownership !== (after.ownership ?? 'observed')) {
+    Errors.throwUserInput('Filesystem audit snapshots disagree on whether ownership was observed.')
+  }
   const diff: Diff = {
     added: [],
     afterIssues: after.issues,
@@ -135,6 +152,7 @@ function compare(before: Snapshot, after: Snapshot): Diff {
     beforeSkippedMounts: before.skippedMounts,
     changed: [],
     incomplete: before.issues.length > 0 || after.issues.length > 0,
+    ownership,
     removed: [],
     root: before.root,
     violations: [],
@@ -170,6 +188,8 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     }
   }
   const onVolume = (path: string) => FS.resolvePath(path.slice(1), diff.root)
+  // An unobserved owner cannot disqualify a shape; the other fields still must match.
+  const ownedByAdmin = (entry: Entry) => diff.ownership === 'ignored' || (entry.uid === 501 && entry.gid === 20)
   const acceptanceRoot = onVolume(scope.root)
   const acceptanceHome = FS.resolvePath('home', acceptanceRoot)
   const guestHome = onVolume(scope.guestHome)
@@ -474,9 +494,10 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
       FS.resolvePath('Library/Logs/CoreSimulator', guestHome),
     ]
     : []
+  // Both profiles run the guest agent that carries every command; it logs where the vendor image's does.
+  const agentLog = onVolume('/private/tmp/tart-guest-agent.log')
   const xcodeExact = scope.vmProfile === 'xcode'
     ? [
-      '/private/tmp/tart-guest-agent.log',
       '/private/tmp/tart-guest-daemon.log',
       '/private/var/tmp',
       '/private/var/tmp/SoftwareUpdateCore_NRD/EventReporterPersistedState',
@@ -531,7 +552,7 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
       const shape = observedMetadata.get(path)
       return shape !== undefined && before.kind === shape.kind && after.kind === shape.kind
         && before.size === shape.beforeSize && after.size === shape.afterSize
-        && after.uid === 501 && after.gid === 20 && after.mode === (shape.kind === 'file' ? 0o100644 : 0o40755)
+        && ownedByAdmin(after) && after.mode === (shape.kind === 'file' ? 0o100644 : 0o40755)
         && JSON.stringify({ ...before, device: 0, modifiedMs: 0, size: 0 })
           === JSON.stringify({ ...after, device: 0, modifiedMs: 0, size: 0 })
     }).map(change => change.path),
@@ -541,7 +562,7 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
     const entry = afterEntries[path]
     if (
       diff.added.includes(path) && entry?.kind === 'directory' && entry.size === 64
-      && entry.mode === 0o40755 && entry.uid === 501 && entry.gid === 20
+      && entry.mode === 0o40755 && ownedByAdmin(entry)
     ) {
       observedMetadataChanges.add(path)
     }
@@ -569,9 +590,9 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
       if (
         marker !== undefined
         && directory?.kind === 'directory' && directory.mode === 0o40700 && directory.size === 96
-        && directory.uid === 501 && directory.gid === 20
+        && ownedByAdmin(directory)
         && file?.kind === 'file' && file.mode === 0o100600 && file.size === 0
-        && file.uid === 501 && file.gid === 20
+        && ownedByAdmin(file)
       ) {
         xcodeChromeStagingPaths.add(root)
         xcodeChromeStagingPaths.add(marker)
@@ -616,7 +637,7 @@ function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entri
       return true
     }
     if (
-      xcodeExact.includes(path) || systemExact.includes(path) || guestSystemExact.includes(path)
+      path === agentLog || xcodeExact.includes(path) || systemExact.includes(path) || guestSystemExact.includes(path)
       || ppmPatArtifact(path) || googleUpdaterTempPath(path)
       || xcodeChromeStagingPaths.has(path)
       || xcodeCryptex(path) || xcodeRemoved(path)
@@ -767,7 +788,10 @@ function report(diff: Diff): string {
     `Added: ${diff.added.length}; changed: ${diff.changed.length}; removed: ${diff.removed.length}.`,
     `Unreadable paths: ${diff.beforeIssues.length} before, ${diff.afterIssues.length} after.`,
     `Disallowed or unobservable test paths: ${diff.violations.length}.`,
-    'This compares path metadata (type, size, modification time, ownership, mode, symlink target), not file contents.',
+    diff.ownership === 'ignored'
+      ? 'This compares path metadata (type, size, modification time, mode, symlink target), not file contents. '
+        + 'Ownership was not observed: the host account uid differs from the guest admin uid.'
+      : 'This compares path metadata (type, size, modification time, ownership, mode, symlink target), not file contents.',
     'It excludes other mounted volumes and cannot see files created and removed between snapshots.',
     'Full path lists and metadata are in filesystem-diff.json; macOS background changes may appear.',
     'The policy rejects every observed change outside the acceptance and explicit macOS-owned paths.',
