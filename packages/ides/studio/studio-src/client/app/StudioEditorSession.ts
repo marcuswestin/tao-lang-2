@@ -294,7 +294,7 @@ export class StudioEditorSession {
 
   async saveActive(): Promise<void> {
     const tab = this.#activePath === undefined ? undefined : this.#tabs.get(this.#activePath)
-    if (tab === undefined || !tab.dirty) {
+    if (tab === undefined || (!tab.dirty && !tab.draft.hasPendingWrites)) {
       this.#deps.view.status.dataset['state'] = 'idle'
       this.#deps.view.status.textContent = 'No unsaved changes.'
       return

@@ -39,8 +39,8 @@ freshness check proves them current. The `node_modules` cache leaves out Jazz's 
 binaries. The prepare phase stays in each partition: running it once in `plan` adds more serial
 time than it saves, and each partition must still fail on unformatted or stale generated files. The
 fixers do not run there: `--hosted-linux` skips every `canonicalises` node, because the workflow
-fails a rewritten tree and the check gates (`_dprint-check`, `_tao-check`, `_repo-lint`) fail on
-the same defect. The generated parser and the compiled WordFlower app are restored from the Actions
+fails a rewritten tree, and runs each one's `checkedBy` gate (`_dprint-check`, `_tao-check`,
+`_repo-lint`) in its place, since `VERIFY_FULL_GATES` names only the fixers. The generated parser and the compiled WordFlower app are restored from the Actions
 cache with their stamps, and each generator re-hashes its inputs and output before trusting a stamp.
 The editor build is not cached: it has no stamp, and its ~29 s runs beside the compile. Measured
 after, on an 11-partition run: about 46 s before the prepare phase. Read a run's per-step times

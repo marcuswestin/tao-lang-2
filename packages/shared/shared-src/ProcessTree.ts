@@ -1,6 +1,7 @@
 import * as Errors from './core/Errors'
 import { sleep } from './core/Time'
 import * as Platform from './Platform'
+import { captureInheritedOutputOwners as captureSocketOutputOwners } from './ProcessOutputOwners'
 import { inspectDarwinProcesses } from './ProcessTreeDarwin'
 import { createLinuxProcessInspector } from './ProcessTreeLinux'
 
@@ -45,6 +46,32 @@ const FORCE_KILL_GRACE_MS = 250
 const EXIT_POLL_MS = 25
 
 const linuxProcesses = createLinuxProcessInspector()
+
+/** Capture escaped writers of a live owned child's output; ordinary polling stays tree-local. */
+function captureInheritedOutputOwners(rootPid: number): TrackedProcess[] {
+  requireProcessInspectionPlatform()
+  if (Platform.hostPlatform !== 'darwin') {
+    return []
+  }
+  return captureSocketOutputOwners(rootPid, {
+    identities: currentProcessIdentities,
+    sameProcess,
+    readDescriptors: pids => {
+      const result = Platform.spawnSync('/usr/sbin/lsof', {
+        args: ['-nP', '-a', '-U', '-d', '1,2', '-F0pftad', ...(pids === undefined ? [] : ['-p', pids.join(',')])],
+        timeout: 5_000,
+        maxBuffer: 2 * 1024 * 1024,
+      })
+      if (result.error !== undefined || result.status !== 0 || String(result.stderr).trim() !== '') {
+        Errors.throwHostEnvironment('Could not verify inherited output socket ownership.', {
+          cause: result.error,
+          details: { status: result.status, diagnostic: String(result.stderr).slice(0, 2_000) },
+        })
+      }
+      return String(result.stdout)
+    },
+  })
+}
 
 function requireProcessInspectionPlatform(platform = Platform.hostPlatform): void {
   if (platform !== 'darwin' && platform !== 'linux') {
@@ -306,6 +333,7 @@ async function stopTree(pid: number | undefined, options: { graceMs?: number } =
 /** ProcessTree finds, signals and waits out the process tree one owned child started. */
 export const ProcessTree = {
   FORCE_KILL_GRACE_MS,
+  captureInheritedOutputOwners,
   descendants: descendantProcesses,
   refreshDescendants,
   identities: currentProcessIdentities,

@@ -2,7 +2,12 @@ import { Assert, Errors } from '@shared/core'
 import { previewCompatibilitySignature } from '../../StudioPreviewCompatibility'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../../StudioPreviewManifest'
 import { StudioProtocol } from '../../StudioProtocol'
-import { StudioApiClient, type StudioCellRuntimeResponse, type StudioHandshake } from '../StudioApiClient'
+import {
+  StudioApiClient,
+  StudioApiError,
+  type StudioCellRuntimeResponse,
+  type StudioHandshake,
+} from '../StudioApiClient'
 import { StudioScenarioControls } from '../StudioScenarioControls'
 import { invalidatePreviewJourneyRecording } from './StudioJourneyRecording'
 import { StudioMatrixGrid } from './StudioMatrixGrid'
@@ -169,14 +174,15 @@ type StudioActivationState = {
 const activationStates = new WeakMap<HTMLElement, StudioActivationState>()
 const maxActivationContextAttempts = 3
 
-function releaseCellInstance(previewInstanceId: string): () => void {
+function releasePreviewInstance(previewInstanceId: string, wholeApp = false): () => void {
   let released = false
   return () => {
     if (released) {
       return
     }
     released = true
-    void StudioApiClient.releaseCellInstance(previewInstanceId).catch(() => {})
+    const release = wholeApp ? StudioApiClient.releasePreviewInstance : StudioApiClient.releaseCellInstance
+    void release(previewInstanceId).catch(() => {})
   }
 }
 
@@ -277,6 +283,7 @@ export function wireActivation(
               previewInstanceId = crypto.randomUUID()
               if (cell === undefined) {
                 await StudioApiClient.previewInstance({ previewInstanceId })
+                releaseRegistered = releasePreviewInstance(previewInstanceId, true)
               } else {
                 Assert(manifest, 'a preview manifest for an activated scenario')
                 cellIdentity = {
@@ -287,8 +294,23 @@ export function wireActivation(
                   manifestRevision: manifest.manifestRevision,
                   project: handshake.identity.project,
                 }
-                await StudioApiClient.cellInstance({ ...cellIdentity, previewInstanceId })
-                releaseRegistered = releaseCellInstance(previewInstanceId)
+                try {
+                  await StudioApiClient.cellInstance({ ...cellIdentity, previewInstanceId })
+                } catch (error) {
+                  // Publishing a pending design overlay may replace the context while
+                  // registration is in flight. Restart with that context, never weaken
+                  // the server's identity check or retry an unchanged stale request.
+                  if (
+                    error instanceof StudioApiError && error.status === 409
+                    && (error.details?.['code'] === 'stale-manifest' || error.details?.['code'] === 'stale-compile')
+                    && (activation.context !== context || connection.cell !== cell
+                      || StudioPreviewActivationGate.generation(parent) !== generation)
+                  ) {
+                    continue
+                  }
+                  throw error
+                }
+                releaseRegistered = releasePreviewInstance(previewInstanceId)
               }
             }
             if (!current()) {
@@ -431,11 +453,12 @@ async function runRestoredPreviews(
         try {
           if (cell === undefined) {
             await StudioApiClient.previewInstance({ previewInstanceId }, signal)
+            releaseRegistered = releasePreviewInstance(previewInstanceId, true)
           } else {
             const identity = connection.cellIdentity
             Assert(identity, 'the current cell identity for a restored preview')
             await StudioApiClient.cellInstance({ ...identity, previewInstanceId }, signal)
-            releaseRegistered = releaseCellInstance(previewInstanceId)
+            releaseRegistered = releasePreviewInstance(previewInstanceId)
           }
           if (signal?.aborted) {
             throw Errors.abortError('Tao Studio preview activation was cancelled.')
@@ -470,6 +493,14 @@ async function runRestoredPreviews(
           return
         } catch (error) {
           releaseRegistered?.()
+          if (
+            error instanceof StudioApiError && error.status === 409
+            && (error.details?.['code'] === 'stale-manifest' || error.details?.['code'] === 'stale-compile')
+            && (context !== activation.context || cell !== connection.cell
+              || generation !== StudioPreviewActivationGate.generation(parent))
+          ) {
+            continue
+          }
           throw error
         }
       }
@@ -521,6 +552,7 @@ async function connectWholeAppPreview(
     navigationPending: true,
     origin,
     previewInstanceId,
+    ...(activated && !startupPending ? { releaseCellInstance: releasePreviewInstance(previewInstanceId, true) } : {}),
     startupPending,
   }
   watchCellPreviewLoad(connection, handshake)
@@ -618,7 +650,7 @@ async function connectCellPreview(
     origin,
     previewInstanceId,
     startupPending,
-    ...(activated && !startupPending ? { releaseCellInstance: releaseCellInstance(previewInstanceId) } : {}),
+    ...(activated && !startupPending ? { releaseCellInstance: releasePreviewInstance(previewInstanceId) } : {}),
   }
   watchCellPreviewLoad(connection, handshake)
   return connection

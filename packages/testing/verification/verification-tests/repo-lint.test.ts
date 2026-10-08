@@ -9,6 +9,7 @@ import {
   developerEnvironmentLedgerIssues,
   devLazyStudioImportIssues,
   duplicateDescribeTitleIssues,
+  duplicateRoadmapItemIdIssues,
   justRecipeIssues,
   langiumImportIssues,
   missingTestAppReadmeEntries,
@@ -527,6 +528,14 @@ _bench-check:
       ['Data MVP', 'Navigation MVP'],
       '# Test Apps\n\n## Navigation MVP\n\nNavigation behavior.\n',
     )).toEqual(['Data MVP'])
+  })
+
+  Test('reports a roadmap item ID given to two headings', () => {
+    const roadmap = '### A1 — First\n\n### A2 — Second\n\n#### A2 — Not an item\n\n### A2 — Merged twin\n'
+    Expect(duplicateRoadmapItemIdIssues('Roadmap.md', roadmap)).toEqual([
+      'Roadmap.md uses item ID A2 for more than one heading (lines 3, 7); give the newer item the next unused ID.',
+    ])
+    Expect(duplicateRoadmapItemIdIssues('Roadmap.md', '### A1 — First\n### R1 — Other\n')).toEqual([])
   })
 
   Test('requires contracts for authored apps while ignoring removed apps and generated leftovers', async () => {

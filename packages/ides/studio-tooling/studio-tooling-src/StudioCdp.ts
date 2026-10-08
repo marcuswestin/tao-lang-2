@@ -5,6 +5,7 @@ import {
   FS,
   Json,
   Platform,
+  ProcessTree,
   Repo,
   Time,
   VerificationTimeouts,
@@ -188,14 +189,32 @@ export class StudioCdp {
         Platform.hostPlatform === 'linux' ? () => describeChromeStall(startedCommand.pid, userDataRoot) : undefined,
       )
       const target = await waitForTarget(`http://127.0.0.1:${port}`, undefined, command, diagnostic)
+      captureChromeOutputOwners(startedCommand)
       client = await CdpClient.connect(requireWebSocketUrl(target), command, diagnostic)
       const connectedClient = client
+      const process = startedCommand.pid === undefined
+        ? undefined
+        : ProcessTree.identities([startedCommand.pid]).get(startedCommand.pid)
+      const shutdownEvents: { phase: string; timestamp: string }[] = []
+      const recordShutdown = (phase: string) => shutdownEvents.push({ phase, timestamp: new Date().toISOString() })
+      const artifactRoot = options.artifactRoot ?? Repo.tryResolvePath('.artifacts/tests/studio-browser')
+      const shutdownReport = artifactRoot === undefined
+        ? undefined
+        : FS.resolvePath(`chrome-shutdown/${Platform.randomUUID()}.json`, artifactRoot)
       const studio = new StudioCdp(client, async () => {
-        try {
-          connectedClient.close()
-        } finally {
-          await stopChrome(startedCommand, userDataRoot, 'SIGTERM')
-        }
+        await closeChrome([
+          () => closeOwnedChrome(startedCommand, connectedClient, userDataRoot, recordShutdown),
+          () =>
+            shutdownReport === undefined ? undefined : FS.writeJson(shutdownReport, {
+              executable: chromePath,
+              process,
+              profile: userDataRoot,
+              events: shutdownEvents,
+              exitCode: startedCommand.exitCode,
+              signal: startedCommand.signalCode,
+              output: startupOutput,
+            }),
+        ])
       }, options)
       await configure(client, { viewport: { width: 1440, height: 900 } })
       return studio
@@ -254,6 +273,8 @@ export class StudioCdp {
   }
 
   static readonly testing = {
+    closeChrome,
+    closeOwnedChrome,
     stopChrome,
     waitForActivePort,
     attach(
@@ -1398,18 +1419,103 @@ async function findChromePath(): Promise<string> {
     ?? Errors.throwUserInput('Studio smoke requires Chrome or Chromium; set TAO_STUDIO_CHROME_PATH.')
 }
 
+/** Retain daemonized output writers before Chrome exits and releases its endpoint identity. */
+function captureChromeOutputOwners(command: CLI.StartedCommand): void {
+  if (Platform.hostPlatform === 'darwin') {
+    Assert.defined(command.captureOutputOwners, 'Expected supervised Chrome output ownership capture.')
+    command.captureOutputOwners()
+  }
+}
+
+/** Attempt each owned cleanup step and keep the first failure as the diagnostic cause. */
+async function closeChrome(steps: readonly (() => void | Promise<void>)[]): Promise<void> {
+  const failures: unknown[] = []
+  for (const step of steps) {
+    try {
+      await step()
+    } catch (error) {
+      failures.push(error)
+    }
+  }
+  if (failures.length > 0) {
+    Errors.throwHostEnvironment('Chrome cleanup could not be verified.', {
+      cause: failures[0],
+      details: { failures: failures.map(error => Errors.formatForLog(error).slice(0, 4_000)) },
+    })
+  }
+}
+
+/** Keep CDP connected while Chrome closes itself; force only survivors after the bounded grace. */
+async function closeOwnedChrome(
+  command: CLI.StartedCommand,
+  client: Pick<CdpClient, 'send' | 'close'>,
+  profile: string,
+  record: (phase: string) => void = () => {},
+): Promise<void> {
+  let retainProfile = false
+  await closeChrome([
+    () => {
+      record('capture-output-owners')
+      if (command.exitCode === null && command.signalCode === null) {
+        try {
+          captureChromeOutputOwners(command)
+        } catch (error) {
+          retainProfile = true
+          throw error
+        }
+      }
+    },
+    async () => {
+      record('join-started')
+      await stopChrome(command, profile, 'SIGKILL', {
+        retainProfile,
+        requestClose: () => {
+          Assert.defined(command.beginGracefulStop, 'Expected supervised Chrome graceful shutdown.')
+          command.beginGracefulStop(1_000)
+          record('browser-close-requested')
+          // Chrome may close the socket before answering. Join its supervised exit rather than
+          // treating a missing protocol response as proof that the browser failed to stop.
+          void client.send('Browser.close').catch(error => record(`browser-close-response: ${Errors.messageOf(error)}`))
+        },
+      })
+      record('joined')
+    },
+    () => {
+      record('disconnect')
+      client.close()
+    },
+  ])
+}
+
 /** Join supervised Chrome ownership before releasing observers, even after the direct child exited. */
 async function stopChrome(
   command: Pick<CLI.StartedCommand, 'exitCode' | 'signalCode' | 'kill' | 'waitForClose' | 'closeOutput' | 'dispose'>,
   profile: string,
   signal: Platform.ProcessSignal,
+  options: { requestClose?: () => void; retainProfile?: boolean } = {},
 ): Promise<void> {
   const failures: unknown[] = []
+  let joined = false
   try {
     if (command.exitCode === null && command.signalCode === null) {
-      command.kill(signal)
+      if (options.requestClose === undefined) {
+        command.kill(signal)
+      } else {
+        try {
+          options.requestClose()
+        } catch (error) {
+          failures.push(error)
+          command.kill('SIGKILL')
+        }
+      }
     }
-    await command.waitForClose()
+    const result = await command.waitForClose()
+    joined = true
+    if (result.exitCode !== null && result.exitCode !== 0) {
+      Errors.throwHostEnvironment('Chrome reported an unsuccessful exit during cleanup.', {
+        details: { exitCode: result.exitCode, directExitCode: command.exitCode, signal: result.signal },
+      })
+    }
   } catch (error) {
     failures.push(error)
   } finally {
@@ -1423,16 +1529,18 @@ async function stopChrome(
     } catch (error) {
       failures.push(error)
     }
-    try {
-      await FS.remove(profile)
-    } catch (error) {
-      failures.push(error)
+    if (joined && failures.length === 0 && options.retainProfile !== true) {
+      try {
+        await FS.remove(profile)
+      } catch (error) {
+        failures.push(error)
+      }
     }
   }
   if (failures.length > 0) {
     Errors.throwHostEnvironment('Chrome cleanup could not be verified.', {
       cause: failures[0],
-      details: { failures: failures.map(error => Errors.formatForLog(error).slice(0, 4_000)) },
+      details: { profile, failures: failures.map(error => Errors.formatForLog(error).slice(0, 4_000)) },
     })
   }
 }

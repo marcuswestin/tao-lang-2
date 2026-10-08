@@ -6,7 +6,7 @@ name: Verify
 # of the readers; the final `Verify` job is the one verdict, and it refuses a set of partitions that
 # did not compute the same plan, because a disagreement there means some node ran nowhere. The
 # prepare phase's fixers do not run here (`--hosted-linux` skips them): a rewrite fails the partition
-# below, and the check gates (`_dprint-check`, `_tao-check`, `_repo-lint`) fail on the same defect.
+# below, and the runner adds their check gates (`_dprint-check`, `_tao-check`, `_repo-lint`) instead.
 #
 # Host gates: the ones the catalog marks `runsOnHostedLinux` run here (studio-smoke,
 # studio-smoke-simulated-user, keyboard-navigation-smoke, studio-dialog-browser, studio-metro-refresh,

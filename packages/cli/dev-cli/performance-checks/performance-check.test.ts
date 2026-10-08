@@ -5,6 +5,27 @@ import { PerformanceCheck } from '../dev-cli-src/performance/performance-check'
 
 type Dependencies = NonNullable<Parameters<typeof PerformanceCheck.run>[0]>
 
+const forcedStudioDiagnostics = {
+  TAO_STUDIO_SMOKE_NODE_ENV: 'development',
+  TAO_STUDIO_PREVIEW_FIRST: 'true',
+  TAO_STUDIO_PREVIEW_TRACE: 'false',
+  TAO_STUDIO_PREVIEW_PROFILE: 'false',
+  TAO_STUDIO_LATENCY_SAVE_GAP_MS: '500',
+  TAO_STUDIO_LATENCY_PADDING_LENGTH: 'false',
+  TAO_STUDIO_LATENCY_REVERT: 'false',
+  TAO_STUDIO_LATENCY_RECOVERY: 'false',
+  TAO_STUDIO_LATENCY_RAPID_SAVES: 'false',
+  TAO_STUDIO_LATENCY_RETAINED_STATE: 'false',
+  TAO_STUDIO_LATENCY_WHOLE_APP: 'false',
+  TAO_STUDIO_LATENCY_SINGLE_CELL: 'false',
+  TAO_STUDIO_LATENCY_TWO_FILE_BURST: 'false',
+  TAO_STUDIO_LATENCY_ACTIVATE_DURING_OVERLAY: 'false',
+  TAO_STUDIO_LATENCY_REQUIRE_FULL_OVERLAP: 'false',
+  TAO_STUDIO_LATENCY_BROWSER_SCHEDULER: 'false',
+  TAO_STUDIO_FAST_HMR: 'true',
+  TAO_STUDIO_FAST_FILE_MAP: 'true',
+} as const
+
 function fixture() {
   const calls: string[] = []
   const reports: Parameters<Dependencies['writeReport']>[0][] = []
@@ -18,6 +39,7 @@ function fixture() {
     load: 1,
     languageExit: 0,
     studioExit: 0,
+    directStudioExit: 0,
     sample: undefined as (() => Promise<void>) | undefined,
     language: undefined as (() => Promise<void>) | undefined,
     studio: undefined as (() => Promise<void>) | undefined,
@@ -82,10 +104,14 @@ function fixture() {
       environments.push(env)
       await state.studio?.()
       calls.push('studio-end')
-      return state.studioExit
+      return env['TAO_STUDIO_PREVIEW_PERFORMANCE'] === 'false' ? state.directStudioExit : state.studioExit
     },
     qualifyStudio: async () => {
-      calls.push('qualify')
+      calls.push('qualify-canonical')
+      return 0
+    },
+    qualifyDirectStudio: async () => {
+      calls.push('qualify-direct')
       return 0
     },
     writeReport: async report => {
@@ -115,17 +141,33 @@ Describe('standalone performance protection', () => {
       'language-end',
       'studio-start',
       'studio-end',
-      'qualify',
+      'qualify-canonical',
+      'studio-start',
+      'studio-end',
+      'qualify-direct',
       'monitor-stop',
       'exclusive-release',
       'lane-release',
       'write',
     ])
     Expect(fake.reports[0]?.status).toBe('passed')
-    Expect(fake.environments).toHaveLength(2)
+    Expect(fake.environments).toHaveLength(3)
     Expect(fake.environments[0]?.['TAO_MACHINE_LANE_ID']).toBe('owner')
     Expect(fake.environments[1]?.['TAO_STUDIO_PREVIEW_PERFORMANCE']).toBe('true')
+    Expect(fake.environments[1]).toMatchObject({
+      ...forcedStudioDiagnostics,
+      TAO_STUDIO_LATENCY_CASE: '',
+      TAO_STUDIO_LATENCY_PUBLICATION: '',
+    })
     Expect(fake.environments[1]?.['TAO_STUDIO_PREVIEW_PERFORMANCE_ARTIFACT_ROOT']).toContain('.artifacts/performance/')
+    Expect(fake.environments[2]).toMatchObject({
+      ...forcedStudioDiagnostics,
+      TAO_STUDIO_PREVIEW_PERFORMANCE: 'false',
+      TAO_STUDIO_LATENCY_CASE: 'HNReader editor padding',
+      TAO_STUDIO_LATENCY_PUBLICATION: 'off',
+      TAO_STUDIO_DESIGN_DELIVERY: '',
+    })
+    Expect(fake.environments[2]?.['TAO_STUDIO_PREVIEW_PERFORMANCE_ARTIFACT_ROOT']).toContain('/direct-padding')
   })
 
   Test('refuses unavailable registries, busy lanes, and load above half the CPUs', async () => {
@@ -233,13 +275,15 @@ Describe('standalone performance protection', () => {
     Expect(fake.reports[0]?.reasons).toHaveLength(2)
   })
 
-  Test('reports uncontaminated child failures after running both timing stages', async () => {
+  Test('fails fast after a language-stage failure and releases the lease', async () => {
     const fake = fixture()
     fake.state.languageExit = 1
     Expect(await PerformanceCheck.run(fake.dependencies)).toBe(1)
-    Expect(fake.calls).toContain('studio-end')
+    Expect(fake.calls).not.toContain('studio-start')
+    Expect(fake.calls.slice(-4)).toEqual(['monitor-stop', 'exclusive-release', 'lane-release', 'write'])
     Expect(fake.reports[0]?.status).toBe('failed')
     Expect(fake.reports[0]?.reasons).toEqual([])
+    Expect(fake.reports[0]?.stages).toEqual([{ name: 'language', exitCode: 1 }])
   })
 
   Test('requires artifact qualification even after a successful Studio child', async () => {
@@ -262,6 +306,63 @@ Describe('standalone performance protection', () => {
       { name: 'language', exitCode: 0 },
       { name: 'studio-preview', exitCode: 1 },
     ])
+  })
+
+  Test('does not admit direct padding after a failed canonical qualification and releases the lease', async () => {
+    const fake = fixture()
+    fake.dependencies.qualifyStudio = async () => {
+      fake.calls.push('qualify-canonical')
+      return 1
+    }
+    Expect(await PerformanceCheck.run(fake.dependencies)).toBe(1)
+    Expect(fake.calls).not.toContain('qualify-direct')
+    Expect(fake.calls.filter(call => call === 'studio-start')).toHaveLength(1)
+    Expect(fake.calls.slice(-4)).toEqual(['monitor-stop', 'exclusive-release', 'lane-release', 'write'])
+    Expect(fake.reports[0]?.stages).toEqual([
+      { name: 'language', exitCode: 0 },
+      { name: 'studio-preview', exitCode: 1 },
+    ])
+  })
+
+  Test('cancels direct admission after canonical contamination and releases the lease', async () => {
+    const fake = fixture()
+    fake.dependencies.qualifyStudio = async () => {
+      fake.calls.push('qualify-canonical')
+      fake.state.load = 8
+      await fake.state.sample!()
+      fake.state.load = 1
+      return 0
+    }
+    Expect(await PerformanceCheck.run(fake.dependencies)).toBe(2)
+    Expect(fake.calls).not.toContain('qualify-direct')
+    Expect(fake.calls.filter(call => call === 'studio-start')).toHaveLength(1)
+    Expect(fake.calls.slice(-4)).toEqual(['monitor-stop', 'exclusive-release', 'lane-release', 'write'])
+    Expect(fake.reports[0]?.status).toBe('inconclusive')
+  })
+
+  Test('reports a direct child failure and still releases the lease', async () => {
+    const fake = fixture()
+    fake.state.directStudioExit = 1
+    Expect(await PerformanceCheck.run(fake.dependencies)).toBe(1)
+    Expect(fake.calls).not.toContain('qualify-direct')
+    Expect(fake.calls.slice(-4)).toEqual(['monitor-stop', 'exclusive-release', 'lane-release', 'write'])
+    Expect(fake.reports[0]?.stages).toEqual([
+      { name: 'language', exitCode: 0 },
+      { name: 'studio-preview', exitCode: 0 },
+      { name: 'studio-direct-padding', exitCode: 1 },
+    ])
+  })
+
+  Test('requires direct artifact qualification and preserves cleanup failures', async () => {
+    const fake = fixture()
+    fake.dependencies.qualifyDirectStudio = async () => {
+      fake.calls.push('qualify-direct')
+      Errors.throwHostEnvironment('fixture missing direct padding receipt')
+    }
+    Expect(await PerformanceCheck.run(fake.dependencies)).toBe(2)
+    Expect(fake.calls.slice(-4)).toEqual(['monitor-stop', 'exclusive-release', 'lane-release', 'write'])
+    Expect(fake.reports[0]?.status).toBe('inconclusive')
+    Expect(fake.reports[0]?.reasons[0]).toContain('fixture missing direct padding receipt')
   })
 
   Test('blocks a real peer reservation until the performance lease releases', async () => {

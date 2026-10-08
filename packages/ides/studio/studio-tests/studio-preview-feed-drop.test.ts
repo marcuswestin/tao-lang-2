@@ -1,16 +1,34 @@
 import { Errors } from '@shared/core'
-import { Describe, Expect, Test, until } from '@shared/test'
+import { Describe, Expect, Test, testOverrideSlot, until } from '@shared/test'
 import { studioPreviewMessageListener } from '../studio-src/client/app/StudioPreviewWiring'
 import { StudioSketchFeedTarget } from '../studio-src/client/matrix/StudioMatrixSketches'
 import { handlePreviewMessage } from '../studio-src/client/matrix/StudioPreviewBridge'
+import { postDesignPadding } from '../studio-src/client/matrix/StudioPreviewBridge'
 import type { StudioPreviewConnection } from '../studio-src/client/matrix/StudioPreviewConnection'
-import type { StudioHandshake } from '../studio-src/client/StudioApiClient'
+import { StudioApiClient, type StudioHandshake } from '../studio-src/client/StudioApiClient'
 import {
+  type StudioDesignPaddingUpdate,
   type StudioPreviewFeedDropMessage,
   studioProtocolChannel,
   studioProtocolVersion,
 } from '../studio-src/StudioProtocol'
 import type { StudioSketchCatalogSnapshot } from '../studio-src/StudioSketchCatalog'
+
+const mutableStudioApiClient = StudioApiClient as unknown as {
+  previewPaint: typeof StudioApiClient.previewPaint
+}
+const previewPaintSlot = testOverrideSlot({
+  read: () => mutableStudioApiClient.previewPaint,
+  write: (value: typeof mutableStudioApiClient.previewPaint) => {
+    mutableStudioApiClient.previewPaint = value
+  },
+})
+const previewLayoutMeasurementsSlot = testOverrideSlot({
+  read: () => StudioApiClient.previewLayoutMeasurements,
+  write: value => {
+    ;(StudioApiClient as { previewLayoutMeasurements: typeof value }).previewLayoutMeasurements = value
+  },
+})
 
 Describe('Studio iframe Feed drops', () => {
   Test('routes current field and collection drops to the exact normalized snapped target', async () => {
@@ -77,6 +95,207 @@ Describe('Studio iframe Feed drops', () => {
     await Expect(handlePreviewMessage(event(message), preview, handshake, async () => undefined, actions)).rejects
       .toThrow('Edit mode')
     Expect(calls).toEqual([])
+  })
+
+  Test('reports only current child paint acknowledgements for revisions Studio sent', async () => {
+    const { preview, handshake } = fixture()
+    preview.activated = true
+    preview.expectedRevision = 1
+    const reports: Array<{ painted?: boolean; revision: number }> = []
+    const sent: unknown[] = []
+    ;(preview.iframe.contentWindow as unknown as { postMessage(message: unknown, targetOrigin: string): void })
+      .postMessage = (message, targetOrigin) => sent.push({ message, targetOrigin })
+    const restore = previewPaintSlot.install(async message => {
+      reports.push({ painted: message.painted, revision: message.paintRevision })
+      return { accepted: true }
+    })
+    const experimentalHandshake = { ...handshake, previewPaint: true as const }
+    const window = preview.iframe.contentWindow
+    const identity = { ...preview.cellIdentity!, previewInstanceId: preview.previewInstanceId }
+    const padding = (revision: number): StudioDesignPaddingUpdate => ({
+      bundleName: 'surface',
+      designName: 'Theme',
+      sourcePath: '/project/Design.tao',
+      entryIndex: 0,
+      ownerKind: 'styles',
+      oldLiteralRange: { from: 10, to: 12 },
+      newLiteralRange: { from: 10, to: 12 },
+      oldSpecRange: { from: 5, to: 20 },
+      newSpecRange: { from: 5, to: 20 },
+      expectedPadding: 12,
+      padding: 16,
+      revision,
+    })
+    const painted = (revision: number, acknowledgedIdentity = identity, didPaint = true) =>
+      ({
+        data: {
+          channel: studioProtocolChannel,
+          identity: acknowledgedIdentity,
+          painted: didPaint,
+          paintRevision: revision,
+          protocolVersion: studioProtocolVersion,
+          type: 'preview-painted',
+        },
+        origin: preview.origin,
+        source: window,
+      }) as unknown as MessageEvent
+    const handle = (event: MessageEvent) =>
+      handlePreviewMessage(
+        event,
+        preview,
+        experimentalHandshake,
+        async () => undefined,
+        { async applySourceAction() {}, inspect() {} },
+      )
+    try {
+      postDesignPadding(preview, experimentalHandshake, padding(8))
+      Expect(sent).toMatchObject([{
+        message: { revision: 8, type: 'design-padding' },
+        targetOrigin: preview.origin,
+      }])
+      await handle({ ...painted(8), origin: 'https://wrong.test' } as MessageEvent)
+      await handle({ ...painted(8), source: {} } as MessageEvent)
+      await handle(painted(8, { ...identity, previewInstanceId: 'old-preview' }))
+      await handle(painted(7))
+      Expect(reports).toEqual([])
+      await handle(painted(8))
+      await handle(painted(8))
+      postDesignPadding(preview, experimentalHandshake, padding(9))
+      await handle(painted(9, identity, false))
+      Expect(reports).toEqual([{ painted: true, revision: 8 }, { painted: false, revision: 9 }])
+    } finally {
+      restore()
+    }
+  })
+
+  Test('publishes and authenticates whole-app experimental paint acknowledgements', async () => {
+    const { preview, handshake } = fixture()
+    preview.cellIdentity = undefined
+    preview.activated = true
+    preview.expectedRevision = 6
+    preview.previewInstanceId = 'whole-app-preview'
+    const experimentalHandshake = { ...handshake, previewPaint: true as const }
+    const sent: unknown[] = []
+    const reports: Array<{ painted?: boolean; revision: number }> = []
+    const window = preview.iframe.contentWindow
+    ;(window as unknown as { postMessage(message: unknown, targetOrigin: string): void }).postMessage = (
+      message,
+      targetOrigin,
+    ) => sent.push({ message, targetOrigin })
+    const restore = previewPaintSlot.install(async message => {
+      reports.push({ painted: message.painted, revision: message.paintRevision })
+      return { accepted: true }
+    })
+    const identity = {
+      appName: 'Garden',
+      compileRevision: 6,
+      previewInstanceId: 'whole-app-preview',
+      project: '/workspace',
+    }
+    const painted = (ackIdentity = identity) =>
+      ({
+        data: {
+          channel: studioProtocolChannel,
+          identity: ackIdentity,
+          painted: true,
+          paintRevision: 8,
+          protocolVersion: studioProtocolVersion,
+          type: 'preview-painted',
+        },
+        origin: preview.origin,
+        source: window,
+      }) as unknown as MessageEvent
+    const receive = (event: MessageEvent) =>
+      handlePreviewMessage(event, preview, experimentalHandshake, async () => undefined, {
+        async applySourceAction() {},
+        inspect() {},
+      })
+    try {
+      postDesignPadding(preview, experimentalHandshake, {
+        bundleName: 'surface',
+        designName: 'Theme',
+        entryIndex: 0,
+        expectedPadding: 12,
+        newLiteralRange: { from: 10, to: 12 },
+        newSpecRange: { from: 5, to: 20 },
+        oldLiteralRange: { from: 10, to: 12 },
+        oldSpecRange: { from: 5, to: 20 },
+        ownerKind: 'styles',
+        padding: 16,
+        revision: 8,
+        sourcePath: '/project/Design.tao',
+      })
+      Expect(sent).toMatchObject([{
+        message: { identity, revision: 8, type: 'design-padding' },
+        targetOrigin: preview.origin,
+      }])
+      await receive(painted({ ...identity, appName: 'Other' }))
+      await receive(painted({ ...identity, compileRevision: 5 }))
+      await receive({ ...painted(), origin: 'https://wrong.test' } as MessageEvent)
+      await receive({ ...painted(), source: {} } as MessageEvent)
+      Expect(reports).toEqual([])
+      await receive(painted())
+      await receive(painted())
+      Expect(reports).toEqual([{ painted: true, revision: 8 }])
+    } finally {
+      restore()
+    }
+  })
+
+  Test('keeps whole-app layout measurements local and posts complete cell measurements', async () => {
+    const { preview: wholeApp, handshake } = fixture()
+    wholeApp.cellIdentity = undefined
+    wholeApp.expectedRevision = 4
+    wholeApp.previewInstanceId = 'whole-app-preview'
+    const wholeWindow = wholeApp.iframe.contentWindow!
+    const wholeIdentity = {
+      appName: 'Garden',
+      previewInstanceId: 'whole-app-preview',
+      project: '/workspace',
+    }
+    const wholeMeasurements = {
+      channel: studioProtocolChannel,
+      identity: wholeIdentity,
+      measurements: [{ elementName: 'Text', renderId: 'whole', rect: { height: 20, width: 40, x: 10, y: 30 } }],
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-layout-measurements',
+    }
+    const cell = fixture()
+    const cellMeasurements = {
+      ...wholeMeasurements,
+      identity: { ...cell.preview.cellIdentity!, previewInstanceId: cell.preview.previewInstanceId },
+      measurements: [{ elementName: 'Text', renderId: 'cell', rect: { height: 25, width: 45, x: 15, y: 35 } }],
+    }
+    const posts: unknown[] = []
+    let localUpdates = 0
+    const restore = previewLayoutMeasurementsSlot.install(async message => {
+      posts.push(message)
+      return { accepted: true }
+    })
+    const receive = (
+      target: StudioPreviewConnection,
+      contentWindow: object,
+      data: unknown,
+    ) =>
+      handlePreviewMessage(
+        { data, origin: target.origin, source: contentWindow } as MessageEvent,
+        target,
+        handshake,
+        async () => undefined,
+        { async applySourceAction() {}, inspect() {}, layoutMeasured: () => localUpdates++ },
+      )
+    try {
+      await receive(wholeApp, wholeWindow, wholeMeasurements)
+      Expect(wholeApp.layoutMeasurements).toEqual(wholeMeasurements)
+      Expect(localUpdates).toBe(1)
+      Expect(posts).toEqual([])
+      await receive(cell.preview, cell.preview.iframe.contentWindow!, cellMeasurements)
+      Expect(cell.preview.layoutMeasurements).toEqual(cellMeasurements)
+      Expect(localUpdates).toBe(2)
+      Expect(posts).toEqual([cellMeasurements])
+    } finally {
+      restore()
+    }
   })
 
   Test('requires matching rectangle, render range, path, version and a unique catalog target', () => {

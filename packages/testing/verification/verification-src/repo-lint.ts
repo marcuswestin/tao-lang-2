@@ -92,6 +92,29 @@ export function missingTestAppReadmeEntries(appNames: readonly string[], readme:
   return [...appNames].sort().filter(name => !headings.has(name))
 }
 
+/** The MVP roadmaps whose `### A20 — Title` item IDs other documents cite by ID alone. */
+const MVP_ROADMAPS = ['Docs/MVP Roadmap/Agent MVP Roadmap.md', 'Docs/MVP Roadmap/Developer MVP Roadmap.md']
+
+/**
+ * duplicateRoadmapItemIdIssues names each item ID a roadmap gives to more than one heading. Two
+ * branches that each add an item read the same highest ID and choose the same successor, and the
+ * merge keeps both, leaving every citation of that ID ambiguous.
+ */
+export function duplicateRoadmapItemIdIssues(path: string, source: string): string[] {
+  const lines = new Map<string, number[]>()
+  source.split('\n').forEach((line, index) => {
+    const id = /^### ([A-Z]\d+) — /.exec(line)?.[1]
+    if (id !== undefined) {
+      lines.set(id, [...lines.get(id) ?? [], index + 1])
+    }
+  })
+  return [...lines].filter(([, at]) => at.length > 1).map(([id, at]) =>
+    `${path} uses item ID ${id} for more than one heading (lines ${
+      at.join(', ')
+    }); give the newer item the next unused ID.`
+  )
+}
+
 /** LedgerEntry is one backlog file as this rule sees it: its file name and the fields it records. */
 export type LedgerEntry = {
   name: string
@@ -454,9 +477,9 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:486',
   'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:507',
   'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:508',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:306',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:328',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:1093',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:307',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:329',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:1094',
   'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:40',
   'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:80',
   'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:103',
@@ -476,17 +499,17 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1567',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1593',
   // Emitted browser and Electrobun bodies, where no Tao module loads.
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:305',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:380',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:390',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:427',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:326',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:401',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:411',
   'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:448',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:454',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:498',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:696',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:728',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:896',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:1067',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:469',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:475',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:519',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:717',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:749',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:917',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:1088',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobun.ts:102',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:208',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:211',
@@ -517,7 +540,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:908',
   'packages/ides/studio/studio-src/StudioWelcome.ts:83',
   'packages/ides/studio/studio-tests/studio-client.test.ts:722',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:3873',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:3902',
   // Expo config plugins execute as standalone CommonJS host scripts.
   'packages/apps/providers/icloud/plugins/with-tao-icloud.cjs:32',
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:14',
@@ -1161,6 +1184,12 @@ export async function repoLintIssues(
   }
   issues.push(...instructionBudgetIssues(await readInstructionFiles(repoRoot)))
   issues.push(...await readDeveloperEnvironmentLedgerIssues(repoRoot))
+  for (const path of MVP_ROADMAPS) {
+    const roadmapPath = FS.resolvePath(path, repoRoot)
+    if (await FS.isFile(roadmapPath)) {
+      issues.push(...duplicateRoadmapItemIdIssues(path, await FS.readText(roadmapPath)))
+    }
+  }
 
   // Inventory authored Tao sources, since removed apps can leave ignored generated directories.
   for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {

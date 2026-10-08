@@ -98,6 +98,11 @@ export type GateMetadata =
      * later is not recordable by default. The safe answer for a writer is no.
      */
     canonicalises?: boolean
+    /**
+     * For a fixer, the check-only reader that fails on whatever this node would rewrite. A hosted
+     * Verify partition skips the fixer and runs this gate in its place (`hostedLinuxGates`).
+     */
+    checkedBy?: string
     /** File classes this node reads; it waits for their writers. `just` is implied for a recipe. */
     reads?: readonly SourceClass[]
     /** True when the node needs host capabilities the managed agent sandbox deliberately denies. */
@@ -563,12 +568,27 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // The prepare phase, in the order its declared classes imply: the Justfile first because every
     // recipe parses it, then the parser generator and dprint in parallel, then `./tao fix`, then the
     // WordFlower compile, which reads the `.tao` sources `./tao fix` has just canonicalized. A hosted
-    // Verify partition skips the fixers (`skippedOnHostedLinux`) and runs only the generators.
-    ['_fix-just-fmt', { canonicalises: true, priority: PREPARE_PRIORITY, serial: true, writes: ['just'] }],
-    ['_fix-dprint', { canonicalises: true, priority: PREPARE_PRIORITY, reads: ['ts'], serial: true, writes: ['ts'] }],
+    // Verify partition skips the fixers (`skippedOnHostedLinux`), runs each one's `checkedBy` gate
+    // instead, and runs the generators.
+    ['_fix-just-fmt', {
+      canonicalises: true,
+      checkedBy: '_dprint-check',
+      priority: PREPARE_PRIORITY,
+      serial: true,
+      writes: ['just'],
+    }],
+    ['_fix-dprint', {
+      canonicalises: true,
+      checkedBy: '_dprint-check',
+      priority: PREPARE_PRIORITY,
+      reads: ['ts'],
+      serial: true,
+      writes: ['ts'],
+    }],
     // Generated from the entry files, so it must land before the lint that now fails a stale index.
     ['_fix-ledger-index', {
       canonicalises: true,
+      checkedBy: '_repo-lint',
       priority: PREPARE_PRIORITY,
       reads: ['ts'],
       serial: true,
@@ -580,7 +600,14 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // then `serial` is what tells the scheduler to pack the rest of the run around it.
     [
       '_fix-tao',
-      { canonicalises: true, priority: PREPARE_PRIORITY, reads: ['gen-parser', 'ts'], serial: true, writes: ['tao'] },
+      {
+        canonicalises: true,
+        checkedBy: '_tao-check',
+        priority: PREPARE_PRIORITY,
+        reads: ['gen-parser', 'ts'],
+        serial: true,
+        writes: ['tao'],
+      },
     ],
     [
       '_compile-word-flower-app',
@@ -745,12 +772,24 @@ function skippedUnsandboxed(name: string, options: { hostedLinux?: boolean } = {
  * skippedOnHostedLinux reports whether a hosted Verify Linux partition leaves this node out: the
  * fixers, the nodes that declare `canonicalises`. A hosted run cannot keep what a fixer writes; the
  * workflow fails any partition whose prepare phase changed a tracked file, so there a fixer is a
- * slower way to report what its check-only reader already fails on: `_dprint-check` for
- * `_fix-dprint` and `_fix-just-fmt`, `_tao-check` for `_fix-tao`, `_repo-lint` for
- * `_fix-ledger-index`. The generators stay, because readers consume what they write.
+ * slower way to report what its `checkedBy` reader fails on, which `hostedLinuxGates` adds to the
+ * lane. The generators stay, because readers consume what they write.
  */
 function skippedOnHostedLinux(name: string, options: { hostedLinux?: boolean } = {}): boolean {
   return options.hostedLinux === true && metadata(name).canonicalises === true
+}
+
+/**
+ * hostedLinuxGates is the lane a hosted Verify Linux partition runs: the requested gates plus the
+ * `checkedBy` gate of every fixer it skips, so skipping `_fix-dprint` cannot also skip the
+ * formatting check. A lane that already names the check is unchanged; locally the list is as given.
+ */
+function hostedLinuxGates(gates: readonly string[], options: { hostedLinux?: boolean } = {}): string[] {
+  const checks = gates.flatMap(name => {
+    const check = skippedOnHostedLinux(name, options) ? metadata(name).checkedBy : undefined
+    return check === undefined ? [] : [check]
+  })
+  return [...new Set([...gates, ...checks])]
 }
 
 /**
@@ -942,6 +981,7 @@ export const GateCatalog = {
   metadata,
   node,
   reportsAttributableDurations,
+  hostedLinuxGates,
   skippedOnHostedLinux,
   skippedUnsandboxed,
   suiteReads,

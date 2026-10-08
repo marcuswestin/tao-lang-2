@@ -3780,6 +3780,35 @@ Test('Studio draft sync writes only explicit saves and advances the optimistic v
   Expect(writes.map(write => write.sourceVersion)).toEqual(['source-1', 'source-2'])
 })
 
+Test('Studio keeps a requested revert pending until earlier writes and the revert settle', async () => {
+  const firstWrite = Deferred<StudioDraftSyncResult>()
+  const revertWrite = Deferred<StudioDraftSyncResult>()
+  const writes: StudioDraftSyncRequest[] = []
+  const sync = new StudioDraftSync({ content: 'before', path: 'Garden.tao', sourceVersion: 'source-1' }, {
+    async write(request) {
+      writes.push(request)
+      return await (writes.length === 1 ? firstWrite.promise : revertWrite.promise)
+    },
+  })
+  Expect(sync.hasPendingWrites).toBe(false)
+  sync.update('after')
+  const firstSave = sync.save()
+  Expect(sync.hasPendingWrites).toBe(true)
+  await until(() => writes.length === 1, { description: 'the first requested editor write', intervalMs: 0 })
+  sync.update('before')
+  const revertSave = sync.save()
+  Expect(writes).toHaveLength(1)
+  firstWrite.resolve(saved(writes[0]!, 'source-2'))
+  await firstSave
+  await until(() => writes.length === 2, { description: 'the requested revert after the first save', intervalMs: 0 })
+  Expect(sync.hasPendingWrites).toBe(true)
+  Expect(writes.map(write => write.content)).toEqual(['after', 'before'])
+  Expect(writes.map(write => write.sourceVersion)).toEqual(['source-1', 'source-2'])
+  revertWrite.resolve(saved(writes[1]!, 'source-3'))
+  Expect((await revertSave)?.file.content).toBe('before')
+  Expect(sync.hasPendingWrites).toBe(false)
+})
+
 Test('Studio save responses preserve completed and newer compile status', () => {
   const result: StudioDraftSyncResult = {
     compile: {
@@ -3872,6 +3901,7 @@ Test('Studio draft sync restores a rejected save without overwriting newer edito
   sync.update('newer draft')
   firstWrite.reject(new Error('Connection closed.'))
   await Expect(firstSave).rejects.toThrow('Connection closed.')
+  Expect(sync.hasPendingWrites).toBe(false)
   await sync.save()
 
   Expect(writes.map(write => write.content)).toEqual(['first draft', 'newer draft'])

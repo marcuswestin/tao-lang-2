@@ -513,9 +513,9 @@ Describe('repository gate runner', () => {
       'studio-canary',
     ])
 
-    // The hosted lane skips the fixers, reported with why, and still runs the generators and the
-    // check gates that fail on what a fixer would have rewritten.
-    const hostedPrepare = await run(['_fix-dprint', '_fix-tao', '_parser-gen', '_dprint-check', '_tao-check'], {}, {
+    // The hosted lane skips the fixers, reported with why, still runs the generators, and adds the
+    // check gates that fail on what a fixer would have rewritten although the lane did not name them.
+    const hostedPrepare = await run(['_fix-dprint', '_fix-tao', '_parser-gen'], {}, {
       hostedLinux: true,
       skipUnsandboxed: true,
     })

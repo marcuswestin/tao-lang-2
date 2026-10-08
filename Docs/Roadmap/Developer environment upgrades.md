@@ -84,6 +84,7 @@ change that addressed it.
 - [DEVENV-AGENT-WORKTREE-SHELLS-DENY-WRITES-AND-COMPOUND-COMMANDS — Agent worktree shells deny writes and compound commands](<Developer environment upgrades/DEVENV-AGENT-WORKTREE-SHELLS-DENY-WRITES-AND-COMPOUND-COMMANDS.md>) — Candidate
 - [DEVENV-ANDROID-EMULATOR-LEASE-RELEASE-PRECEDES-EXIT — Android emulator lease release precedes confirmed exit](<Developer environment upgrades/DEVENV-ANDROID-EMULATOR-LEASE-RELEASE-PRECEDES-EXIT.md>) — Candidate
 - [DEVENV-APP-DEV-WEB-OPENS-CHROME-IN-THE-FOREGROUND — `app-dev --web` opens Chrome in the foreground](<Developer environment upgrades/DEVENV-APP-DEV-WEB-OPENS-CHROME-IN-THE-FOREGROUND.md>) — Planned
+- [DEVENV-CANCEL-VERIFY-LEAVES-AUTO-MERGE-ARMED — Cancel Verify leaves auto-merge armed](<Developer environment upgrades/DEVENV-CANCEL-VERIFY-LEAVES-AUTO-MERGE-ARMED.md>) — Candidate
 - [DEVENV-CANCEL-VERIFY-SHORT-SHA-MISREPORTS-ACTIVE-RUN — Cancel Verify misreports an active run for a short SHA](<Developer environment upgrades/DEVENV-CANCEL-VERIFY-SHORT-SHA-MISREPORTS-ACTIVE-RUN.md>) — Candidate
 - [DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM — Claude Code is below the configured Opus minimum](<Developer environment upgrades/DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM.md>) — Candidate
 - [DEVENV-CLOSED-STDIN-PIPE-TEST-FLAKES-UNDER-LOAD — The closed-stdin-pipe test fails `verify-changed` under load](<Developer environment upgrades/DEVENV-CLOSED-STDIN-PIPE-TEST-FLAKES-UNDER-LOAD.md>) — Candidate
@@ -107,8 +108,8 @@ change that addressed it.
 - [DEVENV-HOST-CONTROLS-COLD-BUILD-TIMEOUTS — Host controls cold builds time out](<Developer environment upgrades/DEVENV-HOST-CONTROLS-COLD-BUILD-TIMEOUTS.md>) — Candidate
 - [DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS — Host effect lint has baseline findings](<Developer environment upgrades/DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS.md>) — Candidate
 - [DEVENV-HOSTED-CHROME-STARTUP-TIMES-OUT-BEFORE-DEVTOOLS — Hosted Chrome startup times out before DevTools](<Developer environment upgrades/DEVENV-HOSTED-CHROME-STARTUP-TIMES-OUT-BEFORE-DEVTOOLS.md>) — Candidate
+- [DEVENV-IOS-BARRIER-JOURNAL-RETENTION-INTERMITTENT — iOS barrier journal retention is intermittent](<Developer environment upgrades/DEVENV-IOS-BARRIER-JOURNAL-RETENTION-INTERMITTENT.md>) — Candidate
 - [DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS — iOS builds lack CocoaPods metadata access](<Developer environment upgrades/DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS.md>) — In progress
-- [DEVENV-LAND-FIX-PUSHES-UNGATED-PRE-SQUASH-COMMITS — `land-fix` pushes ungated pre-squash commits](<Developer environment upgrades/DEVENV-LAND-FIX-PUSHES-UNGATED-PRE-SQUASH-COMMITS.md>) — In progress
 - [DEVENV-LANDING-ADMISSION-RACES-ACROSS-PROCESSES — Landing admission races across processes](<Developer environment upgrades/DEVENV-LANDING-ADMISSION-RACES-ACROSS-PROCESSES.md>) — Candidate
 - [DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED — A landing tests a Codex config it never regenerated](<Developer environment upgrades/DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED.md>) — Candidate
 - [DEVENV-LAZY-TEST-REGISTRATION-FAILS-CI-IMPORT — Lazy test registration fails CI import](<Developer environment upgrades/DEVENV-LAZY-TEST-REGISTRATION-FAILS-CI-IMPORT.md>) — In progress
@@ -120,6 +121,7 @@ change that addressed it.
 - [DEVENV-METRO-FAILS-TO-START-WITHIN-ITS-WAIT-UNDER-CONTENTION — Expo Metro intermittently fails to start within its wait under machine contention](<Developer environment upgrades/DEVENV-METRO-FAILS-TO-START-WITHIN-ITS-WAIT-UNDER-CONTENTION.md>) — Candidate
 - [DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP — iOS dev loop can stall after an Android loop stops](<Developer environment upgrades/DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP.md>) — Candidate
 - [DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG — Model routing trails the installed catalog](<Developer environment upgrades/DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG.md>) — Candidate
+- [DEVENV-NATIVE-INSPECTION-MEMO-REUSE-ASSERTION-INTERMITTENT — Native inspection memo reuse assertion is intermittent](<Developer environment upgrades/DEVENV-NATIVE-INSPECTION-MEMO-REUSE-ASSERTION-INTERMITTENT.md>) — Candidate
 - [DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES — Native kit omits provider transitives](<Developer environment upgrades/DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES.md>) — In progress
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
 - [DEVENV-OPEN-PR-GIVES-UP-ON-TRANSIENT-GITHUB-SERVER-ERRORS — open-pr gives up on transient GitHub server errors](<Developer environment upgrades/DEVENV-OPEN-PR-GIVES-UP-ON-TRANSIENT-GITHUB-SERVER-ERRORS.md>) — Candidate
@@ -153,9 +155,11 @@ change that addressed it.
 - [DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO — Tao fix never reuses the check memo, so every verify lane refixes the whole repository](<Developer environment upgrades/DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO.md>) — Candidate
 - [DEVENV-TAO-INSTALL-DEFAULT-NPM-CACHE-IS-OUTSIDE-WRITABLE-PROJECT — Tao install defaults to an npm cache outside the writable project](<Developer environment upgrades/DEVENV-TAO-INSTALL-DEFAULT-NPM-CACHE-IS-OUTSIDE-WRITABLE-PROJECT.md>) — Candidate
 - [DEVENV-TAO-PIPELINE-DEFECTS-SET-EVERY-LANES-FLOOR — Tao pipeline defects set every lane's floor](<Developer environment upgrades/DEVENV-TAO-PIPELINE-DEFECTS-SET-EVERY-LANES-FLOOR.md>) — Candidate
+- [DEVENV-TART-PROVISIONING-REQUIRES-HOST-UID-501 — Tart provisioning requires host uid 501](<Developer environment upgrades/DEVENV-TART-PROVISIONING-REQUIRES-HOST-UID-501.md>) — Candidate
 - [DEVENV-TEST-FILE-REFUSES-STANDALONE-APP-TESTS — Focused test-file refuses standalone app tests](<Developer environment upgrades/DEVENV-TEST-FILE-REFUSES-STANDALONE-APP-TESTS.md>) — Candidate
 - [DEVENV-TEST-FILE-STOPS-ON-MISSING-BINDING-MANIFEST-IN-FRESH-WORKTREE — `test-file` stops on a missing binding manifest in a fresh worktree](<Developer environment upgrades/DEVENV-TEST-FILE-STOPS-ON-MISSING-BINDING-MANIFEST-IN-FRESH-WORKTREE.md>) — Candidate
 - [DEVENV-TEST-FILE-TAKES-NO-TAO-FILE-OR-TEST-NAME — `test-file` takes no Tao test file or test name](<Developer environment upgrades/DEVENV-TEST-FILE-TAKES-NO-TAO-FILE-OR-TEST-NAME.md>) — Candidate
 - [DEVENV-TEST-RUNS-CANNOT-BE-CPU-PROFILED — Test runs cannot be CPU-profiled](<Developer environment upgrades/DEVENV-TEST-RUNS-CANNOT-BE-CPU-PROFILED.md>) — Candidate
 - [DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS — Visual review scenario readiness timeouts](<Developer environment upgrades/DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS.md>) — Candidate
 - [DEVENV-WATCHOS-SWIFT-PROBE-FAILS-UNDER-BROAD-LANES — watchOS Swift probe fails under broad lanes](<Developer environment upgrades/DEVENV-WATCHOS-SWIFT-PROBE-FAILS-UNDER-BROAD-LANES.md>) — Candidate
+- [DEVENV-WORDFLOWER-CHECK-EXCEEDS-QUIET-PERFORMANCE-BUDGET — WordFlower check exceeds its quiet performance budget](<Developer environment upgrades/DEVENV-WORDFLOWER-CHECK-EXCEEDS-QUIET-PERFORMANCE-BUDGET.md>) — Candidate

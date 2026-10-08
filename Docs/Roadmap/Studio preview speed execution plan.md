@@ -1,0 +1,462 @@
+# Studio preview speed execution plan
+
+Prepared 2026-10-06; updated 2026-10-07. Status: the integrated compiler, browser-cleanup and
+final-audit changes pass the complete local changed-scope gate at `c716bf157` (360.2 seconds).
+The subsequent rapid-revert save repair passes focused tests and real whole-app/fresh-preview
+stress. Quiet measurements retain failed Studio budget verdicts; hosted landing proof is pending.
+The Developer authorized landing on 2026-10-07; the current merge gates still have to pass.
+The common compiler repair passes language budgets; complete quiet Studio runs still breach ceilings.
+The [continuation roadmap](<Studio preview speed continuation.md>) remains
+the project owner. The [tracked POC handover](<Studio preview speed POC handover.md>) records the
+experimental mechanisms and historical evidence. This plan supersedes the supplementary archive's
+main-only preparation plan as the proposed execution sequence, without superseding its raw evidence.
+
+## Integrated starting state
+
+### Current qualification state, 2026-10-07
+
+The final alternating-order comparison completed on control `bf64ca6ae` and candidate
+`0fd6205a7`, both integrating main `fe7a4da74`. The control includes the same compiler,
+browser custody and editor revert repairs; this isolates Studio preview-first/scheduling/audit
+behavior, rather than comparing against unchanged main. HNReader source, dependencies, Metro
+flags, viewport, preview activation and all ceilings match. Each member ran serially, retained
+eight rows per case, discarded the cold first row, and had no peer lanes or contention reasons.
+All four pass language budgets, all six computed-paint journeys and cleanup. All four fail
+numerical Studio ceilings; no overall or direct-delivery numerical qualification is claimed.
+The runner's unchanged fail-fast boundary leaves its separate direct stage unrun.
+
+| Order       | Run ID                                             | Duration | Load range / 18 CPUs |
+| ----------- | -------------------------------------------------- | -------- | -------------------- |
+| Control A   | `performance-70562e1a-2179-474c-88bd-fc83d6b7d72a` | 217.0s   | 2.822–4.874          |
+| Candidate A | `performance-3f136580-f011-4221-b794-b15256d36672` | 206.0s   | 3.531–4.492          |
+| Candidate B | `performance-9fc67b4d-407f-4f4a-a4c1-4b07765e9067` | 207.4s   | 2.944–4.252          |
+| Control B   | `performance-c5cb0263-49b4-4f43-ac90-324f2c19f6d2` | 218.8s   | 2.760–4.837          |
+
+Warm save-to-painted computed result p50/p95, milliseconds:
+
+| Case                     | Control A   | Candidate A | Candidate B | Control B   |
+| ------------------------ | ----------- | ----------- | ----------- | ----------- |
+| One-file publication on  | 539 / 575   | 285 / 982   | 290 / 301   | 555 / 1330  |
+| One-file publication off | 539 / 586   | 278 / 330   | 286 / 296   | 550 / 776   |
+| HNReader publication on  | 1116 / 1454 | 1096 / 1135 | 1122 / 1168 | 1110 / 1417 |
+| HNReader publication off | 1151 / 1206 | 1158 / 1224 | 1142 / 1164 | 1128 / 1141 |
+| Padding publication on   | 1530 / 1813 | 309 / 1456  | 309 / 1459  | 1509 / 1989 |
+| Padding publication off  | 1594 / 1651 | 300 / 1501  | 311 / 1510  | 1517 / 1652 |
+
+Warm source-to-generated-publication p50/p95, milliseconds; direct delivery is disabled here:
+
+| Case                     | Control A   | Candidate A | Candidate B | Control B   |
+| ------------------------ | ----------- | ----------- | ----------- | ----------- |
+| One-file publication on  | 449 / 481   | 166 / 881   | 180 / 203   | 454 / 1204  |
+| One-file publication off | 424 / 464   | 161 / 195   | 161 / 165   | 419 / 682   |
+| HNReader publication on  | 1005 / 1355 | 1012 / 1039 | 1029 / 1075 | 1017 / 1333 |
+| HNReader publication off | 1031 / 1048 | 1038 / 1070 | 1033 / 1038 | 1009 / 1028 |
+| Padding publication on   | 1424 / 1714 | 241 / 1385  | 235 / 1381  | 1399 / 1922 |
+| Padding publication off  | 1434 / 1501 | 234 / 1359  | 243 / 1346  | 1378 / 1454 |
+
+The two candidate padding medians improve consistently in this configuration, but synchronous
+full work still produces roughly 1.5-second tails. Full fallback remains about a second, and even
+the one-file publication-on tail is variable. These observations are neither an all-budget pass
+nor an additive/general speed guarantee. The bounded production slice proceeds through the
+authorized hosted route with the failures retained; the separate later plans below address the
+remaining costs. The complete integrated source gate passed on `c716bf157`, and subsequent
+rapid-revert source/test changes have focused and real-editor proof recorded below. The lead's
+integrated review found no remaining correctness findings; hosted and host-only merge proof is
+still pending.
+
+### Pre-repeat qualification
+
+Control `a51537cbc` run `performance-080112d6-6e7d-4243-a200-fc0f90255600` completed in
+219.0s and candidate `c716bf157` run `performance-ef25343b-6854-4629-a41a-784efd3dcf02`
+completed in 206.8s. Both had no peers, stayed below quiet admission limits, passed language
+budgets, and passed all six computed-paint and cleanup cases. Candidate session checking was 922ms.
+Both failed numerical Studio ceilings; the candidate's direct-delivery stage was not admitted.
+These are completed matching-baseline measurements with failed budget verdicts, not a qualified
+speed claim or a completed alternating-order comparison.
+
+| Case                     | Control source p50 / p95 ms | Candidate source p50 / p95 ms |
+| ------------------------ | --------------------------- | ----------------------------- |
+| One-file publication on  | 449 / 830                   | 163 / 182                     |
+| One-file publication off | 420 / 681                   | 164 / 170                     |
+| HNReader publication on  | 1015 / 1057                 | 1032 / 1428                   |
+| HNReader publication off | 1011 / 1022                 | 1037 / 1093                   |
+| Padding publication on   | 1421 / 1501                 | 265 / 1377                    |
+| Padding publication off  | 1437 / 1485                 | 250 / 1393                    |
+
+Candidate save-to-paint results are 285/301, 290/296, 1134/1524, 1173/1224, 370/1461 and
+328/1467ms in the same order. Both one-file cases fit their source and total ceilings. Full
+HNReader fallback and padding tails during actual full processing remain over budget in both
+trees. The bounded production slice will retain those failures and use the authorized hosted
+landing route; completing the larger worker/admission design is separate work, not an implicit
+expansion of this slice. No ceiling, timeout, admission rule or scheduling limit is changed.
+
+The combined rapid-save/revert probe exposed a real editor bug: reverting to acknowledged text
+while an earlier write was pending cleared the dirty flag and skipped the requested revert.
+`80ca2b4b4` tracks pending writes through settlement and admits that explicit save. The control
+includes the same editor fix (`bf64ca6ae`), alongside the common compiler and browser baseline.
+The 111-test client suite passes on both trees; disabling pending-write tracking fails its new
+deterministic witness. The smoke additionally checks all four actual rapid-save responses before
+final source/manifest parity, avoiding an old matching paint as a false completion witness.
+
+Fresh-activation/multiple-preview stress passes in 33.1s
+(`hnreader-editor-padding-publication-off-1791409321935.json`), and whole-app stress passes in
+34.9s (`hnreader-editor-padding-publication-off-1791409258857.json`). Both include width changes,
+revert, invalid-to-valid recovery, four rapid saves, a two-file burst, final authoritative parity
+and a save during traced running full work. The fresh case activates another preview during an
+overlay with no existing iframe reload. These are tracing-enabled correctness diagnostics;
+their 240/1584ms and 317/1884ms total median/tail are not quiet numerical qualification. Populated
+data/navigation state retention remains unproved by these two fixtures.
+
+Diagnostic traces retain the synchronous full-work overlap: queued padding saves still wait
+about 1.6s. A one-file fast save separately repeats native inspection at validation/compilation
+and a complete tooling audit during metadata assembly. The narrow repair carries validation's
+native inspection only into its immediate implicit-root compile and keeps its independent final
+inspection. Runtime source acceptance names compiled and publication phases; source versions and
+epochs are checked at both, while eligibility and final publication retain the full tooling audit.
+The final audit rejection preserves generated bytes and recovers authoritatively in a real session
+test. No scheduler idle/max delay, ceiling, eligibility, or admission policy is changed.
+Restart all four paired members after a new common compiler baseline is pinned. Larger worker,
+shared-snapshot and dependency-directed changes remain separate measured planning work.
+
+Compiler commit `999313496` adds prepared snapshot indexes and immediate native inspection carry.
+Focused runtime (31 tests), workspace native (2 tests) and Studio session (10 tests) suites pass.
+Removing inspection carry, final native identity comparison, or the final tooling audit fails the
+respective new witness; all mutations are restored. A real one-file editor diagnostic reports
+source 165/197ms and total paint 292/303ms under quiet load, within the unchanged numerical limits
+for that trial (`one-file-app-publication-on-1791407510371.json`). Padding diagnostics still reach
+about 1.4s publication tail during full processing. Added native-only diagnostic timing reports
+roughly 16–38ms per inspection, with validation and processing overlap retaining larger costs;
+that temporary instrumentation was removed. These trials do not replace full qualification.
+
+### Earlier browser cleanup failure and repair
+
+Control `de7be17c0` completed its language stage within every budget (session checking 995ms),
+with no peers and peak load 6.6983 on 18 CPUs. Its full run `performance-4642ea68-7f8f-4d6e-af2c-406da1aaea06`
+failed after 783.5 seconds: two publication-on cases collected all eight paint rows, then timed out
+in browser cleanup. This is not a completed paired member. Four other cases passed correctness;
+their baseline ceiling breaches remain failures, not candidate qualification.
+
+Two focused attempts reproduced the cleanup wait, including documented graceful browser close.
+The main browser exited while a daemonized crash-reporting helper retained its output socket.
+The repair captures exact shared output endpoints while Chrome is alive, confirms kernel start
+identities before and after a fresh descriptor read, and retains those identities in the existing
+supervisor. Discovery is explicit at browser readiness and before teardown; ordinary polling stays
+tree-local. Independent output/process joins, escalation and failure handling remain in place.
+Failed cleanup retains the browser profile, and the latency journey attempts all owned disposers
+without replacing a primary failure. No helper is adopted by name, age or parentlessness.
+
+Ten ownership regressions and 22 supervision cases pass. Removing retained output custody makes
+the escaped-process regression fail and still cleans its fixtures. The previously failing real
+HNReader publication-on journey passes in 35.2 seconds with correct paints and cleanup. This is
+focused correctness evidence; the common control/candidate protocol and unchanged ceilings still
+require a complete repeat. No hosted merge proof or new numerical gain exists.
+
+### Earlier language blocker and repair, 2026-10-07
+
+Candidate `ae0dbf4c6` and control `5a2ba4b6c` include the same current main; both frozen
+setups pass and authored HNReader, package.json and bun.lock are identical. Candidate standalone
+run `performance-8c6a878c-d57c-4236-9772-bb0ecdf5329c` reached quiet exclusive admission
+but failed whole-app session checking at 1.4 seconds against the unchanged 1.3-second ceiling.
+There were no peer lanes and load stayed 4.0166–4.6284 on 18 CPUs. The runner stopped before
+Studio stages. Current-main control also fails the focused language benchmark, so this failure
+is not established as a branch regression.
+
+The preceding full control attempt `performance-b2c8f8db-449c-447e-8084-3c948a52459f` took
+853 seconds and ran all six canonical Studio cases, but was inconclusive after load crossed the
+quiet threshold; language checking failed and two publication-on cases timed out. Four Studio
+cases completed correctness, including computed padding, but this is not a qualified paired
+member. No qualified comparison or new numerical gain exists.
+
+Focused profiling attributes about 620 milliseconds per thirteen-entry validation batch to
+constructing effect analyses. Exact ordered effect inputs repeated zero times across sixty
+entry invocations. Two narrow reuse trials showed no demonstrated gain and were removed;
+production source is unchanged by this investigation. The proposed next slice is a separate
+compiler-owned effect-analysis design, following the boundary on broader compilation work:
+
+1. Trace semantic dependency closure and define an immutable reuse contract for distinct entry
+   graphs, keeping entry diagnostics, filesystem checks and native freshness authoritative.
+2. Prove unchanged ordered diagnostics and sealed effect evidence against cold construction,
+   covering changed and missing dependencies, differing entry order, recovery and fresh batches.
+3. Implement only reuse whose exact consumed inputs can be proved; retain cold fallback and
+   deterministic work-count witnesses. Broader worker or workspace sharing remains separate.
+4. Repeat unchanged standalone ceilings, then matched control/candidate/candidate/control real
+   editor measurements. The authorized hosted landing route follows after qualification.
+
+The Developer approved the separate compiler scope and continuing until merged on 2026-10-07.
+The first grounded change is narrower than cross-entry reuse: commit `29004402d` projects the
+immutable effect inventory once per exact canonical snapshot, while preserving independent
+owner roots, discovery and analysis. Different snapshots and fresh builds stay cold. Its owning
+359-test suite passes, and mutations that disable retention or leak inputs across snapshots
+fail the new tests. An isolated ten-iteration diagnostic passes every median budget, including
+session checking at 983 milliseconds. Quiet standalone qualification remains required.
+The comparison control includes the same compiler-only change (`de7be17c0`) on main
+`fe7a4da74`; this common compiler baseline isolates the Studio delivery changes and must not
+be described as unchanged main. No paired numerical gain or hosted merge proof exists yet.
+Landing authorization remains valid. The original workflow blocker is recorded in
+[DEVENV-WORDFLOWER-CHECK-EXCEEDS-QUIET-PERFORMANCE-BUDGET](<Developer environment upgrades/DEVENV-WORDFLOWER-CHECK-EXCEEDS-QUIET-PERFORMANCE-BUDGET.md>).
+
+Main `c4b48ea1b` subsequently integrated without conflicts, preserving native inspection caching
+and locking. Both setups pass. Retry `performance-192ca37b-b81e-47ab-9e8b-80f01c184e29`
+also fails session checking, with no peers and load 2.4717–3.4600 on 18 CPUs. Its rounded output
+shows both median and ceiling as 1.3 seconds; the failure remains authoritative. The language
+reporter now names breaches in unrounded milliseconds and retains every raw sample in
+`language.json` under the standalone run's artifact root. That reporting fix changes neither
+the measured operations nor ceilings, and its focused regression passes.
+
+### Historical starting state
+
+1. New managed worktree: `/Users/ro/.codex/worktrees/studio-preview-speed-execution/tao-lang-2`;
+   branch `feat/studio-preview-speed-execution`, created from exact checkpoint
+   `4efc6ff2aff31fa3c0a8f45d270444c836fe7a9d`.
+2. The supported merge workflow fetched and integrated main
+   `5d9330f85e402a0a9bf28bf5b4de2700b6094fc8`. Merge commit
+   `aed4c9ad807cf5bcf2ceb7855c499e995958be54` resolves compiler and validator conflicts.
+   It retains main's associated-effect validation evidence, workspace union, and emission context,
+   plus the checkpoint's profiling and independent final native freshness audit.
+3. The complete checkpoint delta against `b1cc156c775b92d8095bd3ce6eee2214dabbf02b`
+   was reviewed: 44 files, 3,776 insertions and 119 deletions, including all six experiments and
+   their tests. At takeover all six remained experimental. Frozen setup, typecheck and lint passed;
+   initial focused integration evidence is recorded in the task checkpoint. The acceptance record
+   below describes subsequent production work; no push, hosted run or landing has occurred.
+4. Main's native inspection memo, manifest capture/probes, two optimistic passes, locked fallback,
+   and stale-publication recovery are retained. Explicit native roots remain cold under main's
+   existing contract. The POC's mutable `experimentalInspection` option is not a production API.
+5. The original performance and POC worktrees, user edits and supplementary handover archive
+   remain untouched. The separate `feat/studio-preview-production` branch contains no POC source.
+   Project store/local/cache layout, activation persistence, stable links, identical-publication
+   suppression and the landed timer patches remain the baseline.
+
+## Implementation and acceptance record
+
+1. Production core `3aa6fbfb0` and qualification/harness `28de0892b` integrate preview-first
+   admission, bounded authoritative work, narrow padding delivery and fresh-realm barriers.
+   Supported main integration `1f1962f39` includes `2876d94371274ad01318b29f8c21860e8b4bba32`;
+   frozen setup reproduces all 1,252 maintained generated native files. The control worktree is
+   pinned to that main SHA on `feat/studio-preview-speed-control`; it has no measurement yet.
+2. The lead completed the integrated source review, using one permitted read-only aid and checking
+   its claims. Repairs include queued/initial compile drain on close, final epoch rechecking,
+   stronger real-session/identity/barrier mutation witnesses, a nonvacuous forged-padding fixture,
+   rejection of duplicate/reversed warm delivery receipts, canceled-callback timer ownership,
+   and preservation of virtual Feed scenario membership in snapshots and final audits. Trace-only
+   journals preserve startup output and partial samples across test-process timeouts; ordinary
+   qualification has no journal timer or writes. Focused checks and intended mutation failures are recorded in the
+   task checkpoint. Two local changed-scope attempts exposed repaired export and Feed-membership
+   failures. Serial repeats of all timed-out scopes pass without raising limits; canceled checks
+   were followed by a complete successful changed-scope repeat on `61725396a`: 541 passing
+   selected gates, one explicit slow Studio-smoke skip, and no failures. Three watch scopes
+   passed the runner's isolated retries after contention; no execution budgets were raised.
+3. Four real editor trials pass: two-preview width/recovery/rapid/burst/retained-state; single-cell
+   revert and fresh activation during an overlay; whole-app retained-state; actual full-work
+   overlap. Each records eight computed padding/paint samples and final source parity. Repeated
+   rapid saves reach edit 12; fresh activation witnesses the publication barrier; saves 2, 4 and 5
+   overlap traced authoritative attempts. Existing iframes retain their realms. The continuation
+   roadmap records exact report identifiers and preserved failures; screenshots were reviewed.
+4. These are diagnostic runs under load 23.9–222.6 on 18 CPUs, with tracing and diagnostic gaps.
+   They do not establish a speed gain or budget verdict. Standalone quiet admission returned
+   inconclusive because other lanes were active and load was 65.45. Sequential matched
+   main/feature trials in both modes, alternating-order repeats and unchanged-source standalone
+   qualification remain pending. No ceiling or execution budget was raised.
+
+## Approved enablement
+
+1. Enable preview-first and bounded authoritative scheduling by default only after their admission
+   and lifecycle proofs pass. Preserve publication checks on by default. Unknown or unsupported
+   input states use authoritative compilation; initial activation is authoritative. This first
+   enablement covers browser Studio sessions; native/device publication stays authoritative.
+2. Enable direct scalar padding by default only for eligible browser previews in publication-off
+   mode, within the tested `Design.tao` boundary. Native/device publication and checked browser
+   publication retain the normal compiler path; sessions requiring native/device publication are
+   ineligible for direct delivery. Extending this boundary needs a separately proved
+   contract and a Developer decision.
+3. Retain explicit diagnostic opt-outs for preview-first and direct delivery and opt-in tracing.
+   Remove the held/paused-full mode and the revision-only experimental paint endpoint from the
+   production surface. Scheduling has one production policy, with deterministic injected clocks
+   for tests. No experimental enabling flags are required for approved production behavior.
+4. Exclude unchanged source-read reuse and additional whole-document validation replay. Preserve
+   their source, tests and measured evidence in checkpoint `4efc6ff2a` and its original worktree.
+   Deliberately remove their production plumbing from parser, validator and Workspace; retain
+   main's existing guarded local report, type, document and traversal reuse. Compare the restored
+   fallback against the covered corpus before retiring any branch-specific behavior.
+
+## Execution slices and barriers
+
+1. **Contracts, baseline and experiment separation.** Freeze the fetched-main control SHA and
+   integrated candidate SHA. Establish matched baselines using identical copied authored inputs,
+   Studio editor saves, publication modes, Metro settings and active previews. Measure native
+   inspection calls, cold hashes, memo hits and lock/barrier crossings before selecting extra reuse.
+   Separate the two excluded experiments and the held mode. Freeze input-classification,
+   accepted-source snapshot, paint identity, overlay baseline and fresh-realm contracts before
+   implementation workers start. No dependency, lockfile or permission-policy change is planned.
+2. **Preview-first and bounded authoritative work, together.** Admit only one known current
+   versioned Tao edit with otherwise proven consumed inputs and current tooling identity. Treat
+   watch events as hints: source versions and consumed config/package/sidecar/native observations
+   must establish equivalence. Unknown observations, additions/deletions, graph/ownership changes,
+   stale or multiple changes, configuration/dependency/native changes and failed baselines go
+   authoritative. Keep source overrides immutable per attempt, candidate epochs separate from
+   successfully consumed snapshots, and recheck identity before publication. Serialize mutable
+   parser/workspace use and preserve diagnostics and generated-output repair.
+   Schedule one current and one latest pending authoritative request. Authenticate child paint
+   using origin/window and project/app/cell/instance/compile/manifest identity; carry the complete
+   identity through the server API and validate it against registration and the pending attempt.
+   Observe two child frames, then a one-second quiet delay; anchor the ten-second maximum to the
+   first pending work. An absent paint still reaches the maximum. Rejection, compilation failure,
+   invalidation and loss of all useful active previews release recovery promptly. Close flushes
+   required work once and disposes timers, subscriptions, watch and runtime state even on failure.
+   Reject superseded results. Already-running synchronous full work remains non-preemptible;
+   the maximum bounds intended scheduling delay, not completion time under a blocked event loop.
+3. **Direct padding and authoritative publication barriers.** The compiler owns syntax admission:
+   exactly one finite nonnegative unconditional scalar pad literal and identical bytes outside it.
+   Require a successful baseline, current source version, unique declaration/path/owner/member,
+   exact entry index/prior value and valid half-open ranges. Shift later provenance immutably for
+   literal-width changes. Authenticate revision delivery to retained realms; reject stale or
+   mismatched baselines and take normal compilation for unsupported or rejected updates. Do not
+   advance an accepted baseline merely because an attempt started. Before any new realm registers,
+   publish authoritative generated bytes for the pending overlay, retaining stale-manifest
+   rejection and only the existing bounded changed-context activation retry. This is not a Metro
+   revision-recovery retry. Cover whole-app compile-only identity, complete cell identity, and
+   local whole-app versus server cell geometry. Authoritative diagnostics eventually catch up.
+4. **Conditional native reuse.** Use main's owning memo and locking implementation first. Add
+   immutable attempt-local inspection handoff only if measurements and deterministic work counts
+   show remaining duplicate work. Keep exact roots/input provenance, explicit lifetime, error
+   cleanup and a separately invoked final freshness audit. No shared mutable options object,
+   blanket freshness bypass, redundant cache or reused final audit. Retain main's locked fallback
+   and publication recovery. If no useful work remains to eliminate, keep main and document that
+   disposition instead of shipping another mechanism.
+5. **Integrate, qualify and review.** Integrate at each contract barrier, read every worker diff,
+   and run focused checks with writers paused. Commit coherent reviewed task-owned slices, update
+   the continuation roadmap before each changed-scope gate, and run the local iteration lane.
+   Run sequential paired measurements and the standalone performance proof after source is stable.
+   Perform the full integrated review personally at completion. The Developer's later instruction
+   permits one read-only subagent to aid that review if needed; the lead owns fixes and judgment.
+   Prepare the reviewed merge message and report readiness, remaining risks and measured costs.
+   Stop before push/CI/landing unless separately authorized. At project completion remind the
+   Developer to review Tao test and scenario syntax and structure.
+
+## Exclusive implementation ownership
+
+All workers use bounded briefs, settled interfaces and exact paths; planned code writers use
+a lower model tier at high effort. They return diffs and evidence, with no Git/index, ledger, dependency,
+generated configuration, cross-session messaging or review work. They are not alone in the checkout
+and must preserve unrelated edits. No workers start before approval of this plan.
+
+| Owner                      | Exclusive paths/responsibility                                                                                                                                                                                                                                                                                                      | Integration barrier                                                                                                                       |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Input worker               | `ProjectFileWatch.ts`, `ProjectTooling.ts`, classified-input tests under project-tooling                                                                                                                                                                                                                                            | Lead freezes observation classes and source-versus-topology rules; worker does not edit `ProjectToolingService.ts`                        |
+| Scheduling worker          | `StudioBackgroundValidation.ts`, `StudioPreviewEligibility.ts`, their two focused test files                                                                                                                                                                                                                                        | Lead freezes source snapshot and paint-release contracts; worker does not edit the session, protocol or runtime                           |
+| Design worker              | `studio-design-delta.ts`, `TR-design.ts`, their focused compiler/runtime padding tests                                                                                                                                                                                                                                              | Lead freezes typed delta, baseline and provenance contract; worker does not edit `compiler.ts`, `Workspace.ts` or `TR-studio-preview.tsx` |
+| Native worker, conditional | `maintained-native-bindings.ts` and its focused native-bindings tests                                                                                                                                                                                                                                                               | Starts only after measured duplication and an attempt-lifetime API are specified; compiler/Workspace wiring stays with lead               |
+| Lead                       | `StudioPreviewSession.ts`, coordinator/project session/server/routes/protocol, client bridge/matrix/app wiring, device gateway, `TR-studio-preview.tsx`, `Workspace.ts`, `compiler.ts`, expo-host `runtime.ts`, `ProjectToolingService.ts`, excluded parser/validator plumbing, integrated tests, harness, enablement, docs and Git | One owner for every shared seam; worker changes settle before dependent integration                                                       |
+
+Input and scheduling helpers can proceed concurrently after contracts freeze. The design helper can
+proceed independently against its frozen wire type; delivery wiring waits for preview-first and
+paint identity integration. Native work is optional after baseline measurement. Numeric trials
+run with all writers and task tests stopped, one measurement lane at a time.
+
+## Correctness and measurement acceptance
+
+1. Deterministic regressions establish work counts, input identities, invalidation, ordered
+   diagnostics, output/cold-result parity and zero stale publication. Cover imports, membership,
+   package/config/sidecar/native changes, generated-file repair, failed attempts and independent
+   final freshness checks. Preserve main's associated-effect contracts across multi-entry builds.
+2. Ordering/lifecycle mutations must fail their intended witnesses: stale source admission,
+   superseded result acceptance, extending the first deadline, missing rejection/close cleanup,
+   missing identity checks and removing fresh-realm barriers. A green helper test alone does not
+   establish the real session's scheduling or delivery contract.
+3. Run real-Metro editor-save trials for 12 → 16 → 100 → 12 padding, rapid saves and revert,
+   invalid-to-valid recovery, paired-file bursts plus a following save, one cell, whole app,
+   multiple active previews, fresh activation during an overlay, and a save during proven running
+   authoritative work. Use editor transactions/shortcuts for the felt-path trials; API burst
+   probes supplement those trials. Assert actual computed padding, subsequent paint, retained
+   state, no unexpected iframe reload, final source/manifest parity and eventual diagnostics.
+4. Keep normal timings separate from profiling/tracing. Eight saves per sequential case, retain
+   the cold first sample, report warm median and nearest-rank p95 from seven samples, raw failures,
+   load/CPU observations and lane contention. Use matched main/feature and opt-out/opt-in repeats
+   with alternating order to reduce host drift; compare each coherent mechanism before combining
+   results. Never add independently measured gains together.
+5. Preserve all executable ceilings in `StudioPreviewPerformance.ts`. Keep the six canonical
+   compiler/publication cases and their independent source/publication and total limits, using
+   the documented direct-delivery opt-out for that control. Qualify the production-default direct
+   path separately against the existing applicable total limits, with explicit source-to-delivery
+   and delivery-to-paint timestamps. Also record eventual authoritative publication and scheduler
+   delay. Never fabricate generated mtimes, relabel a delta as generated publication, drop a
+   canonical case or raise a limit to pass. Adapt the harness explicitly for default enablement;
+   the POC currently refuses direct-delivery mode in canonical performance qualification.
+6. Full-overlap diagnostics identify actual attempt start/end around each save, queue delay,
+   event-loop lag, tooling, emission and paint. Do not infer overlap from a fixed sleep. Quiet
+   admission failures remain inconclusive; eligible budget breaches remain failures. Correct
+   rendering precedes timing interpretation. Historical 179/188ms compiler/HMR, 38–47/48–52ms
+   direct padding and 523/1154ms overlap figures belong to differing POC configurations and loads,
+   not this integrated tree. A general 100–150ms warm goal remains an aspiration.
+
+## Verification and stopping boundary
+
+1. Focused tests and changed-scope verification prove iteration; the standalone performance lane
+   proves the numerical budgets. Do not repeat portable CI gates locally as merge evidence.
+2. Landing was authorized on 2026-10-07. Reread live help and the current hosted route: reviewed
+   message, `open-pr --auto-merge`, hosted Verify plus the local host-only complement. The Developer's
+   stricter rule prevails over the repository's two-run capacity: wait until no Verify run is
+   running, checking every ten seconds before starting one. Monitor owned runs frequently and
+   promptly cancel failed-head work through the supported cancellation command. Never cancel
+   another owner's healthy run, jump the queue or merge through a raw GitHub command.
+3. Authorization covers this production slice and retries. No Metro revision fallback/retry, editor
+   configuration file, dependency/version/lockfile edit or new host permission is part of it.
+   Keep UI automation quiet through the existing headless smoke surface; separate visible native
+   acceptance remains subject to its own authorization.
+
+## Separate later plans
+
+1. Worker isolation plus independent interactive admission: measure remaining queue/lag/full-stage
+   costs, then propose a persistent background worker with its own mutable workspace, immutable
+   requests, one latest pending input, restart/error/close handling and a short stale-checked
+   publication boundary. Moving emission alone does not bypass coordinator drain or generation lock.
+   Keep one authoritative executor per watched project and one current plus one latest pending
+   request. Prove a real editor save paints while full work remains active, then cover worker
+   failure/restart, stale diagnostics, fresh activation, close/flush and owned-child termination.
+   One bounded implementer owns the settled executor protocol; the lead owns admission and
+   publication seams and the integrated review. Worker isolation improves responsiveness but
+   does not itself reduce an ineligible edit's full elapsed compilation cost.
+2. Shared immutable tooling/preview snapshots: measure repeated preparation, define complete
+   config/package/sidecar/native identity and lifetime, and prohibit shared mutable linked ASTs.
+3. Dependency-directed compilation/validation: partition global versus local reports, certify
+   reverse dependencies, membership/unresolved/ownership changes and cold parity before selecting
+   emission/output-plan reuse. Define exact semantic owner closures, native/requirement evidence
+   and entry-sensitive report positions before implementation. Whole-document and whole-inventory
+   replay previously had zero hits; do not restore those experiments. One compiler implementer
+   can own a settled closure-reuse slice after read-only design, deterministic repeated-work
+   counts and cold-result parity are reviewed. No mutable AST crosses overlapping builds.
+4. Broader design/token delivery: extend the compiler-owned protocol only from measured costs and
+   parity. Selective subscriptions wait for demonstrated consumed-style fan-out in larger apps or
+   many previews; the current whole-app timing does not establish that bottleneck.
+
+Main now includes the 2026-10-06 repository health review, and the separate recurring pass is
+active. Its broader work remains outside this production speed slice.
+
+## Landing integration, 2026-10-07
+
+Supported main integration `79c8c76b4d` includes `776a84ed8` without conflicts. Frozen setup
+passes and reproduces all 1,252 maintained native files. The overlapping changes preserve
+Studio's long-request handling, watch startup cancellation and drain, native engine loading,
+and the existing inspection cache, locking and independent final freshness audit. The current
+landing route generates maintained bindings automatically and assigns portable proof to hosted
+Verify; its host complement covers the remaining catalog gates.
+
+Standalone performance retry `performance-cf746baf-b6d1-499a-a3ff-4004d3315327` remains
+inconclusive: another `verify-complement` lane was active and load was 15.57 on 18 CPUs,
+above the unchanged quiet threshold of 9. No timing stages ran. Quiet qualification and
+paired trials remain required; this integration does not establish a new numerical gain.
+
+## Hosted cleanup retry, 2026-10-07
+
+PR #81's first hosted Verify (`37693128510`, head `073aca140`) failed Chrome cleanup
+in partitions 3 and 7; the run was canceled promptly. The same head's host complement
+passed in 98.2 seconds. The Linux failure reported supervised exit 1 with no signal;
+that report alone did not distinguish a native exit from the wrapper's synthesized verdict.
+A real process regression reproduces the latter: an explicitly stopped parent exits zero
+before its owned descendant finishes, and supervision reports a false leak despite joining
+and stopping that exact descendant. Owner-requested shutdown now retains the parent verdict
+while still joining every owned process. Spontaneous leaks, nonzero parent exits, inspection
+uncertainty, bounds and escalation retain their failure rules. Chrome also retains its profile
+on any cleanup failure and reports both supervised and direct exit codes. The lifecycle
+witness fails with the old behavior; hosted Linux proof remains required on the retry head.
+This changes teardown only. The pinned ABBA measurements above remain historical evidence;
+no active compilation path, numerical ceiling, admission rule or timeout changed.

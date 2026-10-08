@@ -195,6 +195,11 @@ agents-demo: _parser-gen
 studio-smoke test_file="packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts" run_id="local" native='false' show_studio='false':
     ./dev studio-smoke {{ if native == "true" { "--native" } else { "" } }} {{ if show_studio == "true" { "--show-studio" } else { "" } }} --run-id "{{ run_id }}" "{{ test_file }}"
 
+# Repeat owned headless Chrome launch/close and retain shutdown and macOS crash-report evidence
+[group('Host proofs')]
+studio-chrome-shutdown run_id="local":
+    ./dev studio-smoke --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-chrome-shutdown.test.ts
+
 # Prove semantic host control against the owned native Studio shell
 [arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
@@ -618,7 +623,7 @@ merge-pr *ARGS:
 cancel-verify *ARGS:
     ./dev cancel-verify {{ ARGS }}
 
-# Land a fix committed after GitHub merged this branch: commit it onto fetched origin/main as one commit and push, with a receipt and no verification
+# Land a fix committed after GitHub merged this branch: commit it onto fetched origin/main as one commit and push once typecheck, lint and the changed suites pass
 [group('Dev')]
 land-fix *ARGS:
     ./dev land-fix {{ ARGS }}

@@ -92,6 +92,31 @@ function ignoreSupersededPreviewReport(error: unknown): void {
   throw error
 }
 
+type PendingPreviewPaint = { instanceId: string; latestRevision: number; revisions: Set<number> }
+const pendingPreviewPaints = new WeakMap<StudioPreviewConnection, PendingPreviewPaint>()
+
+/** Direct style-store update; active retained realms keep their app and navigation state. */
+export function postDesignPadding(
+  preview: StudioPreviewConnection,
+  handshake: StudioHandshake,
+  update: import('../../StudioProtocol').StudioDesignPaddingUpdate,
+): void {
+  if (!preview.activated || preview.iframe.contentWindow === null) {
+    return
+  }
+  preview.iframe.contentWindow.postMessage({
+    ...update,
+    channel: studioProtocolChannel,
+    protocolVersion: studioProtocolVersion,
+    identity: {
+      ...(preview.cellIdentity ?? { ...handshake.identity, compileRevision: preview.expectedRevision }),
+      previewInstanceId: preview.previewInstanceId,
+    },
+    type: 'design-padding',
+  }, preview.origin)
+  rememberPreviewPaint(preview, handshake, update.revision)
+}
+
 export function postInteractionMode(preview: StudioPreviewConnection, handshake: StudioHandshake): void {
   const target = preview.iframe.contentWindow
   if (target === null) {
@@ -287,6 +312,7 @@ export async function handlePreviewMessage(
       receivePreviewApplied(preview, received(message, type), handshake, actions.canvasGesturesOwned?.()),
     'preview-mounted': type =>
       receivePreviewMounted(preview, received(message, type), handshake, actions.canvasGesturesOwned?.()),
+    'preview-painted': type => receivePreviewPainted(preview, received(message, type), handshake),
     'preview-console': type => receiveConsole(preview, received(message, type), actions),
     'preview-canvas-gesture': type => actions.canvasGesture?.(received(message, type)),
     'preview-canvas-pan-key': type => actions.canvasPanKey?.(received(message, type)),
@@ -316,7 +342,11 @@ export async function handlePreviewMessage(
         preview.layoutMeasurements = measurement
         actions.layoutMeasured?.()
       }
-      await StudioApiClient.previewLayoutMeasurements(measurement).catch(ignoreSupersededPreviewReport)
+      // Whole-app geometry is local to its canvas; the server layout contract
+      // stores only complete matrix-cell identities for source layout operations.
+      if (preview.cellIdentity !== undefined) {
+        await StudioApiClient.previewLayoutMeasurements(measurement).catch(ignoreSupersededPreviewReport)
+      }
     },
     'preview-runtime-capture-failed': type => receiveRuntimeCapture(preview, received(message, type)),
     'preview-runtime-captured': type => receiveRuntimeCapture(preview, received(message, type)),
@@ -505,6 +535,7 @@ async function receivePreviewApplied(
   }
   // A frame can acknowledge its previous revision while Studio publishes the next manifest.
   // The server correctly rejects that stale report; it does not indicate a broken preview.
+  rememberPreviewPaint(preview, handshake, message.appliedRevision)
   try {
     await StudioApiClient.previewApplied(message)
   } catch (error) {
@@ -537,10 +568,75 @@ function receivePreviewMounted(
     current ?? { compileRevision: message.identity.compileRevision! },
     message.identity.previewInstanceId,
   )
+  rememberPreviewPaint(preview, handshake, message.identity.compileRevision!)
   StudioPreviewActivationGate.changed(preview)
   if (canvasGesturesOwned !== undefined) {
     postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned)
   }
+}
+
+function rememberPreviewPaint(
+  preview: StudioPreviewConnection,
+  handshake: StudioHandshake,
+  revision: number,
+): void {
+  if (handshake.previewPaint !== true) {
+    return
+  }
+  const current = pendingPreviewPaints.get(preview)
+  const pending = current?.instanceId === preview.previewInstanceId
+    ? current
+    : { instanceId: preview.previewInstanceId, latestRevision: -1, revisions: new Set<number>() }
+  if (revision < pending.latestRevision) {
+    return
+  }
+  pending.latestRevision = revision
+  // A newer update cancels the child's older paint callback. Retain only the
+  // acknowledgement that can still advance background validation.
+  pending.revisions.clear()
+  pending.revisions.add(revision)
+  pendingPreviewPaints.set(preview, pending)
+}
+
+function receivePreviewPainted(
+  preview: StudioPreviewConnection,
+  message: StudioWindowMessageOf<'preview-painted'>,
+  handshake: StudioHandshake,
+): void {
+  if (
+    handshake.previewPaint !== true
+    || !matchesCurrentPaintIdentity(preview, handshake, message.identity)
+  ) {
+    return
+  }
+  const pending = pendingPreviewPaints.get(preview)
+  if (
+    pending?.instanceId !== preview.previewInstanceId
+    || pending.latestRevision !== message.paintRevision
+    || !pending.revisions.delete(message.paintRevision)
+  ) {
+    return
+  }
+  void StudioApiClient.previewPaint(message)
+    .catch(ignoreSupersededPreviewReport)
+}
+
+function matchesCurrentPaintIdentity(
+  preview: StudioPreviewConnection,
+  handshake: StudioHandshake,
+  identity: StudioWindowMessageOf<'preview-painted'>['identity'],
+): boolean {
+  if (
+    identity.appName !== handshake.identity.appName
+    || identity.project !== handshake.identity.project
+    || identity.previewInstanceId !== preview.previewInstanceId
+    || identity.compileRevision !== preview.expectedRevision
+  ) {
+    return false
+  }
+  return preview.cellIdentity === undefined
+    ? identity.cellId === undefined && identity.manifestRevision === undefined
+    : matchesExactPreviewCellIdentity(preview, identity)
 }
 
 async function receiveSourceAction(

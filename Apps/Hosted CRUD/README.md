@@ -24,7 +24,7 @@ From the repository root, run:
 The QR is hidden until you press `d` for Device; any required Expo account guidance appears there.
 Before that, `c` shows only the address. Afterward, it reprints the QR.
 The Android emulator action asks Expo to open the app locally; its real-emulator acceptance remains
-pre-MVP work in A22. Other CLI choice prompts use the shared numbered menu and Enter default.
+pre-MVP work in A33. Other CLI choice prompts use the shared numbered menu and Enter default.
 
 `tao connect run` replaces Expo's terminal screen with its own: Expo's Expo Go address as a QR code, bundling progress and errors, app logs, and the compact Actions line above (`?` remains a connection-display alias). Scan with the iPhone camera, or from inside Expo Go on Android, to open the app. The phone and development machine must be able to reach the Metro server. No Apple Developer account is needed for this path, but Expo Go on a physical iPhone opens a development server only when Expo CLI and the Expo Go app are signed in to the same free Expo account; `tao connect run` checks the Expo CLI account, gives local sign-in guidance when needed, and names the account to use in Expo Go. The iOS Simulator does not need the account. Choose a provider on the first screen, then create an account and perform the same CRUD steps. Each provider keeps its own session, so switching providers needs no sign-out.
 

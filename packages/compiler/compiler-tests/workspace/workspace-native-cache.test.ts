@@ -1,10 +1,75 @@
+import { Packages } from '@ast-utils'
 import { Workspace } from '@compiler/workspace'
+import * as NativeBindings from '@native-bindings'
 import { inspectMaintainedNativeBindings } from '@native-bindings'
 import { Assert, Diagnostics, FS, ReleaseCapabilities, Repo, TaoStdlib } from '@shared'
-import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { EmittedModuleCache } from '../../compiler-src/compiler'
+import { Describe, Expect, MockModule, Test, testOverrideSlot, withTaoFiles } from '@shared/test'
+import Compiler, { compileWorkspaceAttempt, EmittedModuleCache } from '../../compiler-src/compiler'
+
+const originalNativeBindings = { ...NativeBindings }
+const nativeInspectionSlot = testOverrideSlot({
+  read: () => NativeBindings.inspectMaintainedNativeBindings,
+  write: value => {
+    MockModule(
+      new URL('../../../apps/native-bindings/native-bindings-src/native-bindings.ts', import.meta.url).pathname,
+      () => ({ ...originalNativeBindings, inspectMaintainedNativeBindings: value }),
+    )
+  },
+})
 
 Describe('workspace maintained native admission with retained documents', () => {
+  Test('carries only the immediate implicit-root inspection and independently checks native freshness', async () => {
+    await withTaoFiles('tao-workspace-native-attempt-', {
+      'Main.tao': `
+        app Example { id "native-attempt" version "1.0.0" name "Example" view Main }
+        view Main() { render inject \`\`\`ts return null \`\`\` }
+      `,
+    }, async (paths, root) => {
+      const workspace = await Workspace.open(root)
+      const context = Compiler.createContext(await Packages.createContext(root), root)
+      const inspection = await inspectMaintainedNativeBindings()
+      Expect(inspection.status).toBe('fresh')
+      let inspections = 0
+      const restore = nativeInspectionSlot.install(async options => {
+        inspections++
+        return await originalNativeBindings.inspectMaintainedNativeBindings(options)
+      })
+      try {
+        const first = await workspace.compileFiles([paths['Main.tao']])
+        Expect(inspections).toBe(2)
+        inspections = 0
+        const warm = await workspace.compileFiles([paths['Main.tao']])
+        Expect(inspections).toBe(2)
+        Expect(warm.files).toEqual(first.files)
+
+        const validation = await workspace.validateFiles([paths['Main.tao']])
+        inspections = 0
+        const standalone = await Compiler.compileValidated(validation, context)
+        Expect(inspections).toBe(2)
+        Expect(standalone.files).toEqual(first.files)
+
+        inspections = 0
+        const immediate = await compileWorkspaceAttempt(validation, context, {}, inspection)
+        Expect(inspections).toBe(1)
+        Expect(immediate.files).toEqual(standalone.files)
+
+        inspections = 0
+        const explicit = Compiler.createContext(context.packagesContext, root, context.releaseProfile, {})
+        await compileWorkspaceAttempt(validation, explicit, {}, inspection)
+        Expect(inspections).toBe(2)
+
+        inspections = 0
+        await Expect(compileWorkspaceAttempt(validation, context, {}, {
+          ...inspection,
+          identity: 'different-attempt-native-inputs',
+        })).rejects.toThrow('Native binding inputs changed during compilation')
+        Expect(inspections).toBe(1)
+      } finally {
+        restore()
+      }
+    })
+  })
+
   Test('rejects stale native outputs before reused validation and cached emission, then recovers', async () => {
     await withTaoFiles('tao-workspace-native-cache-', {
       'App/.tao/.gitkeep': '',
