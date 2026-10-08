@@ -108,6 +108,7 @@ change that addressed it.
 - [DEVENV-HOST-CONTROLS-COLD-BUILD-TIMEOUTS — Host controls cold builds time out](<Developer environment upgrades/DEVENV-HOST-CONTROLS-COLD-BUILD-TIMEOUTS.md>) — Candidate
 - [DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS — Host effect lint has baseline findings](<Developer environment upgrades/DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS.md>) — Candidate
 - [DEVENV-HOSTED-CHROME-STARTUP-TIMES-OUT-BEFORE-DEVTOOLS — Hosted Chrome startup times out before DevTools](<Developer environment upgrades/DEVENV-HOSTED-CHROME-STARTUP-TIMES-OUT-BEFORE-DEVTOOLS.md>) — Candidate
+- [DEVENV-IOS-BARRIER-JOURNAL-RETENTION-INTERMITTENT — iOS barrier journal retention is intermittent](<Developer environment upgrades/DEVENV-IOS-BARRIER-JOURNAL-RETENTION-INTERMITTENT.md>) — Candidate
 - [DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS — iOS builds lack CocoaPods metadata access](<Developer environment upgrades/DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS.md>) — In progress
 - [DEVENV-LANDING-ADMISSION-RACES-ACROSS-PROCESSES — Landing admission races across processes](<Developer environment upgrades/DEVENV-LANDING-ADMISSION-RACES-ACROSS-PROCESSES.md>) — Candidate
 - [DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED — A landing tests a Codex config it never regenerated](<Developer environment upgrades/DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED.md>) — Candidate
