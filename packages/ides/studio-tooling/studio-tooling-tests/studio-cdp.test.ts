@@ -1,4 +1,4 @@
-import { Errors, FS } from '@shared'
+import { CLI, Errors, FS, Platform } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test } from '@shared/test'
 import {
   StudioCdp,
@@ -102,6 +102,108 @@ class FakeCdpTransport implements StudioCdpTransport {
 }
 
 Describe('Studio browser CDP harness', () => {
+  Test('requests browser shutdown before joining ownership and disconnects only after the join', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-graceful-')
+    const joined = Deferred<CLI.CommandCloseResult>()
+    const events: string[] = []
+    // Escaped output-owner capture is a macOS lifecycle requirement.
+    const captureEvents = Platform.hostPlatform === 'darwin' ? ['capture'] : []
+    let exitCode: number | null = null
+    const command: CLI.StartedCommand = {
+      args: [],
+      command: 'fixture Chrome',
+      get exitCode() {
+        return exitCode
+      },
+      signalCode: null,
+      captureOutputOwners: () => {
+        events.push('capture')
+      },
+      beginGracefulStop: graceMs => {
+        Expect(graceMs).toBe(1_000)
+        events.push('grace')
+      },
+      kill: signal => {
+        events.push(`signal:${signal}`)
+        return true
+      },
+      waitForClose: () => {
+        events.push('join')
+        return joined.promise
+      },
+      closeOutput: async () => {
+        events.push('output')
+      },
+      dispose: () => {
+        events.push('dispose')
+      },
+      endStdin: () => {},
+      onceClose: () => {},
+      onceError: () => {},
+      writeStdin: () => true,
+    }
+    const transport = new FakeCdpTransport()
+    // A real browser can close its socket before answering Browser.close.
+    transport.failMethod = 'Browser.close'
+    const client = Object.assign(transport, {
+      close: () => {
+        events.push('disconnect')
+      },
+    })
+    const close = StudioCdp.testing.closeOwnedChrome(command, client, profile)
+    await settle()
+    Expect(transport.calls.map(call => call.method)).toEqual(['Browser.close'])
+    Expect(events).toEqual([...captureEvents, 'grace', 'join'])
+    Expect(await FS.isDirectory(profile)).toBe(true)
+    exitCode = 0
+    joined.resolve({ exitCode: 0, signal: null })
+    await close
+    Expect(events).toEqual([...captureEvents, 'grace', 'join', 'output', 'dispose', 'disconnect'])
+    Expect(await FS.isDirectory(profile)).toBe(false)
+  })
+
+  Test('force-stops and joins Chrome when preparing graceful shutdown fails', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-graceful-failure-')
+    const events: string[] = []
+    const command: CLI.StartedCommand = {
+      args: [],
+      command: 'fixture Chrome',
+      exitCode: null,
+      signalCode: null,
+      captureOutputOwners: () => {},
+      beginGracefulStop: () => {
+        Errors.throwHostEnvironment('ownership capture failed')
+      },
+      kill: signal => {
+        events.push(`signal:${signal}`)
+        return true
+      },
+      waitForClose: async () => {
+        events.push('join')
+        return { exitCode: null, signal: 'SIGKILL' }
+      },
+      closeOutput: async () => {},
+      dispose: () => {},
+      endStdin: () => {},
+      onceClose: () => {},
+      onceError: () => {},
+      writeStdin: () => true,
+    }
+    const transport = new FakeCdpTransport()
+    const client = Object.assign(transport, {
+      close: () => {
+        events.push('disconnect')
+      },
+    })
+    await Expect(StudioCdp.testing.closeOwnedChrome(command, client, profile)).rejects.toThrow(
+      'Chrome cleanup could not be verified',
+    )
+    Expect(events).toEqual(['signal:SIGKILL', 'join', 'disconnect'])
+    Expect(transport.calls).toEqual([])
+    Expect(await FS.isDirectory(profile)).toBe(true)
+    await FS.remove(profile)
+  })
+
   Test('attempts disconnect and ownership join after capture fails without replacing that failure', async () => {
     const events: string[] = []
     const captureFailure = new Errors.HostEnvironmentError('output custody is uncertain')
@@ -127,6 +229,25 @@ Describe('Studio browser CDP harness', () => {
     Expect(caught).toBeInstanceOf(Errors.HostEnvironmentError)
     Expect((caught as Errors.HostEnvironmentError).cause).toBe(captureFailure)
     Expect(Errors.formatForLog(caught)).toContain('ownership join failed')
+  })
+
+  Test('retains diagnostic profile after an ownership failure even when the process join succeeds', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-custody-failure-')
+    await StudioCdp.testing.stopChrome(
+      {
+        exitCode: 0,
+        signalCode: null,
+        kill: () => true,
+        waitForClose: async () => ({ exitCode: 0, signal: null }),
+        closeOutput: async () => {},
+        dispose: () => {},
+      },
+      profile,
+      'SIGKILL',
+      { retainProfile: true },
+    )
+    Expect(await FS.isDirectory(profile)).toBe(true)
+    await FS.remove(profile)
   })
 
   Test('reports a supervised unsuccessful exit after joining owned Chrome cleanup', async () => {

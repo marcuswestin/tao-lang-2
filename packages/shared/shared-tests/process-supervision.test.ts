@@ -27,6 +27,7 @@ const mutableProcessTree = ProcessTree as unknown as {
   captureInheritedOutputOwners: typeof ProcessTree.captureInheritedOutputOwners
   groupMembers: typeof ProcessTree.groupMembers
   signalGroup: typeof ProcessTree.signalGroup
+  signalTracked: typeof ProcessTree.signalTracked
   refreshDescendants: typeof ProcessTree.refreshDescendants
 }
 const outputOwnersSlot = testOverrideSlot<typeof ProcessTree.captureInheritedOutputOwners>({
@@ -51,6 +52,12 @@ const signalGroupSlot = testOverrideSlot<typeof ProcessTree.signalGroup>({
   read: () => ProcessTree.signalGroup,
   write: value => {
     mutableProcessTree.signalGroup = value
+  },
+})
+const signalTrackedSlot = testOverrideSlot<typeof ProcessTree.signalTracked>({
+  read: () => ProcessTree.signalTracked,
+  write: value => {
+    mutableProcessTree.signalTracked = value
   },
 })
 
@@ -418,6 +425,148 @@ Describe('CLI process policy', () => {
       await command.waitForClose()
     }
   })
+
+  Test('graceful stop leaves a live root unsignalled while its protocol completes naturally', async () => {
+    let output = ''
+    const command = CLI.start('/bin/sh', {
+      args: ['-c', "trap 'echo TERM >&2' TERM; read reply; exit 0"],
+      processPolicy: 'test',
+      onOutput: (_stream, chunk) => {
+        output += chunk.toString()
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    try {
+      command.beginGracefulStop!(500)
+      command.writeStdin('Browser.close\n')
+      const result = await command.waitForClose()
+      Expect(result.exitCode).toBe(0)
+      Expect(output).not.toContain('TERM')
+      Expect(output).not.toContain('Graceful process stop exceeded')
+    } finally {
+      command.kill('SIGKILL')
+      await command.waitForClose()
+      command.dispose()
+    }
+  })
+
+  Test('graceful deadline kills a surviving descendant after successful root close without TERM', async () => {
+    let output = ''
+    const command = CLI.start('/bin/sh', {
+      args: [
+        '-c',
+        "trap 'echo root-TERM >&2' TERM; sh -c 'trap \"echo descendant-TERM >&2\" TERM; echo descendant:$$; exec >/dev/null 2>&1; exec sleep 300' & read reply; exit 0",
+      ],
+      detached: true,
+      processPolicy: 'test',
+      onOutput: (_stream, chunk) => {
+        output += chunk.toString()
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    const trackedSignals: Platform.ProcessSignal[] = []
+    const groupSignals: Platform.ProcessSignal[] = []
+    const originalTracked = ProcessTree.signalTracked
+    const originalGroup = ProcessTree.signalGroup
+    const restoreTracked = signalTrackedSlot.install((tracked, signal, seams) => {
+      trackedSignals.push(signal)
+      return originalTracked(tracked, signal, seams)
+    })
+    const restoreGroup = signalGroupSlot.install((pid, signal) => {
+      groupSignals.push(signal)
+      return originalGroup(pid, signal)
+    })
+    try {
+      const pid = await until(() => Number(/descendant:(\d+)/u.exec(output)?.[1]) || undefined)
+      abandoned.push(pid)
+      const identity = ProcessTree.identities([pid]).get(pid)!
+      command.beginGracefulStop!(250)
+      command.writeStdin('Browser.close\n')
+      const result = await command.waitForClose()
+      Expect(result.exitCode).toBe(0)
+      Expect(isAlive(identity)).toBe(false)
+      Expect(output).toContain('Graceful process stop exceeded 250ms')
+      Expect(trackedSignals).not.toContain('SIGTERM')
+      Expect(groupSignals).not.toContain('SIGTERM')
+    } finally {
+      restoreTracked()
+      restoreGroup()
+      command.kill('SIGKILL')
+      await command.waitForClose()
+      command.dispose()
+    }
+  })
+
+  Test('graceful cleanup preserves a nonzero root verdict', async () => {
+    let output = ''
+    const command = CLI.start('/bin/sh', {
+      args: ['-c', 'sleep 300 & echo descendant:$!; read reply; exit 7'],
+      processPolicy: 'test',
+      detached: true,
+      onOutput: (_stream, chunk) => {
+        output += chunk.toString()
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    try {
+      const pid = await until(() => Number(/descendant:(\d+)/u.exec(output)?.[1]) || undefined)
+      abandoned.push(pid)
+      const identity = ProcessTree.identities([pid]).get(pid)!
+      command.beginGracefulStop!(250)
+      command.writeStdin('Browser.close\n')
+      Expect((await command.waitForClose()).exitCode).toBe(7)
+      Expect(isAlive(identity)).toBe(false)
+      Expect(output).toContain('Graceful process stop exceeded 250ms')
+    } finally {
+      command.kill('SIGKILL')
+      await command.waitForClose()
+      command.dispose()
+    }
+  })
+
+  Test('graceful deadline force-kills a stalled direct root', async () => {
+    let output = ''
+    const command = CLI.start('/bin/sh', {
+      args: ['-c', "trap 'echo TERM >&2' TERM; exec sleep 300"],
+      processPolicy: 'test',
+      onOutput: (_stream, chunk) => {
+        output += chunk.toString()
+      },
+      stdio: 'pipe',
+    })
+    const identity = ProcessTree.identities([command.pid!]).get(command.pid!)!
+    try {
+      command.beginGracefulStop!(150)
+      command.beginGracefulStop!(5_000)
+      const result = await command.waitForClose()
+      Expect(result.signal).toBe('SIGKILL')
+      Expect(isAlive(identity)).toBe(false)
+      Expect(output).toContain('Graceful process stop exceeded 150ms')
+      Expect(output).not.toContain('TERM')
+    } finally {
+      command.kill('SIGKILL')
+      await command.waitForClose()
+      command.dispose()
+    }
+  })
+
+  Test('invalid graceful requests leave the command available for natural completion', async () => {
+    const command = CLI.start('/bin/sh', {
+      args: ['-c', 'read reply; exit 0'],
+      processPolicy: 'test',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    try {
+      Expect(() => command.beginGracefulStop!(0)).toThrow(/positive finite graceMs/u)
+      command.writeStdin('natural exit\n')
+      Expect((await command.waitForClose()).exitCode).toBe(0)
+    } finally {
+      command.kill('SIGKILL')
+      await command.waitForClose()
+      command.dispose()
+    }
+  })
+
   Test('no policy detaches a child; only the caller decides its process group', async () => {
     const ownGroup = ProcessTree.processGroupOf(Platform.runtimeProcess.pid)
     const toolChild = await startTree()

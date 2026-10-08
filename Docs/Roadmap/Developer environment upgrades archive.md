@@ -81,6 +81,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-APP-LINT-COUNTS-IGNORED-ORPHAN-DIRECTORIES — App lint counts ignored orphan directories](<Developer environment upgrades/Archive/DEVENV-APP-LINT-COUNTS-IGNORED-ORPHAN-DIRECTORIES.md>) — Resolved
 - [DEVENV-APP-SIDECAR-TYPECHECK-ASSUMES-GENERATED-METADATA — App sidecar typecheck assumes generated metadata](<Developer environment upgrades/Archive/DEVENV-APP-SIDECAR-TYPECHECK-ASSUMES-GENERATED-METADATA.md>) — Resolved
 - [DEVENV-BROWSER-LANES-MISS-A-PLAYWRIGHT-CHROMIUM — Browser lanes miss a Playwright Chromium](<Developer environment upgrades/Archive/DEVENV-BROWSER-LANES-MISS-A-PLAYWRIGHT-CHROMIUM.md>) — Resolved
+- [DEVENV-CHROME-FORKED-CHILD-CRASHES-DURING-SHUTDOWN — Chrome forked child crashes during shutdown](<Developer environment upgrades/Archive/DEVENV-CHROME-FORKED-CHILD-CRASHES-DURING-SHUTDOWN.md>) — Resolved
 - [DEVENV-COLD-VM-CHROME-STARTUP — Cold VM Chrome startup](<Developer environment upgrades/Archive/DEVENV-COLD-VM-CHROME-STARTUP.md>) — Resolved
 - [DEVENV-COMPANION-INSTALL-SKIPS-NATIVE-CONFIGURATION — Companion install skips native configuration](<Developer environment upgrades/Archive/DEVENV-COMPANION-INSTALL-SKIPS-NATIVE-CONFIGURATION.md>) — Resolved
 - [DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS — Compiled test store rename is denied in managed shells](<Developer environment upgrades/Archive/DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS.md>) — Resolved

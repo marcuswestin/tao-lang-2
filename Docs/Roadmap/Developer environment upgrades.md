@@ -84,6 +84,7 @@ change that addressed it.
 - [DEVENV-AGENT-WORKTREE-SHELLS-DENY-WRITES-AND-COMPOUND-COMMANDS — Agent worktree shells deny writes and compound commands](<Developer environment upgrades/DEVENV-AGENT-WORKTREE-SHELLS-DENY-WRITES-AND-COMPOUND-COMMANDS.md>) — Candidate
 - [DEVENV-ANDROID-EMULATOR-LEASE-RELEASE-PRECEDES-EXIT — Android emulator lease release precedes confirmed exit](<Developer environment upgrades/DEVENV-ANDROID-EMULATOR-LEASE-RELEASE-PRECEDES-EXIT.md>) — Candidate
 - [DEVENV-APP-DEV-WEB-OPENS-CHROME-IN-THE-FOREGROUND — `app-dev --web` opens Chrome in the foreground](<Developer environment upgrades/DEVENV-APP-DEV-WEB-OPENS-CHROME-IN-THE-FOREGROUND.md>) — Planned
+- [DEVENV-CANCEL-VERIFY-LEAVES-AUTO-MERGE-ARMED — Cancel Verify leaves auto-merge armed](<Developer environment upgrades/DEVENV-CANCEL-VERIFY-LEAVES-AUTO-MERGE-ARMED.md>) — Candidate
 - [DEVENV-CANCEL-VERIFY-SHORT-SHA-MISREPORTS-ACTIVE-RUN — Cancel Verify misreports an active run for a short SHA](<Developer environment upgrades/DEVENV-CANCEL-VERIFY-SHORT-SHA-MISREPORTS-ACTIVE-RUN.md>) — Candidate
 - [DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM — Claude Code is below the configured Opus minimum](<Developer environment upgrades/DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM.md>) — Candidate
 - [DEVENV-CLOSED-STDIN-PIPE-TEST-FLAKES-UNDER-LOAD — The closed-stdin-pipe test fails `verify-changed` under load](<Developer environment upgrades/DEVENV-CLOSED-STDIN-PIPE-TEST-FLAKES-UNDER-LOAD.md>) — Candidate
@@ -107,6 +108,7 @@ change that addressed it.
 - [DEVENV-HOST-CONTROLS-COLD-BUILD-TIMEOUTS — Host controls cold builds time out](<Developer environment upgrades/DEVENV-HOST-CONTROLS-COLD-BUILD-TIMEOUTS.md>) — Candidate
 - [DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS — Host effect lint has baseline findings](<Developer environment upgrades/DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS.md>) — Candidate
 - [DEVENV-HOSTED-CHROME-STARTUP-TIMES-OUT-BEFORE-DEVTOOLS — Hosted Chrome startup times out before DevTools](<Developer environment upgrades/DEVENV-HOSTED-CHROME-STARTUP-TIMES-OUT-BEFORE-DEVTOOLS.md>) — Candidate
+- [DEVENV-IOS-BARRIER-JOURNAL-RETENTION-INTERMITTENT — iOS barrier journal retention is intermittent](<Developer environment upgrades/DEVENV-IOS-BARRIER-JOURNAL-RETENTION-INTERMITTENT.md>) — Candidate
 - [DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS — iOS builds lack CocoaPods metadata access](<Developer environment upgrades/DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS.md>) — In progress
 - [DEVENV-LANDING-ADMISSION-RACES-ACROSS-PROCESSES — Landing admission races across processes](<Developer environment upgrades/DEVENV-LANDING-ADMISSION-RACES-ACROSS-PROCESSES.md>) — Candidate
 - [DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED — A landing tests a Codex config it never regenerated](<Developer environment upgrades/DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED.md>) — Candidate
@@ -119,6 +121,7 @@ change that addressed it.
 - [DEVENV-METRO-FAILS-TO-START-WITHIN-ITS-WAIT-UNDER-CONTENTION — Expo Metro intermittently fails to start within its wait under machine contention](<Developer environment upgrades/DEVENV-METRO-FAILS-TO-START-WITHIN-ITS-WAIT-UNDER-CONTENTION.md>) — Candidate
 - [DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP — iOS dev loop can stall after an Android loop stops](<Developer environment upgrades/DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP.md>) — Candidate
 - [DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG — Model routing trails the installed catalog](<Developer environment upgrades/DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG.md>) — Candidate
+- [DEVENV-NATIVE-INSPECTION-MEMO-REUSE-ASSERTION-INTERMITTENT — Native inspection memo reuse assertion is intermittent](<Developer environment upgrades/DEVENV-NATIVE-INSPECTION-MEMO-REUSE-ASSERTION-INTERMITTENT.md>) — Candidate
 - [DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES — Native kit omits provider transitives](<Developer environment upgrades/DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES.md>) — In progress
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
 - [DEVENV-OPEN-PR-GIVES-UP-ON-TRANSIENT-GITHUB-SERVER-ERRORS — open-pr gives up on transient GitHub server errors](<Developer environment upgrades/DEVENV-OPEN-PR-GIVES-UP-ON-TRANSIENT-GITHUB-SERVER-ERRORS.md>) — Candidate
