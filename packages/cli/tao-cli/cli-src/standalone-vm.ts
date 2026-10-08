@@ -28,6 +28,7 @@ try {
     Platform.runtimeProcess.exit(await guestCommand(name, argument, args, false))
   } else if (
     operation === 'push' && argument !== undefined && args.length === 1 && /^\/(Users|home)\/admin(\/|$)/.test(args[0]!)
+    && !args[0]!.split('/').includes('..')
   ) {
     // The archive arrives on this process's stdin; the guest only ever extracts it under the admin home,
     // /Users/admin on macOS and /home/admin on Linux.

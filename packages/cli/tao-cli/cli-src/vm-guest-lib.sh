@@ -59,6 +59,7 @@ vm_acquire_lease() {
 vm_require_tart_version() {
   tart_version=$(tart --version)
   IFS=. read -r tart_major tart_minor tart_patch <<< "$tart_version"
+  tart_patch=${tart_patch%%[!0-9]*}
   if (( tart_major < 2 || (tart_major == 2 && tart_minor < 32) || (tart_major == 2 && tart_minor == 32 && tart_patch < 1) )); then
     printf 'Tart 2.32.1 or newer is required for this guest-agent transport; found %s.\n' "$tart_version" >&2
     exit 1
@@ -137,12 +138,12 @@ vm_prepare_base() {
 # answers. Only vm-images.sh calls this, from the Developer's terminal.
 vm_build_vanilla_base() {
   vm_fetch_guest_agent
-  base_build_vm=$name
-  if ! step 'clone the vanilla image for the local base' tart clone "$image" "$base_build_vm" \
+  if ! step 'clone the vanilla image for the local base' tart clone "$image" "$name" \
     > "$logs/base-clone.log" 2>&1; then
     cat "$logs/base-clone.log" >&2
     exit 1
   fi
+  base_build_vm=$name
   step 'write only the guest agent to the stopped base disk' \
     "$bun_bin" run "$vm_helper" bootstrap-agent "$base_build_vm" "$root" 2>&1 | tee "$logs/base-bootstrap.log"
   vm_boot_and_wait "$base_build_vm"

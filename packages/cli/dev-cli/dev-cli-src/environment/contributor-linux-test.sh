@@ -125,6 +125,11 @@ case "$1" in
     sudo DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
       curl ca-certificates xz-utils git tar coreutils util-linux ;;
 esac
+# The cached clone keeps the tools phase's checkout. Keep only its installed tools and artifacts, so a
+# file the new commit deleted or renamed cannot survive into the snapshot the lanes run on.
+if [ "$1" = cached ]; then
+  find /home/admin/tao -mindepth 1 -maxdepth 1 ! -name .devenv ! -name .artifacts -exec rm -rf {} +
+fi
 mkdir -p /home/admin/tao
 tar -xf /home/admin/tao-harness/input/checkout.tar -C /home/admin/tao
 cd /home/admin/tao
@@ -167,10 +172,10 @@ run_phase() {
   booted=0
   printf 'Contributor Linux: %s phase in %s\n' "$phase" "$name"
 
+  created=1
   if ! step "clone $parent for the $phase phase" tart clone "$parent" "$name" 2>&1 | tee "$logs/clone.log"; then
     exit 1
   fi
-  created=1
   # A cached clone inherits the tools VM's disk, which is already 50 GB.
   if [ "$phase" = cached ]; then
     tart set "$name" --cpu 4 --memory 16384

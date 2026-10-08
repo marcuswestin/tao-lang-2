@@ -32,7 +32,7 @@ notes after each completed pass; Git history is the longer record.
   - Package README audience (D3), `packages/AGENTS.md` over budget (D4), and configuration-list layout (F2).
   - A Sonnet row in the routing table.
 - Before the macOS isolation checks, the Developer runs `just vm-images vanilla` once its root step lands (`DEVENV-TART-PROVISIONING-REQUIRES-HOST-UID-501`).
-- Run the Ubuntu contributor check once Docker has 16 GB.
+- Run the Ubuntu contributor check periodically (`./agent unsandboxed contributor-linux-test`); it runs in Tart now, not Docker. If its image is missing, it stops and prints `just vm-images ubuntu`.
 - Recheck the six tutorial QA observations and regenerate the QA dashboard once Q7 is decided.
 - Watch hosted Chrome startup. The next `DevToolsActivePort` timeout carries `fe7a4da74`'s stall snapshot; read it before changing the timeout.
 - Keep each evidence boundary distinct: ARM64 Linux, native amd64, hosted cloud, the installed CLI, native builds, devices, signing and distribution. Explicit prerelease installation and WordFlower outline export stay deferred until after MVP.
