@@ -1052,7 +1052,7 @@ const operations = {
   recoverResources: async () => { Errors.throwUnexpected('Unexpected recovery'); },
   start: () => {
     running = true;
-    child = CLI.start(Platform.runtimeProcess.execPath, {args: ['-e', "setInterval(() => {}, 100)"], detached: true, processPolicy: 'server', stdio: 'pipe', unref: true});
+    child = CLI.start(Platform.runtimeProcess.execPath, {args: ['-e', "setInterval(() => {}, 100)"], detached: true, lifetime: {outlivesParent: 'emulator fixture'}, processPolicy: 'server', stdio: 'pipe', unref: true});
     const identity = ProcessTree.identities([child.pid]).get(child.pid);
     Platform.runtimeConsole.info(JSON.stringify({child: identity}));
     const dispose = child.dispose;

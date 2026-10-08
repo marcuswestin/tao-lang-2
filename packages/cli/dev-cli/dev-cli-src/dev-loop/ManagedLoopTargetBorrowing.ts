@@ -791,6 +791,7 @@ async function run(
               'full',
             ],
             detached: true,
+            lifetime: { outlivesParent: 'A borrowed target is retained past this parent so its return can be proved.' },
             processPolicy: 'server',
             // File descriptors remain writable by a retained child after this parent exits.
             stdio: ['ignore', stdout.fd, stderr!.fd],

@@ -768,6 +768,35 @@ Describe('repo lint conventions', () => {
     ])
   })
 
+  Test('reports a direct spawn outside the allowlist and leaves the wrappers alone', () => {
+    const source = `const child = ${['Platform', 'spawn'].join('.')}('ls')\nconst other = ${
+      ['Bun', 'spawn'].join('.')
+    }(['ls'])\n`
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.directSpawn,
+      [{ path: 'packages/dev/dev-src/studio/StudioNew.ts', source }],
+      [],
+    )).toEqual([
+      'packages/dev/dev-src/studio/StudioNew.ts:1 starts a child process directly; start it through `CLI.start`'
+      + ' or `CLI.run` from `@shared`, with `lifetime` saying whether it dies with this process.',
+      'packages/dev/dev-src/studio/StudioNew.ts:2 starts a child process directly; start it through `CLI.start`'
+      + ' or `CLI.run` from `@shared`, with `lifetime` saying whether it dies with this process.',
+    ])
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.directSpawn,
+      [{ path: 'packages/shared/shared-src/CLI.ts', source }],
+      [],
+    )).toEqual([])
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.directSpawn,
+      [{ path: 'packages/dev/dev-src/studio/StudioNew.ts', source: "const child = CLI.start('ls')\n" }],
+      ['packages/dev/dev-src/studio/StudioNew.ts'],
+    )).toEqual([
+      'packages/dev/dev-src/studio/StudioNew.ts no longer starts a child process directly; drop its repo lint'
+      + ' allowlist entry.',
+    ])
+  })
+
   Test('leaves the wrappers and the runtime outside the platform rules', () => {
     const source = `const env = ${['process', 'env'].join('.')}\n${importFrom('node:os')}`
     for (const rule of [CONVENTION_RULES.nodeImport, CONVENTION_RULES.processAccess]) {

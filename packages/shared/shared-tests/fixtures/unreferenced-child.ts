@@ -2,6 +2,7 @@ import { CLI, Errors, HCI, ProcessTree } from '@shared'
 
 const child = CLI.start('/bin/sleep', {
   args: ['30'],
+  lifetime: { outlivesParent: 'This fixture proves an unreferenced child is released from the event loop.' },
   processPolicy: 'server',
   stdio: 'ignore',
   unref: true,

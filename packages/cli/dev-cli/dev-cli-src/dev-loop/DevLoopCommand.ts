@@ -213,7 +213,7 @@ async function launchController(receipt: DevLoopReceipt): Promise<DevLoopReceipt
   const session = receipt.session
   const log = await FS.openAppend(FS.resolvePath('controller.log', devLoopDirectory(session)))
   try {
-    const child = Platform.spawn(Platform.runtimeProcess.execPath, {
+    const child = CLI.start(Platform.runtimeProcess.execPath, {
       args: [Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/dev-loop/DevLoopWorker.ts')],
       cwd: Repo.getRoot(),
       detached: true,
@@ -222,9 +222,14 @@ async function launchController(receipt: DevLoopReceipt): Promise<DevLoopReceipt
         TAO_DEV_LOOP_WORKER_CREDENTIALS: '',
         TAO_DEV_LOOP_SELECTION_ONLY: '',
       },
+      lifetime: {
+        outlivesParent: 'The managed dev-loop controller is designed to survive the launcher command that starts'
+          + ' it; its receipts and the stop command bound its lifetime instead.',
+      },
+      processPolicy: 'server',
       stdio: ['ignore', log.fd, log.fd],
+      unref: true,
     })
-    child.unref()
     return await acknowledgeDevLoopController(session, child)
   } finally {
     await log.close()

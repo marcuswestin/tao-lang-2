@@ -908,12 +908,116 @@ export async function inspect(options: InspectOptions): Promise<Report> {
   return { version: 1, entries, warnings }
 }
 
-/** Nested commands share one advisory marker; it grants no authority and suppresses only repeated output. */
-export async function notifyStartup(options: Omit<InspectOptions, 'mode'>): Promise<void> {
+/** SweepOptions names the seams a startup sweep signals and waits through; production uses the kernel. */
+export type SweepOptions = Pick<InspectOptions, 'indexRoot' | 'inspectIdentities' | 'inspectProcessAlive'> & {
+  /** How long each of SIGTERM and SIGKILL may take before the record is left for inspection. */
+  graceMs?: number
+  signalGroup?: typeof ProcessTree.signalGroup
+  signalTracked?: typeof ProcessTree.signalTracked
+  sleep?: (ms: number) => Promise<void>
+}
+
+/** SweepReport says which stranded records the sweep stopped and retired, and how many it left alone. */
+export type SweepReport = { stopped: string[]; left: number }
+
+const SWEEP_GRACE_MS = 3_000
+const SWEEP_POLL_MS = 50
+
+/**
+ * sweepStrandedProcesses stops the children an earlier session recorded with complete provenance
+ * whose owner is gone while the children still run under their exact recorded identities, then
+ * retires those records. Every signal goes through `ProcessTree.signalTracked`, which checks each
+ * identity against the kernel again, so a reused PID is never hit. Records whose provenance is
+ * uncertain, whose identities cannot be read, or whose children refuse to die are left for the
+ * advisory that follows; the sweep never widens what it is sure of.
+ */
+export async function sweepStrandedProcesses(options: SweepOptions): Promise<SweepReport> {
+  const root = indexRoot(options.indexRoot)
+  const candidates: Candidate[] = []
+  await registrations(root, candidates, [], MAX_ENTRIES)
+  const identitiesOf = options.inspectIdentities ?? ProcessTree.identities
+  const alive = options.inspectProcessAlive ?? Platform.processIsAlive
+  const signalTracked = options.signalTracked ?? ProcessTree.signalTracked
+  const signalGroup = options.signalGroup ?? ProcessTree.signalGroup
+  const sleep = options.sleep ?? (async (ms: number) => await new Promise<void>(resolve => setTimeout(resolve, ms)))
+  const graceMs = options.graceMs ?? SWEEP_GRACE_MS
+  const report: SweepReport = { stopped: [], left: 0 }
+  for (const candidate of candidates) {
+    const { entry, owner, children } = candidate
+    if (
+      entry.kind !== 'process' || candidate.closureUnverified === true || owner === undefined || children === undefined
+      || !KERNEL_START.test(owner.startedAt) || !children.every(child => KERNEL_START.test(child.startedAt))
+    ) {
+      continue
+    }
+    let identities: Map<number, TrackedProcess>
+    try {
+      identities = identitiesOf([owner.pid, ...children.map(child => child.pid)])
+    } catch {
+      report.left += 1
+      continue
+    }
+    const liveChildren = () => children.filter(child => ProcessTree.sameProcess(identities.get(child.pid), child))
+    const ownerIdentity = identities.get(owner.pid)
+    let ownerGone: boolean
+    try {
+      ownerGone = ownerIdentity === undefined ? !alive(owner.pid) : !ProcessTree.sameProcess(ownerIdentity, owner)
+    } catch {
+      ownerGone = false
+    }
+    if (!ownerGone || liveChildren().length === 0) {
+      continue
+    }
+    const groupRoot = candidate.processGroup === undefined ? undefined : children[0]
+    const stopped = await (async () => {
+      for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
+        signalTracked(liveChildren(), signal)
+        if (groupRoot !== undefined && ProcessTree.sameProcess(identities.get(groupRoot.pid), groupRoot)) {
+          signalGroup(groupRoot.pid, signal)
+        }
+        for (let waited = 0; waited <= graceMs; waited += SWEEP_POLL_MS) {
+          identities = identitiesOf(children.map(child => child.pid))
+          if (liveChildren().length === 0) {
+            return true
+          }
+          await sleep(SWEEP_POLL_MS)
+        }
+      }
+      return false
+    })().catch(() => false)
+    if (!stopped) {
+      report.left += 1
+      continue
+    }
+    try {
+      retireProcess(entry.id, { indexRoot: root })
+      report.stopped.push(entry.id)
+    } catch {
+      report.left += 1
+    }
+  }
+  return report
+}
+
+/**
+ * Nested commands share one advisory marker; it grants no authority and suppresses only repeated
+ * output. Before advising, the startup pass stops what an earlier session provably left behind.
+ */
+export async function notifyStartup(options: Omit<InspectOptions, 'mode'> & SweepOptions): Promise<void> {
   if (Platform.runtimeProcess.env[STARTUP_MARKER] === '1') {
     return
   }
   Platform.runtimeProcess.env[STARTUP_MARKER] = '1'
+  try {
+    const swept = await sweepStrandedProcesses(options)
+    if (swept.stopped.length > 0) {
+      HCI.writeStderr(
+        `Tao resources: stopped ${swept.stopped.length} stale process(es) left by an earlier session.\n`,
+      )
+    }
+  } catch {
+    // The advisory below still names what the sweep could not settle.
+  }
   try {
     const report = await inspect({ ...options, mode: 'startup' })
     const count = report.entries.filter(entry =>

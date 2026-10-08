@@ -1,4 +1,15 @@
-import { CLI, Errors, HCI, Platform, ProcessTree, Repo, ResourceInventory, Time, type TrackedProcess } from '@shared'
+import {
+  CLI,
+  Errors,
+  HCI,
+  Platform,
+  ProcessLifetime,
+  ProcessTree,
+  Repo,
+  ResourceInventory,
+  Time,
+  type TrackedProcess,
+} from '@shared'
 
 export type StudioProcessTree =
   & Pick<
@@ -26,28 +37,17 @@ export type WaitForStudioProcessTreeClose = () => Promise<CLI.CommandCloseResult
 
 const defaultStopTimeoutMs = 3_000
 
-// The private fourth descriptor holds the launcher until its kernel identity is durable.
-// exec preserves that identity, argv and the application's three standard descriptors.
-// Parent death before admission closes the pipe and never starts the requested executable.
-const admissionScript = `IFS= read -r admission <&3 || exit 70
-[ "$admission" = "$1" ] || exit 71
-shift
-exec 3<&-
-exec "$@"`
-
-/** Starts a command in its own process group so its complete subprocess tree can be stopped. */
+/**
+ * Starts a command in its own process group so its complete subprocess tree can be stopped. The
+ * child runs behind the shared lifetime link (`ProcessLifetime`): its launch registration is the
+ * admission token, so the tool starts only once its kernel identity is recorded, and it dies with
+ * this process however this process ends.
+ */
 export async function startStudioProcessTree(
   command: string,
   spec: StudioProcessTreeSpec = {},
 ): Promise<StudioProcessTree> {
-  const standard = spec.stdio ?? ['ignore', 'pipe', 'pipe']
-  const stdio = Array.isArray(standard) ? [...standard] : [standard, standard, standard]
-  if (stdio.length > 3 || stdio.includes('ipc')) {
-    Errors.throwHostEnvironment('Process-tree admission requires the three standard descriptors without IPC.')
-  }
-  while (stdio.length < 3) {
-    stdio.push('pipe')
-  }
+  const stdio = spec.stdio ?? ['ignore', 'pipe', 'pipe']
   const owner = ProcessTree.identities([Platform.runtimeProcess.pid]).get(Platform.runtimeProcess.pid)
   if (owner === undefined) {
     Errors.throwHostEnvironment('Cannot capture ownership before launching the process.')
@@ -58,14 +58,14 @@ export async function startStudioProcessTree(
     command,
     indexRoot: spec.resourceIndexRoot,
   })
-  const child = Platform.spawn('/bin/sh', {
-    args: ['-c', admissionScript, 'tao-process-admission', registration, command, ...(spec.args ?? [])],
+  const child = ProcessLifetime.spawnLinked(command, registration, {
+    args: spec.args,
     cwd: spec.cwd,
-    detached: true,
     env: spec.env,
-    stdio: [...stdio, 'pipe'],
+    stdio,
   })
   child.on('error', error => spec.onError?.(error))
+  child.once('exit', () => ProcessLifetime.release(child))
   let rootIdentity: TrackedProcess | undefined
   const owned = new Map<number, TrackedProcess>()
   let shutdownCaptured = false
@@ -198,7 +198,7 @@ export async function startStudioProcessTree(
       Errors.throwHostEnvironment('Process launch ownership could not be published; launch refused.', { cause: error })
     }
   } else {
-    child.stdio[3]?.destroy()
+    ProcessLifetime.destroyChannel(child)
     child.stdout?.destroy()
     child.stderr?.destroy()
     Errors.throwHostEnvironment('The process did not publish a launch identity; its intent remains unverified.')
@@ -221,20 +221,10 @@ export async function startStudioProcessTree(
       child.once('exit', (exitCode, signal) => resolve({ exitCode, signal }))
     })
     : close
-  const admission = child.stdio[3]
-  if (admission === undefined || admission === null || !('write' in admission)) {
-    await rollbackUnpublishedLaunch(child, rootIdentity).catch(reportRegistrationFailure)
-    Errors.throwHostEnvironment('The private process admission channel is unavailable; launch refused.')
-  }
   try {
-    if ('resume' in admission && typeof admission.resume === 'function') {
-      admission.resume()
-    }
-    await new Promise<void>((resolve, reject) => {
-      admission.once('error', reject)
-      admission.write(`${registration}\n`, error => error ? reject(error) : resolve())
-    })
-    admission.end()
+    // The channel stays open after admission: it is the link that stops the tree when this
+    // process dies, and `release` closes it once the child has exited on its own.
+    await ProcessLifetime.admit(child, registration)
   } catch (error) {
     await rollbackUnpublishedLaunch(child, rootIdentity).catch(reportRegistrationFailure)
     Errors.throwHostEnvironment('The private process admission channel failed; launch refused.', { cause: error })
@@ -368,7 +358,7 @@ async function rollbackUnpublishedLaunch(
     }
     Errors.throwHostEnvironment('Refused launch rollback is unproved; preserve its discovery intent.')
   } finally {
-    child.stdio[3]?.destroy()
+    ProcessLifetime.destroyChannel(child)
     child.stdout?.destroy()
     child.stderr?.destroy()
   }

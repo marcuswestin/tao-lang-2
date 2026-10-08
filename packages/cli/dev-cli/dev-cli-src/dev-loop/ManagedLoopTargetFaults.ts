@@ -548,6 +548,7 @@ async function runFault(
         root,
       ],
       detached: true,
+      lifetime: { outlivesParent: 'The quarantine helper must survive the launcher so its cleanup can be observed.' },
       processPolicy: 'server',
       stdio: 'pipe',
       unref: true,

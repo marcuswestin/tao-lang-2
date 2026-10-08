@@ -1070,6 +1070,7 @@ export function startManagedLoopPrivateController(invocation: string, id: string
       'controller',
     ],
     cwd: Repo.getRoot(),
+    lifetime: { outlivesParent: 'The acceptance controller under test must outlive the launcher that probes it.' },
     processPolicy: 'server',
     stdio: 'pipe',
     unref: true,

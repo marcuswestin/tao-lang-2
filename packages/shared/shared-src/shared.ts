@@ -17,6 +17,7 @@ import * as FS from './FS'
 import * as HCI from './HCI'
 import * as LocalSocket from './LocalSocket'
 import * as Platform from './Platform'
+import * as ProcessLifetime from './ProcessLifetime'
 import { ProcessListeners } from './ProcessListeners'
 import { ProcessTree } from './ProcessTree'
 import { ProjectDevSession } from './ProjectDevSession'
@@ -39,6 +40,7 @@ export type {
   DiagnosticSource,
 } from './core/shared-core'
 
+export type { Lifetime } from './ProcessLifetime'
 export type { ProcessListener } from './ProcessListeners'
 export type { ReleaseCapability, ReleasePhase, ReleaseProfile } from './ReleaseCapabilities'
 
@@ -59,6 +61,7 @@ export {
   Json,
   LocalSocket,
   Platform,
+  ProcessLifetime,
   ProcessListeners,
   ProcessTree,
   ProjectDevSession,
