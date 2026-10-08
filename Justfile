@@ -315,11 +315,11 @@ standalone-cli-clean-machine action='' vm='': _parser-gen
 standalone-cli-clean-machine-audit: _parser-gen
     bash packages/cli/tao-cli/cli-src/standalone-clean-machine.sh --audit
 
-# Prove portable contributor setup in fresh Ubuntu containers; agents use ./agent unsandboxed contributor-linux-test
+# Prove portable contributor setup in a fresh Tart Ubuntu VM; agents use ./agent unsandboxed contributor-linux-test
 [group('Host proofs')]
 [positional-arguments]
 contributor-linux-test *ARGS:
-    /bin/sh packages/cli/dev-cli/dev-cli-src/environment/contributor-linux-test.sh "$@"
+    /bin/bash packages/cli/dev-cli/dev-cli-src/environment/contributor-linux-test.sh "$@"
 
 # Prove the documented contributor path in a fresh vanilla macOS VM; agents use ./agent unsandboxed contributor-macos-test
 [group('Host proofs')]

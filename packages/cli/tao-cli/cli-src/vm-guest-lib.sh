@@ -1,15 +1,25 @@
-# Sourced by the disposable macOS VM runners, standalone-clean-machine.sh and contributor-macos-test.sh.
+# Sourced by the disposable Tart VM runners: standalone-clean-machine.sh, contributor-macos-test.sh, and
+# contributor-linux-test.sh.
 # The caller sets vm_label, name, root, logs, input, lease_root, bun_bin, and vm_helper first, owns its
-# cleanup trap and the variables that trap reads (lease_owned, started, booted, vm_pid), and calls
-# these only for the steps both runners must do identically: one account-wide lease, one pinned
-# guest-agent fixture, one headless boot with a readiness wait.
+# cleanup trap and the variables that trap reads (lease_owned, started, booted, vm_pid, running_vm,
+# base_build_vm), and calls these only for the steps both runners must do identically: one
+# account-wide lease, one local vanilla base with the pinned guest agent, one headless boot with a
+# readiness wait, and pushing inputs through the agent.
 
 vm_image_for_profile() {
   case "$1" in
     vanilla) image='ghcr.io/cirruslabs/macos-tahoe-vanilla@sha256:eeec54bfe1f076e27786c5d92b89187a05b1d109b5071eb2dcdf02d596e34640' ;;
     xcode) image='ghcr.io/cirruslabs/macos-tahoe-xcode@sha256:71d9dc1d6c4614b7ecbb328753124912b43425fc8cf1c4085d7f352026df6601' ;;
+    # Ubuntu 24.04 for arm64, as published 2026-10-03; it ships the guest agent as a systemd unit.
+    ubuntu) image='ghcr.io/cirruslabs/ubuntu@sha256:e004f7f4f6765e2b3ae2738a95040c5d03867b667eb21a57ea0c3729aad640b6' ;;
   esac
 }
+
+agent_version=0.10.0
+agent_sha=303a50d452753e36776ce8775e243be580bb3fc3ec8efde154320c37fd65b1a7
+vanilla_base=tao-base-vanilla
+running_vm=''
+base_build_vm=''
 
 step() {
   label=$1
@@ -68,10 +78,8 @@ vm_release_lease() {
   fi
 }
 
-# The vanilla image deliberately has no agent or developer tools. Add only the pinned RPC fixture.
-vm_install_guest_agent() {
-  agent_version=0.10.0
-  agent_sha=303a50d452753e36776ce8775e243be580bb3fc3ec8efde154320c37fd65b1a7
+# The vanilla image deliberately has no agent or developer tools. Fetch only the pinned RPC fixture.
+vm_fetch_guest_agent() {
   agent_archive="$(pwd)/.artifacts/standalone-toolchain/tart-guest-agent-$agent_version.tar.gz"
   mkdir -p "$(dirname "$agent_archive")"
   if [ ! -f "$agent_archive" ] || [ "$(shasum -a 256 "$agent_archive" | cut -d ' ' -f 1)" != "$agent_sha" ]; then
@@ -84,17 +92,89 @@ vm_install_guest_agent() {
     fi
     mv "$root/guest-agent.tar.gz" "$agent_archive"
   fi
-  /usr/bin/tar -xzf "$agent_archive" -C "$input" tart-guest-agent
+  mkdir -p "$root/agent"
+  /usr/bin/tar -xzf "$agent_archive" -C "$root/agent" tart-guest-agent
 }
 
-# Boot the provisioned clone without graphics and wait until `tart exec` answers twice in a row.
+# Sets base_vm to the VM a run clones. The xcode image ships its own agent. The vanilla image gets a
+# local base, built once per source digest and agent: the pinned agent written to the stopped disk
+# with ownership ignored, then one boot proving `tart exec` answers. Pass 1 to rebuild regardless.
+vm_prepare_base() {
+  if [ "$profile" != vanilla ]; then
+    base_vm=$image
+    return
+  fi
+  base_vm=$vanilla_base
+  manifest="$HOME/.tao/vm-bases/$vanilla_base.txt"
+  expected=$(printf 'source=%s\nagent=%s %s\n' "$image" "$agent_version" "$agent_sha")
+  if [ "${1:-0}" -ne 1 ] && [ -f "$manifest" ] && [ "$(head -n 2 "$manifest")" = "$expected" ] \
+    && tart get "$vanilla_base" --format json > /dev/null 2>&1; then
+    printf '%s: reusing local base %s (%s)\n' "$vm_label" "$vanilla_base" "$manifest"
+    return
+  fi
+  vm_fetch_guest_agent
+  base_build_vm="tao-basebuild-$(date +%s)-$$"
+  if ! step 'clone the vanilla image for the local base' tart clone "$image" "$base_build_vm" \
+    > "$logs/base-clone.log" 2>&1; then
+    cat "$logs/base-clone.log" >&2
+    exit 1
+  fi
+  step 'write only the guest agent to the stopped base disk' \
+    "$bun_bin" run "$vm_helper" bootstrap-agent "$base_build_vm" "$root" 2>&1 | tee "$logs/base-bootstrap.log"
+  vm_boot_and_wait "$base_build_vm"
+  vm_stop_running
+  rm -f "$manifest"
+  if tart get "$vanilla_base" --format json > /dev/null 2>&1; then
+    step 'remove the outdated local base' tart delete "$vanilla_base"
+  fi
+  step 'name the local base' tart rename "$base_build_vm" "$vanilla_base"
+  base_build_vm=''
+  mkdir -p "$(dirname "$manifest")"
+  printf '%s\nbuilt=%s\n' "$expected" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$manifest"
+  printf '%s: built local base %s (%s)\n' "$vm_label" "$vanilla_base" "$manifest"
+}
+
+# Delete a base build that never became the local base; one whose disk may be mounted stays for inspection.
+vm_cleanup_base_build() {
+  if [ -n "$base_build_vm" ]; then
+    if [ -f "$root/disk-attached" ]; then
+      printf '%s: retaining base build %s because its disk may still be mounted\n' "$vm_label" "$base_build_vm" >&2
+      status=1
+      return
+    fi
+    if ! "$bun_bin" run "$vm_helper" collect "$base_build_vm" "$root" >> "$logs/cleanup.log" 2>&1; then
+      printf '%s: could not collect evidence from base build %s; see %s\n' "$vm_label" "$base_build_vm" "$logs/cleanup.log" >&2
+    fi
+    if ! tart delete "$base_build_vm" >> "$logs/cleanup.log" 2>&1; then
+      printf '%s: could not delete base build %s; see %s\n' "$vm_label" "$base_build_vm" "$logs/cleanup.log" >&2
+      status=1
+    fi
+  fi
+}
+
+# Extract a host archive under the guest admin's home through the agent; it never touches the stopped disk.
+vm_push() {
+  "$bun_bin" run "$vm_helper" push "$name" 1800000 "$2" < "$1"
+}
+
+# Flush, stop, and reap the running VM; the caller's trap stops it when any step fails first.
+vm_stop_running() {
+  step 'flush guest writes before stopping the VM' "$bun_bin" run "$vm_helper" exec "$running_vm" 30000 /bin/sync
+  step "stop $running_vm" tart stop "$running_vm"
+  wait "$vm_pid" || true
+  started=0
+  running_vm=''
+}
+
+# Boot a stopped VM (the run's clone unless named) without graphics and wait until `tart exec` answers twice in a row.
 vm_boot_and_wait() {
-  printf '%s: booting %s headless...\n' "$vm_label" "$name"
+  running_vm=${1:-$name}
+  printf '%s: booting %s headless...\n' "$vm_label" "$running_vm"
   boot_started=$(date +%s)
-  "$bun_bin" run "$vm_helper" boot "$name" "$root" > "$logs/boot.log" 2>&1 &
+  "$bun_bin" run "$vm_helper" boot "$running_vm" "$root" >> "$logs/boot.log" 2>&1 &
   vm_pid=$!
   started=1
-  booted=1
+  if [ "$running_vm" = "$name" ]; then booted=1; fi
 
   deadline=$(($(date +%s) + 240))
   last_wait_report=$boot_started
@@ -104,7 +184,7 @@ vm_boot_and_wait() {
       printf '%s: guest exited during boot; see %s\n' "$vm_label" "$logs/boot.log" >&2
       exit 1
     fi
-    if "$bun_bin" run "$vm_helper" exec "$name" 10000 /usr/bin/true >> "$logs/exec-ready.log" 2>&1; then
+    if "$bun_bin" run "$vm_helper" exec "$running_vm" 10000 /usr/bin/true >> "$logs/exec-ready.log" 2>&1; then
       ready_streak=$((ready_streak + 1))
       if [ "$ready_streak" -ge 2 ]; then
         break

@@ -2,502 +2,256 @@ import { CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 
 const ENVIRONMENT = 'packages/cli/dev-cli/dev-cli-src/environment'
+const VM_LIBRARY = 'packages/cli/tao-cli/cli-src/vm-guest-lib.sh'
 const ENTRY = `${ENVIRONMENT}/contributor-linux-test.sh`
+const UBUNTU_IMAGE = 'ghcr.io/cirruslabs/ubuntu@sha256:e004f7f4f6765e2b3ae2738a95040c5d03867b667eb21a57ea0c3729aad640b6'
+const GUEST_RUN = '/bin/sh /home/admin/tao-harness/input/run.sh'
 
-Describe('contributor Linux container runner', () => {
-  Test('rejects extra arguments before consulting Docker', async () => {
+Describe('contributor Linux VM runner', () => {
+  Test('rejects extra arguments before consulting Tart or the VM helper', async () => {
     await withFixture(async fixture => {
       for (
         const args of [
-          ['--mode', 'host'],
-          ['--probe', '--privileged'],
           ['--mode'],
-          ['--mount', '/'],
-          [
-            '--native-arm64',
-            '--qemu-compat',
-          ],
-          ['--native-arm64', '--mode', 'both'],
-          ['--mode', 'cached', '--native-arm64'],
+          ['--mode', 'host'],
+          ['--mode', 'cold', '--debug'],
+          ['--probe'],
+          ['--native-arm64'],
+          ['--qemu-compat'],
+          ['--inspect-run', '20260926T161634Z-57262'],
+          ['--vm', 'tao-contributor-1-2'],
+          ['cold'],
         ]
       ) {
         const result = await run(fixture, args)
         Expect(result.exitCode).toBe(2)
       }
       Expect(await FS.exists(fixture.log)).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.artifacts/contributor-linux', fixture.root))).toBe(false)
     })
   })
 
-  Test('probes fixed read-only Docker operations and leaves quota proof pending', async () => {
+  Test('leaves another workflow lease untouched and creates no VM', async () => {
     await withFixture(async fixture => {
-      const result = await run(fixture, ['--probe'])
-      Expect(result.exitCode).toBe(0)
-      Expect((await FS.readText(fixture.log)).trim().split('\n')).toEqual([
-        'version',
-        'info',
-        'info --format {{.Architecture}} {{.Driver}} {{json .DriverStatus}}',
-        'info --format {{.MemTotal}}',
-      ])
-      Expect(result.stdout).toContain('disk_hard_limit=enforcement-not-proven')
-      Expect(result.stdout).toContain('not enforcement of the 30 GiB budget')
-    })
-  })
-
-  Test('refuses to build when Docker cannot hold the 16 GiB guest, naming the setting to raise', async () => {
-    await withFixture(async fixture => {
-      // Docker Desktop's 8 GB setting: verify outgrew it and the VM's OOM killer ended the run.
-      const small = { ...fixture, env: { ...fixture.env, TAO_TEST_DOCKER_MEMORY: '8317214720' } }
-      const refused = await run(small, [])
-      Expect(refused.exitCode).toBe(2)
-      Expect(refused.stderr).toContain('Docker has 7931 MiB of memory; the contributor guest needs 16 GiB.')
-      Expect(refused.stderr).toContain('Settings > Resources')
-      const unreadable = { ...fixture, env: { ...fixture.env, TAO_TEST_DOCKER_MEMORY: 'unknown' } }
-      Expect((await run(unreadable, [])).exitCode).toBe(1)
-      const calls = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(calls.some(call => call.startsWith('build') || call.startsWith('create'))).toBe(false)
-    })
-  })
-
-  Test('rejects inspection paths, patterns, and option injection before consulting Docker', async () => {
-    await withFixture(async fixture => {
-      for (
-        const id of ['../run', '*', '--all', '20260926T161634Z-', '20260926T161634Z-x-123', '20260926T161634Z-123/']
-      ) {
-        Expect((await run(fixture, ['--inspect-run', id])).exitCode).toBe(2)
-      }
+      const owner = FS.resolvePath('.tao/standalone-vm-lease/owner.txt', fixture.home)
+      await FS.writeText(owner, 'pid=12345\nvm=someone-elses-work\n')
+      const result = await run(fixture)
+      Expect(result.exitCode).toBe(1)
+      Expect(result.stderr).toContain('Another VM workflow owns')
+      Expect(await FS.readText(owner)).toBe('pid=12345\nvm=someone-elses-work\n')
       Expect(await FS.exists(fixture.log)).toBe(false)
     })
   })
 
-  Test('inspects only the selected run without creating or removing Docker resources', async () => {
-    await withFixture(async fixture => {
-      const result = await run(fixture, ['--inspect-run', '20260926T161634Z-57262'])
-      Expect(result.exitCode).toBe(0)
-      Expect((await FS.readText(fixture.log)).trim().split('\n')).toEqual([
-        'version',
-        'info',
-        'info --format {{.Architecture}} {{.Driver}} {{json .DriverStatus}}',
-        'info --format {{.MemTotal}}',
-        'image ls --all --filter reference=tao-contributor-linux-base:20260926T161634Z-57262 --format {{.ID}} {{.Repository}}:{{.Tag}}',
-        'container ls --all --no-trunc --filter name=^/tao-contributor-linux-20260926T161634Z-57262-(cold|tools|cached)$ --format {{.ID}} {{.Names}} {{.Status}} owner={{.Label "tao.owner"}} run={{.Label "tao.run"}}',
-      ])
-      Expect(result.stdout).toContain('No run-specific images remain')
-      Expect(result.stdout).toContain('No run-specific containers remain')
-      const output = await latestOutput(fixture)
-      Expect(await FS.readText(`${output}/inspection.txt`)).toContain('state=complete')
-      Expect(await FS.exists(`${output}/checkout.tar`)).toBe(false)
-    })
-  })
-
-  Test('reports retained inspection resources and keeps daemon failures unknown', async () => {
-    await withFixture(async fixture => {
-      await FS.writeText(fixture.container, 'retained-container\n')
-      const result = await run(fixture, ['--inspect-run', '20260926T161634Z-57262'])
-      Expect(result.exitCode).toBe(0)
-      Expect(result.stdout).toContain('retained-container')
-      Expect(result.stdout).not.toContain('No run-specific containers remain')
-      const failed = await run(fixture, ['--inspect-run', '20260926T161634Z-57262'], 'disconnected')
-      Expect(failed.exitCode).toBe(5)
-      Expect(failed.stdout).not.toContain('No run-specific')
-      Expect(await FS.readText(`${await latestOutput(fixture)}/inspection.txt`)).toContain('state=unknown')
-      Expect(await FS.exists(fixture.container)).toBe(true)
-    })
-  })
-
-  Test('snapshots logs from an exact owned live container without executing or stopping it', async () => {
-    await withFixture(async fixture => {
-      const id = '20260926T161634Z-57262'
-      const name = `tao-contributor-linux-${id}-cold`
-      await FS.writeText(
-        fixture.container,
-        `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ${name} Up 10 minutes owner=contributor-linux-test run=${id}\n`,
-      )
-      await FS.writeText(`${fixture.container}.labels`, `contributor-linux-test ${id}\n`)
-      Expect((await run(fixture, ['--inspect-run', id])).exitCode).toBe(0)
-      let calls = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(
-        calls.filter(call =>
-          call.startsWith(
-            'cp aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:/workspace/.artifacts/logs ',
-          )
-        ),
-      ).toHaveLength(1)
-      Expect(calls.some(call => /^(exec|start|stop|rm|build|commit) /u.test(call))).toBe(false)
-      Expect(calls.filter(call => call.startsWith('top '))).toHaveLength(1)
-      Expect(calls.filter(call => call.startsWith('stats --no-stream '))).toHaveLength(1)
-      Expect(await FS.exists(fixture.container)).toBe(true)
-      await FS.writeText(`${fixture.container}.labels`, 'foreign-owner another-run\n')
-      Expect((await run(fixture, ['--inspect-run', id])).exitCode).toBe(0)
-      calls = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(calls.filter(call => call.startsWith('cp '))).toHaveLength(1)
-    })
-  })
-
-  Test('records unknown inspection state before the first Docker request can fail', async () => {
-    await withFixture(async fixture => {
-      const result = await run(fixture, ['--inspect-run', '20260926T161634Z-57262'], 'version')
-      Expect(result.exitCode).toBe(6)
-      const output = await latestOutput(fixture)
-      Expect(result.stdout).toContain(`Contributor Linux evidence: ${output}`)
-      Expect(await FS.readText(`${output}/inspection.txt`)).toContain('state=unknown')
-      Expect((await FS.readText(fixture.log)).trim()).toBe('version')
-    })
-  })
-
-  Test('recovers only an exited owned run after collecting its complete guest evidence', async () => {
-    await withFixture(async fixture => {
-      const id = '20260928T042401Z-16239'
-      await seedRecovery(fixture, id, 'exited')
-      const result = await run(fixture, ['--recover-run', id])
-      Expect(result.exitCode).toBe(0)
-      Expect(result.stdout).toContain('recovery complete')
-      const calls = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(calls.filter(call => call.startsWith('rm aaaaaaaaa'))).toHaveLength(1)
-      Expect(calls.filter(call => call === `image rm tao-contributor-linux-base:${id}`)).toHaveLength(1)
-      Expect(calls.some(call => /^(stop|start|exec|build|commit|rm --force) /u.test(call))).toBe(false)
-      Expect(calls.filter(call => call.startsWith('logs aaaaaaaaa'))).toHaveLength(1)
-      Expect(calls.filter(call => call.startsWith('cp aaaaaaaaa') && call.includes(':/workspace/.artifacts/')))
-        .toHaveLength(2)
-      Expect(await FS.exists(fixture.container)).toBe(false)
-      const attempt = recoveryAttempt(result.stdout)
-      Expect(await FS.readText(`${attempt}/cold/guest-console.txt`)).toContain('complete guest console')
-      Expect(await FS.readText(`${attempt}/cold/guest/steps.tsv`)).toContain('check')
-      Expect(await FS.readText(`${attempt}/cold/workflow-logs/complete.log`)).toContain('complete workflow log')
-      Expect(await FS.readText(`${attempt}/result.txt`)).toContain('state=complete')
-      const again = await run(fixture, ['--recover-run', id])
-      Expect(again.exitCode).toBe(0)
-      const repeated = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(repeated.filter(call => call.startsWith('rm aaaaaaaaa'))).toHaveLength(1)
-      Expect(repeated.filter(call => call === `image rm tao-contributor-linux-base:${id}`)).toHaveLength(1)
-    })
-  })
-
-  Test('refuses a live, foreign, or ambiguous guest without removing any resource', async () => {
-    for (const [state, failure] of [['running', ''], ['exited', 'foreign'], ['exited', 'disconnected']] as const) {
-      await withFixture(async fixture => {
-        const id = '20260928T042401Z-16239'
-        await seedRecovery(fixture, id, state)
-        const result = await run(fixture, ['--recover-run', id], failure)
-        Expect(result.exitCode).not.toBe(0)
-        const calls = (await FS.readText(fixture.log)).trim().split('\n')
-        Expect(calls.some(call => /^(rm |image rm |cp |logs )/u.test(call))).toBe(false)
-        Expect(await FS.exists(fixture.container)).toBe(true)
-      })
-    }
-  })
-
-  Test('leaves an exited guest and its base in place when complete logs cannot be copied', async () => {
-    await withFixture(async fixture => {
-      const id = '20260928T042401Z-16239'
-      await seedRecovery(fixture, id, 'exited')
-      const result = await run(fixture, ['--recover-run', id], 'collect')
-      Expect(result.exitCode).not.toBe(0)
-      const calls = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(calls.some(call => /^(rm |image rm )/u.test(call))).toBe(false)
-      Expect(await FS.exists(fixture.container)).toBe(true)
-      Expect(await FS.exists(FS.resolvePath('.artifacts/base-image.txt', fixture.root))).toBe(true)
-    })
-  })
-
-  Test('refuses a base tag with a different image ID and a guest that changes state', async () => {
-    await withFixture(async fixture => {
-      const id = '20260928T042401Z-16239'
-      await seedRecovery(fixture, id, 'exited')
-      const changedBase = await run({
-        ...fixture,
-        env: { ...fixture.env, TAO_TEST_DOCKER_BASE_ID: 'sha256:another-image' },
-      }, ['--recover-run', id])
-      Expect(changedBase.exitCode).toBe(1)
-      Expect(changedBase.stderr).toContain('no longer matches this run')
-      const stateChanged = await run(fixture, ['--recover-run', id], 'state-change')
-      Expect(stateChanged.exitCode).toBe(1)
-      Expect(stateChanged.stderr).toContain('changed state during recovery')
-      const calls = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(calls.some(call => /^(rm |image rm )/u.test(call))).toBe(false)
-      Expect(await FS.exists(fixture.container)).toBe(true)
-    })
-  })
-
-  Test('rejects recovery without an exact existing run record before consulting Docker', async () => {
-    await withFixture(async fixture => {
-      for (const id of ['../run', '*', '20260928T042401Z-', '20260928T042401Z-16239/']) {
-        Expect((await run(fixture, ['--recover-run', id])).exitCode).toBe(2)
-      }
-      Expect((await run(fixture, ['--recover-run', '20260928T042401Z-16239'])).exitCode).toBe(1)
-      Expect(await FS.exists(fixture.log)).toBe(false)
-    })
-  })
-
-  Test('uses committed sources and bounded independent cold, tools, and cached containers', async () => {
+  Test('runs the cold journey in a clone of the pinned image with committed source only, then deletes it', async () => {
     await withFixture(async fixture => {
       await FS.writeText(FS.resolvePath('untracked-secret.txt', fixture.root), 'private')
       await FS.writeText(FS.resolvePath('tracked.txt', fixture.root), 'dirty')
-      const result = await run(fixture)
+      const result = await run(fixture, ['--mode', 'cold'])
       Expect(result.exitCode).toBe(0)
-      const calls = (await FS.readText(fixture.log)).trim().split('\n')
-      const creates = calls.filter(call => call.startsWith('create '))
-      Expect(creates).toHaveLength(3)
-      for (const [index, mode] of ['cold', 'tools', 'cached'].entries()) {
-        Expect(creates[index]).toContain('--platform linux/amd64 --cpus 4 --memory 16g --memory-swap 16g')
-        Expect(creates[index]).toContain(`contributor-linux ${mode}`)
-        Expect(creates[index]).toContain('/usr/bin/timeout --signal=TERM --kill-after=30s 7200')
-        Expect(creates[index]).not.toContain('--mount')
-        Expect(creates[index]).not.toContain('--privileged')
-        Expect(creates[index]).not.toContain('--volume')
-      }
-      Expect(calls.filter(call => call.startsWith('rm --force '))).toHaveLength(3)
-      Expect(calls.filter(call => call.startsWith('image rm '))).toHaveLength(1)
-      Expect(calls.some(call => call.includes('prune'))).toBe(false)
-      const output = (await FS.readText(FS.resolvePath('.artifacts/contributor-linux/latest.txt', fixture.root))).trim()
-      const archive = await CLI.run('tar', { args: ['-xOf', `${output}/checkout.tar`, 'tracked.txt'] })
+      const calls = await readCalls(fixture)
+      const clones = calls.filter(call => call.startsWith('tart clone ')).map(call => call.split(' '))
+      Expect(clones).toHaveLength(1)
+      const name = clones[0]?.[3] ?? ''
+      Expect(name).toMatch(/^tao-contributor-[0-9]+-[0-9]+-cold$/)
+      Expect(calls.filter(call => call.startsWith('tart '))).toEqual([
+        'tart --version',
+        `tart clone ${UBUNTU_IMAGE} ${name}`,
+        `tart set ${name} --cpu 4 --memory 16384 --disk-size 50`,
+        `tart get ${name} --format json`,
+        `tart stop ${name}`,
+        `tart delete ${name}`,
+      ])
+      const stem = name.replace(/-cold$/, '')
+      const helper = calls.filter(call => call.startsWith('helper ')).map(call => call.split(' ').slice(1))
+      Expect(helper.map(args => `${args[0]} ${args[1]}`)).toEqual([
+        `idle ${stem}`,
+        `boot ${name}`,
+        `exec ${name}`,
+        `exec ${name}`,
+        `push ${name}`,
+        `exec ${name}`,
+        `exec ${name}`,
+        `exec ${name}`,
+      ])
+      Expect(helper.slice(5).map(args => args.slice(2).join(' '))).toEqual([
+        `7200000 ${GUEST_RUN} cold`,
+        '300000 /usr/bin/tar -cf - -C /home/admin/tao/.artifacts contributor-linux/guest-cold logs',
+        '30000 /bin/sync',
+      ])
+      Expect(helper[4]?.slice(2)).toEqual(['1800000', '/home/admin'])
+      const pushed = await CLI.run('tar', {
+        args: ['-tf', FS.resolvePath(`.artifacts/pushed/${name}.tar`, fixture.root)],
+      })
+      Expect(pushed.stdout.split('\n').filter(Boolean).sort()).toEqual([
+        'tao-harness/',
+        'tao-harness/input/',
+        'tao-harness/input/checkout.tar',
+        'tao-harness/input/run.sh',
+      ])
+
+      Expect(await FS.exists(FS.resolvePath('.tao/standalone-vm-lease', fixture.home))).toBe(false)
+      Expect(result.stdout).toContain('Contributor Linux: cold guest steps (label, exit, seconds)')
+      Expect(result.stdout).toContain('setup\t0\t12')
+      const evidence = await evidenceDirectory(fixture)
+      Expect(await FS.readText(`${evidence}/cold/guest/contributor-linux/guest-cold/steps.tsv`)).toContain(
+        'bootstrap\t0\t30',
+      )
+      Expect(await FS.readText(`${evidence}/cold/guest/logs/check.log`)).toContain('workflow log')
+      Expect(await FS.readText(`${evidence}/cold/logs/console.log`)).toContain('guest console')
+      Expect(await FS.readText(`${evidence}/result.txt`)).toContain('exit_code=0')
+      Expect(await FS.readText(`${evidence}/source-commit.txt`)).toMatch(/^[0-9a-f]{40}\n$/)
+      Expect(await FS.readText(`${evidence}/host-dirty-state.txt`)).toContain('tracked.txt')
+      Expect(await FS.readText(`${evidence}/resources.txt`)).toEqual(
+        [
+          'platform=linux/arm64 (Tart Ubuntu VM)',
+          'guest_cpus=4',
+          'guest_memory_mib=16384',
+          'guest_disk_gb=50',
+          'guest_timeout_seconds=7200',
+          `image=${UBUNTU_IMAGE}`,
+          'host_only_native_ui_lanes=unrun',
+          'source=git archive HEAD; uncommitted changes excluded',
+          'amd64=not covered locally; hosted Verify runs ubuntu-24.04 x86-64',
+          '',
+        ].join('\n'),
+      )
+      const archive = await CLI.run('tar', { args: ['-xOf', `${evidence}/input/checkout.tar`, 'tracked.txt'] })
       Expect(archive.exitCode).toBe(0)
       Expect(archive.stdout).toBe('committed')
-      const listing = await CLI.run('tar', { args: ['-tf', `${output}/checkout.tar`] })
-      Expect(listing.exitCode).toBe(0)
+      const listing = await CLI.run('tar', { args: ['-tf', `${evidence}/input/checkout.tar`] })
       Expect(listing.stdout).not.toContain('untracked-secret.txt')
-      Expect(await FS.readText(`${output}/resources.txt`)).toContain('base_image_build_cpu_memory_limits=not-enforced')
-      Expect(await FS.readText(`${output}/cache-ownership.txt`)).toContain('image=tao-contributor-linux-tools:')
+      const guestScript = await FS.readText(`${evidence}/input/run.sh`)
+      Expect(guestScript).toContain(
+        'sudo DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \\\n'
+          + '      curl ca-certificates xz-utils git tar coreutils util-linux',
+      )
+      Expect(guestScript).toContain('guest-smoke.sh "$1"')
+      Expect(guestScript).toContain('cold|tools)')
     })
   })
 
-  Test('collects and cleans a failed cold container while still attempting cached smoke', async () => {
+  Test('reports a failed guest journey with its status after collecting evidence and deleting the clone', async () => {
     await withFixture(async fixture => {
-      const result = await run(fixture, [], 'cold')
+      const result = await run(fixture, ['--mode', 'cold'], { FAKE_GUEST_EXIT: '7' })
+      Expect(result.exitCode).toBe(7)
+      const calls = await readCalls(fixture)
+      Expect(calls.some(call => call.startsWith('tart delete '))).toBe(true)
+      Expect(calls.some(call => call.includes('/usr/bin/tar -cf -'))).toBe(true)
+      Expect(calls.findIndex(call => call.includes('/usr/bin/tar -cf -')))
+        .toBeLessThan(calls.findIndex(call => call.startsWith('tart delete ')))
+      Expect(await FS.readText(`${await evidenceDirectory(fixture)}/result.txt`)).toContain('exit_code=7')
+      Expect(await FS.exists(FS.resolvePath('.tao/standalone-vm-lease', fixture.home))).toBe(false)
+    })
+  })
+
+  Test('keeps a clone whose guest evidence was not collected, and names it', async () => {
+    await withFixture(async fixture => {
+      const result = await run(fixture, ['--mode', 'cold'], { FAKE_COLLECT: 'fail' })
       Expect(result.exitCode).toBe(1)
-      Expect(result.stdout).toContain('base build output')
-      Expect(result.stdout).toContain('guest output before failure')
-      Expect(result.stdout).toContain('cold finished (exit 7,')
-      const output = await latestOutput(fixture)
-      const guestLog = FS.resolvePath(['console', 'log'].join('.'), `${output}/cold`)
-      Expect(await FS.readText(guestLog)).toContain('guest output before failure')
-      Expect(await FS.readText(`${output}/cold/result.txt`)).toContain('exit_code=7')
-      const calls = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(calls.filter(call => call.startsWith('create '))).toHaveLength(3)
-      Expect(calls.filter(call => call.startsWith('rm --force '))).toHaveLength(3)
-      Expect(calls.filter(call => call.startsWith('cp ') && call.includes(':/workspace/.artifacts/'))).toHaveLength(5)
-      Expect(calls.some(call => call.startsWith('commit '))).toBe(true)
+      Expect(result.stderr).toContain('retaining stopped VM tao-contributor-')
+      Expect(result.stderr).toMatch(/delete it with tart delete tao-contributor-[0-9]+-[0-9]+-cold/u)
+      const calls = await readCalls(fixture)
+      Expect(calls.some(call => call.startsWith('tart delete '))).toBe(false)
+      Expect(calls.some(call => call.startsWith('tart stop '))).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('.tao/standalone-vm-lease', fixture.home))).toBe(false)
     })
   })
 
-  Test('scopes the fixed QEMU experiment to guest arguments and a separate tool cache', async () => {
+  Test('builds the tools VM once, names it by its inputs, and reuses it until those inputs change', async () => {
     await withFixture(async fixture => {
-      Expect((await run(fixture)).exitCode).toBe(0)
-      const baseline = await FS.readText(`${await latestOutput(fixture)}/cache-ownership.txt`)
-      const identities = new Set([baseline])
-      for (const flag of ['--qemu-guest-base', '--qemu-compat']) {
-        Expect((await run(fixture, [flag])).exitCode).toBe(0)
-        const output = await latestOutput(fixture)
-        const resources = await FS.readText(`${output}/resources.txt`)
-        Expect(resources).toContain('qemu_guest_base_experiment=1')
-        Expect(resources).toContain(`qemu_nix_filter_disabled=${flag === '--qemu-compat' ? 1 : 0}`)
-        const identity = await FS.readText(`${output}/cache-ownership.txt`)
-        Expect(identities.has(identity)).toBe(false)
-        identities.add(identity)
-        const calls = (await FS.readText(fixture.log)).trim().split('\n')
-        const creates = calls.filter(call => call.startsWith('create ') && call.endsWith(flag))
-        Expect(creates).toHaveLength(3)
-        for (const [index, mode] of ['cold', 'tools', 'cached'].entries()) {
-          Expect(creates[index]).toContain(`contributor-linux ${mode} ${flag}`)
-          Expect(creates[index]).not.toContain('--privileged')
-          Expect(creates[index]).not.toContain('--security-opt')
-          Expect(creates[index]).not.toContain('--cap-add')
-          Expect(creates[index]).not.toContain('--env')
-        }
-        const native = { ...fixture, env: { ...fixture.env, TAO_TEST_DOCKER_ARCH: 'x86_64' } }
-        const rejected = await run(native, [flag])
-        Expect(rejected.exitCode).toBe(2)
-        Expect(rejected.stderr).toContain('requires an arm64 Docker daemon')
-      }
+      Expect((await run(fixture, ['--mode', 'cached'])).exitCode).toBe(0)
+      const first = await readCalls(fixture)
+      const clones = first.filter(call => call.startsWith('tart clone ')).map(call => call.split(' '))
+      const tools = clones[0]?.[3] ?? ''
+      const cached = clones[1]?.[3] ?? ''
+      Expect(tools).toMatch(/^tao-contributor-[0-9]+-[0-9]+-tools$/)
+      Expect(cached).toMatch(/^tao-contributor-[0-9]+-[0-9]+-cached$/)
+      const cache = clones[1]?.[2] ?? ''
+      Expect(cache).toMatch(/^tao-linux-tools-[0-9a-f]{40}$/)
+      Expect(clones[0]?.[2]).toBe(UBUNTU_IMAGE)
+      Expect(first.filter(call => call.startsWith('tart '))).toEqual([
+        'tart --version',
+        `tart get ${cache} --format json`,
+        `tart clone ${UBUNTU_IMAGE} ${tools}`,
+        `tart set ${tools} --cpu 4 --memory 16384 --disk-size 50`,
+        `tart get ${tools} --format json`,
+        `tart stop ${tools}`,
+        `tart rename ${tools} ${cache}`,
+        `tart clone ${cache} ${cached}`,
+        `tart set ${cached} --cpu 4 --memory 16384`,
+        `tart get ${cached} --format json`,
+        `tart stop ${cached}`,
+        `tart delete ${cached}`,
+      ])
+      const collections = first.filter(call => call.includes('/usr/bin/tar -cf -'))
+      Expect(collections.map(call => call.split('.artifacts ')[1])).toEqual([
+        'contributor-linux/guest-tools',
+        'contributor-linux/guest-cached logs',
+      ])
+      Expect(first.filter(call => call.endsWith('run.sh tools'))).toHaveLength(1)
+      Expect(first.filter(call => call.endsWith('run.sh cached'))).toHaveLength(1)
+      const evidence = await evidenceDirectory(fixture)
+      const ownership = await FS.readText(`${evidence}/cache-ownership.txt`)
+      Expect(ownership).toContain('owner=contributor-linux-test')
+      Expect(ownership).toContain(`vm=${cache}`)
+      Expect(ownership).toContain(`tart delete ${cache}`)
+      Expect(await FS.exists(`${evidence}/tools/guest/contributor-linux/guest-tools/steps.tsv`)).toBe(true)
+      Expect(await FS.exists(`${evidence}/tools/guest/logs`)).toBe(false)
+      Expect(await FS.exists(`${evidence}/cached/guest/logs/check.log`)).toBe(true)
+
+      // An unrelated source commit leaves the key alone, so the second run clones the existing tools VM.
+      await commitFile(fixture, 'tracked.txt', 'another commit')
+      await FS.remove(fixture.log)
+      Expect((await run(fixture, ['--mode', 'cached'])).exitCode).toBe(0)
+      const second = await readCalls(fixture)
+      Expect(second.filter(call => call.startsWith('tart clone ')).map(call => call.split(' ')[2])).toEqual([cache])
+      Expect(second.some(call => call.startsWith('tart rename '))).toBe(false)
+      Expect(second.some(call => call.endsWith('run.sh tools'))).toBe(false)
+      Expect(second.filter(call => call.endsWith('run.sh cached'))).toHaveLength(1)
+
+      // A changed tool input names a different VM, which is built afresh.
+      await commitFile(fixture, 'devenv.lock', '{"changed":true}\n')
+      await FS.remove(fixture.log)
+      Expect((await run(fixture, ['--mode', 'cached'])).exitCode).toBe(0)
+      const third = await readCalls(fixture)
+      const renamed = third.find(call => call.startsWith('tart rename '))?.split(' ')[3]
+      Expect(renamed).toMatch(/^tao-linux-tools-[0-9a-f]{40}$/)
+      Expect(renamed).not.toBe(cache)
+      Expect(third.filter(call => call.endsWith('run.sh tools'))).toHaveLength(1)
     })
   })
 
-  Test('runs the native ARM control without QEMU settings and keeps its cache separate', async () => {
-    await withFixture(async fixture => {
-      Expect((await run(fixture)).exitCode).toBe(0)
-      const baseline = await FS.readText(`${await latestOutput(fixture)}/cache-ownership.txt`)
-      const native = {
-        ...fixture,
-        env: {
-          ...fixture.env,
-          TAO_TEST_DOCKER_IMAGE_FORMAT:
-            '{{if and (eq .Os "linux") (eq .Architecture "arm64") .RootFS.Layers .Config}}linux/arm64 {{json .RootFS.Layers}} {{json .Config}}{{else}}invalid{{end}}',
-          TAO_TEST_DOCKER_BASE_CONTENTS: 'linux/arm64 ["sha256:layer"] {"WorkingDir":"/workspace"}',
-        },
-      }
-      Expect((await run(native, ['--native-arm64'])).exitCode).toBe(0)
-      const output = await latestOutput(fixture)
-      const resources = await FS.readText(`${output}/resources.txt`)
-      Expect(resources).toContain('platform=linux/arm64')
-      Expect(resources).toContain('daemon_emulation=not-required')
-      Expect(resources).toContain('qemu_guest_base_experiment=0')
-      Expect(resources).toContain('qemu_nix_filter_disabled=0')
-      Expect(await FS.readText(`${output}/cache-ownership.txt`)).not.toBe(baseline)
-      const calls = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(calls.filter(call => call.startsWith('build --platform linux/arm64 '))).toHaveLength(1)
-      const creates = calls.filter(call => call.startsWith('create ') && call.includes('--platform linux/arm64 '))
-      Expect(creates).toHaveLength(3)
-      for (const call of creates) {
-        Expect(call).not.toContain('--qemu')
-      }
-      Expect(
-        (await run({ ...native, env: { ...native.env, TAO_TEST_DOCKER_ARCH: 'x86_64' } }, ['--native-arm64'])).exitCode,
-      ).toBe(2)
-      // A daemon returning an image for the wrong architecture must not seed the cache.
-      Expect(
-        (await run({ ...native, env: { ...native.env, TAO_TEST_DOCKER_BASE_CONTENTS: 'invalid' } }, ['--native-arm64']))
-          .exitCode,
-      ).toBe(1)
-    })
-  })
-
-  Test('runs only native ARM cached acceptance when cold already completed', async () => {
-    await withFixture(async fixture => {
-      const native = {
-        ...fixture,
-        env: {
-          ...fixture.env,
-          TAO_TEST_DOCKER_IMAGE_FORMAT:
-            '{{if and (eq .Os "linux") (eq .Architecture "arm64") .RootFS.Layers .Config}}linux/arm64 {{json .RootFS.Layers}} {{json .Config}}{{else}}invalid{{end}}',
-          TAO_TEST_DOCKER_BASE_CONTENTS: 'linux/arm64 ["sha256:layer"] {"WorkingDir":"/workspace"}',
-        },
-      }
-      const result = await run(native, ['--native-arm64', '--mode', 'cached'])
-      Expect(result.exitCode).toBe(0)
-      const output = await latestOutput(fixture)
-      Expect(await FS.readText(`${output}/resources.txt`)).toContain('platform=linux/arm64')
-      Expect(await FS.exists(`${output}/cold`)).toBe(false)
-      Expect(await FS.exists(`${output}/tools/guest`)).toBe(true)
-      Expect(await FS.exists(`${output}/cached/guest`)).toBe(true)
-      const calls = (await FS.readText(fixture.log)).trim().split('\n')
-      const creates = calls.filter(call => call.startsWith('create ') && call.includes('--platform linux/arm64 '))
-      Expect(creates).toHaveLength(2)
-      Expect(creates[0]).toContain('contributor-linux tools')
-      Expect(creates[1]).toContain('contributor-linux cached')
-    })
-  })
-
-  Test('cleans an owned container when creation succeeds but its client reports failure', async () => {
-    await withFixture(async fixture => {
-      const result = await run(fixture, ['--mode', 'cold'], 'create-after')
-      Expect(result.exitCode).toBe(1)
-      const calls = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(calls.filter(call => call.startsWith('rm --force '))).toHaveLength(1)
-      Expect(calls.some(call => call.startsWith('inspect --format '))).toBe(true)
-      Expect(await FS.exists(fixture.container)).toBe(false)
-      Expect(await FS.readText(`${await latestOutput(fixture)}/cold/result.txt`)).toContain('exit_code=9')
-    })
-  })
-
-  Test('confirms genuine absence after a rejected create without issuing a remove', async () => {
-    await withFixture(async fixture => {
-      Expect((await run(fixture, ['--mode', 'cold'], 'create-before')).exitCode).toBe(1)
-      const calls = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(calls.some(call => call.startsWith('container ls --all --filter name=^/'))).toBe(true)
-      Expect(calls.some(call => call.startsWith('rm '))).toBe(false)
-      Expect(await FS.exists(fixture.container)).toBe(false)
-    })
-  })
-
-  Test('cleans the intended owned container when interrupted during creation', async () => {
-    await withFixture(async fixture => {
-      Expect((await run(fixture, ['--mode', 'cold'], 'interrupt')).exitCode).toBe(143)
-      Expect(await FS.exists(fixture.container)).toBe(false)
-      Expect((await FS.readText(fixture.log)).split('\n').filter(call => call.startsWith('rm --force ')))
-        .toHaveLength(1)
-      Expect(await FS.readText(`${await latestOutput(fixture)}/cold/result.txt`)).toBe('state=running\n')
-    })
-  })
-
-  Test('does not mistake failed Docker inspection and listing for confirmed absence', async () => {
-    await withFixture(async fixture => {
-      Expect((await run(fixture, ['--mode', 'cold'], 'disconnected')).exitCode).toBe(1)
-      Expect(await FS.exists(fixture.container)).toBe(true)
-      Expect((await FS.readText(fixture.log)).split('\n').some(call => call.startsWith('rm '))).toBe(false)
-    })
-  })
-
-  Test('preserves a container with different ownership after an ambiguous create failure', async () => {
-    await withFixture(async fixture => {
-      const result = await run(fixture, ['--mode', 'cold'], 'foreign')
-      Expect(result.exitCode).toBe(1)
-      Expect(result.stderr).toContain('Refusing to remove container with different ownership')
-      Expect(await FS.exists(fixture.container)).toBe(true)
-      Expect((await FS.readText(fixture.log)).split('\n').some(call => call.startsWith('rm '))).toBe(false)
-    })
-  })
-
-  Test('records cache commit and container removal failures in the final tools result', async () => {
-    for (const [failure, exitCode] of [['commit', 7], ['remove', 8]] as const) {
+  Test(
+    'runs cold then cached in both mode, each in its own clone, and fails with the first failing status',
+    async () => {
       await withFixture(async fixture => {
-        Expect((await run(fixture, ['--mode', 'cached'], failure)).exitCode).toBe(1)
-        const output = await latestOutput(fixture)
-        Expect(await FS.readText(`${output}/tools/result.txt`)).toContain(`state=complete\nexit_code=${exitCode}`)
-        Expect(
-          (await FS.readText(fixture.log)).split('\n').some(call =>
-            call.startsWith('create ') && call.endsWith('contributor-linux cached')
-          ),
-        ).toBe(false)
+        const result = await run(fixture, [], { FAKE_GUEST_EXIT: '7', FAKE_GUEST_EXIT_PHASE: 'cold' })
+        Expect(result.exitCode).toBe(7)
+        const calls = await readCalls(fixture)
+        Expect(calls.filter(call => call.endsWith('run.sh cold'))).toHaveLength(1)
+        Expect(calls.filter(call => call.endsWith('run.sh tools'))).toHaveLength(1)
+        Expect(calls.filter(call => call.endsWith('run.sh cached'))).toHaveLength(1)
+        Expect(calls.filter(call => call.startsWith('tart delete '))).toHaveLength(2)
+        Expect(calls.filter(call => call.startsWith('tart rename '))).toHaveLength(1)
       })
-    }
-  })
+    },
+  )
 
-  Test('reuses the tool image across unrelated source commits', async () => {
+  Test('does not run cached smoke when the tools VM fails, and does not keep it as the cache', async () => {
     await withFixture(async fixture => {
-      Expect((await run(fixture, ['--mode', 'cached'])).exitCode).toBe(0)
-      await FS.writeText(FS.resolvePath('tracked.txt', fixture.root), 'another commit')
-      await CLI.mustRun('git', { args: ['add', 'tracked.txt'], cwd: fixture.root })
-      await CLI.mustRun('git', {
-        args: [
-          '-c',
-          'user.name=Tao Test',
-          '-c',
-          'user.email=tao@example.test',
-          'commit',
-          '--quiet',
-          '-m',
-          'Source only',
-        ],
-        cwd: fixture.root,
-      })
-      Expect((await run(fixture, ['--mode', 'cached'])).exitCode).toBe(0)
-      const calls = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(calls.filter(call => call.startsWith('commit '))).toHaveLength(1)
-      Expect(calls.filter(call => call.startsWith('create ') && call.endsWith('contributor-linux cached')))
-        .toHaveLength(2)
+      const result = await run(fixture, ['--mode', 'cached'], { FAKE_GUEST_EXIT: '7', FAKE_GUEST_EXIT_PHASE: 'tools' })
+      Expect(result.exitCode).toBe(7)
+      Expect(result.stderr).toContain('Cached smoke unrun')
+      const calls = await readCalls(fixture)
+      Expect(calls.some(call => call.startsWith('tart rename '))).toBe(false)
+      Expect(calls.some(call => call.endsWith('run.sh cached'))).toBe(false)
+      Expect(calls.filter(call => call.startsWith('tart delete '))).toHaveLength(1)
+      Expect(await FS.exists(FS.resolvePath('.tao/standalone-vm-lease', fixture.home))).toBe(false)
     })
   })
 
-  Test('tool cache ignores attestations but tracks ordered layers and complete runtime config', async () => {
-    await withFixture(async fixture => {
-      const contents = 'linux/amd64 ["sha256:one","sha256:two"] {"WorkingDir":"/workspace"}'
-      const runWith = (baseId: string, baseContents = contents) =>
-        run({
-          ...fixture,
-          env: { ...fixture.env, TAO_TEST_DOCKER_BASE_ID: baseId, TAO_TEST_DOCKER_BASE_CONTENTS: baseContents },
-        }, ['--mode', 'cached'])
-      Expect((await runWith('sha256:first-attestation')).exitCode).toBe(0)
-      const initial = await FS.readText(`${await latestOutput(fixture)}/cache-ownership.txt`)
-      Expect(await FS.readText(`${await latestOutput(fixture)}/base-cache-identity.txt`)).toBe(`${contents}\n`)
-      Expect((await runWith('sha256:second-attestation')).exitCode).toBe(0)
-      Expect(await FS.readText(`${await latestOutput(fixture)}/base-identity.txt`)).toContain('second-attestation')
-      Expect(await FS.readText(`${await latestOutput(fixture)}/cache-ownership.txt`)).toBe(initial)
-      for (
-        const changed of [
-          contents.replace('sha256:one', 'sha256:new'),
-          contents.replace('["sha256:one","sha256:two"]', '["sha256:two","sha256:one"]'),
-          contents.replace('/workspace', '/another'),
-        ]
-      ) {
-        Expect((await runWith('sha256:second-attestation', changed)).exitCode).toBe(0)
-        Expect(await FS.readText(`${await latestOutput(fixture)}/cache-ownership.txt`)).not.toBe(initial)
-      }
-      Expect((await runWith('sha256:invalid', 'invalid')).exitCode).toBe(1)
-      const calls = (await FS.readText(fixture.log)).trim().split('\n')
-      Expect(calls.filter(call => call.startsWith('commit '))).toHaveLength(4)
-    })
-  })
-
-  Test('runs guest wrappers with a clean PATH and preserves a failed check through later passing lanes', async () => {
+  Test('runs guest wrappers as the current user with a clean PATH and preserves a failed check', async () => {
     const root = await mkGitTestDir('tao-contributor-linux-guest-')
     try {
       const guest = FS.resolvePath(`${ENVIRONMENT}/guest-smoke.sh`, root)
@@ -511,7 +265,7 @@ Describe('contributor Linux container runner', () => {
           path,
           [
             '#!/bin/sh',
-            'printf "%s|%s|%s\\n" "$*" "$PATH" "${TAO_TEST_INHERITED-unset}" >> calls.log',
+            'printf "%s|%s|%s|%s|%s\\n" "$*" "$PATH" "${TAO_TEST_INHERITED-unset}" "$HOME" "$USER" >> calls.log',
             'printf "wrapper output: %s\\n" "$*"',
             '[ "${1:-}" != check ]',
             '',
@@ -534,14 +288,18 @@ Describe('contributor Linux container runner', () => {
       for (const tool of ['bun', 'node', 'zsh', 'just', 'python3', 'nix']) {
         Expect(versions).toContain(`${tool} (${root}/.devenv/profile/bin/${tool}): ${tool} fixture-version --version`)
       }
+      const path = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+      const user = (await CLI.mustRun('id', { args: ['-un'] })).stdout.trim()
+      const home = Platform.runtimeProcess.env['HOME'] ?? ''
+      const identity = `${path}|unset|${home}|${user}`
       Expect((await FS.readText(FS.resolvePath('calls.log', root))).trim().split('\n')).toEqual([
-        '|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
-        'help|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
-        'setup --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
-        'test-file packages/language/parser/parser-tests/dialect.test.ts --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
-        'check --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
-        'test-all --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
-        'verify --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
+        `|${identity}`,
+        `help|${identity}`,
+        `setup --verbose|${identity}`,
+        `test-file packages/language/parser/parser-tests/dialect.test.ts --verbose|${identity}`,
+        `check --verbose|${identity}`,
+        `test-all --verbose|${identity}`,
+        `verify --verbose|${identity}`,
         // The shared journey runs after the lanes that judge the committed tree, in its fixed order.
         ...JOURNEY_ACTIONS.map(action => `journey ${action}`),
       ])
@@ -555,6 +313,9 @@ Describe('contributor Linux container runner', () => {
         'dev-loop-reflect',
         'dev-loop-stop',
       ])
+      // The kernel's memory view after each step, so a silent OOM kill is attributable to it.
+      Expect(await FS.exists(FS.resolvePath('.artifacts/contributor-linux/guest-cached/check.memory.txt', root)))
+        .toBe(true)
     } finally {
       await FS.remove(root)
     }
@@ -590,17 +351,14 @@ Describe('contributor Linux container runner', () => {
     }
   })
 
-  Test('records profile tool versions in the tools-only image before completing bootstrap', async () => {
+  Test('records profile tool versions in the tools-only VM before completing bootstrap', async () => {
     const root = await mkGitTestDir('tao-contributor-linux-tools-')
     try {
       const guest = FS.resolvePath(`${ENVIRONMENT}/guest-smoke.sh`, root)
       await FS.writeText(guest, await FS.readText(Repo.resolvePath(`${ENVIRONMENT}/guest-smoke.sh`)))
       await writeVersionTools(root)
       const bootstrap = FS.resolvePath('.config/bootstrap-tao-dev-env', root)
-      await FS.writeText(
-        bootstrap,
-        '#!/bin/sh\nprintf "%s|%s|%s\\n" "$*" "${QEMU_GUEST_BASE-unset}" "${NIX_CONFIG-unset}"\n',
-      )
+      await FS.writeText(bootstrap, '#!/bin/sh\nprintf "%s\\n" "$*"\n')
       await FS.chmod(bootstrap, 0o755)
       const result = await CLI.run('/bin/sh', {
         // Model the empty guest base and keep disk accounting away from the host.
@@ -608,19 +366,7 @@ Describe('contributor Linux container runner', () => {
         cwd: root,
       })
       Expect(result.exitCode).toBe(0)
-      Expect(result.stdout).toContain('--install-nix --tools-only|unset|unset')
-      const experiment = await CLI.run('/bin/sh', {
-        args: ['-c', 'command() { return 1; }; du() { :; }; df() { :; }; . "$0"', guest, 'tools', '--qemu-guest-base'],
-        cwd: root,
-      })
-      Expect(experiment.exitCode).toBe(0)
-      Expect(experiment.stdout).toContain('--install-nix --tools-only|0x800000000000|unset')
-      const compatible = await CLI.run('/bin/sh', {
-        args: ['-c', 'command() { return 1; }; du() { :; }; df() { :; }; . "$0"', guest, 'tools', '--qemu-compat'],
-        cwd: root,
-      })
-      Expect(compatible.exitCode).toBe(0)
-      Expect(compatible.stdout).toContain('--install-nix --tools-only|0x800000000000|filter-syscalls = false')
+      Expect(result.stdout).toContain('--install-nix --tools-only')
       const versions = await FS.readText(
         FS.resolvePath('.artifacts/contributor-linux/guest-tools/tool-versions.log', root),
       )
@@ -628,33 +374,16 @@ Describe('contributor Linux container runner', () => {
         Expect(versions).toContain(`${tool} (${root}/.devenv/profile/bin/${tool}): ${tool} fixture-version --version`)
       }
       Expect(await FS.exists(FS.resolvePath('.git', root))).toBe(false)
+      // The container-only emulation options are gone: the guest takes exactly its mode.
+      const extra = await CLI.run('/bin/sh', { args: [guest, 'tools', '--qemu-compat'], cwd: root })
+      Expect(extra.exitCode).toBe(2)
     } finally {
       await FS.remove(root)
     }
   })
 })
 
-type Fixture = { root: string; log: string; container: string; env: Platform.ProcessEnv }
-
-function recoveryAttempt(stdout: string): string {
-  const match = stdout.match(/Contributor Linux recovery evidence: (.+)/u)
-  Expect(match).not.toBeNull()
-  return match?.[1] ?? ''
-}
-
-async function seedRecovery(fixture: Fixture, id: string, state: string): Promise<void> {
-  const output = FS.resolvePath(`.artifacts/contributor-linux/${id}`, fixture.root)
-  await FS.writeText(`${output}/resources.txt`, 'platform=linux/amd64\n')
-  await FS.writeText(`${output}/source-commit.txt`, 'fixture\n')
-  await FS.writeText(`${output}/base-identity.txt`, 'sha256:fixture-base\n')
-  await FS.writeText(
-    fixture.container,
-    `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa tao-contributor-linux-${id}-cold\n`,
-  )
-  await FS.writeText(`${fixture.container}.labels`, `contributor-linux-test ${id}\n`)
-  await FS.writeText(`${fixture.container}.state`, state)
-  await FS.writeText(FS.resolvePath('.artifacts/base-image.txt', fixture.root), `tao-contributor-linux-base:${id}\n`)
-}
+type Fixture = { root: string; home: string; log: string; env: Platform.ProcessEnv }
 
 const JOURNEY_ACTIONS = ['loop-start', 'loop-serve', 'toolchain-change', 'loop-restart', 'loop-reflect', 'loop-stop']
 
@@ -678,10 +407,37 @@ async function writeVersionTools(root: string): Promise<void> {
   }
 }
 
-async function latestOutput(fixture: Fixture): Promise<string> {
+async function readCalls(fixture: Fixture): Promise<string[]> {
+  return (await FS.readText(fixture.log)).trim().split('\n')
+}
+
+async function evidenceDirectory(fixture: Fixture): Promise<string> {
   return (await FS.readText(FS.resolvePath('.artifacts/contributor-linux/latest.txt', fixture.root))).trim()
 }
 
+async function commitFile(fixture: Fixture, path: string, content: string): Promise<void> {
+  await FS.writeText(FS.resolvePath(path, fixture.root), content)
+  await CLI.mustRun('git', { args: ['add', path], cwd: fixture.root })
+  await CLI.mustRun('git', {
+    args: [
+      '-c',
+      'user.name=Tao Test',
+      '-c',
+      'user.email=tao@example.test',
+      'commit',
+      '--quiet',
+      '-m',
+      `Change ${path}`,
+    ],
+    cwd: fixture.root,
+  })
+}
+
+/**
+ * A committed fixture repository holding the real runner and VM library, a recording `tart`, and a recording
+ * stand-in for the checkout Bun that answers the VM helper's commands. No VM, network, or Tart store is touched.
+ * `FAKE_GUEST_EXIT` fails the guest journey, only for the phase named by `FAKE_GUEST_EXIT_PHASE` when given.
+ */
 async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<void> {
   const root = await mkGitTestDir('tao-contributor-linux-')
   try {
@@ -691,111 +447,89 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
       'devenv.lock': '{}\n',
       'tracked.txt': 'committed',
     }
-    for (const name of ['contributor-linux-test.sh', 'Dockerfile', 'guest-smoke.sh']) {
-      files[`${ENVIRONMENT}/${name}`] = await FS.readText(Repo.resolvePath(`${ENVIRONMENT}/${name}`))
+    for (const path of [ENTRY, VM_LIBRARY, `${ENVIRONMENT}/guest-smoke.sh`]) {
+      files[path] = await FS.readText(Repo.resolvePath(path))
     }
     await initGitTestRepository(root, { commit: { files } })
+    const home = FS.resolvePath('home', root)
     const bin = FS.resolvePath('.artifacts/fake-bin', root)
-    const log = FS.resolvePath('.artifacts/docker.log', root)
-    const cache = FS.resolvePath('.artifacts/cache.txt', root)
-    const container = FS.resolvePath('.artifacts/container.txt', root)
-    const docker = FS.resolvePath('docker', bin)
-    // The clean PATH below would otherwise reach macOS's /usr/bin/git shim, which writes xcrun cache
-    // warnings to stderr in a sandbox that denies the per-user temporary directory.
-    const git = await CLI.commandPath('git')
-    if (git !== undefined) {
-      await FS.symlink(git, FS.resolvePath('git', bin))
+    const log = FS.resolvePath('.artifacts/calls.log', root)
+    const stopped = FS.resolvePath('.artifacts/stopped', root)
+    const guest = FS.resolvePath('.artifacts/fake-guest', root)
+    for (const phase of ['cold', 'tools', 'cached']) {
+      await FS.writeText(
+        FS.resolvePath(`contributor-linux/guest-${phase}/steps.tsv`, guest),
+        'bootstrap\t0\t30\nsetup\t0\t12\n',
+      )
     }
-    await FS.writeText(
-      docker,
-      [
+    await FS.writeText(FS.resolvePath('logs/check.log', guest), 'workflow log\n')
+    await FS.mkdir(FS.resolvePath('.artifacts/pushed', root))
+    const executables: Record<string, string> = {
+      tart: [
         '#!/bin/sh',
-        'printf "%s\\n" "$*" >> "$TAO_TEST_DOCKER_LOG"',
+        'printf "tart %s\\n" "$*" >> "$FAKE_LOG"',
         'case "$1" in',
-        '  version) [ "$TAO_TEST_DOCKER_FAILURE" != version ] || exit 6; printf "Docker fixture\\n" ;;',
-        '  info)',
-        '    case "$*" in',
-        '      *MemTotal*) printf "%s\\n" "${TAO_TEST_DOCKER_MEMORY:-16608174080}" ;;',
-        '      *) printf "%s overlayfs fixture\\n" "${TAO_TEST_DOCKER_ARCH:-aarch64}" ;;',
-        '    esac ;;',
-        '  build) printf "base build output\\n" ;;',
-        '  create)',
-        '    [ "$TAO_TEST_DOCKER_FAILURE" != create-before ] || exit 9',
-        '    printf "%s\\n" "$3" > "$TAO_TEST_DOCKER_CONTAINER"',
-        '    for argument in "$@"; do case "$argument" in tao.run=*) run=${argument#tao.run=} ;; esac; done',
-        '    owner=contributor-linux-test',
-        '    [ "$TAO_TEST_DOCKER_FAILURE" != foreign ] || owner=other-owner',
-        '    printf "%s %s\\n" "$owner" "$run" > "$TAO_TEST_DOCKER_CONTAINER.labels"',
-        '    [ "$TAO_TEST_DOCKER_FAILURE" != interrupt ] || kill -TERM "$PPID"',
-        '    case "$TAO_TEST_DOCKER_FAILURE" in create-after|foreign) exit 9 ;; esac ;;',
-        '  inspect)',
-        '    if [ "$2" = --format ]; then',
-        '      [ "$TAO_TEST_DOCKER_FAILURE" != disconnected ] || exit 5',
-        '      [ -f "$TAO_TEST_DOCKER_CONTAINER" ] || exit 1',
-        '      case "$3" in',
-        '        *State.Status*)',
-        '          read -r owner run < "$TAO_TEST_DOCKER_CONTAINER.labels"',
-        '          [ "$TAO_TEST_DOCKER_FAILURE" != foreign ] || owner=foreign-owner',
-        '          read -r ignored name < "$TAO_TEST_DOCKER_CONTAINER"',
-        '          read -r state < "$TAO_TEST_DOCKER_CONTAINER.state"',
-        '          printf "/%s|%s|%s|%s|1\\n" "$name" "$owner" "$run" "$state"',
-        '          [ "$TAO_TEST_DOCKER_FAILURE" != state-change ] || printf "running\\n" > "$TAO_TEST_DOCKER_CONTAINER.state" ;;',
-        '        *) cat "$TAO_TEST_DOCKER_CONTAINER.labels" ;;',
-        '      esac',
-        '    fi ;;',
-        '  container)',
-        '    [ "$TAO_TEST_DOCKER_FAILURE" != disconnected ] || exit 5',
-        '    if [ -f "$TAO_TEST_DOCKER_CONTAINER" ]; then',
-        '      read -r ignored name < "$TAO_TEST_DOCKER_CONTAINER"',
-        '      case "$*" in *"-(cold|tools|cached)$"*|*"name=^/$name$"*) cat "$TAO_TEST_DOCKER_CONTAINER" ;; esac',
-        '    fi ;;',
-        '  rm)',
-        '    [ "$TAO_TEST_DOCKER_FAILURE" != remove ] || exit 8',
-        '    rm -f "$TAO_TEST_DOCKER_CONTAINER" "$TAO_TEST_DOCKER_CONTAINER.labels" "$TAO_TEST_DOCKER_CONTAINER.state" ;;',
-        '  image)',
-        '    if [ "$2" = ls ]; then',
-        '      [ ! -f "$TAO_TEST_DOCKER_BASE_IMAGE" ] || cat "$TAO_TEST_DOCKER_BASE_IMAGE"',
-        '    elif [ "$2" = rm ]; then',
-        '      rm -f "$TAO_TEST_DOCKER_BASE_IMAGE"',
-        '    elif [ "$2" = inspect ]; then',
-        '      case "$3" in',
-        '        tao-contributor-linux-tools:*) [ -f "$TAO_TEST_DOCKER_CACHE" ] && [ "$(cat "$TAO_TEST_DOCKER_CACHE")" = "$3" ] || exit 1 ;;',
-        '      esac',
-        '      if [ "$3" = --format ] && [ "$4" != "{{.Id}}" ]; then',
-        '        expected=\'{{if and (eq .Os "linux") (eq .Architecture "amd64") .RootFS.Layers .Config}}linux/amd64 {{json .RootFS.Layers}} {{json .Config}}{{else}}invalid{{end}}\'',
-        '        [ "$4" = "${TAO_TEST_DOCKER_IMAGE_FORMAT:-$expected}" ] || exit 12',
-        '        default_contents=\'linux/amd64 ["sha256:layer"] {"WorkingDir":"/workspace"}\'',
-        '        printf "%s\\n" "${TAO_TEST_DOCKER_BASE_CONTENTS:-$default_contents}"',
-        '      else',
-        '        printf "%s\\n" "${TAO_TEST_DOCKER_BASE_ID:-sha256:fixture-base}"',
-        '      fi',
-        '    fi ;;',
-        '  start) printf "guest output before failure\\n"; case "$3" in *-"$TAO_TEST_DOCKER_FAILURE") exit 7 ;; esac ;;',
-        '  logs) printf "complete guest console\\n" ;;',
-        '  cp) case "$3" in */recovery-*/*/workflow-logs) [ "$TAO_TEST_DOCKER_FAILURE" != collect ] || exit 7 ;; esac',
-        '    case "$2" in *:/workspace/*) mkdir -p "$3" ;; esac',
-        '    case "$3" in */recovery-*/*/guest) printf "check\\n" > "$3/steps.tsv" ;;',
-        '      */recovery-*/*/workflow-logs) printf "complete workflow log\\n" > "$3/complete.log" ;; esac ;;',
-        '  commit)',
-        '    [ "$TAO_TEST_DOCKER_FAILURE" != commit ] || exit 7',
-        '    printf "%s\\n" "$3" > "$TAO_TEST_DOCKER_CACHE" ;;',
+        '  --version) printf "2.32.1\\n" ;;',
+        // The tools cache exists once a clone has been renamed to its name.
+        '  get) case "$2" in tao-linux-tools-*) [ "$(cat "$FAKE_CACHE" 2>/dev/null)" = "$2" ] || exit 1 ;; esac; printf "{}\\n" ;;',
+        '  rename) printf "%s\\n" "$3" > "$FAKE_CACHE" ;;',
+        '  stop) : > "$FAKE_STOPPED" ;;',
         'esac',
         'exit 0',
         '',
       ].join('\n'),
-    )
-    await FS.chmod(docker, 0o755)
+      bun: [
+        '#!/bin/sh',
+        'printf "helper %s\\n" "$*" | sed "s|^helper run [^ ]* |helper |" >> "$FAKE_LOG"',
+        '[ "$1" = run ] || exit 64',
+        'shift 2',
+        'case "$1" in',
+        '  idle) exit 0 ;;',
+        '  push) cat > "$FAKE_PUSHED/$2.tar"; exit 0 ;;',
+        '  boot)',
+        '    rm -f "$FAKE_STOPPED"',
+        '    trap "exit 0" TERM',
+        '    while [ ! -f "$FAKE_STOPPED" ]; do sleep 0.1; done',
+        '    exit 0 ;;',
+        '  exec)',
+        '    shift 3',
+        '    case "$1 $2" in',
+        '      "/bin/sh /home/admin/tao-harness/input/run.sh")',
+        '        printf "guest console\\n"',
+        '        [ -z "${FAKE_GUEST_EXIT_PHASE:-}" ] || [ "$3" = "$FAKE_GUEST_EXIT_PHASE" ] || exit 0',
+        '        exit "${FAKE_GUEST_EXIT:-0}" ;;',
+        '      "/usr/bin/tar -cf") [ "${FAKE_COLLECT:-}" != fail ] || exit 9; exec /usr/bin/tar -cf - -C "$FAKE_GUEST" "$6" ${7:-} ;;',
+        '    esac',
+        '    exit 0 ;;',
+        'esac',
+        'exit 0',
+        '',
+      ].join('\n'),
+    }
+    for (const [name, content] of Object.entries(executables)) {
+      const path = FS.resolvePath(name, bin)
+      await FS.writeText(path, content)
+      await FS.chmod(path, 0o755)
+    }
+    // The clean PATH would otherwise reach macOS's /usr/bin/git shim, which warns on stderr when the sandbox
+    // denies the per-user temporary directory.
+    const git = await CLI.commandPath('git')
+    if (git !== undefined) {
+      await FS.symlink(git, FS.resolvePath('git', bin))
+    }
     await test({
       root,
+      home,
       log,
-      container,
       env: {
-        ...Platform.runtimeProcess.env,
+        HOME: home,
         PATH: `${bin}:/usr/bin:/bin`,
-        TAO_TEST_DOCKER_CACHE: cache,
-        TAO_TEST_DOCKER_BASE_IMAGE: FS.resolvePath('.artifacts/base-image.txt', root),
-        TAO_TEST_DOCKER_CONTAINER: container,
-        TAO_TEST_DOCKER_LOG: log,
+        FAKE_LOG: log,
+        FAKE_STOPPED: stopped,
+        FAKE_CACHE: FS.resolvePath('.artifacts/cache-vm.txt', root),
+        FAKE_PUSHED: FS.resolvePath('.artifacts/pushed', root),
+        FAKE_GUEST: guest,
+        TAO_STANDALONE_BUN: FS.resolvePath('bun', bin),
       },
     })
   } finally {
@@ -803,10 +537,16 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
   }
 }
 
-async function run(fixture: Fixture, args: string[] = [], failure = ''): Promise<CLI.CommandResult> {
-  return await CLI.run('/bin/sh', {
+async function run(
+  fixture: Fixture,
+  args: string[] = [],
+  extra: Record<string, string> = {},
+): Promise<CLI.CommandResult> {
+  return await CLI.run('/bin/bash', {
     args: [FS.resolvePath(ENTRY, fixture.root), ...args],
     cwd: fixture.root,
-    env: { ...fixture.env, TAO_TEST_DOCKER_FAILURE: failure },
+    env: { ...fixture.env, ...extra },
+    processPolicy: 'test',
+    timeoutMs: 60_000,
   })
 }

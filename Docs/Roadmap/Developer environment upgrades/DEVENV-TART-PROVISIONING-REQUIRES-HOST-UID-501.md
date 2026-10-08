@@ -15,6 +15,12 @@
   - **Each run** clones that base and sends its inputs in through `tart exec`.
   - **The audit snapshots** attach the stopped disk read-only. They honour ownership when the host account's uid matches the guest admin's. Otherwise they ignore it, and the audit records ownership as unobserved.
   - **The prepared Xcode base** already ships the agent, so it needs no build.
+- **Finding (2026-10-07, evening):** Without root, the local base cannot be built offline. Three base builds from host uid 503 never answered `tart exec`. Each collected its evidence from the stopped disk into `logs/guest`.
+  - **Global LaunchAgent.** The guest's `/private/var/log/com.apple.xpc.launchd/launchd.log` reads `Caller specified a plist with bad ownership/permissions: path = /Library/LaunchAgents/org.cirruslabs.tart-guest-agent.plist`. The plist was mode 0644, but root did not own it.
+  - **admin's `~/Library/LaunchAgents`.** The agent never started, and launchd logged nothing about it.
+  - **`chown 501:20` on the ownership-ignored mount.** It fails with `Operation not permitted`.
+  - **What is fine.** The vanilla image logs admin in (`autoLoginUser` is `admin`), and the agent binary landed with mode 0755.
+  - **Consequence.** Cirrus's own template runs `sudo chown root:wheel` on the plist, and something must do the same here. The route needs the Developer's decision.
 - **Dependencies:** None.
 - **Acceptance:** Vanilla acceptance and `contributor-macos-test` pass their provisioning step from a host account whose uid is not 501.
 - **Source:** Isolation checks of the October 7 afternoon repository pass.

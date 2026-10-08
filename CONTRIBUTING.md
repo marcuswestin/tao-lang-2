@@ -159,4 +159,5 @@ just contributor-linux-test
 just contributor-macos-test
 ```
 
-The macOS proof clones a vanilla Tart image and needs Tart installed; the Linux proof needs Docker.
+Both proofs clone a pinned Tart image (vanilla macOS, Ubuntu 24.04 for Linux) and need Tart installed.
+They are periodic acceptance checks and a debugging aid; hosted CI is the integration proof.

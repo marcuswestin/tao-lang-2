@@ -3,17 +3,7 @@
 set -eu
 
 case "${1:-}" in cold|cached|tools) mode=$1 ;; *) exit 2 ;; esac
-qemu_guest_base=0
-qemu_nix_filter=0
-case "$#" in
-  1) ;;
-  2) case "$2" in
-       --qemu-guest-base) qemu_guest_base=1 ;;
-       --qemu-compat) qemu_guest_base=1; qemu_nix_filter=1 ;;
-       *) exit 2 ;;
-     esac ;;
-  *) exit 2 ;;
-esac
+[ "$#" -eq 1 ] || exit 2
 cd "$(dirname "$0")/../../../../.."
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 logs="$PWD/.artifacts/contributor-linux/guest-$mode"
@@ -22,7 +12,7 @@ mkdir -p "$logs"
 finish() {
   result=$?
   trap - EXIT
-  du -sk "$PWD" /nix /root > "$logs/disk-kib.txt" 2>&1 || true
+  du -sk "$PWD" /nix "$HOME" > "$logs/disk-kib.txt" 2>&1 || true
   df -Pk "$PWD" > "$logs/filesystem-kib.txt" 2>&1 || true
   printf 'Host-only native and UI lanes were not run.\n' > "$logs/unrun.txt"
   exit "$result"
@@ -37,15 +27,7 @@ step() {
   step_result=0
   (
     producer_result=0
-    if [ "$qemu_guest_base" -eq 1 ]; then
-      set -- QEMU_GUEST_BASE=0x800000000000 "$@"
-    fi
-    # Explicit emulation diagnostic: QEMU user mode cannot load Nix's inner
-    # syscall filter. Docker's outer isolation and default bootstrap stay intact.
-    if [ "$qemu_nix_filter" -eq 1 ]; then
-      set -- 'NIX_CONFIG=filter-syscalls = false' "$@"
-    fi
-    env -i HOME=/root USER=root TERM=dumb PATH="$PATH" "$@" 2>&1 || producer_result=$?
+    env -i HOME="$HOME" USER="$(id -un)" TERM=dumb PATH="$PATH" "$@" 2>&1 || producer_result=$?
     printf '%s\n' "$producer_result" > "$logs/$label.exit-code"
   ) | tee "$logs/$label.log" || step_result=$?
   producer_result=1
@@ -59,14 +41,13 @@ step() {
 }
 
 # A process the kernel kills for memory prints nothing, and a test runner sees only a signal.
-# The container's cgroup counts each kill and keeps the high-water mark, so record both after
+# The kernel counts each kill in /proc/vmstat, so record it with the memory headroom after
 # every step: an `oom_kill` that rose during a step names that step's silent deaths.
 record_memory() {
-  for counter in memory.events memory.peak memory.max; do
-    if [ -r "/sys/fs/cgroup/$counter" ]; then
-      printf '%s %s\n' "$counter" "$(tr '\n' ' ' < "/sys/fs/cgroup/$counter")"
-    fi
-  done > "$logs/$1.memory.txt" 2>&1 || true
+  {
+    grep -E '^(MemTotal|MemAvailable):' /proc/meminfo
+    grep -E '^oom_kill ' /proc/vmstat
+  } > "$logs/$1.memory.txt" 2>&1 || true
 }
 
 record_tool_versions() {

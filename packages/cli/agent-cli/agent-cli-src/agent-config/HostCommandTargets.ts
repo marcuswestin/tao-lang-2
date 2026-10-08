@@ -77,8 +77,11 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
     fixedArgs: ['standalone-cli-clean-machine'],
     argsPolicy: 'standalone-vm',
   },
+  // Clones the pinned Ubuntu image under Tart's account-wide lease and runs the contributor journey in
+  // the clone (and in a clone of a cached tools VM) with the committed source; the script accepts only
+  // `--mode cold|cached|both`. Hosted CI stays the integration proof.
   'contributor-linux-test': {
-    command: '/bin/sh',
+    command: '/bin/bash',
     fixedArgs: ['packages/cli/dev-cli/dev-cli-src/environment/contributor-linux-test.sh'],
   },
   // Clones the pinned vanilla macOS image under Tart's account-wide lease and runs the contributor
