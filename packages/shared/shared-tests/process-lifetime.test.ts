@@ -40,6 +40,12 @@ Describe('process lifetime', () => {
       Expect(alive(identities.plain)).toBe(true)
       ProcessTree.signalTracked([identities.plain], 'SIGKILL')
       await until(() => alive(identities.plain) ? undefined : true, { description: 'plain child exit' })
+      // The watcher outlives the child by the kill grace before it sweeps its group and exits.
+      await until(() => ProcessTree.isGroupAlive(identities.linked.pid) ? undefined : true, {
+        description: 'linked watcher exit after its group is gone',
+        intervalMs: 50,
+        timeoutMs: 10_000,
+      })
     } finally {
       parent.kill('SIGKILL')
       await parent.waitForClose().catch(() => undefined)
