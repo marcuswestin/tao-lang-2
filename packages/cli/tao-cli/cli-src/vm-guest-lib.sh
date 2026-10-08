@@ -96,24 +96,48 @@ vm_fetch_guest_agent() {
   /usr/bin/tar -xzf "$agent_archive" -C "$root/agent" tart-guest-agent
 }
 
-# Sets base_vm to the VM a run clones. The xcode image ships its own agent. The vanilla image gets a
-# local base, built once per source digest and agent: the pinned agent written to the stopped disk
-# with ownership ignored, then one boot proving `tart exec` answers. Pass 1 to rebuild regardless.
-vm_prepare_base() {
-  if [ "$profile" != vanilla ]; then
-    base_vm=$image
-    return
-  fi
-  base_vm=$vanilla_base
+# Runs never download or build VM images: an agent would spend tens of gigabytes unasked, and the
+# vanilla base needs root once. A missing image stops the run with the command the Developer runs.
+vm_missing_image() {
+  printf '%s: %s\n' "$vm_label" "$1" >&2
+  printf 'Runs and agents never download or build VM images. Run this in a terminal from %s, then rerun:\n\n  just vm-images %s\n\n' \
+    "$(pwd -P)" "$profile" >&2
+  exit 1
+}
+
+# True when the local vanilla base was built from the pinned image with the pinned agent.
+vm_vanilla_base_current() {
   manifest="$HOME/.tao/vm-bases/$vanilla_base.txt"
   expected=$(printf 'source=%s\nagent=%s %s\n' "$image" "$agent_version" "$agent_sha")
-  if [ "${1:-0}" -ne 1 ] && [ -f "$manifest" ] && [ "$(head -n 2 "$manifest")" = "$expected" ] \
-    && tart get "$vanilla_base" --format json > /dev/null 2>&1; then
+  [ -f "$manifest" ] && [ "$(head -n 2 "$manifest")" = "$expected" ] \
+    && tart list --source local --quiet | grep -Fx "$vanilla_base" > /dev/null
+}
+
+# Sets base_vm to the VM a run clones, or stops the run with the command that prepares it. The xcode
+# and ubuntu images ship their own agent; the vanilla image gets a local base (vm-images.sh).
+vm_prepare_base() {
+  if [ "$profile" = vanilla ]; then
+    if ! vm_vanilla_base_current; then
+      vm_missing_image "the local macOS base $vanilla_base is missing or was built from another image or agent ($manifest)."
+    fi
+    base_vm=$vanilla_base
     printf '%s: reusing local base %s (%s)\n' "$vm_label" "$vanilla_base" "$manifest"
     return
   fi
+  local cached
+  cached=$(tart list --source oci --quiet)
+  if ! grep -Fx "$image" <<< "$cached" > /dev/null; then
+    vm_missing_image "the pinned $profile image is not cached on this Mac: $image"
+  fi
+  base_vm=$image
+}
+
+# Builds the local vanilla base in the stopped VM $name (a tao-basebuild name), then names it: the
+# pinned agent written to the stopped disk with ownership ignored, then one boot proving `tart exec`
+# answers. Only vm-images.sh calls this, from the Developer's terminal.
+vm_build_vanilla_base() {
   vm_fetch_guest_agent
-  base_build_vm="tao-basebuild-$(date +%s)-$$"
+  base_build_vm=$name
   if ! step 'clone the vanilla image for the local base' tart clone "$image" "$base_build_vm" \
     > "$logs/base-clone.log" 2>&1; then
     cat "$logs/base-clone.log" >&2
@@ -124,11 +148,12 @@ vm_prepare_base() {
   vm_boot_and_wait "$base_build_vm"
   vm_stop_running
   rm -f "$manifest"
-  if tart get "$vanilla_base" --format json > /dev/null 2>&1; then
+  if tart list --source local --quiet | grep -Fx "$vanilla_base" > /dev/null; then
     step 'remove the outdated local base' tart delete "$vanilla_base"
   fi
   step 'name the local base' tart rename "$base_build_vm" "$vanilla_base"
   base_build_vm=''
+  booted=0
   mkdir -p "$(dirname "$manifest")"
   printf '%s\nbuilt=%s\n' "$expected" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$manifest"
   printf '%s: built local base %s (%s)\n' "$vm_label" "$vanilla_base" "$manifest"

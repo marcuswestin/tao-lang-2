@@ -96,13 +96,13 @@ async function run(): Promise<number> {
       args.length !== 2 || !(
         (['--diagnose', '--stop', '--collect', '--recover-lease', '--audit-results'].includes(args[0]!)
           && /^tao-acceptance-[0-9]+-[0-9]+$/u.test(args[1]!))
-        || (['--prepare-base', '--base'].includes(args[0]!) && ['vanilla', 'xcode'].includes(args[1]!))
+        || (args[0] === '--base' && ['vanilla', 'xcode'].includes(args[1]!))
       )
     )
   ) {
     HCI.writeErrorLine(
       'Usage: ./agent unsandboxed standalone-cli-clean-machine'
-        + ' [--prepare-base|--base <vanilla|xcode> | --diagnose|--stop|--collect|--recover-lease|--audit-results <owned-vm>]',
+        + ' [--base <vanilla|xcode> | --diagnose|--stop|--collect|--recover-lease|--audit-results <owned-vm>]',
     )
     return 2
   }

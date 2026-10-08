@@ -5,7 +5,6 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/vm-guest-lib.sh"
 vm_label='Clean-machine'
 profile=vanilla
-prepare_base=0
 lease_owned=0
 lease_root="$HOME/.tao/standalone-vm-lease"
 overall_started=$(date +%s)
@@ -19,13 +18,12 @@ bun_bin="${TAO_STANDALONE_BUN:-$(pwd)/.devenv/profile/bin/bun}"
 portable_bun_script='packages/cli/tao-cli/cli-src/standalone-bun.sh'
 browser_app="${TAO_STANDALONE_BROWSER_APP:-/Applications/Google Chrome.app}"
 if [ "$#" -eq 2 ] && [ -z "$1$2" ]; then set --; fi
-if [ "$#" -eq 2 ] && { [ "$1" = --base ] || [ "$1" = --prepare-base ]; }; then
+if [ "$#" -eq 2 ] && [ "$1" = --base ]; then
   if [ "$2" != vanilla ] && [ "$2" != xcode ]; then
     printf 'Expected the vanilla or xcode VM profile.\n' >&2
     exit 2
   fi
   profile="$2"
-  if [ "$1" = --prepare-base ]; then prepare_base=1; fi
   set --
 fi
 vm_image_for_profile "$profile"
@@ -78,7 +76,7 @@ if [ "$#" -eq 2 ] && { [ "$1" = --diagnose ] || [ "$1" = --stop ] || [ "$1" = --
   exit
 fi
 if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != --audit ]; }; then
-  printf 'Usage: %s [--prepare-base|--base vanilla|xcode | --diagnose|--stop|--collect|--recover-lease|--audit-results <owned-vm>]\n' "$0" >&2
+  printf 'Usage: %s [--base vanilla|xcode | --diagnose|--stop|--collect|--recover-lease|--audit-results <owned-vm>]\n' "$0" >&2
   exit 2
 fi
 created=0
@@ -125,6 +123,7 @@ trap 'exit 143' TERM
 vm_acquire_lease
 printf 'Clean-machine: profile %s, pinned image %s\n' "$profile" "$image"
 vm_require_tart_version
+vm_prepare_base
 if ! command -v "$bun_bin" >/dev/null; then
   printf 'The checkout Bun is unavailable: %s. Run ./agent setup first.\n' "$bun_bin" >&2
   exit 1
@@ -216,10 +215,6 @@ fi
 exit "$acceptance_status"
 GUEST
 
-if [ "$prepare_base" -eq 1 ]; then
-  step "cache the pinned $profile image" tart pull "$image" 2>&1 | tee "$logs/pull.log"
-fi
-vm_prepare_base "$prepare_base"
 mkdir -p "$root/stage/tao-harness/logs/steps"
 cp -R "$input" "$root/stage/tao-harness/input"
 /usr/bin/tar --no-xattrs -cf "$root/harness.tar" -C "$root/stage" tao-harness

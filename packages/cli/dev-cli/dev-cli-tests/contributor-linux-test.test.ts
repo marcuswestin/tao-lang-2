@@ -43,6 +43,18 @@ Describe('contributor Linux VM runner', () => {
     })
   })
 
+  Test('stops before any clone and names the command when the pinned image is not cached', async () => {
+    await withFixture(async fixture => {
+      const result = await run(fixture, [], { FAKE_NO_IMAGES: '1' })
+      Expect(result.exitCode).toBe(1)
+      Expect(result.stderr).toContain(`the pinned ubuntu image is not cached on this Mac: ${UBUNTU_IMAGE}`)
+      Expect(result.stderr).toContain('\n  just vm-images ubuntu\n')
+      const calls = await readCalls(fixture)
+      Expect(calls.some(call => call.startsWith('tart clone ') || call.startsWith('tart pull '))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/standalone-vm-lease', fixture.home))).toBe(false)
+    })
+  })
+
   Test('runs the cold journey in a clone of the pinned image with committed source only, then deletes it', async () => {
     await withFixture(async fixture => {
       await FS.writeText(FS.resolvePath('untracked-secret.txt', fixture.root), 'private')
@@ -56,6 +68,7 @@ Describe('contributor Linux VM runner', () => {
       Expect(name).toMatch(/^tao-contributor-[0-9]+-[0-9]+-cold$/)
       Expect(calls.filter(call => call.startsWith('tart '))).toEqual([
         'tart --version',
+        'tart list --source oci --quiet',
         `tart clone ${UBUNTU_IMAGE} ${name}`,
         `tart set ${name} --cpu 4 --memory 16384 --disk-size 50`,
         `tart get ${name} --format json`,
@@ -172,6 +185,7 @@ Describe('contributor Linux VM runner', () => {
       Expect(clones[0]?.[2]).toBe(UBUNTU_IMAGE)
       Expect(first.filter(call => call.startsWith('tart '))).toEqual([
         'tart --version',
+        'tart list --source oci --quiet',
         `tart get ${cache} --format json`,
         `tart clone ${UBUNTU_IMAGE} ${tools}`,
         `tart set ${tools} --cpu 4 --memory 16384 --disk-size 50`,
@@ -473,6 +487,7 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
         // The tools cache exists once a clone has been renamed to its name.
         '  get) case "$2" in tao-linux-tools-*) [ "$(cat "$FAKE_CACHE" 2>/dev/null)" = "$2" ] || exit 1 ;; esac; printf "{}\\n" ;;',
         '  rename) printf "%s\\n" "$3" > "$FAKE_CACHE" ;;',
+        `  list) [ -n "\${FAKE_NO_IMAGES:-}" ] || printf "%s\\n" ${UBUNTU_IMAGE} ;;`,
         '  stop) : > "$FAKE_STOPPED" ;;',
         'esac',
         'exit 0',

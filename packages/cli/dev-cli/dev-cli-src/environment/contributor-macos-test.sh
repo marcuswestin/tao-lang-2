@@ -83,6 +83,7 @@ trap 'exit 143' TERM
 vm_acquire_lease
 printf 'Contributor macOS: profile %s, pinned image %s\n' "$profile" "$image"
 vm_require_tart_version
+vm_prepare_base
 if ! command -v "$bun_bin" >/dev/null; then
   printf 'The checkout Bun is unavailable: %s. Run ./enter-tao-dev-env first.\n' "$bun_bin" >&2
   exit 1
@@ -133,7 +134,6 @@ make_harness() {
 }
 step 'archive the guest inputs' make_harness
 
-vm_prepare_base
 created=1
 if ! step "clone the $profile base" tart clone "$base_vm" "$name" 2>&1 | tee "$logs/clone.log"; then
   exit 1

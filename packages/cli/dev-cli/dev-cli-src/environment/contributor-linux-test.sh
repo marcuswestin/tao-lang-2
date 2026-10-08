@@ -23,7 +23,8 @@ repository=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd -P)
 cd "$repository"
 source packages/cli/tao-cli/cli-src/vm-guest-lib.sh
 vm_label='Contributor Linux'
-vm_image_for_profile ubuntu
+profile=ubuntu
+vm_image_for_profile "$profile"
 
 # The run directory doubles as the VM helper's run root: it holds the lease record and the input pushed
 # into every guest. Each phase has its own VM, named after the run so the lease names its owner.
@@ -84,6 +85,7 @@ trap 'exit 143' TERM
 vm_acquire_lease
 printf 'Contributor Linux: mode %s, pinned image %s\n' "$mode" "$image"
 vm_require_tart_version
+vm_prepare_base
 if ! command -v "$bun_bin" >/dev/null; then
   printf 'The checkout Bun is unavailable: %s. Run ./enter-tao-dev-env first.\n' "$bun_bin" >&2
   exit 1

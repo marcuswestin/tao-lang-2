@@ -305,7 +305,7 @@ standalone-cli-acceptance: _parser-gen
 ide-extension-acceptance:
     ./dev ide-extension-acceptance
 
-# Test a release in a disposable macOS VM; --base or --prepare-base vanilla|xcode selects a pinned image
+# Test a release in a disposable macOS VM; --base vanilla|xcode selects a pinned image prepared by just vm-images
 [group('Ship')]
 standalone-cli-clean-machine action='' vm='': _parser-gen
     bash packages/cli/tao-cli/cli-src/standalone-clean-machine.sh {{ quote(action) }} {{ quote(vm) }}
@@ -326,6 +326,12 @@ contributor-linux-test *ARGS:
 [positional-arguments]
 contributor-macos-test *ARGS:
     /bin/bash packages/cli/dev-cli/dev-cli-src/environment/contributor-macos-test.sh "$@"
+
+# Download the pinned VM images the isolation checks clone and build the local macOS base; runs and agents never do
+[group('Host proofs')]
+[positional-arguments]
+vm-images *PROFILES:
+    /bin/bash packages/cli/tao-cli/cli-src/vm-images.sh "$@"
 
 # Trust Tart's required tap formula and install Tart for the clean-machine gate
 [group('Ship')]

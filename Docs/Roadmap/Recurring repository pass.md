@@ -31,7 +31,7 @@ notes after each completed pass; Git history is the longer record.
   - Unused dependencies and lagging majors.
   - Package README audience (D3), `packages/AGENTS.md` over budget (D4), and configuration-list layout (F2).
   - A Sonnet row in the routing table.
-- Before the macOS isolation checks, choose a route in `DEVENV-TART-PROVISIONING-REQUIRES-HOST-UID-501`, or run them from a uid-501 account. Copying the harness in after boot cannot carry in the guest agent, which the vanilla image lacks. The vanilla base is cached.
+- Before the macOS isolation checks, the Developer runs `just vm-images vanilla` once its root step lands (`DEVENV-TART-PROVISIONING-REQUIRES-HOST-UID-501`).
 - Run the Ubuntu contributor check once Docker has 16 GB.
 - Recheck the six tutorial QA observations and regenerate the QA dashboard once Q7 is decided.
 - Watch hosted Chrome startup. The next `DevToolsActivePort` timeout carries `fe7a4da74`'s stall snapshot; read it before changing the timeout.
