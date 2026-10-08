@@ -1,4 +1,4 @@
-import { CLI, Errors, FS } from '@shared'
+import { CLI, Errors, FS, Platform } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test } from '@shared/test'
 import {
   StudioCdp,
@@ -106,6 +106,8 @@ Describe('Studio browser CDP harness', () => {
     const profile = await mkTestDir('tao-studio-cdp-graceful-')
     const joined = Deferred<CLI.CommandCloseResult>()
     const events: string[] = []
+    // Escaped output-owner capture is a macOS lifecycle requirement.
+    const captureEvents = Platform.hostPlatform === 'darwin' ? ['capture'] : []
     let exitCode: number | null = null
     const command: CLI.StartedCommand = {
       args: [],
@@ -151,12 +153,12 @@ Describe('Studio browser CDP harness', () => {
     const close = StudioCdp.testing.closeOwnedChrome(command, client, profile)
     await settle()
     Expect(transport.calls.map(call => call.method)).toEqual(['Browser.close'])
-    Expect(events).toEqual(['capture', 'grace', 'join'])
+    Expect(events).toEqual([...captureEvents, 'grace', 'join'])
     Expect(await FS.isDirectory(profile)).toBe(true)
     exitCode = 0
     joined.resolve({ exitCode: 0, signal: null })
     await close
-    Expect(events).toEqual(['capture', 'grace', 'join', 'output', 'dispose', 'disconnect'])
+    Expect(events).toEqual([...captureEvents, 'grace', 'join', 'output', 'dispose', 'disconnect'])
     Expect(await FS.isDirectory(profile)).toBe(false)
   })
 
